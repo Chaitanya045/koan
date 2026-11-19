@@ -121,6 +121,95 @@ TEST(KoanCliArgsTest, Refusals) {
   EXPECT_EQ(Parse({"__hold", "--ready-fd", "3"}).ready_fd, 3);
 }
 
+TEST(KoanCliArgsTest, SettleChooseAndShell) {
+  Command click = Parse({"act", "abcd", "click", "@12", "--snapshot"});
+  EXPECT_TRUE(click.snapshot_after);
+  EXPECT_EQ(click.timeout_seconds, 15);
+  EXPECT_FALSE(Parse({"act", "abcd", "click", "@12"}).snapshot_after);
+  Command navigate = Parse({"act", "abcd", "navigate", "https://b.test/",
+                            "--timeout", "40", "--snapshot"});
+  EXPECT_EQ(navigate.text, "https://b.test/");
+  EXPECT_EQ(navigate.timeout_seconds, 40);
+  EXPECT_TRUE(navigate.snapshot_after);
+  EXPECT_TRUE(
+      Parse({"act", "--snapshot", "abcd", "press", "Enter"}).snapshot_after);
+  EXPECT_EQ(
+      Parse({"act", "abcd", "press", "Tab", "--timeout=5"}).timeout_seconds, 5);
+  // Where the act's text goes, it is the text.
+  Command fill = Parse({"act", "abcd", "fill", "@3", "--snapshot"});
+  EXPECT_EQ(fill.text, "--snapshot");
+  EXPECT_FALSE(fill.snapshot_after);
+  EXPECT_TRUE(Parse({"act", "abcd", "fill", "@3", "--snapshot", "--snapshot"})
+                  .snapshot_after);
+
+  Command choose =
+      Parse({"act", "abcd", "choose", "@7", "United Kingdom", "--snapshot"});
+  EXPECT_EQ(choose.act, ActKind::kChoose);
+  EXPECT_EQ(choose.ref, "@7");
+  EXPECT_EQ(choose.text, "United Kingdom");
+  EXPECT_TRUE(choose.snapshot_after);
+  EXPECT_FALSE(ErrorOf({"act", "abcd", "choose", "@7"}).empty());
+  EXPECT_FALSE(ErrorOf({"act", "abcd", "choose", "7", "UK"}).empty());
+
+  EXPECT_FALSE(
+      ErrorOf({"act", "abcd", "click", "@1", "--timeout", "0"}).empty());
+  EXPECT_FALSE(
+      ErrorOf({"act", "abcd", "click", "@1", "--timeout", "soon"}).empty());
+  EXPECT_NE(ErrorOf({"snapshot", "abcd", "--snapshot"}).find("koan act's"),
+            std::string::npos);
+
+  EXPECT_EQ(Parse({"shell"}).kind, CommandKind::kShell);
+  EXPECT_FALSE(Parse({"shell"}).stop_on_error);
+  EXPECT_TRUE(Parse({"shell", "--stop-on-error"}).stop_on_error);
+  EXPECT_FALSE(ErrorOf({"shell", "now"}).empty());
+  EXPECT_NE(ErrorOf({"tabs", "--stop-on-error"}).find("koan shell's"),
+            std::string::npos);
+}
+
+TEST(KoanCliShellTest, LinesAsAShellSplitsThem) {
+  ShellLine plain =
+      ParseShellLine("koan act ab12 fill @3 \"Ada Lovelace\" --snapshot\n");
+  EXPECT_FALSE(plain.json);
+  EXPECT_TRUE(plain.error.empty());
+  EXPECT_EQ(plain.args,
+            (std::vector<std::string>{"act", "ab12", "fill", "@3",
+                                      "Ada Lovelace", "--snapshot"}));
+  EXPECT_EQ(ParseShellLine("act t fill @3 'it''s'").args.back(), "its");
+  EXPECT_EQ(ParseShellLine(R"(act t fill @3 'a "b" \c')").args.back(),
+            R"(a "b" \c)");
+  EXPECT_EQ(
+      ParseShellLine(R"(act t fill @3 "say \"hi\" \\ $x \n")").args.back(),
+      R"(say "hi" \ $x \n)");
+  EXPECT_EQ(ParseShellLine(R"(act t fill @3 a\ b)").args.back(), "a b");
+  // An empty argument is one.
+  EXPECT_EQ(ParseShellLine(R"(act t fill @3 "")").args,
+            (std::vector<std::string>{"act", "t", "fill", "@3", ""}));
+  EXPECT_TRUE(ParseShellLine("   \n").empty);
+  EXPECT_TRUE(ParseShellLine("  # the next step").empty);
+  EXPECT_EQ(ParseShellLine("act t fill @3 \"open").error,
+            "unclosed double quote");
+  EXPECT_EQ(ParseShellLine("koan").error, "no command");
+}
+
+TEST(KoanCliShellTest, JsonLines) {
+  ShellLine array = ParseShellLine(R"( ["act","t","click","@4"] )");
+  EXPECT_TRUE(array.json);
+  EXPECT_EQ(array.id, "null");
+  EXPECT_EQ(array.args, (std::vector<std::string>{"act", "t", "click", "@4"}));
+  ShellLine object = ParseShellLine(R"({"id":7,"args":["koan","tabs"]})");
+  EXPECT_TRUE(object.json);
+  EXPECT_EQ(object.id, "7");
+  EXPECT_EQ(object.args, std::vector<std::string>{"tabs"});
+  EXPECT_EQ(ParseShellLine(R"({"id":"step-2","args":["tabs"]})").id,
+            "\"step-2\"");
+  // Every refusal is a JSON line too, answered as one.
+  for (const char* bad : {R"({"id":1})", R"(["act",1])", "[]", "{nope"}) {
+    ShellLine line = ParseShellLine(bad);
+    EXPECT_TRUE(line.json) << bad;
+    EXPECT_FALSE(line.error.empty()) << bad;
+  }
+}
+
 TEST(KoanCliArgsTest, AgentBrowserTakesTheRestUntouched) {
   Command command =
       Parse({"--user-data-dir", "/p", "agent-browser", "--session", "work",
@@ -413,6 +502,13 @@ TEST(KoanCliSkillTest, TheGuideCoversPairingTakeOverAndSsh) {
            "/Applications/Koan.app/Contents/Resources/bin/koan",
            "saves the PNG",
            "never read or edit ~/.koan",
+           "--snapshot",
+           "act <tab> choose @",
+           "koan shell",
+           "--- exit",
+           "HTTP 504",
+           "Koan.timeout",
+           "ControlMaster=auto",
        }) {
     EXPECT_NE(guide.find(needed), std::string::npos) << needed;
   }
@@ -616,6 +712,82 @@ TEST(KoanCliSnapshotTest, States) {
   EXPECT_EQ(StatesText(base::DictValue()), "");
 }
 
+// A custom dropdown's list, rendered at the end of the body (a portal), is
+// shown first, under its opener, and not again further down.
+TEST(KoanCliSnapshotTest, OpenPopupsComeFirst) {
+  auto tree = [](bool expanded, bool controls) {
+    return Dict(std::string(R"({"nodes":[
+      {"nodeId":"1","role":{"value":"RootWebArea"},"name":{"value":"Form"},
+       "childIds":["2","9"],"backendDOMNodeId":1},
+      {"nodeId":"2","role":{"value":"generic"},"childIds":["3","4"]},
+      {"nodeId":"3","role":{"value":"combobox"},"name":{"value":"Country"},
+       "backendDOMNodeId":30,"properties":[
+         {"name":"expanded","value":{"type":"booleanOrUndefined","value":)") +
+                (expanded ? "true" : "false") + "}}" +
+                (controls ? R"(,{"name":"controls","value":{"type":"idrefList",
+           "value":"","relatedNodes":[{"backendDOMNodeId":50,"idref":"l"}]}})"
+                          : "") +
+                R"(]},
+      {"nodeId":"4","role":{"value":"StaticText"},"name":{"value":"Lots of text"}},
+      {"nodeId":"9","role":{"value":"generic"},"childIds":["10"]},
+      {"nodeId":"10","role":{"value":"listbox"},"name":{"value":"Country"},
+       "backendDOMNodeId":50,"childIds":["11","12"]},
+      {"nodeId":"11","role":{"value":"option"},"name":{"value":"India"},
+       "backendDOMNodeId":51},
+      {"nodeId":"12","role":{"value":"option"},"name":{"value":"Uganda"},
+       "backendDOMNodeId":52}
+    ]})");
+  };
+  EXPECT_EQ(BuildSnapshot(tree(true, true), {}).text,
+            "popup of combobox \"Country\" @30 (open; shown first, the page "
+            "has it further down):\n"
+            "  listbox \"Country\" @50\n"
+            "    option \"India\" @51\n"
+            "    option \"Uganda\" @52\n"
+            "RootWebArea \"Form\" @1\n"
+            "  combobox \"Country\" [expanded] @30\n"
+            "  \"Lots of text\"\n");
+  // Not named by its control (react-select), but outside the page's
+  // layout while something is expanded.
+  EXPECT_EQ(BuildSnapshot(tree(true, false), {}).text.substr(0, 61),
+            "popup (open; shown first, the page has it further down):\n"
+            "  li");
+  // Nothing expanded: a list that is always there stays where it is.
+  EXPECT_EQ(BuildSnapshot(tree(false, false), {}).text,
+            "RootWebArea \"Form\" @1\n"
+            "  combobox \"Country\" [collapsed] @30\n"
+            "  \"Lots of text\"\n"
+            "  listbox \"Country\" @50\n"
+            "    option \"India\" @51\n"
+            "    option \"Uganda\" @52\n");
+  // A long page cuts its end, never the popup.
+  const Snapshot cut = BuildSnapshot(tree(true, true), {.max_lines = 4});
+  EXPECT_NE(cut.text.find("option \"Uganda\" @52"), std::string::npos);
+  EXPECT_NE(cut.text.find("(more; the page is long)"), std::string::npos);
+  // --full keeps the tree's order.
+  EXPECT_EQ(BuildSnapshot(tree(true, true), {.full = true}).text.find("popup"),
+            std::string::npos);
+}
+
+TEST(KoanCliSnapshotTest, ADialogComesFirst) {
+  const base::DictValue tree = Dict(R"({"nodes":[
+    {"nodeId":"1","role":{"value":"RootWebArea"},"childIds":["2","3"],
+     "backendDOMNodeId":1},
+    {"nodeId":"2","role":{"value":"button"},"name":{"value":"Behind"},
+     "backendDOMNodeId":2},
+    {"nodeId":"3","role":{"value":"dialog"},"name":{"value":"Cookies"},
+     "backendDOMNodeId":3,"childIds":["4"]},
+    {"nodeId":"4","role":{"value":"button"},"name":{"value":"Accept"},
+     "backendDOMNodeId":4}
+  ]})");
+  EXPECT_EQ(BuildSnapshot(tree, {}).text,
+            "popup (open; shown first, the page has it further down):\n"
+            "  dialog \"Cookies\" @3\n"
+            "    button \"Accept\" @4\n"
+            "RootWebArea @1\n"
+            "  button \"Behind\" @2\n");
+}
+
 TEST(KoanCliSnapshotTest, RefsBelongToOnePage) {
   RefBook book;
   EXPECT_EQ(book.Check("T", "D1", 5), RefVerdict::kNoSnapshot);
@@ -779,6 +951,75 @@ TEST(KoanCliActionsTest, ErrorsAgentsAreShown) {
   EXPECT_EQ(error.code, "Koan.pageError");
   EXPECT_NE(error.message.find("(Something odd)"), std::string::npos);
   EXPECT_EQ(error.message.find("-32000"), std::string::npos);
+}
+
+TEST(KoanCliActionsTest, ChoosingFromAList) {
+  OptionList list;
+  list.found = true;
+  list.labels = {"United States", "United Kingdom", "Uganda", "India",
+                 "United Kingdom"};
+  list.disabled = {false, false, true, false, false};
+  EXPECT_EQ(MatchOption(list, "United Kingdom", "@7").index, 1u);
+  EXPECT_EQ(MatchOption(list, "  united   kingdom ", "@7").index, 1u);
+  // Partial, if only one fits: starting with it, else containing it.
+  EXPECT_EQ(MatchOption(list, "Ind", "@7").index, 3u);
+  EXPECT_EQ(MatchOption(list, "dia", "@7").index, 3u);
+  OptionMatch several = MatchOption(list, "United", "@7");
+  EXPECT_FALSE(several.index);
+  EXPECT_EQ(several.error,
+            "Koan.ambiguousOption: several options of @7 start with "
+            "\"United\": \"United States\", \"United Kingdom\", \"United "
+            "Kingdom\"; give the whole label");
+  OptionMatch disabled = MatchOption(list, "Uganda", "@7");
+  EXPECT_EQ(disabled.error, "Koan.disabled: \"Uganda\" in @7 is disabled");
+  list.more = 3;
+  OptionMatch none = MatchOption(list, "France", "@7");
+  EXPECT_EQ(none.error,
+            "Koan.noOption: @7 has no option \"France\"; its options: "
+            "\"United States\", \"United Kingdom\", \"Uganda\", \"India\", "
+            "\"United Kingdom\" and 3 more");
+  EXPECT_FALSE(MatchOption(OptionList(), "x", "@7").index);
+  EXPECT_NE(NoListText("@7").find("Koan.noList"), std::string::npos);
+  EXPECT_EQ(NotChosenText("@7", "Uganda", ""),
+            "Koan.notChosen: \"Uganda\" was clicked, but @7 shows nothing; "
+            "take a snapshot to see the list, and click the option's ref");
+}
+
+TEST(KoanCliActionsTest, ChooseAndClickAnswers) {
+  auto value = [](std::string_view json) { return base::Value(Dict(json)); };
+  base::Value select = value(R"({"kind":"select"})");
+  EXPECT_EQ(ReadChooseTarget(&select, "@1").kind, ChooseKind::kSelect);
+  base::Value popup =
+      value(R"({"kind":"popup","expanded":true,"editable":true})");
+  ChooseTarget target = ReadChooseTarget(&popup, "@1");
+  EXPECT_EQ(target.kind, ChooseKind::kPopup);
+  EXPECT_TRUE(target.expanded);
+  EXPECT_TRUE(target.editable);
+  base::Value other = value(R"({"kind":"other","what":"<p>"})");
+  EXPECT_NE(ReadChooseTarget(&other, "@1")
+                .refusal.find("Koan.notSelect: @1 "
+                              "is <p>"),
+            std::string::npos);
+  EXPECT_EQ(ReadChooseTarget(nullptr, "@1").kind, ChooseKind::kRefused);
+
+  base::Value listed = value(R"({"found":true,"mine":true,"more":2,"options":[
+      {"label":"A","disabled":false},{"label":"B","disabled":true}]})");
+  OptionList list = ReadOptionList(&listed);
+  EXPECT_TRUE(list.found);
+  EXPECT_TRUE(list.mine);
+  EXPECT_EQ(list.labels, (std::vector<std::string>{"A", "B"}));
+  EXPECT_EQ(list.disabled, (std::vector<bool>{false, true}));
+  EXPECT_EQ(list.more, 2);
+  EXPECT_FALSE(ReadOptionList(nullptr).found);
+
+  base::Value covered =
+      value(R"({"stable":false,"covered":"<div class=\"backdrop\">"})");
+  ClickReadiness ready = ReadClickReadiness(&covered);
+  EXPECT_FALSE(ready.stable);
+  EXPECT_EQ(ready.covered, "<div class=\"backdrop\">");
+  // A page that does not answer: click as before.
+  EXPECT_TRUE(ReadClickReadiness(nullptr).stable);
+  EXPECT_TRUE(ReadClickReadiness(nullptr).covered.empty());
 }
 
 TEST(KoanCliProtocolTest, KeysAndQuads) {
@@ -1015,6 +1256,36 @@ TEST(KoanCliRouterTest, TasksEventsAndWatchers) {
     router.FromBrowser(R"({"method":"Koan.paused","params":{}})");
   }
   EXPECT_EQ(router.events().size(), Router::kMaxEvents);
+}
+
+TEST(KoanCliRouterTest, AFollowerGetsItsTabsEvents) {
+  Router router;
+  auto to = [&](std::string_view json) {
+    std::vector<Router::ConnectionId> ids;
+    for (const Router::Delivery& delivery : router.FromBrowser(json)) {
+      ids.push_back(delivery.connection);
+    }
+    return ids;
+  };
+  using Ids = std::vector<Router::ConnectionId>;
+  constexpr char kS1[] =
+      R"({"method":"Network.requestWillBeSent","params":{},"sessionId":"S1"})";
+  constexpr char kS2[] =
+      R"({"method":"Page.loadEventFired","params":{},"sessionId":"S2"})";
+  constexpr char kPaused[] = R"({"method":"Koan.paused","params":{}})";
+  router.Follow(3, "S1");
+  EXPECT_EQ(to(kS1), Ids{3});
+  EXPECT_TRUE(to(kS2).empty());
+  EXPECT_EQ(to(kPaused), Ids{3});
+  // A watcher that follows too gets each event once.
+  router.AddWatcher(4);
+  router.Follow(4, "S2");
+  EXPECT_EQ(to(kPaused), (Ids{4, 3}));
+  EXPECT_EQ(to(kS2), Ids{4});
+  router.Follow(3, "");
+  EXPECT_TRUE(to(kS1).empty());
+  router.RemoveConnection(4);
+  EXPECT_TRUE(to(kS2).empty());
 }
 
 }  // namespace

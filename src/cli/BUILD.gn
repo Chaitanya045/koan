@@ -13,7 +13,8 @@ import("//testing/test.gni")
 assert(is_posix)
 
 # What the tool decides, without I/O: arguments, messages, the snapshot
-# outline and its refs, actions' answers and errors, the holder's routing.
+# outline and its refs, actions' answers and errors, when a page has settled,
+# the holder's routing.
 source_set("cli_lib") {
   sources = [
     "koan_cli_actions.cc",
@@ -28,6 +29,8 @@ source_set("cli_lib") {
     "koan_cli_protocol.h",
     "koan_cli_router.cc",
     "koan_cli_router.h",
+    "koan_cli_settle.cc",
+    "koan_cli_settle.h",
     "koan_cli_skill.cc",
     "koan_cli_skill.h",
     "koan_cli_snapshot.cc",
@@ -120,6 +123,7 @@ if (is_mac) {
 #   out/Koan/koan_cli_unittests
 test("koan_cli_unittests") {
   sources = [
+    "koan_cli_settle_unittest.cc",
     "koan_cli_unittest.cc",
     "koan_relay_gate_unittest.cc",
   ]

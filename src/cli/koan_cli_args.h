@@ -43,6 +43,9 @@ enum class CommandKind {
   // relay env | relay stop, for an agent-browser --session.
   kRelayEnv,
   kRelayStop,
+  // Reads commands from stdin, one per line, and runs them over one
+  // connection (ParseShellLine()).
+  kShell,
 };
 
 enum class ActKind {
@@ -50,6 +53,10 @@ enum class ActKind {
   kFill,
   // Chooses an option of a dropdown (<select>), by its label or value.
   kSelect,
+  // Chooses an option of any dropdown: a <select> as kSelect does, a custom
+  // one (an ARIA combobox, a button with a listbox) by opening it and
+  // clicking the option, by its text.
+  kChoose,
   kPress,
   kScroll,
   kNavigate,
@@ -88,10 +95,19 @@ struct Command {
   ActKind act = ActKind::kClick;
   // click, fill, select: "@123" from a snapshot.
   std::string ref;
-  // fill: the text; select: the option; press: the key; navigate: the URL.
+  // fill: the text; select, choose: the option; press: the key; navigate:
+  // the URL.
   std::string text;
   // scroll: pixels down (negative: up).
   int scroll_by = 0;
+  // --snapshot: print the compact snapshot after "ok", once the page has
+  // settled.
+  bool snapshot_after = false;
+  // --timeout: how long a navigation may take to commit, in seconds.
+  int timeout_seconds = 15;
+
+  // shell: --stop-on-error, stop at the first command that fails.
+  bool stop_on_error = false;
 
   // __hold: the fd to say "ready" on.
   int ready_fd = -1;
@@ -119,6 +135,22 @@ std::optional<std::string> ResolveTab(std::string_view given,
                                       const std::vector<std::string>& ids);
 
 std::string UsageText();
+
+// One line of `koan shell`'s input. Either a command line as a shell would
+// split it ('single' and "double" quotes, \ escapes; a leading "koan" is
+// dropped, "#" starts a comment line), or a JSON line: an array of
+// arguments, or {"id": any, "args": [...]}, answered with one JSON line.
+struct ShellLine {
+  // Nothing to run (an empty line or a comment).
+  bool empty = false;
+  bool json = false;
+  // The JSON line's "id", echoed in its answer (JSON text; "null" if none).
+  std::string id = "null";
+  std::vector<std::string> args;
+  // Why the line could not be read.
+  std::string error;
+};
+ShellLine ParseShellLine(std::string_view line);
 
 }  // namespace koan::cli
 

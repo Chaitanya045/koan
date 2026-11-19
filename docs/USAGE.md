@@ -1530,6 +1530,23 @@ read: once the tab has navigated or reloaded, an old ref is refused with
 `Koan.staleRef` (take a new snapshot) rather than acting on whatever node
 of the new page has that number. Errors are Koan's, with what to do next
 (`Koan.notVisible`, `Koan.pageChanged`, ...), never raw DevTools errors.
+Every `koan act` waits until the page has settled (a navigation it started
+committed and loaded, no request in flight and the DOM unchanged for a
+quarter of a second, at most about 3 s) before it prints `ok`, and
+`--snapshot` prints the new snapshot in the same reply, so an agent needs
+no `sleep` and no second command. `koan act <tab> navigate <url>` returns
+as soon as the server answers: a 4xx or 5xx is `ok (HTTP 504 Gateway
+Timeout)` (the tab shows the server's page; exit code 0), no answer within
+15 s is `Koan.timeout` (`--timeout <seconds>` changes it). `koan act <tab>
+choose @ref <option>` chooses in any dropdown: a `<select>` as `select`
+does, and a custom one (a Material or react-select dropdown) by opening it,
+waiting for its list, clicking the option and checking that the control
+shows it; it fails naming the options there are. An open dropdown's list,
+a menu or a dialog is printed first in a snapshot, under a `popup` line,
+even when the page renders it at the end of the body. `koan shell` runs
+commands read from stdin, one per line, over one connection (each answer
+ends with `--- exit N`; JSON lines get JSON answers), which is how an
+agent on another machine sends many commands through one ssh session.
 If `koan` is started by another program than the agent you approved (the
 approval pins that agent), Koan asks you again and `koan` says why while it
 waits. `koan skill` prints the guide
