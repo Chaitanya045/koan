@@ -460,9 +460,8 @@ IN_PROC_BROWSER_TEST_F(KoanSplitViewBrowserTest,
     return ChildWidgetShows(browser_view, "KoanSplitRearrange");
   }));
   header->CancelRearrange();
-  EXPECT_TRUE(base::test::RunUntil([&] {
-    return !ChildWidgetShows(browser_view, "KoanSplitRearrange");
-  }));
+  EXPECT_TRUE(base::test::RunUntil(
+      [&] { return !ChildWidgetShows(browser_view, "KoanSplitRearrange"); }));
   header->OnHeaderHovered(0, false);
 }
 
