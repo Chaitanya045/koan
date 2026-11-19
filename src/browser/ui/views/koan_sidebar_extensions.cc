@@ -250,12 +250,24 @@ KoanSidebarExtensionsView::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
 
+base::CallbackListSubscription
+KoanSidebarExtensionsView::AddSidebarHoverCallback(
+    base::RepeatingClosure callback) {
+  return sidebar_hover_callbacks_.Add(std::move(callback));
+}
+
 void KoanSidebarExtensionsView::ShowExtensionsMenu() {
   KoanBrowserViewController* controller =
       KoanBrowserViewController::From(browser_view_);
   KoanSidebarNavView* nav =
       controller ? controller->compact_mode()->sidebar_nav() : nullptr;
-  views::View* anchor = nav ? nav->bubble_anchor() : nullptr;
+  ShowExtensionsMenuAt(nav ? nav->bubble_anchor() : nullptr);
+}
+
+views::Widget* KoanSidebarExtensionsView::ShowExtensionsMenuAt(
+    views::View* anchor) {
+  KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
   BrowserWindowInterface* browser = browser_view_->browser();
   ExtensionsContainer* container = GetContainer();
   ExtensionsContainerViews* container_views =
@@ -263,8 +275,9 @@ void KoanSidebarExtensionsView::ShowExtensionsMenu() {
           ? browser_view_->toolbar_button_provider()
                 ->GetExtensionsContainerViews()
           : nullptr;
-  if (!anchor || !anchor->GetWidget() || !container || !container_views) {
-    return;
+  if (!controller || !anchor || !anchor->GetWidget() || !container ||
+      !container_views) {
+    return nullptr;
   }
   // The menu points at the peeked sidebar (compact mode): keep it out.
   controller->compact_mode()->HoldSidebarForBubble();
@@ -298,6 +311,7 @@ void KoanSidebarExtensionsView::ShowExtensionsMenu() {
     bubble->SetArrow(IsSidebarOnRight(anchor) ? views::BubbleBorder::TOP_RIGHT
                                               : views::BubbleBorder::TOP_LEFT);
   }
+  return menu;
 }
 
 void KoanSidebarExtensionsView::AddedToWidget() {
@@ -315,6 +329,7 @@ void KoanSidebarExtensionsView::AddedToWidget() {
     parent_observation_.Observe(parent());
   }
   UpdateFit();
+  sidebar_hover_callbacks_.Notify();
 }
 
 void KoanSidebarExtensionsView::RemovedFromWidget() {
@@ -559,6 +574,7 @@ void KoanSidebarExtensionsView::OnTabStripModelChanged(
 void KoanSidebarExtensionsView::OnSidebarHovered(bool hovered) {
   sidebar_hovered_ = hovered;
   UpdateReveal();
+  sidebar_hover_callbacks_.Notify();
 }
 
 void KoanSidebarExtensionsView::OnViewBoundsChanged(

@@ -71,6 +71,7 @@ source_set("browsertests_impl") {
     "browser/koan_playing_page_adoption_browsertest.cc",
     "browser/koan_session_data_browsertest.cc",
     "browser/koan_session_restore_browsertest.cc",
+    "browser/koan_sidebar_top_row_browsertest.cc",
     "browser/koan_sidebar_transitions_browsertest.cc",
     "browser/koan_space_containers_browsertest.cc",
     "browser/koan_spaces_browsertest.cc",

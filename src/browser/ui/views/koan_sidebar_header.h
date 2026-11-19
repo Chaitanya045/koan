@@ -31,6 +31,16 @@ void LayoutSidebarHeaderTrailingViews(const views::View* host,
                                       int right,
                                       int center_y);
 
+// Whether `point` (in `region`'s coordinates: the vertical tab strip region)
+// is on one of Koan's views in the top row (the navigation buttons).
+// Upstream's VerticalTabStripTopContainer::IsPositionInWindowCaption() knows
+// only its own buttons and makes the rest of the row window caption; on
+// macOS a caption point never reaches the views (BrowserFrameViewMac turns
+// it into HTCAPTION and NativeWidgetMacNSWindowHost::GetHitTestResult() into
+// a draggable background), so AppKit moved the window instead of the button
+// getting the click. koan::IsSidebarClientArea() asks this first.
+bool IsOnSidebarHeaderView(const views::View* region, const gfx::Point& point);
+
 // The width of Koan's views in `host`, for its preferred width.
 int GetSidebarHeaderTrailingWidth(const views::View* host);
 
