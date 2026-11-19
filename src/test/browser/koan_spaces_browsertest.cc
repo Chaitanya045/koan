@@ -16,6 +16,8 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/navigator/browser_navigator.h"
+#include "chrome/browser/ui/navigator/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/unload_controller.h"
@@ -36,10 +38,12 @@
 #include "koan/browser/ui/views/koan_space_bar.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_tab_drag.h"
+#include "koan/browser/ui/views/koan_window_sync.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/base/models/list_selection_model.h"
+#include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/widget/widget.h"
@@ -72,6 +76,41 @@ std::vector<int> ListedTabs(TabStripModel* model,
     return IsEmptyTab(model->GetTabAtIndex(index));
   });
   return listed;
+}
+
+// Opens kPage in a new window as CDP's Target.createTarget with newWindow
+// does (TargetHandler::CreateTarget(): a kNewWindow navigation of `profile`,
+// no source window), as a link's new window; that window and its page.
+void OpenLinkWindow(Profile* profile,
+                    BrowserWindowInterface** window,
+                    content::WebContents** page) {
+  NavigateParams params(profile, GURL(kPage),
+                        ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+  params.disposition = WindowOpenDisposition::kNewWindow;
+  Navigate(&params);
+  ASSERT_TRUE(params.browser);
+  ASSERT_TRUE(params.navigated_or_inserted_contents);
+  ASSERT_TRUE(content::WaitForLoadStop(params.navigated_or_inserted_contents));
+  *window = params.browser;
+  *page = params.navigated_or_inserted_contents;
+}
+
+// The window's only tab made a blank page the user opened: about:blank
+// opened from `opener` (window.open), which then closes. That tab.
+void OpenBlankAndCloseOpener(BrowserWindowInterface* window,
+                             content::WebContents* opener,
+                             tabs::TabInterface** blank) {
+  TabStripModel* model = window->GetTabStripModel();
+  ASSERT_EQ(opener, model->GetActiveWebContents());
+  ASSERT_TRUE(content::ExecJs(opener, "window.open('about:blank', '_blank')"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return model->count() == 2 && model->GetActiveWebContents() != opener;
+  }));
+  *blank = model->GetActiveTab();
+  model->CloseWebContentsAt(model->GetIndexOfWebContents(opener),
+                            TabCloseTypes::CLOSE_USER_GESTURE);
+  ASSERT_EQ(1, model->count());
+  ASSERT_EQ(*blank, model->GetActiveTab());
 }
 
 }  // namespace
@@ -316,6 +355,74 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
   chrome::ExecuteCommand(other, IDC_CLOSE_TAB);
   EXPECT_TRUE(base::test::RunUntil(
       [&] { return !window || window->IsDeleteScheduled(); }));
+}
+
+// The e2e sidebar_tabs flow: a window opened as CDP's Target.createTarget
+// (newWindow) opens it, a kNewWindow navigation (as a link's "Open Link in
+// New Window") with a profile and no source window; then about:blank opened
+// from its page (window.open), which closes. With Zen's
+// open-link-in-new-unsynced-window off, the window is a synced one with
+// Spaces: Cmd+W on its only tab, that blank page, keeps the window on the
+// Space's empty tab (the tab itself, marked in place), and Cmd+W there closes
+// the window.
+IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
+                       CloseTabOnALinkWindowsOnlyBlankTabKeepsTheWindow) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  browser()->GetProfile()->GetPrefs()->SetBoolean(
+      prefs::kWindowSyncOpenLinksInBlankWindow, false);
+  BrowserWindowInterface* other = nullptr;
+  content::WebContents* opener = nullptr;
+  ASSERT_NO_FATAL_FAILURE(
+      OpenLinkWindow(browser()->GetProfile(), &other, &opener));
+  EXPECT_FALSE(IsBlankWindow(BrowserView::GetBrowserViewForBrowser(other)));
+  ASSERT_TRUE(WaitForSpaceCount(other, 1));
+  tabs::TabInterface* blank = nullptr;
+  ASSERT_NO_FATAL_FAILURE(OpenBlankAndCloseOpener(other, opener, &blank));
+  EXPECT_FALSE(IsEmptyTab(blank));
+  EXPECT_TRUE(blank->GetGroup());
+
+  base::WeakPtr<BrowserWindowInterface> window = other->GetWeakPtr();
+  chrome::ExecuteCommand(other, IDC_CLOSE_TAB);
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(window) << "Cmd+W closed the window";
+  ASSERT_FALSE(window->IsDeleteScheduled()) << "Cmd+W closed the window";
+  ASSERT_EQ(1, window->GetTabStripModel()->count());
+  EXPECT_EQ(blank, window->GetTabStripModel()->GetActiveTab());
+  EXPECT_TRUE(IsEmptyTab(blank));
+
+  // Cmd+W on the empty tab closes the window.
+  chrome::ExecuteCommand(other, IDC_CLOSE_TAB);
+  EXPECT_TRUE(base::test::RunUntil(
+      [&] { return !window || window->IsDeleteScheduled(); }));
+}
+
+// The same window with Zen's open-link-in-new-unsynced-window on (its
+// default): a New Blank Window, without Spaces. Cmd+W on its only tab closes
+// it, as Zen closes an unsynced window with its last tab
+// (gZenWorkspaces.shouldCloseWindow(): an unsynced window that isn't
+// private). The e2e sidebar_tabs check failed on the Mac (cycle 18) because
+// its window was this one.
+IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
+                       CloseTabOnANewBlankWindowsOnlyTabClosesTheWindow) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  ASSERT_TRUE(browser()->GetProfile()->GetPrefs()->GetBoolean(
+      prefs::kWindowSyncOpenLinksInBlankWindow));
+  BrowserWindowInterface* other = nullptr;
+  content::WebContents* opener = nullptr;
+  ASSERT_NO_FATAL_FAILURE(
+      OpenLinkWindow(browser()->GetProfile(), &other, &opener));
+  ASSERT_TRUE(IsBlankWindow(BrowserView::GetBrowserViewForBrowser(other)));
+  EXPECT_FALSE(GetSpaces(other) && GetSpaces(other)->IsEnabled());
+  tabs::TabInterface* blank = nullptr;
+  ASSERT_NO_FATAL_FAILURE(OpenBlankAndCloseOpener(other, opener, &blank));
+  EXPECT_FALSE(IsEmptyTab(blank));
+
+  base::WeakPtr<BrowserWindowInterface> window = other->GetWeakPtr();
+  chrome::ExecuteCommand(other, IDC_CLOSE_TAB);
+  EXPECT_TRUE(base::test::RunUntil(
+      [&] { return !window || window->IsDeleteScheduled(); }));
+  // The first window stays, as it was.
+  EXPECT_FALSE(browser()->IsDeleteScheduled());
 }
 
 IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest, NewWindowOpensOnTheEmptyTab) {

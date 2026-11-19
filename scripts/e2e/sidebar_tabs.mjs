@@ -414,7 +414,12 @@ check('Clear in a Space keeps the Space, with no rows left',
   // A new window opens on Zen's empty tab (a blank page it was made with,
   // MarkStartupEmptyTab(), #252), where Ctrl+W closes the window. The user's
   // own blank page as the window's only tab: about:blank opened from a page
-  // in that window, which then closes.
+  // in that window, which then closes. The window is a synced one, with
+  // Spaces: prefs/sidebar_tabs.json turns off Zen's open-link-in-new-
+  // unsynced-window, or a CDP new window (WindowOpenDisposition::kNewWindow,
+  // a link's) is a New Blank Window, which closes with its only tab as Zen's
+  // unsynced window does (browser test
+  // CloseTabOnANewBlankWindowsOnlyTabClosesTheWindow).
   const firstId = await newTarget({ url: 'data:text/html,<title>First</title>', newWindow: true });
   await sleep(1000);
   const { windowId } = await windowOf(firstId);
@@ -453,7 +458,7 @@ check('Clear in a Space keeps the Space, with no rows left',
   };
   // Every page and its window, for the details: whether the window closed or
   // only its page isn't listed, and whether it was the window's only tab
-  // (a CDP window is a synced window since #385: its Space may list others).
+  // (a synced window: its Space may list synced pinned tabs).
   const where = async () => {
     const out = [];
     for (const t of (await list() ?? []).filter(t => t.type === 'page')) {
