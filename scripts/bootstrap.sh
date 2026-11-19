@@ -46,6 +46,14 @@ if [[ ! -d "$ROOT/depot_tools/.git" ]]; then
   echo "==> Cloning depot_tools"
   git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git "$ROOT/depot_tools"
 fi
+# depot_tools' python3 (gn, autoninja) needs its bootstrap, which only
+# update_depot_tools makes: with DEPOT_TOOLS_UPDATE=0 (CI, scripts/ci/mac_env.sh)
+# gclient runs through vpython3 and never makes it, and gn gen then fails
+# with "python3_bin_reldir.txt not found" (the macOS nightly from 2026-11-11).
+if [[ ! -f "$ROOT/depot_tools/python3_bin_reldir.txt" ]]; then
+  echo "==> Bootstrapping depot_tools"
+  "$ROOT/depot_tools/ensure_bootstrap"
+fi
 
 mkdir -p "$ROOT/chromium"
 cd "$ROOT/chromium"
