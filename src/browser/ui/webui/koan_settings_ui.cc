@@ -247,6 +247,9 @@ void ExtendSettingsUI(content::WebUI& web_ui,
   // row `signinAvailable` shows), and the subpage that held it is "Google
   // services", since sync can't be set up. That subpage stays: it has
   // "Autocomplete searches and URLs" and "Make searches and browsing better".
+  // (On desktop the People row already goes to Chromium's own Google services
+  // subpage, #google-services at /googleServices: Chromium 158 always
+  // replaces the sync promos there. The sync strings cover /syncSetup.)
   if (!profile->GetPrefs()->GetBoolean(::prefs::kSigninAllowed)) {
     source.AddString("peoplePageTitle", "Profile");
     source.AddBoolean("signinAvailable", false);

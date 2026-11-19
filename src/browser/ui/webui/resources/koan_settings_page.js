@@ -714,12 +714,77 @@ if (adopted?.set) {
   };
 }
 
-async function reloadChromiumSheet() {
+// fetch() refuses chrome:// URLs ("URL scheme "chrome" is not supported"), so
+// the sheet loads as a <link> that applies nowhere (media "not all") and its
+// rules are copied. Only the latest load counts: the look can change quickly.
+let chromiumSheetLoad = 0;
+function reloadChromiumSheet() {
+  const load = ++chromiumSheetLoad;
+  return new Promise(resolve => {
+    const link = h('link', {
+      rel: 'stylesheet',
+      media: 'not all',
+      href: `koan_chromium.css?${Date.now()}`,
+    });
+    const done = () => {
+      if (load === chromiumSheetLoad) {
+        try {
+          const text = [...(link.sheet?.cssRules ?? [])]
+                           .map(rule => rule.cssText)
+                           .join('\n');
+          chromiumSheet.replaceSync(text);
+          // Empty in the Zen style.
+          updateThemedColors(text !== '');
+        } catch (e) {
+          console.warn('Koan: koan_chromium.css', e);
+        }
+      }
+      link.remove();
+      resolve();
+    };
+    link.addEventListener('load', done);
+    link.addEventListener('error', done);
+    document.head.append(link);
+  });
+}
+
+// Chromium's controls take their --color-* colours from
+// chrome://theme/colors.css, which Koan's colour mixers make
+// (koan_shadcn_color_mixer.cc maps the tokens onto kColorSys*). Chromium's
+// settings app adds that sheet only with its 2026 refresh (settings_ui.ts,
+// addThemedColors_()), which is off, so without this its sections draw in
+// Chromium's fallback colours (cr_shared_vars.css: Google blue). In the
+// shadcn style Koan adds it and keeps it current as Chromium would; with the
+// refresh on, Chromium's own sheet is there and Koan leaves it alone.
+async function updateThemedColors(on) {
+  const html = document.documentElement;
+  if (html.hasAttribute('webui-refresh-2026') ||
+      html.hasAttribute('settings-refresh-2026')) {
+    return;
+  }
   try {
-    const response = await fetch(`koan_chromium.css?${Date.now()}`);
-    await chromiumSheet.replace(response.ok ? await response.text() : '');
+    // The bundle may have its own copy of this module (see the imports at
+    // the top): it defines no elements, and only this copy is started.
+    const {ColorChangeUpdater, COLORS_CSS_SELECTOR} = await import(
+        'chrome://resources/cr_components/color_change_listener/colors_css_updater.js');
+    const links = document.querySelectorAll(COLORS_CSS_SELECTOR);
+    if (!on) {
+      links.forEach(link => link.remove());
+      return;
+    }
+    const updater = ColorChangeUpdater.forDocument();
+    updater.start();
+    if (links.length) {
+      // The look (its mode) may have changed the colours.
+      await updater.refreshColorsCss();
+      return;
+    }
+    document.body.append(h('link', {
+      rel: 'stylesheet',
+      href: 'chrome://theme/colors.css?sets=ui,chrome',
+    }));
   } catch (e) {
-    console.warn('Koan: koan_chromium.css', e);
+    console.warn('Koan: chrome://theme/colors.css', e);
   }
 }
 
