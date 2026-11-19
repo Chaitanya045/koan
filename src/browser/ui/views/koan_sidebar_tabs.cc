@@ -782,13 +782,16 @@ bool ShowsTabThrobber(content::BrowserContext* context) {
 }
 
 bool IsSidebarEmptySpace(const views::View* tab_strip_view,
-                         const views::View* target) {
+                         views::View* region,
+                         const gfx::Point& point) {
   const auto* strip = views::AsViewClass<TabStripView>(tab_strip_view);
   const views::ScrollView* scroll =
       strip ? strip->unpinned_tabs_scroll_view() : nullptr;
-  if (!features::IsSidebarEnabled() || !scroll || !target) {
+  if (!features::IsSidebarEnabled() || !scroll || !region ||
+      !region->GetLocalBounds().Contains(point)) {
     return false;
   }
+  const views::View* target = region->GetEventHandlerForPoint(point);
   for (const views::View* view = target; view; view = view->parent()) {
     if (view == scroll) {
       return true;
@@ -1310,7 +1313,11 @@ void KoanSidebarTabsController::OnSidebarPressed(ui::MouseEvent* event) {
     }
     return;
   }
-  if (!IsSidebarEmptySpace(region->GetTabStripView(), target)) {
+  // (A press a view turns down comes here again for each of its parents,
+  // see IsSidebarEmptySpace().)
+  if (!IsSidebarEmptySpace(region->GetTabStripView(), region,
+                           views::View::ConvertPointToTarget(
+                               target, region, event->location()))) {
     return;
   }
   if (double_click || event->IsOnlyMiddleMouseButton()) {

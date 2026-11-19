@@ -38,6 +38,7 @@
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_essentials.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
+#include "koan/browser/ui/views/koan_sidebar_tabs.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/compositor/layer.h"
@@ -124,6 +125,52 @@ class KoanSidebarTransitionsBrowserTest : public InProcessBrowserTest {
 };
 
 }  // namespace
+
+// The Mac run (pin_drag, 2026-11-19): a ⌘-press on a selected tab moved the
+// window. TabView turns that press down (the ⌘-click deselects the tab), so
+// RootView hands it on to the tab's parents, through the sidebar's press
+// handler again, and the Space's group view, a parent of every row, counted
+// as the empty space that moves the window (and where a double-click opens a
+// tab). The empty space is decided by the view under the point now.
+IN_PROC_BROWSER_TEST_F(KoanSidebarTransitionsBrowserTest,
+                       EmptySpaceIsWhereNoRowIsWhateverGetsThePress) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  const std::vector<tabs::TabInterface*> tabs = OpenTabs(2);
+  views::View* region = browser_view()->tab_strip_view();
+  TabStripView* strip = FindView<TabStripView>(browser_view());
+  ASSERT_TRUE(region);
+  ASSERT_TRUE(strip);
+  views::test::RunScheduledLayout(browser_view());
+  std::vector<TabView*> rows;
+  CollectTabViews(region, tabs.back(), rows);
+  ASSERT_EQ(1u, rows.size());
+  TabView* row = rows.front();
+  ASSERT_TRUE(row->IsDrawn());
+  const gfx::Point on_row = views::View::ConvertPointToTarget(
+      row, region, row->GetLocalBounds().CenterPoint());
+
+  // The row's parents (where the press goes when the row turns it down) are
+  // inside the scroll view: by them alone the row's middle would be empty
+  // space.
+  const views::ScrollView* scroll = strip->unpinned_tabs_scroll_view();
+  ASSERT_TRUE(scroll);
+  ASSERT_TRUE(scroll->Contains(row->parent()));
+  EXPECT_FALSE(IsSidebarEmptySpace(strip, region, on_row));
+
+  // Below the last row, in the scroll view: the empty space.
+  const gfx::Rect scroll_bounds = views::View::ConvertRectToTarget(
+      scroll, region, scroll->GetLocalBounds());
+  const gfx::Rect row_bounds =
+      views::View::ConvertRectToTarget(row, region, row->GetLocalBounds());
+  ASSERT_GT(scroll_bounds.bottom() - row_bounds.bottom(), 20);
+  EXPECT_TRUE(IsSidebarEmptySpace(
+      strip, region,
+      gfx::Point(row_bounds.CenterPoint().x(),
+                 (row_bounds.bottom() + scroll_bounds.bottom()) / 2)));
+  // And nothing outside the region.
+  EXPECT_FALSE(
+      IsSidebarEmptySpace(strip, region, gfx::Point(-1, row_bounds.y())));
+}
 
 // The recording (round 6, compact on): the revealed sidebar had no separator
 // and no Clear between the Space and "+ New Tab" (KoanClearTabsRow hidden,
