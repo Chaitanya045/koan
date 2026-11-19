@@ -31,7 +31,8 @@ import { ACCEL, CDP_PORT, IS_MAC, NATIVE_MENUS, NATIVE_MENU_WHY, browserCall, cr
 import { skipped } from './lib/mac.mjs';
 import {
   ALT, CTRL, VK, appearance, bigDot, browserWidget, button, click, closePicker, drag,
-  lastPage, mouse, navigateShowing, pagePrefersDark, palette, paletteRows, picker,
+  NO_KEYBOARD_FOCUS, keyboardFocus, lastPage, mouse, navigateShowing, pagePrefersDark, palette,
+  paletteRows, picker,
   pickerKey, pickerWidget, setKoanPref, shortcut, showingTab, shown, tree,
   typeIntoOmnibox, ui, unquote, widgetKey,
 } from './lib/theme_picker.mjs';
@@ -231,19 +232,23 @@ check('The first Space has its own (default) theme',
 
 // The keyboard: Tab reaches the colour field first; Enter adds a colour in
 // its middle, the arrows move it, Delete removes it.
-await pickerKey(VK.TAB);
-await pickerKey(VK.ENTER);
-p = picker(await tree());
-const middle = bigDot(p);
-check('Tab, Enter: a colour in the middle of the field',
-      middle?.every(c => Math.abs(c - 179) <= 1), p?.p.Dots);
-await pickerKey(VK.RIGHT);
-await pickerKey(VK.RIGHT);
-p = picker(await tree());
-check('...the arrows move it', bigDot(p)?.[0] === middle?.[0] + 8 && bigDot(p)?.[1] === middle?.[1],
-      p?.p.Dots);
-await pickerKey(VK.DELETE);
-check('...and Delete removes it', picker(await tree())?.p.Dots === '');
+if (!keyboardFocus(p)) {
+  skipped('Tab, Enter: a colour in the middle of the field; the arrows; Delete', NO_KEYBOARD_FOCUS);
+} else {
+  await pickerKey(VK.TAB);
+  await pickerKey(VK.ENTER);
+  p = picker(await tree());
+  const middle = bigDot(p);
+  check('Tab, Enter: a colour in the middle of the field',
+        middle?.every(c => Math.abs(c - 179) <= 1), p?.p.Dots);
+  await pickerKey(VK.RIGHT);
+  await pickerKey(VK.RIGHT);
+  p = picker(await tree());
+  check('...the arrows move it', bigDot(p)?.[0] === middle?.[0] + 8 && bigDot(p)?.[1] === middle?.[1],
+        p?.p.Dots);
+  await pickerKey(VK.DELETE);
+  check('...and Delete removes it', picker(await tree())?.p.Dots === '');
+}
 await click(button(t, 'Light'));
 check('The Light scheme button makes websites light', await pagePrefersDark() === false,
       await appearance());
@@ -301,26 +306,32 @@ check("Dragging the big dot moves it and gives Zen's colour there", p?.p.Dots ==
 
 // The slider and the dial from the keyboard: Tab to the slider (Home sets
 // its minimum), then the dial.
-let found = false;
-for (let i = 0; i < 20 && !found; i++) {
+if (!keyboardFocus(p)) {
+  skipped('The opacity slider and the grain dial from the keyboard (Tab, Home, Left, Right)',
+          NO_KEYBOARD_FOCUS);
+} else {
+  let found = false;
+  for (let i = 0; i < 20 && !found; i++) {
+    await pickerKey(VK.TAB);
+    await pickerKey(VK.HOME);
+    found = Math.abs(+picker(await tree())?.p.Opacity - 0.25) < 0.001;
+  }
+  check('Tab reaches the opacity slider; Home sets 0.25', found);
+  await pickerKey(VK.RIGHT);
+  p = picker(await tree());
+  check('...Right adds 0.05', Math.abs(+p?.p.Opacity - 0.3) < 0.001, p?.p.Opacity);
   await pickerKey(VK.TAB);
   await pickerKey(VK.HOME);
-  found = Math.abs(+picker(await tree())?.p.Opacity - 0.25) < 0.001;
+  await pickerKey(VK.LEFT);
+  p = picker(await tree());
+  check('The grain dial: Home, then Left wraps to the last step',
+        +p?.p.Texture === 15 / 16, p?.p.Texture);
+  await pickerKey(VK.RIGHT);
+  await pickerKey(VK.RIGHT);
+  p = picker(await tree());
+  check('...and Right steps on (1/16)', +p?.p.Texture === 1 / 16, p?.p.Texture);
 }
-check('Tab reaches the opacity slider; Home sets 0.25', found);
-await pickerKey(VK.RIGHT);
 p = picker(await tree());
-check('...Right adds 0.05', Math.abs(+p?.p.Opacity - 0.3) < 0.001, p?.p.Opacity);
-await pickerKey(VK.TAB);
-await pickerKey(VK.HOME);
-await pickerKey(VK.LEFT);
-p = picker(await tree());
-check('The grain dial: Home, then Left wraps to the last step',
-      +p?.p.Texture === 15 / 16, p?.p.Texture);
-await pickerKey(VK.RIGHT);
-await pickerKey(VK.RIGHT);
-p = picker(await tree());
-check('...and Right steps on (1/16)', +p?.p.Texture === 1 / 16, p?.p.Texture);
 const saved = p?.p.Dots;
 await closePicker();
 
@@ -369,10 +380,16 @@ check('After a restart, the Space has its theme', !!saved && p?.p.Dots === saved
     check('The slider works with the row shown', !!picker(await tree()));
     t = await tree();
     const buttons = t.filter(v => v.cls === 'KoanThemePickerButton' && inCustom(v));
-    // The add button comes first, then each row's remove button.
-    if (buttons.length > 1) await click(buttons.at(-1), 8, 8);
+    // The add button comes first, then each row's remove button. The panel
+    // grows with the row (Zen's sizes to its contents), or the row is
+    // outside the bubble and takes no click.
+    const panel = p?.p.PanelInWindow;
+    const remove = buttons.length > 1 ? buttons.at(-1) : null;
+    if (remove) await click(remove, 8, 8);
     p = picker(await tree());
-    check("The row's button removes it", p?.p.CustomColors === '', p?.p.CustomColors);
+    check("The row's button removes it", p?.p.CustomColors === '',
+          `${p?.p.CustomColors}; panel ${panel} with the row; its button at ` +
+          `${remove ? `${remove.ax},${remove.ay} in ${remove.root.w}x${remove.root.h}` : 'none'}`);
   }
 }
 await closePicker();

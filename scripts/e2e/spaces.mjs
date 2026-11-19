@@ -25,7 +25,8 @@ import {
   pages as pageTargets, readPref, sleep, typeInto, viewEvent, viewMouse, viewTree, visiblePage,
   waitFor, windowTints,
 } from './lib/koan.mjs';
-import { menuKey as macMenuKey, menuKeyWhyNot, skipped } from './lib/mac.mjs';
+import { menuKey as macMenuKey, menuKeyWhyNot, ptr, realInput, realPointerHoldsSidebar,
+         skipped, windowOf } from './lib/mac.mjs';
 
 const views = viewTree;
 // The node of the view tagged with element identifier `id`, if one shows.
@@ -242,9 +243,12 @@ check('The bottom bar shows both Spaces, the new one active',
         first?.w === half && second?.w === half && first.h === size &&
             second.x === first.x + first.w,
         JSON.stringify(s.buttons.map(b => [b.view.x, b.view.w, b.view.h])));
-  check('...centred in the bar',
-        Math.abs((first.x + second.x + second.w) - bar.w) <= 1,
-        `${first.x}..${second.x + second.w} in ${bar.w}`);
+  // (A button's x is in the switcher's strip, which starts after the leading
+  // button: measured from the bar, with the views' window positions.)
+  const left = first.ax - bar.ax;
+  const right = second.ax + second.w - bar.ax;
+  check('...centred in the bar', Math.abs(left + right - bar.w) <= 1,
+        `${left}..${right} in ${bar.w}`);
   check('...the current Space shows its icon, the other a dot',
         s.buttons[1].view.props.Collapsed === 'false' &&
             s.buttons[0].view.props.Collapsed === 'true',
@@ -434,13 +438,33 @@ check('Collapsed, Ctrl+Alt+N shows the Create form (the sidebar expands)',
       !!form && form.h > 100 && form.w >= 200, JSON.stringify(form && [form.w, form.h]));
 const cancel = shown(s.vs, 'MdTextButton')
     .find(b => b.path.includes('KoanSpaceCreationView') && b.props.Text === 'Cancel');
+// On macOS upstream's expand-on-hover reads the real pointer
+// (View::IsMouseHovered()), whatever the synthetic events say: one left over
+// the sidebar (space_drag.mjs's drags end there, or someone at the Mac) holds
+// it out. With real input it moves over the page first; else the check
+// skips while the pointer is there (lib/mac.mjs realPointerHoldsSidebar()).
+if (IS_MAC && realInput()) {
+  const page = await visiblePage();
+  const b = page && (await windowOf(page.id))?.bounds;
+  if (b) {
+    await ptr('move', Math.round(b.left + b.width * 3 / 4), Math.round(b.top + b.height / 2), 100);
+  }
+}
 await click(cancel);
 await sleep(1000);
 s = await sidebar();
-check('...and Cancel goes back to the collapsed sidebar with the tabs',
-      !one(s.vs, 'KoanSpaceCreationView') && s.tabs === 0 &&
-      (one(s.vs, 'KoanSpaceBarView')?.w ?? 999) < 150,
-      JSON.stringify({ tabs: s.tabs, bar: one(s.vs, 'KoanSpaceBarView')?.w }));
+{
+  const CANCEL_COLLAPSED = '...and Cancel goes back to the collapsed sidebar with the tabs';
+  const ok = !one(s.vs, 'KoanSpaceCreationView') && s.tabs === 0 &&
+             (one(s.vs, 'KoanSpaceBarView')?.w ?? 999) < 150;
+  const held = !ok && await realPointerHoldsSidebar(230);
+  if (held) {
+    skipped(CANCEL_COLLAPSED, held);
+  } else {
+    check(CANCEL_COLLAPSED, ok,
+          JSON.stringify({ tabs: s.tabs, bar: one(s.vs, 'KoanSpaceBarView')?.w }));
+  }
+}
 await click(await toggle());
 await sleep(1000);
 s = await sidebar();
@@ -588,18 +612,27 @@ s = await sidebar();
 check('G4: Focus previous group goes back', s.header?.name === 'Clicked',
       s.header?.name);
 // G4: "Close group" asks to delete the Space (Zen's question); No keeps it.
+// ("Clicked" was made by the form, on its empty tab: no rows since #292.)
+const clickedTabs = s.tabs;
+const wPage = await visiblePage();
 await key(KEY.W, GROUP, 'W');
+// The question can take a moment (a sheet on macOS).
+const findNo = vs => shown(vs, 'MdTextButton').find(b => b.props.Text === 'No') ??
+                     shown(vs, 'LabelButton').find(b => b.props.Text === 'No');
+let no = null;
+await waitFor(async () => (no = findNo(await views())), 3000);
 vs = await views();
-const no = shown(vs, 'MdTextButton').find(b => b.props.Text === 'No') ??
-           shown(vs, 'LabelButton').find(b => b.props.Text === 'No');
-check('G4: Close group asks before deleting the Space', !!no);
+check('G4: Close group asks before deleting the Space', !!no,
+      no ? '' : JSON.stringify({ keyTo: wPage?.url, header: (await sidebar()).header?.name,
+                                 dialogs: shown(vs, 'DialogClientView').length,
+                                 buttons: shown(vs, 'MdTextButton').map(b => b.props.Text) }));
 if (no) {
   await click(no);
 }
 s = await sidebar();
 check('...and No keeps it, with its tabs', s.buttons.length === 3 &&
-      s.header?.name === 'Clicked' && s.tabs >= 1,
-      JSON.stringify({ spaces: s.buttons.map(b => b.name), tabs: s.tabs }));
+      s.header?.name === 'Clicked' && s.tabs === clickedTabs,
+      JSON.stringify({ spaces: s.buttons.map(b => b.name), tabs: `${clickedTabs} -> ${s.tabs}` }));
 // G4: "New tab in group" is Koan's new tab (the URL bar), which opens no tab
 // by itself.
 const tabsBefore = s.tabs;

@@ -8,16 +8,18 @@
 // are in it and no longer in the Space they came from; after Esc, the Space
 // it started in, with the tab still there.
 //
-// The drag is a held-button drag of the real pointer (ptr down / dragto /
-// up) when suite.sh allows real input. Without it the events go to the
+// The drag is a held-button drag of the real pointer (hold down / to / up,
+// scripts/mac/tools/hold.m, as the essentials_drag flow drives) when
+// suite.sh allows real input. Without it the events go to the
 // window's root view through UI DevTools, which routes them like real
 // input (the sidebar's pre-target handler, Koan's drag and its capture); a
 // probe checks first that such a drag reaches the drag at all,
 // and the multi-select (Cmd+click) and Esc legs, which need AppKit's
 // events, are skipped. Run by scripts/mac/suite.sh.
 import { browserCall, check, finish, pages, sleep, viewTree, visiblePage, waitFor } from './lib/koan.mjs';
-import { alive, calibrate, createSpace, fatalInLog, ptr, realInput, realInputWhyNot, realKey,
-         rootMouse, rootOf, skipped, spaceButtons, startServer, tabViewTitled } from './lib/mac.mjs';
+import { alive, calibrate, createSpace, fatalInLog, hold, ptr, ptrHas, realInput, realInputWhyNot,
+         realKey, rootMouse, rootOf, skipped, spaceButtons, startServer, tabViewTitled }
+    from './lib/mac.mjs';
 
 const server = await startServer();
 const U = t => server.url(`/p?t=${encodeURIComponent(t)}`);
@@ -88,18 +90,25 @@ async function drag(title, to, { holdMs = 0, esc = false } = {}) {
   const root = rootOf({ views: v.filter(x => x.widget === tab.widget) });
   const from = { x: tab.ax + Math.min(40, tab.w / 2), y: tab.ay + tab.h / 2 };
   if (real()) {
+    // (hold.m, not ptr's down/dragto/up: the bench's ptr can predate them,
+    // and hold is the drag the essentials_drag flow runs there.)
     const X = p => Math.round(origin.x + p.x), Y = p => Math.round(origin.y + p.y);
-    await ptr('down', X(from), Y(from));
-    await sleep(150);
-    await ptr('dragto', X(from) + 6, Y(from) + 4, 120);
-    await ptr('dragto', X(to), Y(to), 450);
-    for (let t = 0; t < holdMs; t += 100) {
-      await ptr('dragto', X(to) + (t / 100) % 2, Y(to), 16);
-      await sleep(84);
+    if (!(await hold('down', X(from), Y(from)))) return { error: realInputWhyNot() };
+    try {
+      await sleep(150);
+      await hold('to', X(from) + 6, Y(from) + 4, 120);
+      await hold('to', X(to), Y(to), 450);
+      for (let t = 0; t < holdMs; t += 100) {
+        await hold('to', X(to) + (t / 100) % 2, Y(to), 24);
+        await sleep(76);
+      }
+      during = await duringDrag();
+      if (esc) await realKey('Escape', '', 300);
+    } finally {
+      // Never leave the button held (the next drag, and the person, would
+      // find it down).
+      await hold('up', X(to), Y(to));
     }
-    during = await duringDrag();
-    if (esc) await realKey('Escape', '', 300);
-    await ptr('up', X(to), Y(to));
   } else {
     // A hold at an edge: the approach stays out of the edge's padding
     // (kSpaceDragSwitchPadding, 20 px) until its last step, and the hold is
@@ -200,7 +209,10 @@ if (canDrag) {
 
   // A 3-tab selection: a click on the first, Cmd+click on the other two
   // (real pointer only).
-  if (real()) {
+  if (real() && !ptrHas('cmdclick')) {
+    skipped('3-tab selection and Esc mid-drag', 'the bench\'s ptr has no cmdclick (built before ' +
+            '#265): rebuild it from scripts/mac/tools/ptr.m');
+  } else if (real()) {
     const sel = ['Drag three', 'Drag four', 'Drag five'];
     const select = async () => {
       const v = await viewTree();

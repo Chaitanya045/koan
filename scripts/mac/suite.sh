@@ -349,7 +349,7 @@ run_koan_script() {  # <name> <script> <secs> [extra flags...]
     KOAN_CHROME_ARGS="$(printf '%s\n' "${args[@]}")" KOAN_LOG="$koan_log" KOAN_PID="$pid" \
       KOAN_PROFILE="$prof" KOAN_APP="$app" KOAN_CLI="$app/Contents/Resources/bin/koan" \
       KOAN_AGENT_HOME="$agent_home" KOAN_MAC_TOOLS="$TOOLS" KOAN_INPUT="$input_mode" \
-      UI_PORT="$UI_PORT" CDP_PORT="$CDP_PORT" KOAN_ROOT="$ROOT" \
+      UI_PORT="$UI_PORT" CDP_PORT="$CDP_PORT" KOAN_ROOT="$ROOT" KOAN_E2E_SECS="$secs" \
       run_timeout "$secs" "$e2e_log" node "$script"
     e2e_status=$?
   fi

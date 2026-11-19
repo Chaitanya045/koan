@@ -1,0 +1,5 @@
+# macOS (scripts/mac/suite.sh reads <name>.mac.flags): the test_helper
+# extension, for lib/mac.mjs closeWindowOf(): Close Window is a main-menu key
+# there, which CDP keys never reach, and closing a synced window's tab leaves
+# the window open. {root} is the repo; suite.sh expands it.
+--load-extension={root}/scripts/e2e/extensions/test_helper
