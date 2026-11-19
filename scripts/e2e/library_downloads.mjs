@@ -29,8 +29,8 @@ import {
   pages, sleep, visiblePage, waitFor, IS_MAC, META, NATIVE_MENUS,
 } from './lib/koan.mjs';
 import {
-  KOAN_PID, closeNativeMenu, nativeMenuReport, nativeMenusWhyNot, pickNativeMenu, skipped,
-  waitNativeMenu,
+  KOAN_PID, closeNativeMenu, nativeMenuReport, nativeMenusWhyNot, pickNativeMenu, realInput,
+  skipped, waitNativeMenu,
 } from './lib/mac.mjs';
 // Library Downloads: Ctrl+Shift+Y, on macOS Cmd+J (koan_shortcut_table.cc).
 const DOWNLOADS_KEY = IS_MAC ? [74, META, 'j'] : [89, CTRL | SHIFT, 'Y'];
@@ -292,10 +292,18 @@ if (safe && NATIVE_MENUS && !nativeWhyNot) {
                       : { ok: false, detail: `no native menu opened by a right press on the row (` +
                               `${nodeId ? 'found again' : `not found again of ${rowNodes.length}`}): ` +
                               await nativeMenuReport() };
-  await closeNativeMenu();
+  // A menu Accessibility doesn't find still keeps the browser from
+  // answering; closeNativeMenu() closes it with a real Escape where real
+  // input is on. Without that nothing closes it: stop, not time out.
+  const closed = await closeNativeMenu();
+  check('A finished download\'s menu opens', picked.ok, picked.detail);
+  if (!closed) {
+    check('...and closes again', false, `still open: ${await nativeMenuReport()}; ` +
+          `real input ${realInput() ? 'on' : 'off'}`);
+    finish();
+  }
   await ui.send('DOM.dispatchMouseEvent', event('mouseReleased'));
   ui.close();
-  check('A finished download\'s menu opens', picked.ok, picked.detail);
 } else if (safe && NATIVE_MENUS) {
   skipped('A finished download\'s menu opens (Open, from the row menu)', nativeWhyNot);
 } else if (safe) {

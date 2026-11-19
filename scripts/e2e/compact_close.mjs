@@ -1,9 +1,12 @@
 // End-to-end regression test for closing a window with compact mode on
 // (#130: closing a window tears the browser down before its BrowserView, and
 // anything that starts a sidebar animation then crashed). Compact mode is on
-// from the seeded prefs (prefs/compact_close.json). A second window is opened
-// and closed in each state the sidebar can be in, and after each the browser
-// must still answer, with the first window as it was:
+// from the seeded prefs (prefs/compact_close.json), which also turn off Zen's
+// open-link-in-new-unsynced-window: a CDP Target.createTarget window is a
+// link's new window (WindowOpenDisposition::kNewWindow), a New Blank Window
+// otherwise, which has no Spaces and so no new-Space form. A second window is
+// opened and closed in each state the sidebar can be in, and after each the
+// browser must still answer, with the first window as it was:
 // - a plain close;
 // - a close with the sidebar revealed by the edge hot zone;
 // - a close after Ctrl+Alt+S (the sidebar pinned out);
@@ -85,7 +88,8 @@ await sleep(1000);
 // With the new-Space form open. (On macOS a CDP key reaches Koan's
 // shortcuts in the key window only, and a window CDP opened isn't key:
 // lib/koan.mjs openSpaceForm() makes it key, and with real input presses a
-// real Ctrl+Option+N if the CDP key did nothing, #295.)
+// real Ctrl+Option+N if the CDP key did nothing, #295. The window must be a
+// synced one, with Spaces: see the prefs above.)
 w = await openWindow();
 const opened = await openSpaceForm(w.page);
 // The windows' order in UI DevTools isn't the windows' order on every

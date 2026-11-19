@@ -165,27 +165,36 @@ if (NATIVE_MENUS) {
 } else {
   await tabMenuCommand({ title: await title(opener) }, 'kKoanAddToEssentialsMenuItem');
 }
+// Ctrl+PgDn / Ctrl+PgUp are Chrome's own key equivalents on macOS, which a
+// CDP key was seen not to reach (the 2026-11-19 synthetic run): real keys
+// there (menuKey()), else these checks skip.
+const pageKey = (page, code, name, what) =>
+  menuKey(page, code, CTRL, name, 'k').then(sent => sent || (skipped(what, menuKeyWhyNot()), false));
 await front(c);
-await key(c, VK.PGDN, CTRL, 'PageDown');
-now = await waitFor(() => activeOf([opener, b, c]));
-check('Ctrl+PgDn from the last tab goes on to the Essentials by default',
-      now?.id === opener.id, now ? await title(now) : 'none');
+if (await pageKey(c, VK.PGDN, 'PageDown', 'Ctrl+PgDn from the last tab goes on to the Essentials by default')) {
+  now = await waitFor(() => activeOf([opener, b, c]));
+  check('Ctrl+PgDn from the last tab goes on to the Essentials by default',
+        now?.id === opener.id, now ? await title(now) : 'none');
+}
 
 check('"Ctrl+Tab cycles within Essential or Workspace tabs only" can be on',
       await setPref('koan.tabs.ctrl_tab_within_kind', true));
 await front(c);
-await key(c, VK.PGDN, CTRL, 'PageDown');
-now = await waitFor(() => activeOf([opener, b, c]));
-check('...then Ctrl+PgDn skips the Essentials', now?.id === b.id,
-      now ? await title(now) : 'none');
-await key(b, VK.PGUP, CTRL, 'PageUp');
-now = await waitFor(() => activeOf([opener, b, c]));
-check('...both ways (Ctrl+PgUp)', now?.id === c.id, now ? await title(now) : 'none');
+if (await pageKey(c, VK.PGDN, 'PageDown', '...then Ctrl+PgDn skips the Essentials')) {
+  now = await waitFor(() => activeOf([opener, b, c]));
+  check('...then Ctrl+PgDn skips the Essentials', now?.id === b.id,
+        now ? await title(now) : 'none');
+  if (await pageKey(b, VK.PGUP, 'PageUp', '...both ways (Ctrl+PgUp)')) {
+    now = await waitFor(() => activeOf([opener, b, c]));
+    check('...both ways (Ctrl+PgUp)', now?.id === c.id, now ? await title(now) : 'none');
+  }
+}
 await front(opener);
-await key(opener, VK.PGDN, CTRL, 'PageDown');
-await sleep(800);
-check('...and from an Essential stays among the Essentials',
-      (await activeOf([opener, b, c]))?.id === opener.id);
+if (await pageKey(opener, VK.PGDN, 'PageDown', '...and from an Essential stays among the Essentials')) {
+  await sleep(800);
+  check('...and from an Essential stays among the Essentials',
+        (await activeOf([opener, b, c]))?.id === opener.id);
+}
 
 // Chromium's "Ctrl+Tab in recently used order" wins for Ctrl+Tab over
 // "within Essential or Workspace tabs only", and the page says so under

@@ -36,18 +36,20 @@ const aiOnScreen = async () => (await views()).filter(
     v => v.shown && (/AiMode|AIM|Gemini|AddContext|Composebox/i.test(v.cls) ||
                      AI_PATTERN.test(aiText(v))));
 
-// Esc in the URL bar (see the Cmd+L step); how it went.
-async function escInUrlBar(page) {
+// A key (`name`, Windows key code `vk`) in the URL bar's field (see the
+// Cmd+L step); how it went.
+async function keyInUrlBar(page, name, vk) {
   if (!IS_MAC) {
-    await key(page, VK.ESC, 0, 'Escape');
+    await key(page, vk, 0, name);
     await sleep(500);
-    return 'a CDP Esc';
+    return `a CDP ${name}`;
   }
-  if (realInput() && await realKey('Escape')) return 'a real Esc';
-  await keyToWidget('OmniboxViewViews', VK.ESC);
+  if (realInput() && await realKey(name)) return `a real ${name}`;
+  await keyToWidget('OmniboxViewViews', vk);
   await sleep(500);
-  return 'an Esc to the window\'s widget';
+  return `${name} to the window's widget`;
 }
+const escInUrlBar = page => keyInUrlBar(page, 'Escape', VK.ESC);
 
 let [page] = await pages();
 await front(page);
@@ -128,12 +130,19 @@ const againRows = await waitFor(async () => {
 check('Typing a character and deleting it lists the open tabs again',
       !!againRows, `${shownViews(await views(), 'OmniboxResultView').length} row(s)`);
 // Enter on the first row (the second tab's): it switches, no duplicate.
-await key(page, 40, 0, 'ArrowDown');
-await key(page, 13, 0, 'Enter');
+// Where the keyboard is, the URL bar's field, as for Esc: on macOS a CDP key
+// to the page stays there (the page scrolls on ArrowDown).
+const firstRowText = async () => (await views()).filter(v => v.cls === 'OmniboxTextView' &&
+    v.shown && v.path.some(c => c === 'OmniboxResultView'))[0]?.props?.Text ?? '';
+const how = await keyInUrlBar(page, 'ArrowDown', 40);
+const rowText = await firstRowText();
+await keyInUrlBar(page, 'Enter', 13);
 await sleep(1000);
+const shownNow = await visiblePage();
 check('Enter on the open tab\'s row switches to it: no new tab, that tab is active',
-      (await pages()).length === tabCount && (await visiblePage())?.id === second,
-      `${(await pages()).length} tab(s), was ${tabCount}`);
+      (await pages()).length === tabCount && shownNow?.id === second,
+      `${(await pages()).length} tab(s), was ${tabCount}; keys: ${how}; first row ${JSON.stringify(rowText)}; ` +
+          `shown: ${shownNow?.url ?? 'none'}; ${IS_MAC ? await keyWindowReport() : ''}`);
 // O8 on about:blank (page classification BLANK, not OTHER): the list is there
 // too, with the example.com tab and the first one.
 const blank = (await browserCall('Target.createTarget', { url: 'about:blank' }))

@@ -86,7 +86,11 @@ if (await menuKey(opened, '1', 'c', () => key(opened, VK.ONE, ACCEL, '1'))) {
 // Cmd+W (the main menu's Close Tab on macOS) on `page`.
 const closeTab = page => menuKey(page, 'w', 'c', () => key(page, 87, ACCEL, 'w'));
 // Cmd+W on the page that was opened: back to the empty state, then Cmd+W on
-// it closes the window.
+// it closes the window. What was shown before, for the failure's detail
+// (koan_browsertests' CloseTabOnTheLastListedTabKeepsTheWindow runs the
+// same IDC_CLOSE_TAB off the menu).
+const beforeClose = `before Cmd+W: pages: ${await pageList()}; shown: ` +
+    `${(await isShown(opened)) ? 'the opened page' : 'not the opened page'}; ${await tabRows()} row(s)`;
 if (!await closeTab(opened)) {
   for (const what of ['Closing it shows the empty state again, with no row',
                       'Back into the once-empty tab: it has its row (it is a tab now)',
@@ -102,7 +106,7 @@ await sleep(1000);
 check('Closing it shows the empty state again, with no row',
       (await pages()).length === 1 && await tabRows() === 0,
       `${await tabRows()} row(s); pages: ${await pageList()}; ` +
-      `${(await windows()).length} window(s); ${await keyWindowReport()}`);
+      `${(await windows()).length} window(s); ${await keyWindowReport()}; ${beforeClose}`);
 if (!(await pages()).length) {
   for (const what of ['Back into the once-empty tab: it has its row (it is a tab now)',
                       '...and Cmd+W closes that tab only: the window stays, with the empty tab',

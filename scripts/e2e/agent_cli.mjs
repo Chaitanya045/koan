@@ -57,7 +57,10 @@ const env = { ...process.env, HOME: AGENT_HOME, KOAN_USER_DATA_DIR: PROFILE };
 
 // Runs `koan args...`; resolves {code, out, err}. `whileRunning` runs once
 // the command started (e.g. to answer a dialog it waits for), with a
-// function that returns what the command printed so far.
+// function that returns what the command printed so far. koan() resolves
+// once both are done: Allow lets the command finish, and its exit could
+// come in before allow() returns (the 2026-11-19 run: paired, yet the check
+// on allow()'s answer failed).
 function koan(args, { timeout = 60000, whileRunning } = {}) {
   return new Promise(resolve => {
     const child = spawn(CLI, args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -65,11 +68,13 @@ function koan(args, { timeout = 60000, whileRunning } = {}) {
     child.stdout.on('data', d => (out += d));
     child.stderr.on('data', d => (err += d));
     const timer = setTimeout(() => child.kill('SIGTERM'), timeout);
-    child.on('close', code => {
+    const running = whileRunning?.(() => out + err)
+        .catch(e => console.log(`  (${e.message})`));
+    child.on('close', async code => {
       clearTimeout(timer);
+      await running;
       resolve({ code, out: out.trim(), err: err.trim() });
     });
-    whileRunning?.(() => out + err).catch(e => console.log(`  (${e.message})`));
   });
 }
 const brief = r => `exit ${r.code}; ${(r.err || r.out).split('\n')[0].slice(0, 160)}`;
@@ -81,8 +86,12 @@ const brief = r => `exit ${r.code}; ${(r.err || r.out).split('\n')[0].slice(0, 1
 // DevTools session is between its DOM.enable and DOM.getDocument crashes
 // the browser in UI DevTools (DOMAgentMac::OnNativeWidgetAdded(), whose
 // element_root() is still null), and each poll opens a session.
+// `allowWhy` says why the last call returned false (a failure's detail).
+let allowWhy = '';
 async function allow(title, printed) {
+  allowWhy = 'koan never said it waits in Koan';
   if (!await waitFor(() => / in Koan\.\.\./.test(printed()), 30000)) return false;
+  allowWhy = 'no dialog with that title and an Allow button within 20s';
   // The dialog is shown in a task after the request arrives.
   await sleep(1000);
   const found = await waitFor(async () => {
@@ -94,6 +103,7 @@ async function allow(title, printed) {
     return button && { vs, button };
   }, 20000);
   if (!found) return false;
+  allowWhy = '';
   // Dialogs ignore a click right after they show (InputEventActivationProtector).
   await sleep(1500);
   const vs = await viewTree();
@@ -146,7 +156,7 @@ r = await koan(['pair', '--label', 'koan suite', '--capabilities', 'observe,read
                { timeout: 90000, whileRunning: async printed => {
                  allowed = await allow(/^Allow a program to control Koan\?$/, printed);
                } });
-check('koan pair: the approval dialog showed and was allowed', allowed);
+check('koan pair: the approval dialog showed and was allowed', allowed, allowWhy);
 check('koan pair: paired', r.code === 0 && /paired as/.test(r.out), brief(r));
 if (r.code !== 0) {
   skipped('the rest of agent control', 'not paired');

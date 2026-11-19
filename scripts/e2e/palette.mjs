@@ -399,7 +399,8 @@ check('...and Enter runs it (URL copied)', clip === pageUrl, JSON.stringify(clip
 // Availability follows the state, like Zen's: only the other appearances.
 await openUrlBar();
 rs = await suggest('>dark mode', rs => label(rs[0]) === 'Switch to Dark Mode');
-check('"Switch to Dark Mode" is offered', label(rs[0]) === 'Switch to Dark Mode', rowsText(rs));
+check('"Switch to Dark Mode" is offered', label(rs[0]) === 'Switch to Dark Mode',
+      `${rowsText(rs)}; URL bar ${JSON.stringify((await ui()).omnibox?.text)}`);
 await press(VK.ENTER);
 await sleep(800);
 await openUrlBar();
@@ -429,7 +430,10 @@ if (opened === false) {
   console.log('SKIP  ...and Enter switches to it: its second tab needs real input on macOS ' +
               '(Cmd+T is a main-menu key)');
 } else {
-  check('...and Enter switches to it', await waitFor(tabsShown, n => n === 2) === 2);
+  const shownAfter = await waitFor(tabsShown, n => n === 2);
+  check('...and Enter switches to it', shownAfter === 2,
+        `${shownAfter} tab(s) shown; selected row ${(await rows()).findIndex(r => r.selected)} of ` +
+        `${focus}; URL bar ${JSON.stringify((await ui()).omnibox?.text)}`);
 }
 
 // Folder actions (#42): "New Folder" makes one in the active Space; then

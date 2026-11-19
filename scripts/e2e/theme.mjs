@@ -1,4 +1,6 @@
-// End-to-end test of Zen's theme picker against a real build: the command
+// End-to-end test of Zen's theme picker against a real build, in the Zen
+// look (local_state/theme.json: Space themes are the Zen style's, the
+// default shadcn style has none, KoanThemeController::IsEnabled()): the command
 // palette's "Open Theme Picker" and a Space's "Theme…" (its header
 // menu, and the Create-a-Space form's for a new Space) open the panel
 // beside the sidebar; its layout and controls match Zen's; a preset gives

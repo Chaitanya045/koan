@@ -74,12 +74,15 @@ async function over(label) {
   const tiles = vs.filter(v => v.cls === 'TabView' && v.shown && v.w > 0 && v.path.includes('PinnedTabContainerView'))
       .sort((a, b) => a.ay - b.ay || a.ax - b.ax);
   const gap = vs.find(v => v.cls === 'KoanEssentialsGapView' && v.shown && v.w > 0);
+  // The gap's slot: its place among the tiles, row by row.
+  const gapIndex = gap ? [...tiles, gap].sort((a, b) => a.ay - b.ay || a.ax - b.ax).indexOf(gap) : -1;
   const s = {
     label,
     promo: !!promo,
     promoLit: promo ? String(promo.props.DragOver) === 'true' : false,
     indicator: indicator ? { x: indicator.ax, y: indicator.ay, w: indicator.w, h: indicator.h } : null,
     gap: gap ? { x: gap.ax, y: gap.ay, w: gap.w, h: gap.h } : null,
+    gapIndex,
     // Zen's gap: the placeholder tile takes the first slot, the tiles moved
     // aside (its left in LTR), and no line over the grid.
     gapFirst: !!gap && !!tiles[0] && !indicator && Math.abs(gap.ay - tiles[0].ay) <= 2 &&

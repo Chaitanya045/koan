@@ -18,7 +18,7 @@
 import { ACCEL, ALT, check, evalIn, finish, front, key, onPage, pages, sleep,
          viewTree, waitFor, browserCall } from './lib/koan.mjs';
 import { calibrate, hold, makeKey, ptr, realClick, realInput, realInputWhyNot,
-         realKey, skipped, startServer } from './lib/mac.mjs';
+         realKey, realPointer, skipped, startServer } from './lib/mac.mjs';
 
 const server = await startServer();
 const shown = (vs, cls) => vs.filter(v => v.cls === cls && v.shown);
@@ -83,9 +83,27 @@ const move = async p => {
   await ptr('move', Math.round(p.x), Math.round(p.y), 150);
   await sleep(500);
 };
-// A grip drag to `to`, `between` run with the button still held.
+// Why no header shows over `pane`, for the details: the header views UI
+// DevTools has (each pane's is made on its first hover), where the real
+// pointer is against the pane on screen, and how many show after a second
+// move inside it (shown only then: the first hover's moves didn't reach the
+// header's window monitor, or it hid again).
+async function noHeaderWhy(pane) {
+  const all = (await viewTree()).filter(v => v.cls === 'KoanSplitHeaderView');
+  const p = realPointer();
+  const s = screen(pane);
+  await move({ x: middle(pane).x + 15, y: middle(pane).y + 10 });
+  const again = headers(await viewTree()).length;
+  return `${all.length} header view(s), ${all.filter(v => v.shown).length} shown; the pointer at ` +
+         `${p ? `${Math.round(p.x)},${Math.round(p.y)}` : '?'}, the pane at ${Math.round(s.x)},` +
+         `${Math.round(s.y)} ${pane.w}x${pane.h}; after a second move: ${again} shown`;
+}
+// A grip drag to `to`, `between` run with the button still held. Its
+// `before`: the headers shown just before the press (the grip is the
+// header's).
 async function dragGrip(from, to, between = async () => {}) {
   await move(from);
+  dragGrip.before = headers(await viewTree()).length;
   await hold('down', from.x, from.y);
   await hold('to', from.x + 20, from.y + 20, 150);
   await hold('to', to.x, to.y, 500);
@@ -107,11 +125,11 @@ if (!realInput() || !calibration) {
   await move(middle(left));
   vs = await viewTree();
   check('The pointer over a pane shows one header', headers(vs).length === 1,
-        `${headers(vs).length} shown`);
+        `${headers(vs).length} shown${headers(vs).length ? '' : `; ${await noHeaderWhy(left)}`}`);
   await move(middle(right));
   vs = await viewTree();
   check('Over the other pane: one header still (the other pane\'s)', headers(vs).length === 1,
-        `${headers(vs).length} shown`);
+        `${headers(vs).length} shown${headers(vs).length ? '' : `; ${await noHeaderWhy(right)}`}`);
   await move({ x: calibration.x + 20, y: middle(left).y });
   await sleep(300);
   vs = await viewTree();
@@ -136,7 +154,8 @@ if (!realInput() || !calibration) {
   const before = splitOrder(await viewTree());
   const shownDuring = await dragGrip(grip(left), middle(right),
                                      async () => rearranging(await viewTree()));
-  check('Dragging the grip shows the rearrange view', shownDuring);
+  check('Dragging the grip shows the rearrange view', shownDuring,
+        `${dragGrip.before} header(s) shown before the press on the grip`);
   vs = await viewTree();
   check('Dropped on the other pane\'s middle, the panes swap',
         splitOrder(vs).join() === [...before].reverse().join(),
