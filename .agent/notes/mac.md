@@ -414,3 +414,18 @@ Mac, build there or run Koan there.
   `CHECK(!layer->fills_bounds_opaquely())` fired for `VerticalTabStripRegionView`
   (`custom_corners_background.cc:160` and `:331`). Fixed on the glass side
   (#105 8c5a986c guard, root cause in #41's `InvalidateBackground`).
+
+## Black notch at the top in compact mode (2026-11-20)
+
+Upstream's `vertical_tab_strip_top_corner` / `_bottom_corner`
+(`CustomFloatingCorner`, the frame colour through `ThemedBackground`) are
+BrowserView children placed at the strip's layout bounds and animated by
+`TabStripAnimations` (`kTopCorner`: collapse from 1, hover flyout from its
+resting value to -1). Compact mode lays the strip out at full width at once and
+slides only its layer, so the corners stood alone where the strip was going or
+had been. In native fullscreen the resting top corner is 1 (`kFullscreen`
+window state: Koan defaults `kShowFullscreenToolbar` off), so every peek and
+hide flashed it at the top edge; in a window the collapse on ⌘S started it at
+1. In compact glass and in fullscreen their alpha is 1. Koan hides both in
+compact mode (`koan_sidebar_corners.h`). Check: `scripts/mac/video/flows/compact_edge.mjs`
+then `edge_check.mjs`.

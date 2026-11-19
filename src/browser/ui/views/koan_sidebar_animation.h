@@ -47,6 +47,13 @@ double LayoutSidebarReveal(views::View* browser_view, double progress);
 // upstream's.
 int SidebarRevealWidth(views::View* browser_view);
 
+// Whether the tabbed layout shows upstream's floating corner beside the
+// vertical tab strip whose animated value is `corner_value`: as upstream does
+// (a positive value), but never while compact mode hides the sidebar, whose
+// slide they don't follow (see koan_sidebar_corners.h). Called from
+// BrowserViewTabbedLayoutImpl for the top and the bottom corner.
+bool ShowsSidebarFloatingCorner(views::View* browser_view, double corner_value);
+
 // Compact mode has just hidden the docked sidebar (the page already takes its
 // place): the strip is shown out, over the page, and slides away in Zen's
 // 0.1 s (kSidebarToggleDuration), as Zen's animateCompactMode() does. Nothing

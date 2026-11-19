@@ -25,6 +25,7 @@
 #include "koan/browser/koan_vertical_tabs.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
+#include "koan/browser/ui/views/koan_sidebar_corners.h"
 #include "koan/browser/ui/views/koan_sidebar_curve.h"
 #include "koan/browser/ui/views/koan_vertical_tabs_policy.h"
 #include "ui/base/class_property.h"
@@ -418,6 +419,12 @@ int SidebarRevealWidth(views::View* browser_view) {
     }
   }
   return tabs::kVerticalTabStripDefaultUncollapsedWidth;
+}
+
+bool ShowsSidebarFloatingCorner(views::View* browser_view,
+                                double corner_value) {
+  return SidebarFloatingCornerVisible(corner_value,
+                                      IsCompactModeActive(browser_view));
 }
 
 void SlideSidebarAway(views::View* browser_view) {
