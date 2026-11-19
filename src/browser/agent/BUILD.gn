@@ -112,6 +112,21 @@ source_set("prompts") {
   public_deps = [ "//base" ]
 }
 
+# What the agent indicator shows in a window (design section 6.2): the pill
+# on a controlled tab, the chip elsewhere, the chip's menu and the event
+# toasts, as pure logic.
+source_set("indicator_logic") {
+  sources = [
+    "koan_agent_indicator_logic.cc",
+    "koan_agent_indicator_logic.h",
+  ]
+  public_deps = [
+    ":prompts",
+    ":registry",
+    "//base",
+  ]
+}
+
 # How many connections the gateway keeps open.
 source_set("admission") {
   sources = [
@@ -361,6 +376,7 @@ test("koan_agent_unittests") {
     "koan_agent_facade_unittest.cc",
     "koan_agent_filters_unittest.cc",
     "koan_agent_frame_unittest.cc",
+    "koan_agent_indicator_logic_unittest.cc",
     "koan_agent_lease_scheduler_unittest.cc",
     "koan_agent_limits_unittest.cc",
     "koan_agent_policy_unittest.cc",
@@ -379,6 +395,7 @@ test("koan_agent_unittests") {
     ":facade",
     ":filters",
     ":frame",
+    ":indicator_logic",
     ":lease_scheduler",
     ":limits",
     ":policy",
