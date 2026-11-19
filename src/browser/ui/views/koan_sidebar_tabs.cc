@@ -44,6 +44,7 @@
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
+#include "koan/browser/ui/views/koan_agent_indicator.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
@@ -618,6 +619,33 @@ void PaintContainerLine(gfx::Canvas* canvas,
       kRowLineWidth / 2.f, flags);
 }
 
+// Agent control's mark (.agent/notes/agent-control.md section 6.2): the
+// agent's dot in the top trailing corner of a tab an agent holds, as on the
+// indicator's chip.
+void PaintAgentDot(gfx::Canvas* canvas,
+                   const views::View& view,
+                   const BrowserView* browser_view) {
+  constexpr int kDotSize = 6;
+  constexpr int kDotInset = 4;
+  const TabView* tab_view = views::AsViewClass<TabView>(&view);
+  const tabs::TabInterface* tab =
+      tab_view ? tab_view->GetTabInterface() : nullptr;
+  const KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+  if (!tab || !controller || !controller->agent_indicator() ||
+      !controller->agent_indicator()->IsAgentTab(tab->GetContents())) {
+    return;
+  }
+  cc::PaintFlags flags;
+  flags.setAntiAlias(true);
+  flags.setColor(view.GetColorProvider()->GetColor(kColorKoanAgentAccent));
+  const int x = view.GetMirroredXWithWidthInView(
+      view.width() - kDotInset - kDotSize, kDotSize);
+  canvas->DrawCircle(
+      gfx::PointF(x + kDotSize / 2.f, kDotInset + kDotSize / 2.f),
+      kDotSize / 2.f, flags);
+}
+
 }  // namespace
 
 int GetSidebarTabRowsHeight(const TabStripView* tab_strip_view) {
@@ -748,6 +776,7 @@ bool PaintSidebarTab(gfx::Canvas* canvas,
   if (pinned) {
     PaintEssentialsTile(canvas, tab, selected, hover, corner_radius);
     PaintContainerLine(canvas, tab, browser_view, pinned, corner_radius);
+    PaintAgentDot(canvas, tab, browser_view);
     return true;
   }
   SkColor color = SK_ColorTRANSPARENT;
@@ -766,6 +795,7 @@ bool PaintSidebarTab(gfx::Canvas* canvas,
                           flags);
   }
   PaintContainerLine(canvas, tab, browser_view, pinned, corner_radius);
+  PaintAgentDot(canvas, tab, browser_view);
   return true;
 }
 

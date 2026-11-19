@@ -112,6 +112,8 @@ class KoanBrowserViewController : public views::ViewObserver,
   KoanWelcome* welcome() const { return welcome_.get(); }
   KoanWindowSyncClient* window_sync() const { return window_sync_.get(); }
   KoanCommandPalette* command_palette() const { return command_palette_.get(); }
+  // Agent control's indicator (it also marks the sidebar's agent tabs).
+  KoanAgentIndicator* agent_indicator() const { return agent_indicator_.get(); }
   // Koan features' data for this window's session (koan_session_data.h).
   std::map<std::string, std::string>& session_data() { return session_data_; }
 

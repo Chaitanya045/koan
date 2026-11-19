@@ -681,6 +681,7 @@ source_set("impl") {
     "//koan/browser:vertical_tabs",
     "//koan/browser:welcome_state",
     "//koan/browser/agent:browser",
+    "//koan/browser/agent:indicator_logic",
     "//koan/browser/containers",
     "//koan/browser/containers:impl",
     "//koan/browser/containers:partition",
