@@ -1762,7 +1762,8 @@ std::optional<gfx::Rect> KoanTabDrag::UpdateGridGap(const gfx::Point& point,
     SetEssentialsDragGap(grid, moving, *gap_slot_);
   }
   // The slots with the gap, wherever it is (the grid's target layout), and
-  // the slot under the dragged tile's centre (the image's tile).
+  // the slot under the dragged tile's centre (the image's tile), the first
+  // while the pointer is above the grid.
   std::vector<gfx::Rect> slots;
   for (const gfx::Rect& slot : GetEssentialsSlots(grid)) {
     slots.push_back(views::View::ConvertRectToTarget(grid, region, slot));
@@ -1776,7 +1777,8 @@ std::optional<gfx::Rect> KoanTabDrag::UpdateGridGap(const gfx::Point& point,
       point - tile_grab +
       gfx::Vector2d(tile_size_.width() / 2, tile_size_.height() / 2);
   const size_t slot = std::min(
-      EssentialsGapSlot(slots, centre, base::i18n::IsRTL(), *gap_slot_),
+      EssentialsGapSlot(slots, EssentialsGapProbe(slots, point, centre),
+                        base::i18n::IsRTL(), *gap_slot_),
       others.size());
   if (slot != *gap_slot_) {
     gap_slot_ = slot;

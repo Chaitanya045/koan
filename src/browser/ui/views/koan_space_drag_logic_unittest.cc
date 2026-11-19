@@ -140,6 +140,25 @@ TEST(KoanSpaceDragLogicTest, TheEssentialsGapFromAboveTheGridIsFirst) {
   EXPECT_EQ(0u, EssentialsGapSlot(slots, {10, 98}, /*rtl=*/true, 2));
 }
 
+// The tile hangs below-right of the pointer: with the pointer above the grid
+// (over the URL bar, 98) the tile's centre is over its first row already
+// (153), and the pointer decides: the first slot (Mac cycle 14,
+// essentials_drag round 3). In the grid, the tile's centre.
+TEST(KoanSpaceDragLogicTest, TheEssentialsGapGoesByThePointerAboveTheGrid) {
+  const std::vector<gfx::Rect> slots = {{0, 132, 101, 46}, {105, 132, 101, 46}};
+  const gfx::Point centre(154, 153);
+  EXPECT_EQ(gfx::Point(115, 98), EssentialsGapProbe(slots, {115, 98}, centre));
+  EXPECT_EQ(
+      0u, EssentialsGapSlot(slots, EssentialsGapProbe(slots, {115, 98}, centre),
+                            /*rtl=*/false, 1));
+  // In the first row (or below it): the tile's centre, Zen's.
+  EXPECT_EQ(centre, EssentialsGapProbe(slots, {115, 132}, centre));
+  EXPECT_EQ(1u, EssentialsGapSlot(slots,
+                                  EssentialsGapProbe(slots, {115, 140}, centre),
+                                  /*rtl=*/false, 0));
+  EXPECT_EQ(centre, EssentialsGapProbe({}, {115, 98}, centre));
+}
+
 TEST(KoanSpaceDragLogicTest, TheEssentialsGapMirrorsInRtl) {
   // RTL: the first slot is on the right; the last row ends on the left.
   const std::vector<gfx::Rect> slots = {{108, 0, 50, 44}, {54, 0, 50, 44}};

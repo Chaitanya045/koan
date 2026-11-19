@@ -332,9 +332,11 @@ await waitFor(async () => await navViews() === 1);
 // Search: Chromium's one search box finds Koan's settings and shortcuts and
 // Chromium's own.
 await evalIn(settings, searchSettings('compact'));
-const found = await waitFor(() => evalIn(settings,
-    `koanSettingsRoot.querySelector('#pane').textContent`),
-    t => t?.includes('Toggle Compact Mode'));
+const paneText = () => evalIn(settings, `koanSettingsRoot.querySelector('#pane').textContent`);
+const found = await waitFor(async () => {
+  const t = await paneText();
+  return t?.includes('Toggle Compact Mode') && t;
+}) || await paneText();
 check('Search finds Koan\'s settings and shortcuts',
       found?.includes('Enable Koan\'s compact mode') && found?.includes('Toggle Compact Mode'));
 // A section of the page in search results: shown, not hidden by the search.
@@ -348,11 +350,16 @@ const sectionFound = id => evalIn(settings, `(() => {
 const koanShown = () => evalIn(settings,
     `!koanSettingsRoot.host.hasAttribute('hidden-by-search')`);
 // "cookies" is in Koan's agent settings and in Chromium's Privacy section.
+// (Chromium searches every section, which can take a while on the Mac.)
 await evalIn(settings, searchSettings('cookies'));
+const koanCookies = async () =>
+    (await evalIn(settings, `koanSettingsRoot.getElementById('pane').textContent`))
+        ?.includes('cookies');
 check('A search for both lists Koan\'s matches and Chromium\'s ("cookies")',
       await waitFor(async () => await koanShown() && await sectionFound('privacy') &&
-          (await evalIn(settings, `koanSettingsRoot.getElementById('pane').textContent`))
-              ?.includes('cookies')));
+          await koanCookies(), 10000),
+      `Koan shown ${await koanShown()}, its rows say cookies ${await koanCookies()}, ` +
+      `Privacy found ${await sectionFound('privacy')}`);
 // "proxy" is only in Chromium's System section.
 await evalIn(settings, searchSettings('proxy'));
 check('...a Chromium-only search ("proxy") shows Chromium\'s and no Koan block',
@@ -460,9 +467,10 @@ const DEEP = `const find = (root, s) => root.querySelector(s) ??
   const findAll = (root, s) => [...root.querySelectorAll(s),
     ...[...root.querySelectorAll('*')].filter(el => el.shadowRoot &&
         el.shadowRoot !== window.koanSettingsRoot).flatMap(el => findAll(el.shadowRoot, s))];`;
+// 'shown' if any match shows (a subpage that isn't open may hold another).
 const rowState = selector => evalIn(settings, `(() => { ${DEEP}
-  const el = find(document, ${JSON.stringify(selector)});
-  return !el ? 'absent' : el.checkVisibility() ? 'shown' : 'hidden';
+  const els = findAll(document, ${JSON.stringify(selector)});
+  return !els.length ? 'absent' : els.some(el => el.checkVisibility()) ? 'shown' : 'hidden';
 })()`);
 const goTo = async path => {
   await onPage(settings, c => c.send('Page.navigate', { url: `chrome://settings${path}` }));
@@ -489,7 +497,12 @@ await goTo('/ai');
 check('...and chrome://settings/ai shows no AI section',
       await rowState('settings-ai-page-index') !== 'shown' &&
       await rowState('settings-ai-page') !== 'shown');
-await goTo('/syncSetup');
+// On desktop the People section links to the Google services subpage
+// (/googleServices), not to sync's (/syncSetup): Chromium 158 always replaces
+// the sync promos there (syncer::IsReplaceSyncPromosWithSignInPromosEnabled(),
+// people_page.ts shouldHideSyncSetupLinkRow_()). Its rows are
+// settings-personalization-options, as sync's were.
+await goTo('/googleServices');
 await waitFor(async () => await rowState('settings-personalization-options') === 'shown', 8000);
 const signinRow = await rowState('#signinAllowedToggle');
 check('People > Google services: no "Allow sign-in" switch (sign-in is off)',
@@ -501,12 +514,14 @@ const urlCollection = await rowState('#urlCollectionToggle');
 check('...where "Make searches and browsing better" stays', urlCollection === 'shown',
       urlCollection);
 await goTo('/people');
-const syncLabel = await waitFor(() => evalIn(settings, `(() => { ${DEEP}
-  const row = find(document, '#sync-setup');
-  return row?.checkVisibility() ? row.label : null;
+const peopleRows = await waitFor(() => evalIn(settings, `(() => { ${DEEP}
+  const label = id => (row => row?.checkVisibility() ? row.label : null)(find(document, id));
+  const r = { googleServices: label('#google-services'), sync: label('#sync-setup') };
+  return r.googleServices || r.sync ? r : null;
 })()`), 8000);
 check('...and the People row to it says Google services, not sync',
-      syncLabel === 'Google services', JSON.stringify(syncLabel));
+      peopleRows?.googleServices === 'Google services' && !peopleRows.sync,
+      JSON.stringify(peopleRows));
 // Chromium's search finds none of them. (Koan's own rows, such as its theme
 // ones, may match "theme": only Chromium's highlights count.)
 for (const text of ['Gemini', 'ad privacy', 'Show home button']) {

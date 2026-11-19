@@ -99,6 +99,13 @@ size_t EssentialsGapSlot(const std::vector<gfx::Rect>& slots,
   return std::min(current, slots.size() - 1);
 }
 
+gfx::Point EssentialsGapProbe(const std::vector<gfx::Rect>& slots,
+                              const gfx::Point& pointer,
+                              const gfx::Point& tile_centre) {
+  return !slots.empty() && pointer.y() < slots.front().y() ? pointer
+                                                           : tile_centre;
+}
+
 gfx::Rect EmptyEssentialsDropZone(const gfx::Size& sidebar,
                                   const gfx::Rect& header,
                                   const std::optional<gfx::Rect>& promo) {

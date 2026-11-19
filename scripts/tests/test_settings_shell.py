@@ -81,9 +81,12 @@ class SettingsShellTest(unittest.TestCase):
     served = set(re.findall(r'\{"(koan_[\w.]+)", File::', ui))
     used = {'koan_settings_page.js'}
     used |= set(re.findall(r"href: '(koan_[\w.]+)'", JS))
-    used |= set(re.findall(r"fetch\(`(koan_[\w.]+)", JS))
+    used |= set(re.findall(r"href: `(koan_[\w.]+)", JS))
     used |= set(re.findall(r'url\(/(koan_[\w.]+)\)', ui))
     self.assertEqual(used, served)
+    # fetch() refuses chrome:// URLs (Mac cycle 14: koan_chromium.css never
+    # loaded), so the page loads its files as <link>s.
+    self.assertNotRegex(JS, r'fetch\([`\'"]')
     self.assertIn('<koan-settings-page>',
                   added_lines('settings_main/settings_main.html.patch'))
     self.assertIn("customElements.define('koan-settings-page'", JS)

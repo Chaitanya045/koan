@@ -1650,18 +1650,10 @@ void KoanUrlBarController::OnKeyEvent(ui::KeyEvent* event) {
   // be bound too.
   constexpr int kModifiers = ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN |
                              ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN;
-  // Zen: Tab on an empty input enters commands mode, the command palette
-  // (its ">" mode here; Tab keeps its meaning with the palette off).
-  LocationBarView* bar = location_bar();
-  if (features::IsCommandPaletteEnabled() &&
-      event->type() == ui::EventType::kKeyPressed &&
-      event->key_code() == ui::VKEY_TAB && (event->flags() & kModifiers) == 0 &&
-      (is_open() || new_tab_) && bar && bar->omnibox_view() &&
-      bar->omnibox_view()->GetText().empty()) {
-    event->SetHandled();
-    bar->omnibox_view()->SetUserText(u">", /*update_popup=*/true);
-    return;
-  }
+  // (Zen's Tab on an empty input, the command palette's ">" mode, and Tab
+  // again to leave it, are KoanCommandPalette::OnKeyEvent()'s, a handler on
+  // the same omnibox that runs before this one: a second Tab here would put
+  // back the ">" it just cleared.)
   // Zen: Esc closes the bar (Chrome's omnibox would first close the
   // suggestions, then revert, then give the page focus).
   if (event->type() == ui::EventType::kKeyPressed &&
