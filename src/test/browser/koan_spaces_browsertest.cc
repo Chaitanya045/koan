@@ -23,7 +23,9 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/prefs/pref_service.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/browser_test_utils.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/koan_shortcut_table.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
@@ -277,6 +279,45 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
 }
 
 // A new window opens on its empty tab too.
+// The Mac run (cycle 17, sidebar_tabs): Cmd+W on a second window's only tab,
+// a blank page opened by a page there (window.open) that then closed, closed
+// the window; Zen keeps it, on the Space's empty tab, and Cmd+W there closes
+// it. Chrome's Close Tab command, as the menu's Cmd+W, in a window that is
+// not the first.
+IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
+                       CloseTabOnASecondWindowsOnlyBlankTabKeepsTheWindow) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  BrowserWindowInterface* other = CreateBrowser(browser()->GetProfile());
+  ASSERT_TRUE(WaitForSpaceCount(other, 1));
+  TabStripModel* model = other->GetTabStripModel();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(other, GURL(kPage)));
+  content::WebContents* opener = model->GetActiveWebContents();
+  ASSERT_TRUE(content::ExecJs(opener, "window.open('about:blank', '_blank')"));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return model->count() == 2 && model->GetActiveWebContents() != opener;
+  }));
+  tabs::TabInterface* blank = model->GetActiveTab();
+  model->CloseWebContentsAt(model->GetIndexOfWebContents(opener),
+                            TabCloseTypes::CLOSE_USER_GESTURE);
+  ASSERT_EQ(1, model->count());
+  ASSERT_EQ(blank, model->GetActiveTab());
+  EXPECT_FALSE(IsEmptyTab(blank));
+  EXPECT_TRUE(blank->GetGroup());
+
+  base::WeakPtr<BrowserWindowInterface> window = other->GetWeakPtr();
+  chrome::ExecuteCommand(other, IDC_CLOSE_TAB);
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(window) << "Cmd+W closed the window";
+  ASSERT_FALSE(window->IsDeleteScheduled()) << "Cmd+W closed the window";
+  ASSERT_EQ(1, window->GetTabStripModel()->count());
+  EXPECT_TRUE(IsEmptyTab(window->GetTabStripModel()->GetActiveTab()));
+
+  // Cmd+W on the empty tab closes the window.
+  chrome::ExecuteCommand(other, IDC_CLOSE_TAB);
+  EXPECT_TRUE(base::test::RunUntil(
+      [&] { return !window || window->IsDeleteScheduled(); }));
+}
+
 IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest, NewWindowOpensOnTheEmptyTab) {
   BrowserWindowInterface* other = CreateBrowser(browser()->GetProfile());
   ASSERT_TRUE(WaitForSpaceCount(other, 1));
