@@ -23,6 +23,14 @@
 //   option takes on the first click, and act choose works; koan shell runs
 //   several commands on one connection; per-command times, old against new
 //   (INFO lines);
+// - batches (koan act with several steps): a 3-page form done in at most 3
+//   koan calls (locators across the pages, --until on the last URL), with
+//   the old one-verb-per-call loop's calls and time against it (INFO); a
+//   batch stopped by the user taking the tab (the pill's Take over, as the
+//   user would press it) says where it stopped and types nothing after;
+//   --diff after a change prints only the change, and "baseline reset" on a
+//   new page; a ref of a re-rendered element is refused, its locator works,
+//   and a locator that names two elements lists them;
 // - a form (#340): act select sets a dropdown (and fill on it does too), the
 //   form submits the value; fill on a checkbox fails instead of "ok";
 //   checkbox and radio states show in the snapshot; a ref from before a
@@ -62,8 +70,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { browserCall, check, evalIn, finish, pages, setKoanPref, showPane, sleep,
          viewTree, waitFor } from './lib/koan.mjs';
-import { IS_MAC, KOAN_LOG, alive, fatalInLog, rootMouse, rootOf, skip, skipped,
-         startServer } from './lib/mac.mjs';
+import { IS_MAC, KOAN_LOG, alive, clickThroughRoot, fatalInLog, rootMouse, rootOf, skip,
+         skipped, startServer } from './lib/mac.mjs';
 
 if (!IS_MAC) skip('agent control\'s CLI needs macOS (its holder resolves peers with LOCAL_PEERTOKEN)');
 const CLI = process.env.KOAN_CLI;
@@ -527,6 +535,233 @@ check('koan screenshot: a PNG of the page', r.code === 0 && png.subarray(1, 4).t
               ` koan shell ${together.toFixed(1)} ms`);
   pagesServer.closeAllConnections?.();
   pagesServer.close();
+}
+
+// --- Batches: several steps in one koan act (agent-control.md section 12,
+// "Batches"). The pages: a 3-page form (/wiz/1 -> /wiz/2 -> /wiz/3 ->
+// /wiz/done, which records what was sent); /typing, whose button waits 2.5 s
+// for the server; /list, whose button adds an item; /rerender, whose
+// Shuffle re-creates its Continue button.
+{
+  const wizard = [];
+  const WIZ = {
+    '/wiz/1': `<!doctype html><title>Step 1</title><h1>Your name</h1>
+      <form action=/wiz/2><label>First name <input name=first></label>
+      <label>Last name <input name=last></label>
+      <label>Country <select name=country><option>India</option><option>United Kingdom</option>
+        <option>Uganda</option></select></label><button>Next</button></form>`,
+    '/wiz/2': q => `<!doctype html><title>Step 2</title><h1>Contact</h1>
+      <form action=/wiz/3>${[...q.searchParams].map(([k, v]) =>
+        `<input type=hidden name=${k} value="${v.replace(/"/g, '&quot;')}">`).join('')}
+      <label>Email <input name=email type=email></label>
+      <label>Plan <select name=plan><option>Free</option><option>Pro</option></select></label>
+      <button>Next</button></form>`,
+    '/wiz/3': q => `<!doctype html><title>Step 3</title><h1>Confirm</h1>
+      <form action=/wiz/done>${[...q.searchParams].map(([k, v]) =>
+        `<input type=hidden name=${k} value="${v.replace(/"/g, '&quot;')}">`).join('')}
+      <label><input type=checkbox name=agree> I agree</label><button>Submit</button></form>`,
+    '/wiz/done': q => {
+      wizard.push(Object.fromEntries(q.searchParams));
+      return `<!doctype html><title>Done</title><h1>Thanks, ${q.searchParams.get('first')}</h1>`;
+    },
+    '/typing': `<!doctype html><title>Typing</title><h1>Typing</h1>
+      <label>One <input id=f1></label>
+      <button onclick="fetch('/slow').then(r => r.text()).then(t => { document.getElementById('st').textContent = t; })">Check</button>
+      <p id=st>Not checked</p>
+      <label>Two <input id=f2></label><label>Three <input id=f3></label>`,
+    '/list': `<!doctype html><title>List</title><h1>List</h1><ul id=l><li>First item</li></ul>
+      <label>Note <input id=note></label>
+      <button onclick="const li = document.createElement('li'); li.textContent = 'Item ' + (l.children.length + 1);
+        l.append(li); document.getElementById('st').textContent = 'Added';">Add</button>
+      <p id=st role=status></p>`,
+    '/rerender': `<!doctype html><title>Rerender</title><h1 id=h>Waiting</h1><div id=box></div>
+      <button onclick="render()">Shuffle</button><button>Save</button><button>Save</button>
+      <script>
+        function render() {
+          document.getElementById('box').innerHTML = '<button id=go>Continue</button>';
+          document.getElementById('go').onclick = () => { document.getElementById('h').textContent = 'Continued'; };
+        }
+        render();
+      </script>`,
+  };
+  const batchServer = http.createServer((q, s) => {
+    const u = new URL(q.url, 'http://x');
+    if (u.pathname === '/slow') {
+      setTimeout(() => s.end('Checked'), 2500);
+      return;
+    }
+    const page = WIZ[u.pathname];
+    s.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+    s.end(typeof page === 'function' ? page(u) : page ?? '<!doctype html><title>Page</title>');
+  });
+  await new Promise(res => batchServer.listen(0, '127.0.0.1', res));
+  const at = p => `http://127.0.0.1:${batchServer.address().port}${p}`;
+  const loc = (role, name) => `loc:role=${role}[name="${name}"]`;
+  const refOf = (text, re) => text.split('\n').find(l => re.test(l))?.match(/@(\d+)/)?.[0];
+  const counted = () => {
+    let calls = 0;
+    const t0 = Date.now();
+    return { run: async (args, opts) => { ++calls; return koan(args, opts); },
+             get calls() { return calls; }, get ms() { return Date.now() - t0; } };
+  };
+
+  // The 3-page form in at most 3 calls: open, one batch, (the batch's own
+  // snapshot is the check).
+  const quick = counted();
+  r = await quick.run(['open', at('/wiz/1'), '--task', 'batch']);
+  const wiz = r.out.split('\n').at(-1);
+  r = await quick.run(['act', wiz,
+    'fill', loc('textbox', 'First name'), 'Ada', 'fill', loc('textbox', 'Last name'), 'Lovelace',
+    'choose', loc('combobox', 'Country'), 'United Kingdom', 'click', loc('button', 'Next'),
+    'fill', loc('textbox', 'Email'), 'ada@example.com', 'choose', loc('combobox', 'Plan'), 'Pro',
+    'click', loc('button', 'Next'),
+    'click', loc('checkbox', 'I agree'), 'click', loc('button', 'Submit'),
+    '--until', 'url~/wiz/done', '--interactive']);
+  const sent = wizard.at(-1) ?? {};
+  check('Batch: a 3-page form in at most 3 koan calls, every step one receipt',
+        quick.calls <= 3 && r.code === 0 && (r.out.match(/^\d+\/9 /gm) ?? []).length === 9 &&
+        /^until url~\/wiz\/done: met$/m.test(r.out), `${quick.calls} calls; ${brief(r)}`);
+  check('...the server got every field, and the batch\'s snapshot shows the last page',
+        sent.first === 'Ada' && sent.last === 'Lovelace' && sent.country === 'United Kingdom' &&
+        sent.email === 'ada@example.com' && sent.plan === 'Pro' && sent.agree === 'on' &&
+        /heading "Thanks, Ada"/.test(r.out), JSON.stringify(sent));
+  const newMs = quick.ms;
+
+  // The same form, the old way: one verb per call, a snapshot to read each
+  // page's refs.
+  const slow = counted();
+  r = await slow.run(['act', wiz, 'navigate', at('/wiz/1')]);
+  let snap = await slow.run(['snapshot', wiz]);
+  for (const [re, verb, text] of [[/textbox "First name"/, 'fill', 'Ada'], [/textbox "Last name"/, 'fill', 'Lovelace'],
+                                  [/combobox "Country"/, 'select', 'United Kingdom'], [/button "Next"/, 'click']]) {
+    await slow.run(['act', wiz, verb, refOf(snap.out, re) ?? '@0', ...(text ? [text] : [])]);
+  }
+  snap = await slow.run(['snapshot', wiz]);
+  for (const [re, verb, text] of [[/textbox "Email"/, 'fill', 'ada@example.com'], [/combobox "Plan"/, 'select', 'Pro'],
+                                  [/button "Next"/, 'click']]) {
+    await slow.run(['act', wiz, verb, refOf(snap.out, re) ?? '@0', ...(text ? [text] : [])]);
+  }
+  snap = await slow.run(['snapshot', wiz]);
+  for (const re of [/checkbox "I agree"/, /button "Submit"/]) {
+    await slow.run(['act', wiz, 'click', refOf(snap.out, re) ?? '@0']);
+  }
+  snap = await slow.run(['snapshot', wiz]);
+  check('...the old way gets there too (the comparison is fair)', /heading "Thanks, Ada"/.test(snap.out),
+        brief(snap));
+  console.log(`INFO  3-page form: old loop (one verb a call) ${slow.calls} calls, ${slow.ms} ms;` +
+              ` batch ${quick.calls} calls, ${newMs} ms`);
+
+  // The loop the guide recommends, with refs: snapshot --interactive, then a
+  // batch per page with --until and --diff.
+  const guided = counted();
+  r = await guided.run(['act', wiz, 'navigate', at('/wiz/1')]);
+  snap = await guided.run(['snapshot', wiz, '--interactive']);
+  const ref = re => refOf(snap.out, re) ?? '@0';
+  snap = await guided.run(['act', wiz, 'fill', `${ref(/textbox "First name"/)}=Ada`, `${ref(/textbox "Last name"/)}=Lovelace`,
+                           'choose', ref(/combobox "Country"/), 'Uganda', 'click', ref(/button "Next"/),
+                           '--until', 'url~/wiz/2', '--interactive', '--diff']);
+  check('Batch: --diff after a navigation says "baseline reset" and prints the new page',
+        snap.code === 0 && /^baseline reset \(the tab shows a new page\)/m.test(snap.out) &&
+        /textbox "Email"/.test(snap.out), brief(snap));
+  snap = await guided.run(['act', wiz, 'fill', ref(/textbox "Email"/), 'ada@example.com', 'choose',
+                           ref(/combobox "Plan"/), 'Free', 'click', ref(/button "Next"/),
+                           '--until', 'url~/wiz/3', '--interactive', '--diff']);
+  snap = await guided.run(['act', wiz, 'click', ref(/checkbox "I agree"/), 'click', ref(/button "Submit"/),
+                           '--until', 'url~/wiz/done', '--interactive', '--diff']);
+  check('...the guide\'s loop (snapshot --interactive, a batch a page) finishes the form',
+        snap.code === 0 && /heading "Thanks, Ada"/.test(snap.out) && wizard.at(-1)?.country === 'Uganda',
+        brief(snap));
+  console.log(`INFO  3-page form, the guide's loop with refs: ${guided.calls} calls, ${guided.ms} ms`);
+
+  // A stale ref mid-batch fails, and nothing after it runs.
+  r = await koan(['act', wiz, 'navigate', at('/wiz/1')]);
+  snap = await koan(['snapshot', wiz, '--interactive']);
+  r = await koan(['act', wiz, 'click', ref(/button "Next"/), 'fill', ref(/textbox "First name"/), 'Late']);
+  check('Batch: a ref from before a navigation, mid-batch, stops it (Koan.staleRef, nothing guessed)',
+        r.code !== 0 && /^1\/2 click @\d+: ok/m.test(r.out) &&
+        /^stopped at 2\/2 fill @\d+: Koan\.staleRef/m.test(r.out), brief(r));
+
+  // The user takes the tab while a batch runs: it stops before the next
+  // step, and says where. The tab is shown so that its pill (Take over) is.
+  r = await koan(['open', at('/typing'), '--task', 'batch']);
+  const typing = r.out.split('\n').at(-1);
+  snap = await koan(['snapshot', typing, '--interactive']);
+  const [one, check1, two, three] = [/textbox "One"/, /button "Check"/, /textbox "Two"/, /textbox "Three"/]
+      .map(re => refOf(snap.out, re) ?? '@0');
+  const shown = await browserCall('Target.activateTarget', { targetId: typing });
+  await sleep(1500);
+  let tookOver = false;
+  const batch = koan(['act', typing, 'fill', one, 'first', 'click', check1, 'fill', two, 'second',
+                      'fill', three, 'third'], {
+    whileRunning: async () => {
+      // During the click's wait for the slow server.
+      await sleep(900);
+      const vs = await viewTree();
+      const button = vs.find(v => v.shown && v.cls === 'LabelButton' && v.props.Text === 'Take over');
+      if (button) {
+        await clickThroughRoot(vs, button);
+        tookOver = true;
+      }
+    } });
+  r = await batch;
+  const typed = await waitFor(async () => {
+    const page = (await pages()).find(p => p.id === typing);
+    return page && evalIn(page, `[f1.value, f2.value, f3.value].join('|')`);
+  });
+  if (shown.error || !tookOver) {
+    skipped('a batch stopped by the user', shown.error ? shown.error.message : 'no Take over button in the pill');
+  } else {
+    check('Batch: the user taking the tab stops it, saying where and why (Koan.paused)',
+          r.code !== 0 && /^stopped at [23]\/4 .*Koan\.paused/m.test(r.out) && /^not run: .*4\/4 fill/m.test(r.out),
+          brief(r));
+    check('...nothing is typed after the user took the tab', typed === 'first||', `${typed}`);
+    // Hand it back (the pill), as the user would.
+    const vs = await viewTree();
+    const back = vs.find(v => v.shown && v.cls === 'LabelButton' && v.props.Text === 'Hand back');
+    if (back) await clickThroughRoot(vs, back);
+    await sleep(800);
+  }
+  const user = (await pages()).find(p => p.id !== typing && !/^(chrome|devtools)/.test(p.url));
+  if (user) await browserCall('Target.activateTarget', { targetId: user.id });
+
+  // --diff after a change: only the change. A ref stays the same while its
+  // element does (typing in it, a change elsewhere).
+  r = await koan(['act', wiz, 'navigate', at('/list')]);
+  snap = await koan(['snapshot', wiz]);
+  const add = refOf(snap.out, /button "Add"/);
+  const note = refOf(snap.out, /textbox "Note"/);
+  r = await koan(['act', wiz, 'fill', note ?? '@0', 'kept', 'click', add ?? '@0', '--diff']);
+  const diffBody = r.out.split('\n').filter(l => /^[+~-] /.test(l));
+  check('Batch: --diff after a change prints only what changed (the field, the new item)',
+        r.code === 0 && /^diff since the last snapshot of this page: /m.test(r.out) &&
+        diffBody.some(l => /^\+ .*Item 2/.test(l)) && diffBody.some(l => /^~ textbox "Note" = "kept"/.test(l)) &&
+        !/heading "List"/.test(diffBody.join('\n')), r.out.slice(0, 300));
+  r = await koan(['act', wiz, 'fill', note ?? '@0', 'again']);
+  check('...the field\'s ref still works after the page changed around it', r.code === 0, brief(r));
+
+  // A locator survives a re-render; a ref does not, and is not guessed.
+  r = await koan(['act', wiz, 'navigate', at('/rerender')]);
+  snap = await koan(['snapshot', wiz, '--locators']);
+  const go = refOf(snap.out, /button "Continue"/);
+  check('Locators: the snapshot prints a locator after a ref that has one, not after the two Saves',
+        /button "Continue" @\d+ loc:role=button\[name="Continue"\]/.test(snap.out) &&
+        /button "Save" @\d+$/m.test(snap.out), snap.out.slice(0, 300));
+  r = await koan(['act', wiz, 'click', refOf(snap.out, /button "Shuffle"/) ?? '@0']);
+  r = await koan(['act', wiz, 'click', go ?? '@0']);
+  check('Locators: a re-rendered element\'s old ref is refused (Koan.staleRef)',
+        r.code !== 0 && /Koan\.staleRef/.test(r.err), brief(r));
+  r = await koan(['act', wiz, 'click', loc('button', 'Continue'), '--snapshot']);
+  check('...its locator finds the new element and the click lands', r.code === 0 && /heading "Continued"/.test(r.out),
+        brief(r));
+  r = await koan(['act', wiz, 'click', loc('button', 'Save')]);
+  check('...a locator that names two elements fails, listing both (Koan.ambiguous)',
+        r.code !== 0 && /Koan\.ambiguous/.test(r.err) && (r.err.match(/button "Save" @\d+/g) ?? []).length === 2,
+        brief(r));
+
+  r = await koan(['end', '--task', 'batch']);
+  check('Batch: koan end --task batch', r.code === 0, brief(r));
+  batchServer.closeAllConnections?.();
+  batchServer.close();
 }
 
 // --- Extensions and permissions in an agent tab (`agentTab`), against a

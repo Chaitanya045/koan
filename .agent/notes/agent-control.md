@@ -1280,6 +1280,42 @@ still asked before each request), commands parsed by `ParseShellLine()` (shell q
 (`--stop-on-error`), so there is no `koan batch`. `watch`, `agent-browser` and `shell` are refused inside it; `--client`
 and `--user-data-dir` are the shell's own.
 
+**Batches and cheaper snapshots (2026-11-20, #cli-batch).** Model time dominates an agent's loop (3 to 5 s a turn), so
+the measure is turns and tokens, not milliseconds; and no model-written JavaScript runs (ego's `run`, a script of 10
+commands, saves turns by trusting the model's code with the page). *Batches* (`koan_cli_batch.*`, pure, unit tested):
+`koan act <tab> <step> <step> ...` (or `--steps FILE`, one or more steps a line), at most 50, run **in the CLI** one after
+another over the connection the command already has: every step is the single act's code (the same CDP the facade's policy
+tables allow, the same settle between steps), so the browser gains no capability, and the round trips a step makes are
+local (holder and gateway, well under a millisecond each against a model turn of seconds); running them browser-side would
+save nothing an agent can measure and would put a second act implementation behind the policy. Each verb takes its words
+by count, so a text that looks like an option is the text; `fill @12=Ada @13=Lovelace` is two fills. Before **every** step
+the batch reads `Koan.listTabs` (the tab's state, the latest word on a pause) and the `Koan.paused`/`resumed`/
+`userNeeded`/`userNeededDone` events it has seen (also the ones the holder kept from before the batch, except an
+interstitial's, which never ends with a Done: the browser refuses input there itself), in `BatchGate`; a pause or a wait for
+the user stops the batch there with the steps done, the one that stopped and why, and the steps not run. The browser stays
+the guarantee: `TargetRegistry::MaySend()` refuses input to a paused tab, so a step already on its way fails with
+Koan.paused rather than typing. The first failure stops the batch (a stale ref mid-batch is Koan.staleRef: refs are never
+re-targeted by guessing). One line a step (`2/4 fill @13: ok`); a single step prints as before. `--until url~T | text~T |
+@ref~T | "@ref gone"` polls after the last step, up to `--timeout`, else Koan.untilTimeout; the snapshot (or diff) comes
+last, also after a failure, so the agent can look before it retries. *Locators*: `loc:role=button[name="Continue"]`
+wherever a ref goes, matched against the page's AX tree when the step runs (role exact, name with whitespace collapsed):
+one match or the step fails, listing the candidates (Koan.ambiguous, Koan.notFound). `snapshot --locators` prints one after
+each ref whose role and name are unique (off by default: about 8 tokens a line, and the line already shows role and name).
+*Refs*: backend DOM node ids, so they already survive input and changes elsewhere on the page; an element the page
+re-creates gets a new id, and the old ref fails (Koan.staleRef), never renumbered. *Snapshots*: `--interactive` keeps
+controls, focusable and editable nodes, headings, dialogs, and the text of alerts and status messages, and leaves out a
+closed dropdown's options. `--scope auto` (default) prints the whole page up to 250 lines (about 2.5k tokens) and cuts a
+longer one to the viewport (a long compact page is up to 1500 lines, about 15k tokens), with `[more above: N nodes]` and
+`[more below: N nodes]`; the viewport is found with `ViewportSearch`, k-ary searches over the lines' tops with
+`DOM.getContentQuads` sent eight at a time (about 30 measured lines, 4 rounds, for 1500), not one call a line. `viewport`,
+`full` and `@ref` (that element's subtree) choose. `--diff`: the holder keeps each tab's last snapshot lines
+(`Baselines`, in `Hold.rememberRefs`, keyed by node id), and prints `+`/`~`/`-` lines, or `baseline reset (why)` and the
+whole snapshot after a navigation, another kind of outline, or no earlier snapshot; it is a flag, not the default after a
+batch, until the Mac measurement (PR test plan) shows it saves turns. *Guide*: `[koan:skill] end of guide v<N>` last,
+`[koan:notice]` first when the browser's `agentVersion` (agent.json, `agent::kAgentInterfaceVersion`) differs from koan's;
+`koan help <command>`; the loop (snapshot --interactive, one batch with --until and --diff, read the result) and the rules
+(verify by reading, never retry blindly, a URL does not identify the account).
+
 **Skill file** (ego's integration model: shell commands, no SDK, no remote-debugging setup). The installed entry skill
 is a few lines ("run `koan skill` and follow it"); `koan skill` prints the guide from the installed version so it is
 never stale, written from Koan's own command set. Koan writes `koan-browser/SKILL.md` into `~/.claude/skills` (Claude

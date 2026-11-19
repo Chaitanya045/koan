@@ -86,18 +86,21 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
   Command command;
   std::vector<std::string> positional;
   bool act_option = false;
+  bool snapshot_option = false;
   for (size_t i = 0; i < args.size(); ++i) {
     const std::string& arg = args[i];
-    // Where an act's text goes (fill's text, a key, a URL), an argument is
-    // the text even if it looks like an option.
-    const bool act_text =
-        positional.size() >= 3 && positional[0] == "act" &&
-        (positional.size() == 4
-             ? (positional[2] == "fill" || positional[2] == "select" ||
-                positional[2] == "choose")
-             : (positional.size() == 3 &&
-                (positional[2] == "press" || positional[2] == "navigate" ||
-                 positional[2] == "scroll")));
+    // After `act <tab>`, the steps: each takes its words by count, so a
+    // fill's text that looks like an option is the text.
+    if (positional.size() == 2 && positional[0] == "act" &&
+        !arg.starts_with("--")) {
+      size_t at = i;
+      std::string error;
+      if (!ParseSteps(args, &at, &command.steps, &error)) {
+        return Error(error);
+      }
+      i = at - 1;
+      continue;
+    }
     // Everything after `agent-browser` is agent-browser's, untouched.
     if (arg == "agent-browser" && positional.empty()) {
       command.kind = CommandKind::kAgentBrowser;
@@ -134,6 +137,7 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
              {"--saved", &command.saved_container},
              {"--output", &command.output},
              {"--session", &command.session},
+             {"--steps", &command.steps_file},
              {"-o", &command.output},
          }) {
       if (std::optional<bool> got = value_of(name, out)) {
@@ -173,41 +177,65 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
       command.json = true;
       continue;
     }
-    if (!act_text && arg == "--snapshot") {
+    if (arg == "--snapshot") {
       command.snapshot_after = true;
       act_option = true;
       continue;
     }
-    if (!act_text) {
-      if (std::optional<bool> got = value_of("--timeout", &value)) {
-        if (!*got || !base::StringToInt(value, &command.timeout_seconds) ||
-            command.timeout_seconds < 1 || command.timeout_seconds > 600) {
-          return Error("--timeout needs a number of seconds (1 to 600)");
-        }
-        act_option = true;
-        continue;
+    if (std::optional<bool> got = value_of("--timeout", &value)) {
+      if (!*got || !base::StringToInt(value, &command.timeout_seconds) ||
+          command.timeout_seconds < 1 || command.timeout_seconds > 600) {
+        return Error("--timeout needs a number of seconds (1 to 600)");
       }
+      act_option = true;
+      continue;
+    }
+    if (std::optional<bool> got = value_of("--until", &value)) {
+      std::string error;
+      if (!*got) {
+        return Error(
+            "--until needs url~TEXT, text~TEXT, @ref~TEXT or \"@ref gone\"");
+      }
+      command.until = ParseUntil(value, &error);
+      if (!command.until) {
+        return Error(error);
+      }
+      act_option = true;
+      continue;
+    }
+    if (arg == "--diff" || arg == "--interactive" || arg == "--locators") {
+      (arg == "--diff"          ? command.diff
+       : arg == "--interactive" ? command.interactive
+                                : command.locators) = true;
+      snapshot_option = true;
+      continue;
+    }
+    if (std::optional<bool> got = value_of("--scope", &command.scope)) {
+      if (!*got || !(command.scope == "viewport" || command.scope == "full" ||
+                     command.scope == "auto" || ParseRef(command.scope))) {
+        return Error("--scope takes viewport, full, auto or @ref");
+      }
+      snapshot_option = true;
+      continue;
     }
     if (arg == "--stop-on-error") {
       command.stop_on_error = true;
       continue;
     }
-    // (An act's text may be "--full".)
-    if (arg == "--full" &&
-        !(positional.size() >= 3 && positional[0] == "act")) {
+    if (arg == "--full") {
       command.full = true;
       continue;
     }
     if (arg == "-h" || arg == "--help") {
       command.kind = CommandKind::kHelp;
+      command.help_topic = positional.empty() ? "" : positional[0];
       return {command, ""};
     }
     if (arg == "--") {
       positional.insert(positional.end(), args.begin() + i + 1, args.end());
       break;
     }
-    if (arg.size() > 1 && arg[0] == '-' &&
-        !(positional.size() >= 3 && positional[0] == "act")) {
+    if (arg.size() > 1 && arg[0] == '-') {
       // A negative number is a scroll amount, not an option.
       int number = 0;
       if (!base::StringToInt(arg, &number)) {
@@ -244,7 +272,23 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
     return Error("--full is koan snapshot's");
   }
   if (act_option && command.kind != CommandKind::kAct) {
-    return Error("--snapshot and --timeout are koan act's");
+    return Error("--snapshot, --timeout and --until are koan act's");
+  }
+  if (!command.steps_file.empty() && command.kind != CommandKind::kAct) {
+    return Error("--steps is koan act's");
+  }
+  if (snapshot_option && command.kind != CommandKind::kAct &&
+      command.kind != CommandKind::kSnapshot) {
+    return Error(
+        "--interactive, --scope, --diff and --locators are koan snapshot's "
+        "and koan act's");
+  }
+  if (command.full && (command.interactive || command.diff)) {
+    return Error("--full prints every node: not with --interactive or --diff");
+  }
+  // On act, they are what its snapshot after the steps shows.
+  if (snapshot_option && command.kind == CommandKind::kAct) {
+    command.snapshot_after = true;
   }
   if (command.stop_on_error && command.kind != CommandKind::kShell) {
     return Error("--stop-on-error is koan shell's");
@@ -252,6 +296,11 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
 
   switch (command.kind) {
     case CommandKind::kHelp:
+      if (!expect(0, 1)) {
+        return Error("usage: koan help [command]");
+      }
+      command.help_topic = rest.empty() ? "" : rest[0];
+      break;
     case CommandKind::kVersion:
     case CommandKind::kPair:
     case CommandKind::kStatus:
@@ -303,61 +352,149 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
       command.tab = rest.empty() ? "" : rest[0];
       break;
     case CommandKind::kAct: {
-      if (rest.size() < 2) {
+      if (rest.size() != 1 ||
+          (command.steps.empty() && command.steps_file.empty())) {
         return Error(
-            "usage: koan act <tab> click @ref | fill @ref <text> | select "
-            "@ref <option> | choose @ref <option> | press <key> | scroll "
-            "<pixels> | navigate <url> [--snapshot] [--timeout <seconds>]");
+            "usage: koan act <tab> <step> [<step> ...] [--until <condition>] "
+            "[--snapshot] (koan help act)");
+      }
+      if (!command.steps.empty() && !command.steps_file.empty()) {
+        return Error(
+            "give the steps on the command line or in --steps, not "
+            "both");
       }
       command.tab = rest[0];
-      const std::string& verb = rest[1];
-      const std::vector<std::string> act_args(rest.begin() + 2, rest.end());
-      if (verb == "click" || verb == "fill" || verb == "select" ||
-          verb == "choose") {
-        const size_t want = verb == "click" ? 1 : 2;
-        const bool option = verb == "select" || verb == "choose";
-        if (act_args.size() != want || !ParseRef(act_args[0]) ||
-            (option && act_args[1].empty())) {
-          return Error(verb == "click" ? "usage: koan act <tab> click @ref"
-                       : verb == "fill"
-                           ? "usage: koan act <tab> fill @ref <text>"
-                           : "usage: koan act <tab> " + verb +
-                                 " @ref <option text>");
-        }
-        command.act = verb == "click"    ? ActKind::kClick
-                      : verb == "fill"   ? ActKind::kFill
-                      : verb == "select" ? ActKind::kSelect
-                                         : ActKind::kChoose;
-        command.ref = act_args[0];
-        command.text = verb == "click" ? "" : act_args[1];
-      } else if (verb == "press") {
-        if (act_args.size() != 1 || act_args[0].empty()) {
-          return Error("usage: koan act <tab> press <key>");
-        }
-        command.act = ActKind::kPress;
-        command.text = act_args[0];
-      } else if (verb == "scroll") {
-        if (act_args.size() != 1 ||
-            !base::StringToInt(act_args[0], &command.scroll_by) ||
-            command.scroll_by == 0) {
-          return Error("usage: koan act <tab> scroll <pixels>");
-        }
-        command.act = ActKind::kScroll;
-      } else if (verb == "navigate") {
-        if (act_args.size() != 1 || act_args[0].empty()) {
-          return Error("usage: koan act <tab> navigate <url>");
-        }
-        command.act = ActKind::kNavigate;
-        command.text = act_args[0];
-      } else {
-        return Error(
-            "unknown action \"" + verb +
-            "\" (click, fill, select, choose, press, scroll, navigate)");
+      if (!command.steps.empty()) {
+        const Step& first = command.steps.front();
+        command.act = first.act;
+        command.ref = first.target;
+        command.text = first.text;
+        command.scroll_by = first.scroll_by;
       }
       break;
     }
   }
   return {command, ""};
+}
+
+std::optional<std::string> HelpText(std::string_view command) {
+  static const auto* help = new std::map<std::string_view, std::string_view>{
+      {"act", R"HELP(koan act <tab> <step> [<step> ...] [options]
+koan act <tab> --steps <file|-> [options]
+
+Runs the steps in order over one connection. After each one, waits until
+the page has settled (a navigation it started committed and loaded, the
+network and the DOM quiet for 250 ms, at most 3 s), then runs the next.
+Before each step it checks the tab: if the user has taken it (Koan.paused)
+or the page waits for them (Koan.userNeeded), it stops there. It stops at
+the first step that fails. One line per step ("2/4 fill @13: ok"); a
+batch that stopped says where and why, and which steps did not run.
+
+Steps (at most 50):
+  click <target>
+  fill <target> <text>         fill @12=<text> @13=<text> ... fills several
+  select <target> <option>     a native <select>, by label or value
+  choose <target> <option>     any dropdown: opens it, clicks the option
+  press <key>                  Enter, Tab, Escape, Backspace, Arrow..., or
+                               one character
+  scroll <pixels>              down (negative: up)
+  navigate <url>               http, https or about:blank
+<target> is @ref, from a snapshot of the page as it is now (a ref from
+before a navigation fails: Koan.staleRef), or a locator,
+loc:role=<role>[name="<name>"], which must name exactly one element (it
+fails listing the candidates otherwise).
+
+Options:
+  --until url~TEXT | text~TEXT | @ref~TEXT | "@ref gone"
+                               after the last step, wait until the URL,
+                               the page's text or that element's text
+                               contains TEXT, or the element is gone (up to
+                               --timeout); Koan.untilTimeout if not
+  --snapshot                   the snapshot after the steps
+  --interactive, --diff, --scope S, --locators
+                               that snapshot's options (koan help snapshot);
+                               each implies --snapshot
+  --timeout <seconds>          for a navigation to commit, and for --until
+                               (15)
+  --steps <file>               steps from a file, one or more a line ("-":
+                               stdin; not in koan shell)
+  --json                       one JSON object: steps, stopped, snapshot
+Exit 0 if every step was done (and --until met), 1 if not.)HELP"},
+      {"snapshot", R"HELP(koan snapshot <tab> [options]
+
+The page as an outline: one line per node, role "name" = "value" [states]
+@ref. Refs are the page's own node ids: they stay the same while the node
+stays (typing, a click, a change elsewhere on the page), and a node a page
+re-creates gets a new one. Open popups (a dropdown's list, a menu, a
+dialog) come first.
+
+Options:
+  --interactive     only what can be acted on (with names, values and
+                    states), headings and dialogs, and the text of alerts
+                    and status messages; a closed dropdown's options are
+                    left out (choose finds one by its text)
+  --scope auto      (the default) the whole page, unless it is long (over
+                    250 lines): then what the viewport shows
+  --scope viewport  only what the viewport shows, with [more above: N
+                    nodes] and [more below: N nodes]
+  --scope full      the whole page
+  --scope @ref      only that element and what is in it
+  --diff            only the lines added (+), changed (~, as they are now)
+                    and removed (-) since this agent's last snapshot of
+                    the tab; "baseline reset (why)" and the whole snapshot
+                    when there is nothing to compare with (a new page)
+  --locators        a locator (loc:role=...[name="..."]) after each ref
+                    whose role and name no other element has
+  --full            every node of the tree (inline text boxes, each text
+                    run), a ref on each
+  --json            the raw accessibility tree)HELP"},
+      {"open", R"HELP(koan open [url] [--task T] [--saved NAME]
+
+Opens a background tab in the agent's Space and prints its id (4 or more
+of its first characters name it later). --task groups tabs into a task
+(koan end --task T closes them); --saved uses a saved container the user
+allowed (Koan.notGranted if not).)HELP"},
+      {"shell", R"HELP(koan shell [--stop-on-error]
+
+Reads commands from stdin, one a line, as a shell splits them (a leading
+"koan" is fine), or JSON lines (["act","ab12","click","@4"] or {"id": 1,
+"args": [...]}), and runs them over one connection. Each answer ends with
+a line "--- exit N"; a JSON line gets one JSON line {"id", "exit", "out",
+"err"}. --stop-on-error stops at the first command that fails.)HELP"},
+      {"screenshot", R"HELP(koan screenshot <tab> [-o file.png]
+
+Saves what the tab shows as a PNG and prints its path.)HELP"},
+      {"status", R"HELP(koan status [--json]
+
+Whether Koan runs, the pairing, the connection, the tasks and tabs, and
+the latest events (Koan.userNeeded, Koan.paused).)HELP"},
+      {"pair", R"HELP(koan pair [--label NAME] [--capabilities LIST]
+
+Asks Koan to let this agent in; the user approves in Koan. LIST is some of
+space, observe, read, drive, keep-awake (default: all).)HELP"},
+      {"take-over", R"HELP(koan take-over [tab]
+
+Asks the user to let this agent control the tab in front (they approve in
+Koan); prints its id.)HELP"},
+      {"release", R"HELP(koan release <tab>
+
+Gives a tab of the user's back.)HELP"},
+      {"end", R"HELP(koan end [--task T]
+
+Ends one task, or every task and the connection: their tabs close and
+their throwaway containers are cleared.)HELP"},
+      {"watch", R"HELP(koan watch
+
+Streams this agent's events as JSON lines until stopped.)HELP"},
+      {"skill", R"HELP(koan skill
+
+Prints the guide for agents.)HELP"},
+  };
+  auto it = help->find(command == "hand-back" ? "release" : command);
+  if (it == help->end()) {
+    return std::nullopt;
+  }
+  return std::string(it->second) + "\n";
 }
 
 std::string UsageText() {
@@ -372,18 +509,19 @@ std::string UsageText() {
   koan open [url] [--task T] [--saved NAME]
                          open a background tab in the agent's Space; prints
                          its id. --saved uses a saved container you allowed
-  koan snapshot <tab> [--full]
-                         the page as an outline, with @refs for act; --full
-                         shows every node of the tree (same refs)
+  koan snapshot <tab> [--interactive] [--diff] [--scope S] [--full]
+                         the page as an outline, with @refs for act;
+                         --interactive: only controls, headings, messages;
+                         --diff: only what changed since the last snapshot
   koan screenshot <tab> [-o file.png]
-  koan act <tab> click @ref | fill @ref <text> | select @ref <option>
-               | choose @ref <option> | press <key> | scroll <pixels>
-               | navigate <url>   [--snapshot] [--timeout <seconds>]
-                         waits until the page settles, then prints ok
-                         (ok (HTTP 504 ...) for a server's error page);
-                         --snapshot prints the new snapshot with it.
-                         choose opens a custom dropdown and clicks the
-                         option. --timeout: for a navigation (15)
+  koan act <tab> <step> [<step> ...] [--until C] [--snapshot] [--diff]
+                         steps: click @ref | fill @ref <text> | select @ref
+                         <option> | choose @ref <option> | press <key> |
+                         scroll <pixels> | navigate <url>, in order, each
+                         once the page settled; stops at the first failure
+                         and when the user takes the tab. A locator
+                         (loc:role=button[name="Next"]) works for @ref
+  koan help <command>    a command's exact form and options
   koan take-over [tab]   ask to control a tab of yours (you approve in Koan)
   koan release <tab>     give a tab of yours back
   koan end [--task T]    end one task, or (no --task) every task: its tabs

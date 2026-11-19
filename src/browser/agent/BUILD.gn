@@ -235,6 +235,7 @@ if (is_posix) {
     ]
     deps = [
       ":auth",
+      ":frame",
       ":gateway",
       ":limits",
       ":peer",

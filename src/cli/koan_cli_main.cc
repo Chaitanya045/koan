@@ -38,6 +38,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/json/json_writer.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
 #include "base/path_service.h"
 #include "base/posix/eintr_wrapper.h"
@@ -51,6 +52,7 @@
 #include "koan/cli/koan_cli_actions.h"
 #include "koan/cli/koan_cli_admission.h"
 #include "koan/cli/koan_cli_args.h"
+#include "koan/cli/koan_cli_batch.h"
 #include "koan/cli/koan_cli_client.h"
 #include "koan/cli/koan_cli_io.h"
 #include "koan/cli/koan_cli_protocol.h"
@@ -63,12 +65,19 @@
 namespace koan::cli {
 namespace {
 
-constexpr char kVersion[] = "1";
 // A holder with no command for this long ends its tasks and exits.
 constexpr base::TimeDelta kHolderIdle = base::Minutes(30);
 // How many lines a snapshot prints at most: compact, and --full.
 constexpr size_t kSnapshotLines = 1500;
 constexpr size_t kFullSnapshotLines = 5000;
+// --scope auto: a page whose outline is longer than this is cut to the
+// viewport (about 10 tokens a line: 250 lines are ~2.5k tokens, a long
+// page's 1500 are ~15k). The outline the viewport is cut from may be this
+// long.
+constexpr size_t kAutoScopeLines = 250;
+constexpr size_t kScopedSnapshotLines = 20000;
+// How long --until looks again after.
+constexpr base::TimeDelta kUntilPoll = base::Milliseconds(200);
 
 enum Exit {
   kOk = 0,
@@ -77,10 +86,31 @@ enum Exit {
   kNotConnected = 3,
 };
 
+// While a step of `koan act` runs, its failure is kept for the step's
+// receipt instead of printed (ScopedFailure).
+std::string* g_failure = nullptr;
+
 int Fail(const std::string& text, int code = kFailed) {
+  if (g_failure) {
+    *g_failure = text;
+    return code;
+  }
   fprintf(stderr, "koan: %s\n", text.c_str());
   return code;
 }
+
+class ScopedFailure {
+ public:
+  explicit ScopedFailure(std::string* text) : previous_(g_failure) {
+    g_failure = text;
+  }
+  ScopedFailure(const ScopedFailure&) = delete;
+  ScopedFailure& operator=(const ScopedFailure&) = delete;
+  ~ScopedFailure() { g_failure = previous_; }
+
+ private:
+  const raw_ptr<std::string> previous_;
+};
 
 // --- The holder
 // ---------------------------------------------------------------
@@ -203,8 +233,10 @@ int RunHolder(const Command& command) {
   ready_fd = -1;
 
   Router router;
-  // Which page each tab's refs belong to (koan_cli_snapshot.h).
+  // Which page each tab's refs belong to, and its last snapshot
+  // (koan_cli_snapshot.h).
   RefBook refs;
+  Baselines baselines;
   std::map<Router::ConnectionId, std::unique_ptr<FrameChannel>> commands;
   // Who each command is, to look at again before each request (a socket
   // survives an exec of its peer).
@@ -370,7 +402,21 @@ int RunHolder(const Command& command) {
               }
             }
             refs.Remember(*target, *document, seen_ids);
-            reply.Set("result", base::DictValue());
+            // The snapshot's lines, for the next one's --diff; the one they
+            // replace goes back.
+            base::DictValue result;
+            if (const base::DictValue* kept =
+                    message->params.FindDict("baseline")) {
+              if (std::optional<Baseline> next = BaselineFromValue(*kept)) {
+                next->document = *document;
+                if (std::optional<Baseline> previous =
+                        baselines.Swap(*target, std::move(*next))) {
+                  result.Set("previous", BaselineToValue(*previous));
+                }
+              }
+              result.Set("baselines", true);
+            }
+            reply.Set("result", std::move(result));
           } else {
             reply.Set("result", base::DictValue().Set(
                                     "verdict", RefVerdictName(refs.Check(
@@ -722,6 +768,9 @@ int Status(const Command& command) {
                            ? "running, Agent ready"
                            : "not reachable (not running, or Agent ready off)");
   printf("paired: %s\n", PairingLine(pairing, why).c_str());
+  printf("%s", VersionNotice(ReadDiscovery(user_data_dir),
+                             agent::kAgentInterfaceVersion)
+                   .c_str());
   printf("connection: %s\n",
          holder ? "open" : "none (the next koan open starts one)");
   if (const base::ListValue* tasks = status.FindList("tasks")) {
@@ -794,11 +843,139 @@ std::optional<std::string> DocumentOf(Link& link,
   return std::move(frame->document);
 }
 
-// The compact (or `full`) outline of the tab, its refs remembered by the
-// holder; `tree` gets the raw tree. nullopt (printed) if it could not be
-// read.
+// Sends one `method` for each of `params` at once, on the tab's session,
+// and waits for all their answers (events meanwhile go to the link's sink):
+// a few round trips' time, not one each. An answer missing (no answer in
+// time) is nullopt.
+std::vector<std::optional<Message>> CallEach(
+    Link& link,
+    std::string_view method,
+    std::vector<base::DictValue> params,
+    const std::string& session) {
+  std::vector<std::optional<Message>> answers(params.size());
+  std::map<int, size_t> pending;
+  for (size_t i = 0; i < params.size(); ++i) {
+    if (const int id = link.Send(method, std::move(params[i]), session)) {
+      pending.emplace(id, i);
+    }
+  }
+  const base::TimeTicks deadline = base::TimeTicks::Now() + kAnswerWait;
+  while (!pending.empty()) {
+    std::optional<Message> message = link.Next(deadline);
+    if (!message) {
+      break;
+    }
+    if (!message->id) {
+      link.PassEvent(*message);
+      continue;
+    }
+    if (auto it = pending.find(*message->id); it != pending.end()) {
+      answers[it->second] = std::move(message);
+      pending.erase(it);
+    }
+  }
+  return answers;
+}
+
+// The outline cut to what the viewport shows (ViewportSearch: a few rounds
+// of DOM.getContentQuads on some of its lines, not all). nullopt (printed)
+// if the viewport's size is not known.
+std::optional<std::string> ViewportText(Link& link,
+                                        const Snapshot& snapshot,
+                                        const std::string& session,
+                                        int* exit_code) {
+  std::optional<base::DictValue> metrics =
+      Expect(link.Call("Page.getLayoutMetrics", base::DictValue(), session),
+             exit_code);
+  if (!metrics) {
+    return std::nullopt;
+  }
+  const base::DictValue* layout = metrics->FindDict("cssLayoutViewport");
+  if (!layout) {
+    layout = metrics->FindDict("cssVisualViewport");
+  }
+  const double height =
+      layout ? layout->FindDouble("clientHeight").value_or(0) : 0;
+  if (height <= 0) {
+    *exit_code = Fail(
+        "Koan.pageError: the tab did not say how big its viewport is; use "
+        "--scope full");
+    return std::nullopt;
+  }
+  // The lines the scope cuts (not the page's own line, not the popups).
+  std::vector<size_t> lines;
+  for (size_t i = 0; i < snapshot.lines.size(); ++i) {
+    if (!snapshot.lines[i].pinned) {
+      lines.push_back(i);
+    }
+  }
+  ViewportSearch search(lines.size());
+  for (size_t i = 0; i < lines.size(); ++i) {
+    if (!snapshot.lines[lines[i]].node) {
+      search.Report(i, ViewportSearch::Place::kUnknown);
+    }
+  }
+  for (int round = 0; round < 10 && !search.done(); ++round) {
+    const std::vector<size_t> probes = search.NextProbes();
+    std::vector<base::DictValue> params;
+    for (size_t probe : probes) {
+      params.push_back(base::DictValue().Set(
+          "backendNodeId", snapshot.lines[lines[probe]].node));
+    }
+    std::vector<std::optional<Message>> answers =
+        CallEach(link, "DOM.getContentQuads", std::move(params), session);
+    for (size_t i = 0; i < probes.size(); ++i) {
+      const base::ListValue* quads = answers[i] && answers[i]->result
+                                         ? answers[i]->result->FindList("quads")
+                                         : nullptr;
+      const base::ListValue* quad =
+          quads && !quads->empty() ? (*quads)[0].GetIfList() : nullptr;
+      ViewportSearch::Place place = ViewportSearch::Place::kUnknown;
+      if (quad && quad->size() == 8) {
+        double top = height;
+        for (size_t y = 1; y < 8; y += 2) {
+          if ((*quad)[y].is_double() || (*quad)[y].is_int()) {
+            top = std::min(top, (*quad)[y].GetDouble());
+          }
+        }
+        place = top < 0         ? ViewportSearch::Place::kAbove
+                : top >= height ? ViewportSearch::Place::kBelow
+                                : ViewportSearch::Place::kIn;
+      }
+      search.Report(probes[i], place);
+    }
+  }
+  if (search.empty()) {
+    // Nothing of the outline is in view: everything above (scrolled past
+    // it) or below.
+    const size_t at = search.first() < lines.size() ? lines[search.first()]
+                                                    : snapshot.lines.size();
+    return RenderWindow(snapshot, at, at);
+  }
+  return RenderWindow(snapshot, lines[search.first()],
+                      lines[std::min(search.last(), lines.size() - 1)] + 1);
+}
+
+// What a snapshot shows (koan snapshot's options, and koan act's for the
+// snapshot after its steps).
+struct SnapshotRequest {
+  bool full = false;
+  bool interactive = false;
+  bool diff = false;
+  bool locators = false;
+  // viewport, full, auto ("" too), @ref.
+  std::string scope;
+};
+SnapshotRequest SnapshotRequestOf(const Command& command) {
+  return {command.full, command.interactive, command.diff, command.locators,
+          command.scope};
+}
+
+// The outline of the tab, as `request` says, its refs (and its lines, for
+// the next --diff) remembered by the holder; `tree` gets the raw tree.
+// nullopt (printed) if it could not be read.
 std::optional<std::string> TakeSnapshot(Link& link,
-                                        bool full,
+                                        const SnapshotRequest& request,
                                         const std::string& target,
                                         const std::string& session,
                                         int* exit_code,
@@ -832,27 +1009,68 @@ std::optional<std::string> TakeSnapshot(Link& link,
         "loading or navigating); retry in a moment");
     return std::nullopt;
   }
+  const bool viewport = request.scope == "viewport";
+  const bool automatic = request.scope.empty() || request.scope == "auto";
   SnapshotOptions options;
-  options.full = full;
-  options.max_lines = full ? kFullSnapshotLines : kSnapshotLines;
+  options.full = request.full;
+  options.interactive = request.interactive;
+  options.locators = request.locators;
+  options.root = ParseRef(request.scope).value_or(0);
+  options.max_lines = viewport || (automatic && !request.full)
+                          ? kScopedSnapshotLines
+                      : request.full ? kFullSnapshotLines
+                                     : kSnapshotLines;
   Snapshot snapshot = BuildSnapshot(*tree, options);
+  if (snapshot.root_missing) {
+    *exit_code = Fail("Koan.staleRef: " + request.scope +
+                      " is not on the page now; take a new snapshot and use "
+                      "its refs");
+    return std::nullopt;
+  }
   base::ListValue ids;
   for (int id : snapshot.refs) {
     ids.Append(id);
   }
-  std::optional<Message> kept =
-      link.Call("Hold.rememberRefs", base::DictValue()
-                                         .Set("targetId", target)
-                                         .Set("document", *document)
-                                         .Set("refs", std::move(ids)));
+  Baseline now;
+  now.document = *document;
+  now.kind = BaselineKind(options);
+  now.lines = snapshot.lines;
+  std::optional<Message> kept = link.Call(
+      "Hold.rememberRefs", base::DictValue()
+                               .Set("targetId", target)
+                               .Set("document", *document)
+                               .Set("refs", std::move(ids))
+                               .Set("baseline", BaselineToValue(now)));
   if (!kept || !kept->result) {
     *exit_code = Fail(kOtherHolder);
     return std::nullopt;
   }
+  std::string text = std::move(snapshot.text);
+  if (viewport ||
+      (automatic && !request.full && snapshot.lines.size() > kAutoScopeLines)) {
+    std::optional<std::string> cut =
+        ViewportText(link, snapshot, session, exit_code);
+    if (!cut) {
+      return std::nullopt;
+    }
+    text = std::move(*cut);
+  }
+  if (request.diff) {
+    std::optional<Baseline> previous;
+    if (const base::DictValue* was = kept->result->FindDict("previous")) {
+      previous = BaselineFromValue(*was);
+    }
+    text = kept->result->FindBool("baselines").value_or(false)
+               ? DiffText(previous, now, text)
+               : "baseline reset (this connection was started by an older "
+                 "koan, which keeps no snapshots; koan end, then open the tab "
+                 "again); the whole snapshot:\n" +
+                     text;
+  }
   if (tree_out) {
     *tree_out = std::move(*tree);
   }
-  return std::move(snapshot.text);
+  return text;
 }
 
 int PrintSnapshot(Link& link,
@@ -861,8 +1079,8 @@ int PrintSnapshot(Link& link,
                   const std::string& session) {
   int exit_code = kOk;
   base::DictValue tree;
-  std::optional<std::string> text =
-      TakeSnapshot(link, command.full, target, session, &exit_code, &tree);
+  std::optional<std::string> text = TakeSnapshot(
+      link, SnapshotRequestOf(command), target, session, &exit_code, &tree);
   if (!text) {
     return exit_code;
   }
@@ -963,18 +1181,6 @@ base::ListValue Args(std::initializer_list<base::Value> values) {
     list.Append(base::DictValue().Set("value", value.Clone()));
   }
   return list;
-}
-
-int Done(const Command& command,
-         const std::string& line,
-         base::DictValue json) {
-  if (command.json) {
-    json.Set("ok", true);
-    PrintJson(json);
-  } else {
-    printf("%s\n", line.c_str());
-  }
-  return kOk;
 }
 
 // What an action did, before the page settles: a failure (printed, its exit
@@ -1392,7 +1598,8 @@ SettleState Pump(Link& link,
       settle.Block(Describe(message));
       continue;
     }
-    settle.OnEvent(*message, base::TimeTicks::Now());
+    // To the step's settle, and to the batch's gate (EventTap).
+    link.PassEvent(*message);
   }
 }
 
@@ -1583,105 +1790,464 @@ const char* SettleStateName(SettleState state) {
   return "waiting";
 }
 
-// One action on a tab, through the CDP the browser allows an agent (the
-// in-browser Koan.act of phase 3 replaces this). A ref must be from a
-// snapshot of the page the tab shows now. Once the action is done, waits
-// for the page to settle (koan_cli_settle.h), then prints "ok" (or what the
-// action says), and with --snapshot the new snapshot.
-int Act(Link& link,
-        const Command& command,
-        const std::string& target,
-        const std::string& session) {
+// Where the tab's events go while `koan act` runs: the batch's gate, and
+// the settle of the step that runs.
+struct EventTap {
+  raw_ptr<BatchGate> gate = nullptr;
+  raw_ptr<Settle> settle = nullptr;
+};
+
+// What one step did.
+struct StepDone {
   int exit_code = kOk;
+  // Done: what "ok" says (SettledLine()); else the error.
+  std::string line;
+  base::DictValue json;
+  // Done, and then the page waited for the user: why.
+  std::string blocked;
+};
+
+// The command one step runs as.
+Command StepCommand(const Command& command, const Step& step) {
+  Command one = command;
+  one.act = step.act;
+  one.ref = step.target;
+  one.text = step.text;
+  one.scroll_by = step.scroll_by;
+  return one;
+}
+
+// One step on a tab, through the CDP the browser allows an agent (the
+// in-browser Koan.act of phase 3 replaces this). A ref must be from a
+// snapshot of the page the tab shows now; a locator must name one element
+// of it. Once the action is done, waits for the page to settle
+// (koan_cli_settle.h). Prints nothing: the failure is kept for the receipt.
+StepDone RunStep(Link& link,
+                 const Command& given,
+                 const std::string& target,
+                 const std::string& session,
+                 EventTap& tap) {
+  StepDone done;
+  std::string failure;
+  ScopedFailure keep(&failure);
+  auto fail = [&](int code) {
+    StepDone failed;
+    failed.exit_code = code;
+    failed.line = failure.empty() ? "failed" : failure;
+    return failed;
+  };
+  int exit_code = kOk;
+  Command command = given;
   const bool on_ref =
       command.act == ActKind::kClick || command.act == ActKind::kFill ||
       command.act == ActKind::kSelect || command.act == ActKind::kChoose;
-  if (on_ref && !RefIsCurrent(link, command, target, session, &exit_code)) {
-    return exit_code;
+  if (on_ref && command.ref.starts_with("loc:")) {
+    // Found in the page as it is now: no snapshot needed, nothing guessed.
+    std::string error;
+    std::optional<Locator> locator = ParseLocator(command.ref, &error);
+    if (!locator) {
+      return fail(Fail(error, kUsage));
+    }
+    std::optional<base::DictValue> tree = Expect(
+        link.Call("Accessibility.getFullAXTree", base::DictValue(), session),
+        &exit_code);
+    if (!tree) {
+      return fail(exit_code);
+    }
+    const LocatorMatch match = MatchLocator(*tree, *locator, command.ref);
+    if (!match.node) {
+      return fail(Fail(match.error));
+    }
+    command.ref = "@" + base::NumberToString(*match.node);
+  } else if (on_ref &&
+             !RefIsCurrent(link, command, target, session, &exit_code)) {
+    return fail(exit_code);
   }
   std::optional<MainFrame> frame = MainFrameOf(link, session, &exit_code);
   if (!frame) {
-    return exit_code;
+    return fail(exit_code);
   }
   SettleTimings timings;
   timings.navigation_timeout = base::Seconds(command.timeout_seconds);
   SettleState state = SettleState::kSettled;
   Acted acted;
   std::optional<Settle> settled;
-  {
-    SettleWatch watch(link, session);
-    auto settle_from = [&](bool navigating) -> Settle& {
-      settled.emplace(timings, base::TimeTicks::Now(), navigating, target,
-                      frame->id);
-      link.SetEventSink(base::BindRepeating(
-          [](Settle* settle, const Message& event) {
-            settle->OnEvent(event, base::TimeTicks::Now());
-          },
-          base::Unretained(&*settled)));
-      return *settled;
-    };
-    Settle& settle = settle_from(command.act == ActKind::kNavigate);
-    acted = DoAction(link, command, session, settle, timings);
-    if (acted.exit_code == kOk) {
-      state = Pump(link, session, settle, timings);
-    }
-    // A custom dropdown's option that did not take is clicked once more
-    // (a list that was still moving, a page that wanted a second click).
-    std::string shows;
-    if (acted.exit_code == kOk && !acted.chosen.empty() &&
-        state != SettleState::kBlocked &&
-        !CheckChosen(link, session, acted, &shows)) {
-      OptionList list = ListOptions(link, session, acted.control);
-      OptionMatch match = MatchOption(list, acted.chosen, command.ref);
-      if (match.index) {
-        Settle& again = settle_from(false);
-        Acted retried = ClickOption(link, session, acted.control, *match.index,
-                                    list.labels[*match.index]);
-        if (retried.exit_code == kOk) {
-          state = Pump(link, session, again, timings);
-        }
-      }
-      if (!CheckChosen(link, session, acted, &shows)) {
-        acted = Failed(NotChosenText(command.ref, acted.chosen, shows));
-      }
-    }
-    link.SetEventSink({});
+  auto settle_from = [&](bool navigating) -> Settle& {
+    tap.settle = nullptr;
+    settled.emplace(timings, base::TimeTicks::Now(), navigating, target,
+                    frame->id);
+    tap.settle = &*settled;
+    return *settled;
+  };
+  Settle& settle = settle_from(command.act == ActKind::kNavigate);
+  acted = DoAction(link, command, session, settle, timings);
+  if (acted.exit_code == kOk) {
+    state = Pump(link, session, settle, timings);
   }
+  // A custom dropdown's option that did not take is clicked once more (a
+  // list that was still moving, a page that wanted a second click).
+  std::string shows;
+  if (acted.exit_code == kOk && !acted.chosen.empty() &&
+      state != SettleState::kBlocked &&
+      !CheckChosen(link, session, acted, &shows)) {
+    OptionList list = ListOptions(link, session, acted.control);
+    OptionMatch match = MatchOption(list, acted.chosen, command.ref);
+    if (match.index) {
+      Settle& again = settle_from(false);
+      Acted retried = ClickOption(link, session, acted.control, *match.index,
+                                  list.labels[*match.index]);
+      if (retried.exit_code == kOk) {
+        state = Pump(link, session, again, timings);
+      }
+    }
+    if (!CheckChosen(link, session, acted, &shows)) {
+      acted = Failed(NotChosenText(command.ref, acted.chosen, shows));
+    }
+  }
+  tap.settle = nullptr;
   if (acted.exit_code != kOk) {
-    return acted.exit_code;
+    return fail(acted.exit_code);
   }
-  const Settle& settle = *settled;
-  std::string line = SettledLine(settle, state, acted.line);
-  if (acted.http_error && !settle.http_status()) {
-    line += " (an HTTP error, and no page from the server)";
+  done.line = SettledLine(*settled, state, acted.line);
+  if (acted.http_error && !settled->http_status()) {
+    done.line += " (an HTTP error, and no page from the server)";
   }
   acted.json.Set("settled", SettleStateName(state));
-  if (std::optional<int> status = settle.http_status()) {
+  if (std::optional<int> status = settled->http_status()) {
     acted.json.Set("status", *status);
   }
   if (state == SettleState::kBlocked) {
-    Done(command, line, std::move(acted.json));
-    return Fail(settle.blocked_reason());
+    done.blocked = settled->blocked_reason();
   }
-  if (!command.snapshot_after) {
-    return Done(command, line, std::move(acted.json));
-  }
-  // "ok" first: it was done, even if the snapshot then fails.
-  if (!command.json) {
-    printf("%s\n", line.c_str());
-    fflush(stdout);
-  }
-  std::optional<std::string> snapshot =
-      TakeSnapshot(link, /*full=*/false, target, session, &exit_code);
-  if (command.json) {
-    if (snapshot) {
-      acted.json.Set("snapshot", *snapshot);
+  done.json = std::move(acted.json);
+  return done;
+}
+
+// Whether --until holds now; `shows` says what the page shows instead.
+// nullopt if the page could not be asked (it is checked again).
+std::optional<bool> UntilHolds(Link& link,
+                               const Until& until,
+                               const Command& command,
+                               const std::string& target,
+                               const std::string& session,
+                               std::string* shows) {
+  std::string failure;
+  ScopedFailure keep(&failure);
+  int exit_code = kOk;
+  switch (until.kind) {
+    case Until::kUrl: {
+      std::optional<base::DictValue> frames =
+          Expect(link.Call("Page.getFrameTree", base::DictValue(), session),
+                 &exit_code);
+      const std::string* url =
+          frames ? frames->FindStringByDottedPath("frameTree.frame.url")
+                 : nullptr;
+      if (!url) {
+        return std::nullopt;
+      }
+      const std::string* fragment =
+          frames->FindStringByDottedPath("frameTree.frame.urlFragment");
+      const std::string full = *url + (fragment ? *fragment : "");
+      *shows = "the URL is " + full;
+      return UrlMatches(full, until);
     }
-    Done(command, line, std::move(acted.json));
-  } else if (snapshot) {
+    case Until::kText: {
+      std::optional<base::DictValue> result = Expect(
+          link.Call("Runtime.evaluate",
+                    base::DictValue()
+                        .Set("expression", PageTextExpression(until.needle))
+                        .Set("returnByValue", true),
+                    session),
+          &exit_code);
+      const base::Value* value = result ? ReturnedValue(*result) : nullptr;
+      if (!value || !value->is_bool()) {
+        return std::nullopt;
+      }
+      *shows = "the page's text does not have it";
+      return value->GetBool();
+    }
+    case Until::kRefText:
+    case Until::kRefGone: {
+      Command probe = command;
+      probe.ref = until.ref;
+      // A ref of a page the tab no longer shows is gone.
+      bool gone = !RefIsCurrent(link, probe, target, session, &exit_code);
+      std::string error;
+      std::optional<std::string> object_id =
+          gone ? std::nullopt
+               : ResolveRef(link, session, ParseRef(until.ref).value_or(0),
+                            &error);
+      gone = gone || !object_id;
+      std::optional<base::DictValue> result =
+          gone ? std::nullopt
+               : RunOn(link, session, *object_id, kElementTextFunction,
+                       Args({base::Value(until.needle)}), &error);
+      *shows = until.kind == Until::kRefGone ? until.ref + " is still shown"
+               : gone ? until.ref + " is gone"
+                      : until.ref + "'s text does not have it";
+      return ElementMeets(until, result ? ReturnedValue(*result) : nullptr,
+                          gone);
+    }
+  }
+  return std::nullopt;
+}
+
+// Waits until --until holds, the gate says stop, or --timeout. Whether it
+// held; `line` says what happened.
+bool WaitUntil(Link& link,
+               const Until& until,
+               const Command& command,
+               const std::string& target,
+               const std::string& session,
+               const BatchGate& gate,
+               std::string* line) {
+  const base::TimeDelta wait = base::Seconds(command.timeout_seconds);
+  const base::TimeTicks deadline = base::TimeTicks::Now() + wait;
+  std::string shows;
+  while (true) {
+    if (std::optional<std::string> stop = gate.StopReason()) {
+      *line = *stop;
+      return false;
+    }
+    if (UntilHolds(link, until, command, target, session, &shows)
+            .value_or(false)) {
+      *line = "met";
+      return true;
+    }
+    const base::TimeTicks now = base::TimeTicks::Now();
+    if (now >= deadline) {
+      break;
+    }
+    // What comes meanwhile (Koan.paused) reaches the gate.
+    const base::TimeTicks next = std::min(deadline, now + kUntilPoll);
+    while (std::optional<Message> message = link.Next(next)) {
+      if (!message->id) {
+        link.PassEvent(*message);
+      }
+    }
+    if (link.closed()) {
+      *line = "Koan.notConnected: the connection to Koan closed";
+      return false;
+    }
+  }
+  *line = "Koan.untilTimeout: " + UntilText(until) + " did not hold within " +
+          base::NumberToString(wait.InSeconds()) + " s (" + shows +
+          "); look at the page before going on";
+  return false;
+}
+
+// `koan act`: its steps in order over this connection (koan_cli_batch.h),
+// each after the page settled from the one before, stopping at the first
+// failure and before any step once the user has the tab or the page waits
+// for them; then --until, then --snapshot. One step prints as it always
+// did ("ok", or the error); several print one receipt each.
+int Act(Link& link,
+        const Command& command,
+        const std::string& target,
+        const std::string& session) {
+  std::vector<Step> steps = command.steps;
+  if (!command.steps_file.empty()) {
+    std::string text;
+    const bool read =
+        command.steps_file == "-"
+            ? base::ReadStreamToString(stdin, &text)
+            : base::ReadFileToString(base::FilePath(command.steps_file), &text);
+    if (!read) {
+      return Fail("cannot read " + command.steps_file, kUsage);
+    }
+    std::string error;
+    if (!ParseStepLines(text, &steps, &error)) {
+      return Fail(error, kUsage);
+    }
+  }
+  const bool numbered = steps.size() > 1;
+  int exit_code = kOk;
+  BatchGate gate(target);
+  // What already waits for the user, from before this command.
+  if (std::optional<Message> held =
+          link.Call("Hold.status", base::DictValue())) {
+    if (const base::ListValue* events =
+            held->result ? held->result->FindList("events") : nullptr) {
+      gate.Replay(*events);
+    }
+  }
+  // --until on a ref: one of the page as it is now.
+  if (command.until && (command.until->kind == Until::kRefText ||
+                        command.until->kind == Until::kRefGone)) {
+    Command probe = command;
+    probe.ref = command.until->ref;
+    if (!RefIsCurrent(link, probe, target, session, &exit_code)) {
+      return exit_code;
+    }
+  }
+  EventTap tap;
+  tap.gate = &gate;
+  link.SetEventSink(base::BindRepeating(
+      [](EventTap* tap, const Message& event) {
+        tap->gate->OnEvent(event);
+        if (tap->settle) {
+          tap->settle->OnEvent(event, base::TimeTicks::Now());
+        }
+      },
+      base::Unretained(&tap)));
+  std::vector<StepDone> done;
+  // The step the batch stopped at (not done, or failed), and why.
+  std::optional<size_t> stopped;
+  std::string why;
+  // The last step was done, and then the page waited for the user.
+  std::string blocked_after;
+  bool tab_gone = false;
+  {
+    SettleWatch watch(link, session);
+    for (size_t i = 0; i < steps.size(); ++i) {
+      // The user may have taken the tab since the last step.
+      std::optional<base::DictValue> tabs =
+          Expect(link.Call("Koan.listTabs", base::DictValue()), &exit_code);
+      if (!tabs) {
+        link.SetEventSink({});
+        return exit_code;
+      }
+      const base::DictValue* entry = nullptr;
+      if (const base::ListValue* list = tabs->FindList("tabs")) {
+        for (const base::Value& tab : *list) {
+          const base::DictValue* dict = tab.GetIfDict();
+          const std::string* id = dict ? dict->FindString("targetId") : nullptr;
+          if (id && *id == target) {
+            entry = dict;
+          }
+        }
+      }
+      gate.OnTab(entry);
+      tab_gone = !entry;
+      if (std::optional<std::string> stop = gate.StopReason()) {
+        stopped = i;
+        why = *stop;
+        break;
+      }
+      StepDone result =
+          RunStep(link, StepCommand(command, steps[i]), target, session, tap);
+      const bool ok = result.exit_code == kOk;
+      std::string blocked = result.blocked;
+      done.push_back(std::move(result));
+      if (!ok) {
+        stopped = i;
+        why = done.back().line;
+        break;
+      }
+      if (!blocked.empty()) {
+        if (i + 1 < steps.size()) {
+          stopped = i + 1;
+          why = blocked;
+        } else {
+          blocked_after = blocked;
+        }
+        break;
+      }
+    }
+  }
+  std::string until_line;
+  bool until_met = true;
+  if (command.until && !stopped && blocked_after.empty()) {
+    until_met = WaitUntil(link, *command.until, command, target, session, gate,
+                          &until_line);
+  }
+  tab_gone =
+      tab_gone || gate.StopReason().value_or("").starts_with("Koan.tabGone");
+  link.SetEventSink({});
+
+  const bool all_done = !stopped && blocked_after.empty() && until_met;
+  int code = kOk;
+  if (stopped && *stopped < done.size()) {
+    code = done[*stopped].exit_code;
+  } else if (!all_done) {
+    code = kFailed;
+  }
+  std::optional<std::string> snapshot;
+  int snapshot_code = kOk;
+  if (command.snapshot_after && !tab_gone && code != kUsage) {
+    // "ok" first: it was done, even if the snapshot then fails.
+    if (!command.json && !numbered && !stopped) {
+      printf("%s\n", done[0].line.c_str());
+      fflush(stdout);
+    }
+    snapshot = TakeSnapshot(link, SnapshotRequestOf(command), target, session,
+                            &snapshot_code);
+  }
+
+  if (command.json) {
+    base::DictValue json;
+    if (!numbered && !done.empty()) {
+      json = done[0].json.Clone();
+    }
+    base::ListValue receipts;
+    for (size_t i = 0; i < done.size(); ++i) {
+      base::DictValue receipt = done[i].json.Clone();
+      receipt.Set("step", StepLabel(steps[i]));
+      receipt.Set("ok", done[i].exit_code == kOk);
+      receipt.Set("line", done[i].line);
+      receipts.Append(std::move(receipt));
+    }
+    if (numbered) {
+      json.Set("steps", std::move(receipts));
+    }
+    if (stopped) {
+      json.Set("stopped", base::DictValue()
+                              .Set("at", static_cast<int>(*stopped) + 1)
+                              .Set("step", StepLabel(steps[*stopped]))
+                              .Set("reason", why));
+    }
+    if (!blocked_after.empty()) {
+      json.Set("blocked", blocked_after);
+    }
+    if (command.until && !stopped && blocked_after.empty()) {
+      json.Set("until", base::DictValue()
+                            .Set("condition", UntilText(*command.until))
+                            .Set("met", until_met)
+                            .Set("line", until_line));
+    }
+    if (snapshot) {
+      json.Set("snapshot", *snapshot);
+    }
+    json.Set("ok", all_done);
+    PrintJson(json);
+    return code != kOk ? code : snapshot_code;
+  }
+
+  if (numbered) {
+    for (size_t i = 0; i < done.size(); ++i) {
+      if (stopped && *stopped == i) {
+        break;
+      }
+      printf("%s\n",
+             ReceiptLine(i, steps.size(), steps[i], done[i].line).c_str());
+    }
+    if (stopped) {
+      printf("%s\n",
+             StoppedLine(*stopped, steps.size(), steps[*stopped], why).c_str());
+      if (const std::string left = NotRunLine(steps, *stopped); !left.empty()) {
+        printf("%s\n", left.c_str());
+      }
+    }
+  } else if (!done.empty() && !stopped && !command.snapshot_after) {
+    printf("%s\n", done[0].line.c_str());
+  } else if (!done.empty() && !stopped && command.snapshot_after && tab_gone) {
+    printf("%s\n", done[0].line.c_str());
+  }
+  if (!blocked_after.empty()) {
+    Fail(blocked_after);
+  }
+  if (!numbered && stopped) {
+    Fail(why);
+  }
+  if (command.until && !stopped && blocked_after.empty()) {
+    printf("until %s: %s\n", UntilText(*command.until).c_str(),
+           until_line.c_str());
+  }
+  if (snapshot) {
     printf("%s", snapshot->c_str());
   }
-  return snapshot ? kOk : exit_code;
+  fflush(stdout);
+  return code != kOk ? code : snapshot_code;
 }
 
 // --- agent-browser (design section 11) --------------------------------------
@@ -1808,14 +2374,28 @@ int Shell(const Command& command);
 
 int Run(const Command& command) {
   switch (command.kind) {
-    case CommandKind::kHelp:
-      printf("%s", UsageText().c_str());
+    case CommandKind::kHelp: {
+      if (command.help_topic.empty()) {
+        printf("%s", UsageText().c_str());
+        return kOk;
+      }
+      std::optional<std::string> help = HelpText(command.help_topic);
+      if (!help) {
+        return Fail("no help for \"" + command.help_topic + "\"; try koan help",
+                    kUsage);
+      }
+      printf("%s", help->c_str());
       return kOk;
+    }
     case CommandKind::kVersion:
-      printf("%s\n", (std::string("koan ") + kVersion).c_str());
+      printf("koan %d\n", agent::kAgentInterfaceVersion);
       return kOk;
     case CommandKind::kSkill:
-      printf("%s", SkillGuide().c_str());
+      printf("%s",
+             SkillGuide(VersionNotice(
+                            ReadDiscovery(UserDataDir(command.user_data_dir)),
+                            agent::kAgentInterfaceVersion))
+                 .c_str());
       return kOk;
     case CommandKind::kPair:
       return Pair(command);
@@ -2118,6 +2698,12 @@ int RunInShell(const Command& command, std::unique_ptr<Link>& link) {
       return Run(command);
     default:
       break;
+  }
+  if (command.steps_file == "-") {
+    return Fail(
+        "--steps - reads stdin, which is koan shell's: put the steps on the "
+        "act line, or in a file",
+        kUsage);
   }
   if (link && link->closed()) {
     link.reset();

@@ -12,8 +12,27 @@
 #include "base/memory/raw_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "koan/cli/koan_cli_batch.h"
 
 namespace koan::cli {
+
+// Whitespace runs as one space, none at the ends.
+std::string CollapseSpace(std::string_view text) {
+  std::string out;
+  bool space = false;
+  for (char c : text) {
+    if (base::IsAsciiWhitespace(c)) {
+      space = !out.empty();
+      continue;
+    }
+    if (space) {
+      out += ' ';
+      space = false;
+    }
+    out += c;
+  }
+  return out;
+}
 
 namespace {
 
@@ -94,6 +113,24 @@ constexpr auto kInlineRoles = base::MakeFixedFlatSet<std::string_view>({
     "time",
 });
 
+// --interactive: the lines shown besides what an agent acts on, for where
+// it is.
+constexpr auto kInteractiveContext = base::MakeFixedFlatSet<std::string_view>({
+    "alertdialog",
+    "dialog",
+    "heading",
+    "Iframe",
+    "RootWebArea",
+});
+
+// --interactive: messages whose text is shown (an error after a submit, a
+// "Saved").
+constexpr auto kMessageRoles = base::MakeFixedFlatSet<std::string_view>({
+    "alert",
+    "log",
+    "status",
+});
+
 // An AX value ({"type", "value"}) as text: strings as they are, numbers and
 // booleans written out.
 std::string ValueText(const base::DictValue* ax_value) {
@@ -121,24 +158,6 @@ std::string ValueText(const base::DictValue* ax_value) {
 
 std::string AxString(const base::DictValue& node, std::string_view key) {
   return ValueText(node.FindDict(key));
-}
-
-// Whitespace runs as one space, none at the ends.
-std::string Collapse(std::string_view text) {
-  std::string out;
-  bool space = false;
-  for (char c : text) {
-    if (base::IsAsciiWhitespace(c)) {
-      space = !out.empty();
-      continue;
-    }
-    if (space) {
-      out += ' ';
-      space = false;
-    }
-    out += c;
-  }
-  return out;
 }
 
 std::string Quoted(std::string_view text, size_t max) {
@@ -210,6 +229,10 @@ class Outline {
       }
       if (std::optional<int> backend = node->FindInt("backendDOMNodeId")) {
         refs_.insert(*backend);
+        if (options_.locators && !node->FindBool("ignored").value_or(false)) {
+          ++names_[{AxString(*node, "role"),
+                    CollapseSpace(AxString(*node, "name"))}];
+        }
       }
       if (!root_) {
         root_ = node;
@@ -218,18 +241,33 @@ class Outline {
   }
 
   Snapshot Build() {
-    if (root_) {
-      if (!options_.full) {
-        WalkPopups();
-      }
-      Walk(root_, 0);
-    }
     Snapshot snapshot;
+    const base::DictValue* start = root_;
+    if (options_.root) {
+      start = nullptr;
+      for (const auto& [id, node] : by_id_) {
+        if (node->FindInt("backendDOMNodeId") == options_.root) {
+          start = node;
+          break;
+        }
+      }
+      snapshot.root_missing = !start;
+    }
+    if (start) {
+      if (!options_.full && !options_.root) {
+        pinned_ = true;
+        WalkPopups();
+        pinned_ = false;
+      }
+      Walk(start, 0);
+    }
     snapshot.text = std::move(out_);
     if (truncated_) {
       snapshot.text += "... (more; the page is long)\n";
     }
+    snapshot.truncated = truncated_;
     snapshot.refs.assign(refs_.begin(), refs_.end());
+    snapshot.lines = std::move(lines_out_);
     return snapshot;
   }
 
@@ -249,6 +287,9 @@ class Outline {
     // The name of the shown node this one is in, if its name is its text:
     // text that only repeats it is left out.
     std::string within;
+    // --interactive: inside an alert or a status message, whose text is
+    // shown.
+    bool keep_text = false;
   };
 
   // Open popups first (compact only), so that the options a click has just
@@ -297,7 +338,7 @@ class Outline {
       if (opener != opened.end()) {
         const base::DictValue& by = *opener->second;
         header += " of " + AxString(by, "role");
-        const std::string name = Collapse(AxString(by, "name"));
+        const std::string name = CollapseSpace(AxString(by, "name"));
         if (!name.empty()) {
           header += " " + Quoted(name, kMaxName);
         }
@@ -422,7 +463,7 @@ class Outline {
   // Depth-first, without recursion (a hostile page can nest deeply).
   void Walk(const base::DictValue* start, int start_depth) {
     std::vector<Step> stack;
-    stack.push_back({start, start_depth, Step::kNode, std::string()});
+    stack.push_back({start, start_depth, Step::kNode, std::string(), false});
     while (!stack.empty() && !truncated_) {
       Step step = std::move(stack.back());
       stack.pop_back();
@@ -440,15 +481,17 @@ class Outline {
       const base::DictValue& node = *step.node;
       int child_depth = step.depth;
       std::string within = step.within;
+      bool keep_text = step.keep_text;
       Step::Kind end = Step::kNode;
-      const bool descend = options_.full ? Full(node, step.depth, &child_depth)
-                                         : Compact(node, step.depth,
-                                                   &child_depth, &within, &end);
+      const bool descend = options_.full
+                               ? Full(node, step.depth, &child_depth)
+                               : Compact(node, step.depth, &child_depth,
+                                         &within, &keep_text, &end);
       if (!descend) {
         continue;
       }
       if (end != Step::kNode) {
-        stack.push_back({nullptr, step.depth, end, std::string()});
+        stack.push_back({nullptr, step.depth, end, std::string(), false});
       }
       const base::ListValue* children = node.FindList("childIds");
       if (!children) {
@@ -458,7 +501,8 @@ class Outline {
         const std::string* child_id = child.GetIfString();
         auto it = child_id ? by_id_.find(*child_id) : by_id_.end();
         if (it != by_id_.end()) {
-          stack.push_back({it->second, child_depth, Step::kNode, within});
+          stack.push_back(
+              {it->second, child_depth, Step::kNode, within, keep_text});
         }
       }
     }
@@ -488,6 +532,7 @@ class Outline {
                int depth,
                int* child_depth,
                std::string* within,
+               bool* keep_text,
                Step::Kind* end) {
     if (node.FindBool("ignored").value_or(false)) {
       return true;
@@ -497,14 +542,17 @@ class Outline {
       return false;
     }
     if (role == "StaticText" || role == "LineBreak") {
+      if (options_.interactive && !*keep_text) {
+        return false;
+      }
       // A line break's name is "\n": a space between the runs around it.
       const std::string text = AxString(node, "name");
-      const std::string collapsed = Collapse(text);
+      const std::string collapsed = CollapseSpace(text);
       if (!collapsed.empty() && !within->empty() &&
           within->find(collapsed) != std::string::npos) {
         return false;
       }
-      AddText(depth, text);
+      AddText(depth, text, node.FindInt("backendDOMNodeId").value_or(0));
       return false;
     }
     const std::string name = AxString(node, "name");
@@ -517,9 +565,15 @@ class Outline {
     const bool inline_role = kInlineRoles.contains(role);
     // Any other role is shown (without a ref) if it has a name: an image, a
     // table, a tab panel, an alert, a video.
-    const bool shown = action || landmark ||
-                       ((!name.empty() || !value.empty()) && !wrapper &&
-                        !inline_role && !kBlockRoles.contains(role));
+    const bool shown =
+        options_.interactive
+            ? action || kInteractiveContext.contains(role)
+            : action || landmark ||
+                  ((!name.empty() || !value.empty()) && !wrapper &&
+                   !inline_role && !kBlockRoles.contains(role));
+    if (options_.interactive && kMessageRoles.contains(role)) {
+      *keep_text = true;
+    }
     if (!shown) {
       if (wrapper) {
         word_break_ = true;
@@ -532,8 +586,8 @@ class Outline {
     }
     // Text just before a control that is its label ("Plan", and then
     // combobox "Plan") says nothing more.
-    const std::string collapsed_name = Collapse(name);
-    if (!collapsed_name.empty() && Collapse(pending_) == collapsed_name) {
+    const std::string collapsed_name = CollapseSpace(name);
+    if (!collapsed_name.empty() && CollapseSpace(pending_) == collapsed_name) {
       pending_.clear();
     }
     Flush();
@@ -544,15 +598,22 @@ class Outline {
     if (kNamedByContent.contains(role) && !collapsed_name.empty()) {
       *within = collapsed_name;
     }
+    // A closed dropdown's options: its value is on its line.
+    if (options_.interactive && role == "combobox" &&
+        Property(node, "expanded") != "true") {
+      Flush();
+      return false;
+    }
     return true;
   }
 
-  void AddText(int depth, std::string_view text) {
+  void AddText(int depth, std::string_view text, int node) {
     if (!pending_.empty() && depth != pending_depth_) {
       Flush();
     }
     if (pending_.empty()) {
       pending_depth_ = depth;
+      pending_node_ = node;
     } else if (word_break_ && !text.empty() &&
                !base::IsAsciiWhitespace(pending_.back()) &&
                !base::IsAsciiWhitespace(text.front()) &&
@@ -569,14 +630,14 @@ class Outline {
   }
 
   void Flush() {
-    const std::string text = Collapse(pending_);
+    const std::string text = CollapseSpace(pending_);
     pending_.clear();
     word_break_ = false;
     // A label after its control ("checkbox "Agree"" and then "Agree").
     if (text.empty() || text == last_name_) {
       return;
     }
-    if (!Emit(pending_depth_, Quoted(text, kMaxText))) {
+    if (!Emit(pending_depth_, Quoted(text, kMaxText), pending_node_)) {
       return;
     }
     last_name_.clear();
@@ -591,7 +652,8 @@ class Outline {
             bool with_ref) {
     std::string line = role;
     if (!name.empty()) {
-      line += " " + Quoted(options_.full ? name : Collapse(name), kMaxName);
+      line +=
+          " " + Quoted(options_.full ? name : CollapseSpace(name), kMaxName);
     }
     if (!value.empty()) {
       line += " = " + Quoted(value, kMaxName);
@@ -599,15 +661,22 @@ class Outline {
     if (!states.empty()) {
       line += " " + states;
     }
-    if (with_ref) {
-      if (std::optional<int> backend = node.FindInt("backendDOMNodeId")) {
-        line += " @" + base::NumberToString(*backend);
+    const int backend = node.FindInt("backendDOMNodeId").value_or(0);
+    if (with_ref && backend) {
+      line += " @" + base::NumberToString(backend);
+      const std::string collapsed = CollapseSpace(name);
+      if (options_.locators && &node != root_.get() && !collapsed.empty() &&
+          names_[{role, collapsed}] == 1) {
+        line += " " + LocatorText(role, collapsed);
       }
     }
-    Emit(depth, line);
+    Emit(depth, line, backend, &node == root_.get());
   }
 
-  bool Emit(int depth, const std::string& line) {
+  bool Emit(int depth,
+            const std::string& line,
+            int node = 0,
+            bool pinned = false) {
     if (lines_ == options_.max_lines) {
       truncated_ = true;
       return false;
@@ -616,6 +685,7 @@ class Outline {
     out_ += line;
     out_ += '\n';
     ++lines_;
+    lines_out_.push_back({node, depth, line, pinned || pinned_});
     return true;
   }
 
@@ -628,12 +698,19 @@ class Outline {
   std::set<const base::DictValue*> seen_;
   raw_ptr<const base::DictValue> root_ = nullptr;
   std::set<int> refs_;
+  // --locators: how many nodes have each role and name.
+  std::map<std::pair<std::string, std::string>, int> names_;
   std::string out_;
+  std::vector<SnapshotLine> lines_out_;
   size_t lines_ = 0;
+  // Walking the open popups, which every scope shows.
+  bool pinned_ = false;
   bool truncated_ = false;
   // Text runs not written yet, and their depth.
   std::string pending_;
   int pending_depth_ = 0;
+  // The first run's node.
+  int pending_node_ = 0;
   // A wrapper began or ended since the last run.
   bool word_break_ = false;
   // The name of the last line written, if it was a node's.
@@ -694,6 +771,185 @@ std::string StatesText(const base::DictValue& ax_node) {
     return std::string();
   }
   return "[" + base::JoinString(states, ", ") + "]";
+}
+
+std::string RenderWindow(const Snapshot& snapshot, size_t first, size_t end) {
+  std::string out;
+  size_t above = 0;
+  size_t below = 0;
+  auto emit = [&](const SnapshotLine& line) {
+    out.append(static_cast<size_t>(line.depth) * 2, ' ');
+    out += line.text;
+    out += '\n';
+  };
+  // The page's own line, and the popups, come first: above's count goes
+  // after them.
+  size_t at = 0;
+  for (; at < snapshot.lines.size() && snapshot.lines[at].pinned; ++at) {
+    emit(snapshot.lines[at]);
+  }
+  for (size_t i = at; i < snapshot.lines.size() && i < first; ++i) {
+    if (!snapshot.lines[i].pinned) {
+      ++above;
+    }
+  }
+  if (above) {
+    out += "[more above: " + base::NumberToString(above) + " nodes]\n";
+  }
+  for (size_t i = at; i < snapshot.lines.size(); ++i) {
+    const SnapshotLine& line = snapshot.lines[i];
+    if (line.pinned || (i >= first && i < end)) {
+      emit(line);
+    } else if (i >= end) {
+      ++below;
+    }
+  }
+  if (below || snapshot.truncated) {
+    out += "[more below: " + base::NumberToString(below) +
+           (snapshot.truncated ? "+" : "") + " nodes]\n";
+  }
+  return out;
+}
+
+// --- Diffs
+// ---------------------------------------------------------------------
+
+namespace {
+
+// What a line is the same line by: its node, else (a popup's heading) its
+// text.
+std::string LineKey(const SnapshotLine& line) {
+  return line.node ? "n" + base::NumberToString(line.node) : "t" + line.text;
+}
+
+// What a baseline keeps of a snapshot, so that a hostile page cannot grow
+// the holder without bound.
+constexpr size_t kMaxBaselinePages = 16;
+constexpr size_t kMaxBaselineLines = 20000;
+
+}  // namespace
+
+std::string BaselineKind(const SnapshotOptions& options) {
+  std::string kind = options.full          ? "full"
+                     : options.interactive ? "interactive"
+                                           : "compact";
+  if (options.root) {
+    kind += " of @" + base::NumberToString(options.root);
+  }
+  return kind;
+}
+
+base::DictValue BaselineToValue(const Baseline& baseline) {
+  base::ListValue lines;
+  for (const SnapshotLine& line : baseline.lines) {
+    lines.Append(base::ListValue().Append(line.node).Append(line.text));
+  }
+  return base::DictValue()
+      .Set("document", baseline.document)
+      .Set("kind", baseline.kind)
+      .Set("lines", std::move(lines));
+}
+
+std::optional<Baseline> BaselineFromValue(const base::DictValue& value) {
+  const std::string* document = value.FindString("document");
+  const std::string* kind = value.FindString("kind");
+  const base::ListValue* lines = value.FindList("lines");
+  if (!document || !kind || !lines) {
+    return std::nullopt;
+  }
+  Baseline baseline;
+  baseline.document = *document;
+  baseline.kind = *kind;
+  for (const base::Value& entry : *lines) {
+    const base::ListValue* pair = entry.GetIfList();
+    if (!pair || pair->size() != 2 || !(*pair)[0].is_int() ||
+        !(*pair)[1].is_string()) {
+      return std::nullopt;
+    }
+    if (baseline.lines.size() == kMaxBaselineLines) {
+      break;
+    }
+    SnapshotLine line;
+    line.node = (*pair)[0].GetInt();
+    line.text = (*pair)[1].GetString();
+    baseline.lines.push_back(std::move(line));
+  }
+  return baseline;
+}
+
+Baselines::Baselines() = default;
+Baselines::~Baselines() = default;
+
+std::optional<Baseline> Baselines::Swap(const std::string& target,
+                                        Baseline next) {
+  if (next.lines.size() > kMaxBaselineLines) {
+    next.lines.resize(kMaxBaselineLines);
+  }
+  auto it = pages_.find(target);
+  if (it == pages_.end()) {
+    if (pages_.size() >= kMaxBaselinePages) {
+      pages_.erase(pages_.begin());
+    }
+    pages_.emplace(target, std::move(next));
+    return std::nullopt;
+  }
+  std::optional<Baseline> previous = std::move(it->second);
+  it->second = std::move(next);
+  return previous;
+}
+
+std::string DiffText(const std::optional<Baseline>& previous,
+                     const Baseline& now,
+                     std::string_view full_text) {
+  std::string reset;
+  if (!previous) {
+    reset = "no earlier snapshot of this tab";
+  } else if (previous->document != now.document) {
+    reset = "the tab shows a new page";
+  } else if (previous->kind != now.kind) {
+    reset =
+        "the last snapshot was " + previous->kind + ", this one is " + now.kind;
+  }
+  if (!reset.empty()) {
+    return "baseline reset (" + reset + "); the whole snapshot:\n" +
+           std::string(full_text);
+  }
+  std::map<std::string, const SnapshotLine*> before;
+  for (const SnapshotLine& line : previous->lines) {
+    before.emplace(LineKey(line), &line);
+  }
+  std::set<std::string> kept;
+  std::string body;
+  size_t added = 0;
+  size_t changed = 0;
+  size_t removed = 0;
+  for (const SnapshotLine& line : now.lines) {
+    const std::string key = LineKey(line);
+    auto it = before.find(key);
+    if (it == before.end()) {
+      body += "+ " + line.text + "\n";
+      ++added;
+      continue;
+    }
+    kept.insert(key);
+    if (it->second->text != line.text) {
+      body += "~ " + line.text + "\n";
+      ++changed;
+    }
+  }
+  for (const SnapshotLine& line : previous->lines) {
+    if (!kept.contains(LineKey(line))) {
+      body += "- " + line.text + "\n";
+      ++removed;
+    }
+  }
+  if (!added && !changed && !removed) {
+    return "diff: no change since the last snapshot of this page\n";
+  }
+  return "diff since the last snapshot of this page: " +
+         base::NumberToString(added) + " added, " +
+         base::NumberToString(changed) + " changed, " +
+         base::NumberToString(removed) + " removed\n" + body;
 }
 
 // --- Refs --------------------------------------------------------------------
