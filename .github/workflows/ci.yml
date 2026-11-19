@@ -101,7 +101,7 @@ jobs:
           git ls-files 'src/*.cc' 'src/*.h' |
             xargs clang-format --style=file --dry-run --Werror
       - name: shellcheck
-        run: shellcheck -S warning scripts/*.sh scripts/ci/*.sh scripts/e2e/*.sh scripts/mac/suite.sh
+        run: shellcheck -S warning scripts/*.sh scripts/ci/*.sh scripts/e2e/*.sh scripts/mac/suite.sh scripts/mac/build_official.sh
       # The friends' Mac build (docs/BUILDING-MAC.md): the scripts parse, and
       # build.sh plans a fresh clone's build on a faked Mac without running
       # or fetching anything.

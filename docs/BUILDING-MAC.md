@@ -90,6 +90,22 @@ scripts/build.sh --help        # all the options
 Don't use `--fast` on a 16 GB Mac while you work: a Chromium build at full
 speed can make it unresponsive.
 
+### The official build (faster browser, much longer build)
+
+`scripts/build.sh` makes a plain optimised build. Chromium's official
+configuration adds link-time optimisation (ThinLTO) and profile-guided
+optimisation (PGO), which make web pages noticeably faster but take a day or
+a night more to build and need about 70 GB of free disk:
+
+```sh
+scripts/mac/build_official.sh --dry-run   # what it would do
+scripts/mac/build_official.sh --away      # build; --away = you're not using the Mac
+```
+
+It builds `chromium/src/out/KoanOfficial/Koan.app` next to your normal build
+and never installs it; at the end it prints how to benchmark it and how to
+install it. Details: `.agent/notes/mac.md`, "Official build".
+
 ## How long it takes
 
 | | MacBook Air | MacBook Pro (Pro/Max chip) |

@@ -1,5 +1,8 @@
 # Build notes
 
+The official (ThinLTO + PGO) Mac build: `.agent/notes/mac.md`, "Official
+build". This file is about the Linux machine.
+
 ## Machine
 - 8 cores, 15 GB RAM, zram 15.5 GB + 16 GB swapfile, ~780 GB free disk.
 - Other apps typically hold 8–10 GB RAM, so only ~5–7 GB is free for the

@@ -1,0 +1,73 @@
+# GN args for Koan's official macOS build: what Chromium's own official
+# mac-arm64 builds use (ThinLTO + PGO), minus Google's branding, debug
+# symbols and remote execution. scripts/mac/build_official.sh copies this file
+# to chromium/src/out/KoanOfficial/args.gn and appends what depends on the
+# machine (listed below). The everyday build stays
+# build/koan-mac.gn in out/Koan; nothing here touches it.
+#
+# Design, sources and estimates: .agent/notes/mac.md, "Official build".
+# Changing anything below rebuilds every object (about a day on the Air):
+# decide before a build, never casually.
+
+# Left at Chromium's defaults on purpose: every v8_enable_* (sandbox,
+# pointer compression, and in official builds v8_logging_level 0 and no
+# fast mksnapshot), partition_alloc's official settings, use_remoteexec
+# (false: no remote execution outside Google), concurrent_links (Chromium
+# asserts it isn't set with ThinLTO; on 16 GB its formula gives 1).
+# enable_nacl no longer exists in Chromium 158.
+#
+# Appended by scripts/mac/build_official.sh, from the machine:
+#   chrome_pgo_phase = 2          (0 with KOAN_PGO=0: no profile, slower)
+#   koan_thin_lto_jobs = <n>      (ThinLTO threads in one link, from the RAM)
+#   angle_metal_toolchain_dir = "..."   (as scripts/build.sh does)
+
+target_cpu = "arm64"
+is_debug = false
+is_component_build = false
+
+# The switch that turns on ThinLTO, PGO (chrome_pgo_phase = 2 by default),
+# -O2 everywhere with CHECK messages compiled out, stripping, and no PCH.
+is_official_build = true
+
+# Never true in a fork: it needs Google's internal resources and turns on
+# Chrome-only behaviour (no --load-extension, the remote-debugging profile
+# check, the updater), which Koan's tests and agent rely on not having.
+is_chrome_branded = false
+
+# Chromium's PGO profiles are made from DCHECK-off builds, and pgo.gni only
+# picks phase 2 when DCHECKs are off.
+dcheck_always_on = false
+
+# Explicit, though they are the official defaults on Mac (compiler.gni):
+# ThinLTO, with link-time optimisation of the browser's main binaries, and
+# the incremental ThinLTO cache in out/KoanOfficial/thinlto-cache (at most
+# 10% of the free disk; lets an interrupted link reuse finished modules).
+use_thin_lto = true
+thin_lto_enable_optimizations = true
+thin_lto_enable_cache = true
+
+# Official builds default to symbol_level = 2 (full DWARF), which takes the
+# out dir past 100 GB and the framework link past this Mac's RAM. No DWARF,
+# no dSYMs: with enable_stripping (official default) and no dSYMs,
+# build/config/mac keeps an unstripped copy of each binary in the out dir
+# ("Koan Framework.unstripped") for atos, so crash reports can still be
+# symbolised by function name.
+symbol_level = 0
+blink_symbol_level = 0
+v8_symbol_level = 0
+enable_dsyms = false
+
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
+
+# Ship stable feature defaults, not Chromium's experiment config (which, for
+# example, turns on the WebUI toolbar).
+disable_fieldtrial_testing_config = true
+
+# Widevine, as in build/koan-mac.gn (issue #315). Official builds fail when
+# Google's signing cert is missing unless this is set; Koan's placeholder
+# signer (//koan/build/widevine_signature_placeholder.py) ignores it anyway,
+# and Chromium's own public mac builders set it the same way.
+enable_widevine = true
+enable_cdm_host_verification = true
+ignore_missing_widevine_signing_cert = true
