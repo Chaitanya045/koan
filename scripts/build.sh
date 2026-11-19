@@ -12,11 +12,12 @@
 #   3. applies Koan's patches and branding when they changed;
 #   4. writes out/Koan/args.gn (build/koan-mac.gn: release, no symbols) and
 #      runs gn gen;
-#   5. builds at a laptop-friendly -j, under nice and caffeinate, then signs
-#      Koan.app with the local identity if you created one
-#      (scripts/mac_signing_identity.sh create; KOAN_SIGN=0 skips that);
+#   5. builds at a laptop-friendly -j, under nice and caffeinate;
 #   6. Widevine: VMP-signs the framework when this Mac has an EVS login
-#      (scripts/mac/widevine_vmp_sign.sh, docs/USAGE.md "DRM video");
+#      (scripts/mac/widevine_vmp_sign.sh, docs/USAGE.md "DRM video"), then
+#      signs Koan.app with the local identity if you created one
+#      (scripts/mac_signing_identity.sh create; KOAN_SIGN=0 skips that);
+#      VMP must come before the code signature;
 #   7. copies Koan.app to ~/Applications (by default when KOAN_MAC is unset,
 #      i.e. on a friend's clone; --install / --no-install to choose).
 #
@@ -358,16 +359,18 @@ if [[ $OS == mac ]]; then build=(caffeinate -i "${build[@]}"); fi
 if [[ $TARGET == chrome ]]; then
   if [[ $OS == mac ]]; then
     echo "built $PWD/$OUT/$(app_name).app"
+    # Widevine VMP (Netflix) first: only with an EVS login on this Mac. Its
+    # .sig goes inside the bundle, so it must come BEFORE the code signature
+    # (castLabs; scripts/mac/widevine_vmp_sign.sh, mac_package.sh,
+    # build_official.sh do the same), or it would break that signature.
+    "$ROOT/scripts/mac/widevine_vmp_sign.sh" --if-configured \
+      "$PWD/$OUT/$(app_name).app"
     # Same signature on every build, so the saved Keychain item (the key for
     # cookies and passwords) keeps matching; see scripts/mac_sign.sh. Before
     # the install, so the installed copy is the signed one.
     if [[ ${KOAN_SIGN:-1} != 0 ]]; then
       "$ROOT/scripts/mac_sign.sh" "$PWD/$OUT/$(app_name).app"
     fi
-    # Widevine VMP after the code signature (it signs over it).
-    # (Netflix): only with an EVS login on this Mac.
-    "$ROOT/scripts/mac/widevine_vmp_sign.sh" --if-configured \
-      "$PWD/$OUT/$(app_name).app"
     if [[ $INSTALL == 1 ]]; then
       install_app
       echo "Open Koan from ~/Applications (Finder, Spotlight or Launchpad)."
