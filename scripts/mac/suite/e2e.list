@@ -23,6 +23,11 @@ agent_cli timeout=540
 # Agent control's indicator (#180, design 6.2): the pill on the taken-over
 # tab only, the sidebar chip elsewhere, the corner dot in compact mode.
 agent_indicator timeout=420
+# The agent tab's keep-alive lease (#180, design 8): an agent's background tab
+# renders at full speed (also with Koan's window covered or minimised, with
+# real input on), is throttled 3 s after the last command, the cap holds,
+# and the user's own background tab stays throttled; a summary table.
+agent_lease timeout=420
 # Copy current URL with several tabs selected (palette, test_helper).
 copy_urls timeout=180
 # The sidebar's top row and URL pill with real clicks: back / forward /
