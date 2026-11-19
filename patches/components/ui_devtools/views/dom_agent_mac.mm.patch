@@ -1,0 +1,16 @@
+diff --git a/components/ui_devtools/views/dom_agent_mac.mm b/components/ui_devtools/views/dom_agent_mac.mm
+index 32b3915a3e00b9b2bb151f8c1f74014caebb51d4..92a665a38b16528e5befd3cafc641b74e9bdde97 100644
+--- a/components/ui_devtools/views/dom_agent_mac.mm
++++ b/components/ui_devtools/views/dom_agent_mac.mm
+@@ -57,6 +57,11 @@ void DOMAgentMac::OnWidgetDestroying(views::Widget* widget) {
+ void DOMAgentMac::OnNativeWidgetAdded(views::NativeWidgetMac* native_widget) {
+   views::Widget* widget = native_widget->GetWidget();
+   DCHECK(widget);
++  // Koan: no document yet (enabled, not read): CreateChildrenForRoot() finds
++  // every open window, this one too, when it is read.
++  if (!element_root()) {
++    return;
++  }
+   roots_.push_back(widget);
+   UIElement* widget_element = new WidgetElement(widget, this, element_root());
+   element_root()->AddChild(widget_element);

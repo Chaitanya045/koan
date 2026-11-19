@@ -82,7 +82,8 @@ check('...with Brave\'s logo on its tile', !!brave?.masked, JSON.stringify(marks
 check('...and Google\'s on Google\'s', !!marks?.find(m => m.mark === 'engine-google' && m.masked),
       JSON.stringify(marks));
 const markSvg = await js(`fetch('icons/engine-brave.svg').then(r => r.text())`);
-check('...a served SVG', /<svg[^>]*viewBox/.test(markSvg ?? ''), markSvg?.slice(0, 80));
+check('...a served SVG', typeof markSvg === 'string' && /<svg[^>]*viewBox/.test(markSvg),
+      JSON.stringify(markSvg)?.slice(0, 80));
 await next();
 check('Next: done', await step() === 'done', await step());
 check('...which says "Enjoy browsing."', await js(

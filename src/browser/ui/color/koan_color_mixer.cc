@@ -117,12 +117,14 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
 
   // Koan's tab drag (ZenDragAndDrop.js): #zen-dragover-background is
   // --zen-primary-color; the drag image is the selected row, opaque over the
-  // toolbar, with its text; the count dot red with white text.
+  // toolbar, with its text; the count dot red with white text. (CSS red is
+  // pure red, gfx::kPlaceholderColor, which the colour pipeline reads as "no
+  // colour": one step off it, the same red to the eye.)
   mixer[kColorKoanTabDragOverBackground] = {ZenPrimaryColor(key)};
   mixer[kColorKoanTabDragImage] = {
       ui::GetResultingPaintColor(kColorKoanSidebarTabSelected, kColorToolbar)};
   mixer[kColorKoanTabDragImageForeground] = {kColorToolbarText};
-  mixer[kColorKoanTabDragCount] = {SK_ColorRED};
+  mixer[kColorKoanTabDragCount] = {SkColorSetRGB(0xFE, 0x00, 0x00)};
   mixer[kColorKoanTabDragCountForeground] = {SK_ColorWHITE};
   // Split by drag (zen-split-view.css): the fake tab the primary button's
   // colour at 60%; the card white (black in dark mode) with the other for its
