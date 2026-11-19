@@ -10,8 +10,10 @@
 
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
+#include "base/logging.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
+#include "build/build_config.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
@@ -30,6 +32,7 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_tab_drag.h"
+#include "koan/browser/ui/views/koan_traffic_lights.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "ui/accessibility/ax_action_data.h"
@@ -92,6 +95,25 @@ constexpr int kShadowMargin = kShadowBlur / 2 + kShadowSpread;
 // opacity transition 0.1s, and transition-delay 0.1s on hover.
 constexpr base::TimeDelta kFadeDuration = base::Milliseconds(100);
 constexpr base::TimeDelta kFadeInDelay = base::Milliseconds(100);
+
+// Whether a kMouseExited that the window's monitor heard means the pointer
+// left the window. On macOS each tracking area of the window reports its own
+// exits (the pages', AppKit's views', and those of a recomputation when a
+// header's child window is ordered in) with the pointer still over the
+// window, and the move that would correct it may never come: the pointer
+// stops over the pane. There the window under the pointer decides
+// (IsPointerOverWindow(): this window or a child of it, such as a header).
+bool HasPointerLeftWindow(const BrowserView* browser_view) {
+#if BUILDFLAG(IS_MAC)
+  const views::Widget* widget = browser_view->GetWidget();
+  return !widget ||
+         !widget->GetWindowBoundsInScreen().Contains(
+             display::Screen::Get()->GetCursorScreenPoint()) ||
+         !IsPointerOverWindow(browser_view);
+#else
+  return true;
+#endif
+}
 
 // The rearrange view: the browsers fade (transition: opacity 0.2s ease-out)
 // to .85, the dragged one to .2; the drop zone moves with
@@ -733,7 +755,15 @@ void KoanSplitHeaderController::OnEvent(const ui::Event& event) {
     }
     return;
   }
-  pointer_in_window_ = event.type() != ui::EventType::kMouseExited;
+  if (event.type() == ui::EventType::kMouseExited) {
+    pointer_in_window_ = !HasPointerLeftWindow(browser_view_);
+    VLOG(1) << "Koan: split header: the window heard an exit ("
+            << (pointer_in_window_ ? "the pointer is still over it"
+                                   : "the pointer left it")
+            << ")";
+  } else {
+    pointer_in_window_ = true;
+  }
   UpdateHover();
 }
 
@@ -866,6 +896,9 @@ void KoanSplitHeaderController::SetWanted(Pane& pane, bool wanted) {
   pane.wanted = wanted;
   pane.timer.Stop();
   const int index = &pane == &panes_[0] ? 0 : 1;
+  VLOG(1) << "Koan: split header " << index << (wanted ? " shows" : " hides")
+          << " (pointer in the window: " << pointer_in_window_
+          << ", over the header: " << pane.header_hovered << ")";
   if (wanted) {
     EnsureWidget(index);
     if (!pane.widget) {
