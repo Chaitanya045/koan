@@ -465,4 +465,47 @@ IN_PROC_BROWSER_TEST_F(KoanSplitViewBrowserTest,
   header->OnHeaderHovered(0, false);
 }
 
+// The Mac run (cycle 18, split_header, after an unsplit and a split again):
+// the header's log said it showed, yet its view was hidden, so no header
+// showed and its grip took no press. On macOS AppKit can order a hidden
+// child window back on screen with its parent, and Views then counts it as
+// shown (NativeWidgetNSWindowBridge::OnVisibilityChanged()). Such a window is
+// hidden again while its header isn't wanted, and a header that is wanted
+// shows its view whatever its window says.
+IN_PROC_BROWSER_TEST_F(KoanSplitViewBrowserTest,
+                       AHeaderShowsWhateverItsWindowSays) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  TwoPanes panes = SplitTwoPages(browser(), 0.5);
+  ASSERT_TRUE(panes.first && panes.second && panes.first->IsSplit());
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
+  KoanSplitHeaderController* header =
+      KoanBrowserViewController::From(browser_view)->split_header();
+  ASSERT_TRUE(header);
+
+  // Shown once, then gone: its widget is hidden with its view.
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    header->OnHeaderHovered(0, true);
+    return ChildWidgetShows(browser_view, "KoanSplitHeader");
+  }));
+  header->OnHeaderHovered(0, false);
+  views::Widget* widget = ChildWidgetNamed(browser_view, "KoanSplitHeader");
+  ASSERT_TRUE(widget);
+  if (!base::test::RunUntil([&] { return !widget->IsVisible(); })) {
+    GTEST_SKIP() << "the header stays: the pointer rests over its pane";
+  }
+  ASSERT_FALSE(widget->GetContentsView()->GetVisible());
+
+  // Shown from outside, as AppKit does: hidden again.
+  widget->ShowInactive();
+  EXPECT_TRUE(base::test::RunUntil([&] { return !widget->IsVisible(); }));
+
+  // Its window shown with its view hidden, and the header wanted: the view
+  // shows too.
+  widget->ShowInactive();
+  header->OnHeaderHovered(0, true);
+  EXPECT_TRUE(base::test::RunUntil(
+      [&] { return ChildWidgetShows(browser_view, "KoanSplitHeader"); }));
+  header->OnHeaderHovered(0, false);
+}
+
 }  // namespace koan
