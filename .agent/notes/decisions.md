@@ -163,3 +163,55 @@
   `WindowRestoreHook` brings the folders back before the tabs, which join them
   by token. Without a session restore, a profile pref (`koan.folders.list`)
   brings back the folders of the window the user was in, with their tabs.
+
+## Agent control and UI, 2026-11-19/20 (maintainer with the user)
+
+- **Agent indicator on the controlled tab only** (#398): the user saw the old
+  pill on every tab. The pill ("<agent> is controlling this tab · Take back /
+  Take over · Stop", with an accent border) shows only on a tab an agent
+  holds. Elsewhere there is a sidebar chip (name, "N waiting", a menu to go
+  to the agent's tabs or Stop all), a corner dot when compact mode hides the
+  sidebar, and dots on agent tabs in the tab list. T10 holds in every layout.
+  Next: a menu-bar item and notifications, because the lease lets agents work
+  behind hidden windows, where in-window marks can't be seen.
+- **Agents find Koan, ego-style but opt-in** (#397): Settings > Agent Control >
+  "Set up agents on this Mac" links `~/.local/bin/koan` and writes the small
+  `koan-browser` skill only into installed agents' skill folders, only on
+  click, with Remove. It never writes silently or into folders of agents that
+  aren't installed: ego wrote up to 48 folders, and users complained.
+  `npx skills add Chaitanya045/koan` installs the repo copy. The entry skill
+  says only "run `koan skill`", so the guide matches the installed version.
+- **`koan pair` asks for every capability by default** (#397), as part of "agents
+  use the browser as the user does". The user can untick any of them in the
+  dialog, and each take-over still asks. Settings has no per-agent capability
+  switch: re-pairing changes capabilities, and the guide must never send
+  agents to a switch that doesn't exist.
+- **`koan` is the only way in.** Agents never use AppleScript JavaScript, a
+  remote-debugging port or another browser. An agent on another machine runs
+  `koan` on the Mac over ssh, by its full path, with one ssh connection
+  reused or `koan shell`.
+- **Speed comes from fewer, cheaper agent turns, done natively** (user: "Ego's
+  speed is a gimmick"): event-based settle and `act --snapshot`, `choose`,
+  `koan shell` (#401); native multi-step `act` batches that check pause and
+  userNeeded before every step; interactive, scoped and diff snapshots with
+  stable locators; the lease for background tabs; and an official
+  ThinLTO+PGO build. Never a model-written JS runtime or raw CDP for agents.
+  Speed is proven with measured calls and wall time on a real form flow.
+- **Navigate on HTTP errors** (#401): `ok (HTTP 504 …)`, exit 0, because the tab
+  shows the server's page. A server that doesn't answer in 15 s
+  (`--timeout`) gives `Koan.timeout`.
+- **URL pill is Zen's** (#400): pinned extension actions with badges, Copy link
+  with its toast, and an Extensions (sliders) button that opens Chromium's
+  extensions menu. Copy link and Extensions fade in on sidebar hover and hide
+  on an empty tab or while editing. Site permissions stay on the favicon's site
+  panel.
+- **Top-row controls are client area** (#400): Koan's views in the vertical
+  strip's top row go through `koan::IsSidebarClientArea`, or the Mac turns a
+  press into a window drag. The empty part of the row still drags and zooms.
+  UI DevTools clicks skip this hit test, so new controls near the window top
+  need a hit-test browser test and a real-click Mac step.
+- **No floating sidebar corners in compact mode** (#399): upstream's corner views
+  don't follow the slid strip and showed as a dark notch on toggle and peek.
+  A docked sidebar keeps them.
+- **Official build** (approved 2026-11-20): ThinLTO+PGO in `out/KoanOfficial`,
+  built on the Mac, offered to the user as a stable update only.
