@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/files/file_path.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "koan/browser/agent/koan_agent_auth.h"
 
@@ -52,15 +53,40 @@ struct ClientInfo {
   // `koan` and the agent that ran it. The holder serves only that agent's
   // `koan` (koan_cli_admission.h). nullopt for a record without it.
   std::optional<agent::PinnedIdentity> pinned;
+  // The browser profile it paired with (the one dialled), and when. Empty
+  // and null in a record from before they were kept.
+  base::FilePath user_data_dir;
+  base::Time paired_at;
 };
 std::string SerializeClient(const ClientInfo& client);
 std::optional<ClientInfo> ParseClient(std::string_view json);
 
-// The client to use: `wanted` if given and paired, else the only paired one.
-// nullopt (and `error`) if none, several, or not that one.
-std::optional<std::string> ChooseClient(const std::vector<std::string>& paired,
-                                        std::string_view wanted,
-                                        std::string* error);
+// What a plain `koan pair` asks for: everything there is, since agents use
+// the browser as the user does (the user's rule, design section 7.0). The
+// user can untick any of it in the dialog, and each take-over still asks.
+std::vector<std::string> PairCapabilities(
+    const std::vector<std::string>& given);
+
+// The client to use: `wanted` if given and paired. Else, of the clients
+// paired with the Koan at `user_data_dir` (a record that does not say which
+// counts for any), those paired by `agent` (this koan's agent, nullopt where
+// the OS cannot say) if there are any, and of them the newest pairing, so
+// that a new `koan pair` is the one used. nullopt (and `error`) if none.
+std::optional<std::string> ChooseClient(
+    const std::vector<ClientInfo>& paired,
+    std::string_view wanted,
+    const base::FilePath& user_data_dir,
+    const std::optional<agent::ProcessInfo>& agent,
+    std::string* error);
+
+// Whether a client the Koan at `dialled` has just refused as unknown (its
+// pairing was revoked, expired, or its profile replaced) is removed from
+// ~/.koan: only when it paired with that Koan, or, for a record that does
+// not say, when `dialled` is Koan's default profile. A pairing with another
+// profile is kept: that Koan may still know it.
+bool ShouldForget(const ClientInfo& client,
+                  const base::FilePath& dialled,
+                  const base::FilePath& default_user_data_dir);
 
 // One request: {"id", "method", "params", "sessionId"?}.
 std::string Request(int id,

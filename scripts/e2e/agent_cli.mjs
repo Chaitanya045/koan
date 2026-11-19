@@ -2,9 +2,17 @@
 // (Koan.app/Contents/Resources/bin/koan), the way an agent uses it, against
 // the suite's test profile (KOAN_USER_DATA_DIR) and a throw-away HOME (the
 // CLI keeps its keys in $HOME/.koan; the user's are never read):
-// - pair: `koan pair` asks Koan; this test presses Allow in Koan's approval
+// - pair: a plain `koan pair` (as the guide says) asks Koan for every
+//   capability, drive among them; this test presses Allow in Koan's approval
 //   dialog through UI DevTools, as the user would with the pointer (there is
 //   no auto-approve switch, and none is added);
+// - stale pairings (2026-11-19): a pairing Koan does not know is removed by
+//   `koan status` (which says "paired: no (Koan forgot ...)" when it was the
+//   only one) and by a command, which then uses the good one, never "several
+//   paired clients ... --client";
+// - Settings > Agent Control > Set Up Agents writes the koan-browser skill
+//   for the installed agents and links ~/.local/bin/koan, in the test's HOME
+//   (KOAN_AGENT_SETUP_HOME), and Remove takes them out again;
 // - open, snapshot (an outline with @refs), act (click lands), screenshot
 //   (a PNG), on a local page, in the agent's own background tab;
 // - a form (#340): act select sets a dropdown (and fill on it does too), the
@@ -38,12 +46,13 @@
 // is off in a non-default --user-data-dir). macOS only: the CLI's holder
 // needs the Mac's peer resolver. Run by scripts/mac/suite.sh.
 import { execFileSync, spawn } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import https from 'node:https';
 import os from 'node:os';
 import path from 'node:path';
-import { browserCall, check, evalIn, finish, pages, setKoanPref, sleep, viewTree,
-         waitFor } from './lib/koan.mjs';
+import { browserCall, check, evalIn, finish, pages, setKoanPref, showPane, sleep,
+         viewTree, waitFor } from './lib/koan.mjs';
 import { IS_MAC, KOAN_LOG, alive, fatalInLog, rootMouse, rootOf, skip, skipped,
          startServer } from './lib/mac.mjs';
 
@@ -61,9 +70,10 @@ const env = { ...process.env, HOME: AGENT_HOME, KOAN_USER_DATA_DIR: PROFILE };
 // once both are done: Allow lets the command finish, and its exit could
 // come in before allow() returns (the 2026-11-19 run: paired, yet the check
 // on allow()'s answer failed).
-function koan(args, { timeout = 60000, whileRunning } = {}) {
+function koan(args, { timeout = 60000, whileRunning, home } = {}) {
   return new Promise(resolve => {
-    const child = spawn(CLI, args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(CLI, args, { env: home ? { ...env, HOME: home } : env,
+                                     stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '', err = '';
     child.stdout.on('data', d => (out += d));
     child.stderr.on('data', d => (err += d));
@@ -152,16 +162,52 @@ await waitFor(() => fs.existsSync(path.join(PROFILE, 'AgentControl', 'agent.json
 let r = await koan(['status']);
 check('koan status: Koan running, Agent ready', /running, Agent ready/.test(r.out), brief(r));
 let allowed = false;
-r = await koan(['pair', '--label', 'koan suite', '--capabilities', 'observe,read,drive'],
+r = await koan(['pair', '--label', 'koan suite'],
                { timeout: 90000, whileRunning: async printed => {
                  allowed = await allow(/^Allow a program to control Koan\?$/, printed);
                } });
 check('koan pair: the approval dialog showed and was allowed', allowed, allowWhy);
 check('koan pair: paired', r.code === 0 && /paired as/.test(r.out), brief(r));
+// The dialog adds a switch only for what was asked, on: all of it came back.
+check('koan pair (no --capabilities): asked for, and got, everything, drive among it',
+      /allowed: space, observe, read, drive, keep-awake$/.test(r.out), brief(r));
 if (r.code !== 0) {
   skipped('the rest of agent control', 'not paired');
   server.close();
   finish();
+}
+r = await koan(['status']);
+check('koan status: paired: yes (Koan knows the pairing)', /^paired: yes$/m.test(r.out), brief(r));
+
+// --- Stale pairings: a record Koan has never heard of (as after its profile
+// was replaced), newer than the good one so that it would be the default.
+const PROFILE_REAL = fs.realpathSync(PROFILE);
+function stalePairing(home) {
+  const id = crypto.randomBytes(16).toString('hex');
+  const dir = path.join(home, '.koan', 'clients', id);
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(path.join(dir, 'key'), crypto.randomBytes(32).toString('base64'), { mode: 0o600 });
+  fs.writeFileSync(path.join(dir, 'client.json'), JSON.stringify({
+    clientId: id, label: 'stale', userDataDir: PROFILE_REAL, pairedAt: Date.now() + 3600e3 }),
+    { mode: 0o600 });
+  return dir;
+}
+{
+  let stale = stalePairing(AGENT_HOME);
+  r = await koan(['status']);
+  check('Stale pairing: koan status removes it and still says paired: yes (the good one)',
+        /^paired: yes$/m.test(r.out) && /forgot pairing/.test(r.err) && !fs.existsSync(stale), brief(r));
+  stale = stalePairing(AGENT_HOME);
+  r = await koan(['tabs']);
+  check('Stale pairing: a command removes it and runs as the good one (no --client)',
+        r.code === 0 && !fs.existsSync(stale) && !/several paired clients/.test(r.err), brief(r));
+  // Only a forgotten pairing, in a HOME of its own.
+  const lone = fs.mkdtempSync(path.join(AGENT_HOME, 'lone-'));
+  stale = stalePairing(lone);
+  r = await koan(['status'], { home: lone });
+  check('Stale pairing: koan status says "paired: no (Koan forgot this pairing; run koan pair)"',
+        /^paired: no \(Koan forgot this pairing; run koan pair\)$/m.test(r.out) && !fs.existsSync(stale),
+        brief(r));
 }
 
 // --- Open, snapshot, act, screenshot.
@@ -448,6 +494,48 @@ check('Switches off: koan end', r.code === 0, brief(r));
     r = await koan(['end', '--client', id]);
     check('...koan end', r.code === 0, brief(r));
   }
+}
+
+// --- Settings > Agent Control > Set Up Agents, in the test's HOME (the
+// browser runs with KOAN_AGENT_SETUP_HOME=AGENT_HOME; the user's ~/.claude
+// is never touched): Claude Code and Codex are "installed", Cursor not.
+{
+  for (const dir of ['.claude', '.codex']) fs.mkdirSync(path.join(AGENT_HOME, dir), { recursive: true });
+  const skillOf = dir => path.join(AGENT_HOME, dir, 'koan-browser', 'SKILL.md');
+  const repoSkill = fs.readFileSync(path.join(process.env.KOAN_ROOT, 'skills', 'koan-browser', 'SKILL.md'), 'utf8');
+  const targetId = (await browserCall('Target.createTarget',
+      { url: 'chrome://settings/koan/agents', background: true })).result?.targetId;
+  const settings = await waitFor(async () => (await pages()).find(p => p.id === targetId));
+  await evalIn(settings, showPane('agents'));
+  const button = sel => `koanSettingsRoot?.querySelector(${JSON.stringify(sel)})`;
+  const shown = await waitFor(() => evalIn(settings, `${button('#agent-setup-button')}?.textContent ?? ''`), 15000);
+  check('Set up agents: the button is in Settings > Agent Control', /^Set Up Agents$/.test(shown || ''), `${shown}`);
+  check('...nothing is written before the click', !fs.existsSync(skillOf('.claude/skills')) &&
+        !fs.existsSync(path.join(AGENT_HOME, '.local/bin/koan')));
+  await evalIn(settings, `${button('#agent-setup-button')}.click()`);
+  const said = await waitFor(() => evalIn(settings, `${button('#agent-setup-status')}?.textContent ?? ''`)
+      .then(t => /Set up\.|Could|left/.test(t) && t), 15000);
+  check('Set up agents: the click says it set up', said === 'Set up.', `${said}`);
+  check('...Claude Code\'s skill is the repo\'s koan-browser skill',
+        fs.existsSync(skillOf('.claude/skills')) && fs.readFileSync(skillOf('.claude/skills'), 'utf8') === repoSkill);
+  check('...Codex\'s, in ~/.agents/skills', fs.existsSync(skillOf('.agents/skills')));
+  check('...nothing for Cursor, which is not installed', !fs.existsSync(path.join(AGENT_HOME, '.cursor')));
+  let linked = '';
+  try { linked = fs.readlinkSync(path.join(AGENT_HOME, '.local/bin/koan')); } catch {}
+  check('...~/.local/bin/koan links to the koan in the app', linked === CLI || (linked && fs.realpathSync(linked) === fs.realpathSync(CLI)),
+        linked);
+  const viaLink = linked && await new Promise(res => {
+    const c = spawn(path.join(AGENT_HOME, '.local/bin/koan'), ['version'], { env });
+    c.on('close', code => res(code === 0));
+    c.on('error', () => res(false));
+  });
+  check('...and runs', !!viaLink);
+  await evalIn(settings, `${button('#agent-setup-remove')}.click()`);
+  await waitFor(() => !fs.existsSync(skillOf('.claude/skills')), 10000);
+  check('Set up agents: Remove takes the skills and the link out',
+        !fs.existsSync(skillOf('.claude/skills')) && !fs.existsSync(skillOf('.agents/skills')) &&
+        !fs.existsSync(path.join(AGENT_HOME, '.local/bin/koan')));
+  if (targetId) await browserCall('Target.closeTarget', { targetId }).catch(() => {});
 }
 
 // `koan status` only checks that Koan answers (it connects and hangs up):

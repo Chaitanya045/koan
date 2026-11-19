@@ -446,13 +446,29 @@ void Session::FinishProof(int id, const base::DictValue& params) {
   // yes.
   const IdentityChange change = CompareIdentity(record->pinned, peer_);
   const std::string chain_key = record->id + "|" + ChainDigest(peer_);
-  if (change == IdentityChange::kProcessChanged ||
-      (change == IdentityChange::kChainChanged &&
-       !env_.accepted_chains->contains(chain_key))) {
+  const bool ask = change == IdentityChange::kProcessChanged ||
+                   (change == IdentityChange::kChainChanged &&
+                    !env_.accepted_chains->contains(chain_key));
+  const ApprovalKind kind = change == IdentityChange::kProcessChanged
+                                ? ApprovalKind::kPeerChanged
+                                : ApprovalKind::kChainChanged;
+  // `koan status` asks whether the pairing is still good: the key proved it
+  // is, and the answer says whether a connection from here would be asked
+  // about. Nothing is asked, pinned or touched, and the session stays
+  // unauthenticated (it may prove itself for real after this).
+  if (params.FindBool("probe").value_or(false)) {
+    base::DictValue result;
+    result.Set("paired", true);
+    result.Set("approvalNeeded", ask);
+    if (ask) {
+      result.Set("reason", ReapprovalReason(kind, record->pinned, peer_));
+    }
+    Reply(id, std::move(result));
+    return;
+  }
+  if (ask) {
     ApprovalRequest request;
-    request.kind = change == IdentityChange::kProcessChanged
-                       ? ApprovalKind::kPeerChanged
-                       : ApprovalKind::kChainChanged;
+    request.kind = kind;
     request.peer = peer_;
     request.client_id = record->id;
     request.previous = record->pinned;

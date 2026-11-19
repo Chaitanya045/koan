@@ -61,12 +61,13 @@ struct Command {
   // Global options.
   // --user-data-dir: the browser profile directory (default: Koan's).
   std::string user_data_dir;
-  // --client: the paired client to speak as (default: the only one).
+  // --client: the paired client to speak as (default: ChooseClient()).
   std::string client;
   // --json: machine-readable output.
   bool json = false;
 
-  // pair: --label, --capabilities observe,read,drive.
+  // pair: --label, --capabilities observe,read,drive. Empty: not given
+  // (PairCapabilities()).
   std::string label;
   std::vector<std::string> capabilities;
 

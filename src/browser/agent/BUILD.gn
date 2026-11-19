@@ -122,6 +122,16 @@ source_set("admission") {
 }
 
 if (is_posix) {
+  # Settings > Agent Control > "Set up agents on this Mac": the koan link and
+  # the entry skill in each agent's skills directory (koan_agent_setup.h).
+  source_set("setup") {
+    sources = [
+      "koan_agent_setup.cc",
+      "koan_agent_setup.h",
+    ]
+    public_deps = [ "//base" ]
+  }
+
   # Where the gateway's unix socket lives and the checks that keep it safe.
   source_set("socket") {
     sources = [
@@ -398,11 +408,13 @@ test("koan_agent_unittests") {
     sources += [
       "koan_agent_gateway_unittest.cc",
       "koan_agent_peer_unittest.cc",
+      "koan_agent_setup_unittest.cc",
       "koan_agent_socket_unittest.cc",
     ]
     deps += [
       ":gateway",
       ":peer",
+      ":setup",
       ":socket",
       "//net",
       "//net:test_support",

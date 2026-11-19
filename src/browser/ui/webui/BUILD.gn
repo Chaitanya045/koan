@@ -77,9 +77,12 @@ source_set("webui") {
     sources += [
       "koan_agent_containers_handler.cc",
       "koan_agent_containers_handler.h",
+      "koan_agent_setup_handler.cc",
+      "koan_agent_setup_handler.h",
     ]
     deps += [
       "//koan/browser/agent:browser",
+      "//koan/browser/agent:setup",
       "//koan/browser/containers",
     ]
   }

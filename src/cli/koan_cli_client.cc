@@ -16,6 +16,7 @@
 #include <utility>
 
 #include "base/base64.h"
+#include "base/files/file.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
@@ -39,9 +40,12 @@ base::FilePath KoanDir() {
 }
 
 base::FilePath UserDataDir(const std::string& given) {
-  return given.empty()
-             ? DefaultUserDataDir(HomeDir(), getenv("KOAN_USER_DATA_DIR"))
-             : base::FilePath(given);
+  const base::FilePath dir =
+      given.empty()
+          ? DefaultUserDataDir(HomeDir(), getenv("KOAN_USER_DATA_DIR"))
+          : base::FilePath(given);
+  const base::FilePath absolute = base::MakeAbsoluteFilePath(dir);
+  return absolute.empty() ? dir : absolute;
 }
 
 bool PrivateDir(const base::FilePath& dir) {
@@ -61,22 +65,31 @@ bool WritePrivateFile(const base::FilePath& path, const std::string& data) {
          fchmod(fd.get(), 0600) == 0;
 }
 
-std::vector<std::string> PairedClients(const base::FilePath& home) {
-  std::vector<std::string> ids;
+std::vector<ClientInfo> PairedClients(const base::FilePath& home) {
+  std::vector<ClientInfo> clients;
   base::FileEnumerator dirs(home.Append("clients"), false,
                             base::FileEnumerator::DIRECTORIES);
   for (base::FilePath dir = dirs.Next(); !dir.empty(); dir = dirs.Next()) {
+    const base::FilePath file = dir.Append("client.json");
     std::string json;
-    if (!base::ReadFileToString(dir.Append("client.json"), &json)) {
+    if (!base::ReadFileToString(file, &json)) {
       continue;
     }
-    if (std::optional<ClientInfo> client = ParseClient(json);
-        client && client->client_id == dir.BaseName().value()) {
-      ids.push_back(client->client_id);
+    std::optional<ClientInfo> client = ParseClient(json);
+    if (!client || client->client_id != dir.BaseName().value()) {
+      continue;
     }
+    base::File::Info info;
+    if (client->paired_at.is_null() && base::GetFileInfo(file, &info)) {
+      client->paired_at = info.last_modified;
+    }
+    clients.push_back(std::move(*client));
   }
-  std::sort(ids.begin(), ids.end());
-  return ids;
+  std::sort(clients.begin(), clients.end(),
+            [](const ClientInfo& a, const ClientInfo& b) {
+              return a.client_id < b.client_id;
+            });
+  return clients;
 }
 
 std::optional<ClientInfo> LoadClient(const base::FilePath& home,
@@ -87,6 +100,13 @@ std::optional<ClientInfo> LoadClient(const base::FilePath& home,
     return std::nullopt;
   }
   return ParseClient(json);
+}
+
+bool ForgetClient(const base::FilePath& home, const std::string& client_id) {
+  if (!agent::IsValidClientId(client_id)) {
+    return false;
+  }
+  return base::DeletePathRecursively(ClientDir(home, client_id));
 }
 
 std::optional<agent::PeerIdentity> ResolveSelf(
@@ -104,6 +124,17 @@ std::optional<agent::PeerIdentity> ResolveSelf(
     return std::nullopt;
   }
   return peer->identity;
+}
+
+std::optional<agent::ProcessInfo> ThisAgent() {
+  std::unique_ptr<agent::PeerResolver> resolver =
+      agent::CreatePlatformPeerResolver();
+  std::optional<agent::PeerIdentity> self =
+      resolver ? ResolveSelf(*resolver) : std::nullopt;
+  if (!self) {
+    return std::nullopt;
+  }
+  return agent::AgentAncestor(*self);
 }
 
 namespace {
@@ -216,18 +247,32 @@ std::unique_ptr<FrameChannel> DialBrowser(const base::FilePath& user_data_dir,
   return std::make_unique<FrameChannel>(std::move(fd), agent::kMaxPayload);
 }
 
-bool Authenticate(Link& link,
-                  const base::FilePath& home,
-                  const std::string& client_id,
-                  std::string* error,
-                  base::RepeatingCallback<void(const std::string&)> on_asked) {
+namespace {
+
+// Asks for a nonce and sends the proof (with "probe" for CheckPairing());
+// the browser's answer to the proof, or nullopt and `error` if there was no
+// nonce. Events while the browser waits for the user go to `on_event`.
+// `late` says the proof went out so long after the nonce was asked for that
+// the browser may have let the nonce expire: its Koan.authFailed then says
+// nothing about the pairing (the browser answers both alike, on purpose).
+std::optional<Message> Prove(
+    Link& link,
+    const base::FilePath& home,
+    const std::string& client_id,
+    bool probe,
+    base::TimeDelta wait,
+    base::RepeatingCallback<void(const Message&)> on_event,
+    bool* late,
+    std::string* error) {
+  *late = false;
   std::optional<Key> key = LoadKey(home, client_id);
   if (!key) {
     *error = "the key of client " + client_id + " is missing or unreadable";
-    return false;
+    return std::nullopt;
   }
   base::DictValue ask;
   ask.Set("clientId", client_id);
+  const base::TimeTicks asked = base::TimeTicks::Now();
   std::optional<Message> nonce_answer =
       link.Call("Koan.authenticate", std::move(ask));
   const std::string* nonce_text =
@@ -238,15 +283,54 @@ bool Authenticate(Link& link,
       nonce_text ? base::Base64Decode(*nonce_text) : std::nullopt;
   if (!nonce || nonce->size() != agent::kNonceSize) {
     *error = "Koan did not start authentication: " + Describe(nonce_answer);
-    return false;
+    return std::nullopt;
   }
   base::DictValue proof;
   proof.Set("clientId", client_id);
   proof.Set("signature", Sign(*key, agent::ProofMessage(client_id, *nonce)));
+  // Half the browser's nonce lifetime (Session::kNonceLifetime, 10 s): a
+  // machine that slept or stalled in between.
+  *late = base::TimeTicks::Now() - asked > base::Seconds(5);
+  if (probe) {
+    proof.Set("probe", true);
+  }
+  std::optional<Message> answer = link.Call(
+      "Koan.authenticate", std::move(proof), {}, wait, std::move(on_event));
+  if (!answer) {
+    *error = Describe(answer);
+  }
+  return answer;
+}
+
+// Removes the record of a client the browser refused as unknown, if it
+// paired with that browser. Whether it did.
+bool ForgetIfStale(const base::FilePath& home,
+                   const std::string& client_id,
+                   const base::FilePath& user_data_dir) {
+  const std::optional<ClientInfo> record = LoadClient(home, client_id);
+  return record &&
+         ShouldForget(*record, user_data_dir,
+                      DefaultUserDataDir(HomeDir(), nullptr)) &&
+         ForgetClient(home, client_id);
+}
+
+constexpr char kForgotten[] =
+    "Koan forgot this pairing (it was revoked, went unused for 30 days, or "
+    "Koan's profile was replaced), so koan removed it: run koan pair";
+
+}  // namespace
+
+bool Authenticate(Link& link,
+                  const base::FilePath& home,
+                  const std::string& client_id,
+                  const base::FilePath& user_data_dir,
+                  std::string* error,
+                  base::RepeatingCallback<void(const std::string&)> on_asked) {
   // A changed program or chain is asked about in Koan: wait for the user. The
   // browser says why it asks (Koan.approvalPending) before it waits.
-  std::optional<Message> answer = link.Call(
-      "Koan.authenticate", std::move(proof), {}, kApprovalWait,
+  bool late = false;
+  std::optional<Message> answer = Prove(
+      link, home, client_id, /*probe=*/false, kApprovalWait,
       base::BindRepeating(
           [](const base::RepeatingCallback<void(const std::string&)>& on_asked,
              const Message& event) {
@@ -255,19 +339,64 @@ bool Authenticate(Link& link,
               on_asked.Run(*why);
             }
           },
-          on_asked));
-  if (!answer || answer->is_error() || !answer->result) {
-    *error = answer && answer->error_code == "Koan.authFailed"
-                 ? "Koan does not know this client any more: pair it again"
-                 : "authentication failed: " + Describe(answer);
+          on_asked),
+      &late, error);
+  if (!answer) {
+    return false;
+  }
+  if (answer->is_error() || !answer->result) {
+    if (answer->error_code != "Koan.authFailed") {
+      *error = "authentication failed: " + Describe(answer);
+    } else if (late) {
+      *error = "Koan did not accept a late proof: run the command again";
+    } else if (ForgetIfStale(home, client_id, user_data_dir)) {
+      *error = kForgotten;
+    } else {
+      *error = "Koan does not know this client any more: pair it again";
+    }
     return false;
   }
   return true;
 }
 
+PairingCheck CheckPairing(Link& link,
+                          const base::FilePath& home,
+                          const std::string& client_id,
+                          const base::FilePath& user_data_dir,
+                          std::string* reason) {
+  bool late = false;
+  std::optional<Message> answer =
+      Prove(link, home, client_id, /*probe=*/true, base::Seconds(10),
+            base::RepeatingCallback<void(const Message&)>(), &late, reason);
+  if (!answer) {
+    return PairingCheck::kUnchecked;
+  }
+  if (answer->error_code == "Koan.authFailed" && late) {
+    *reason = "Koan did not accept a late proof";
+    return PairingCheck::kUnchecked;
+  }
+  if (answer->error_code == "Koan.authFailed") {
+    return ForgetIfStale(home, client_id, user_data_dir)
+               ? PairingCheck::kForgotten
+               : PairingCheck::kUnknown;
+  }
+  // A browser that knows no probe authenticates the client instead: valid.
+  if (answer->is_error() || !answer->result) {
+    *reason = Describe(answer);
+    return PairingCheck::kUnchecked;
+  }
+  if (answer->result->FindBool("approvalNeeded").value_or(false)) {
+    const std::string* why = answer->result->FindString("reason");
+    *reason = why ? *why : std::string();
+    return PairingCheck::kApprovalNeeded;
+  }
+  return PairingCheck::kValid;
+}
+
 std::optional<base::DictValue> PairNewClient(
     Link& link,
     const base::FilePath& home,
+    const base::FilePath& user_data_dir,
     const std::string& label,
     const std::vector<std::string>& capabilities,
     std::string* error) {
@@ -280,7 +409,8 @@ std::optional<base::DictValue> PairNewClient(
   // answered. A chain read after the dialog can differ (a launcher that has
   // exited by then leaves no ancestors) and the holder would then turn away
   // the paired agent's own commands (koan_cli_admission.h).
-  ClientInfo record{std::string(), label, std::nullopt};
+  ClientInfo record;
+  record.label = label;
   if (std::unique_ptr<agent::PeerResolver> resolver =
           agent::CreatePlatformPeerResolver()) {
     if (std::optional<agent::PeerIdentity> self = ResolveSelf(*resolver)) {
@@ -312,6 +442,8 @@ std::optional<base::DictValue> PairNewClient(
     return std::nullopt;
   }
   record.client_id = *client_id;
+  record.user_data_dir = user_data_dir;
+  record.paired_at = base::Time::Now();
   const base::FilePath dir = ClientDir(home, *client_id);
   if (!PrivateDir(dir) ||
       !WritePrivateFile(dir.Append("key"), base::Base64Encode(seed)) ||
