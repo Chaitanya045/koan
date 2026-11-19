@@ -45,8 +45,8 @@ class WebContents;
 // the user's it was not given.
 namespace koan::agent {
 
-// A tab the user may need to act on (the indicator shows it): a user tab an
-// agent controls, or any tab paused by the user's input.
+// A tab an agent holds, as the indicator shows it (design section 6.2): its
+// own tab, or a user tab it was given.
 struct ControlledTab {
   std::string target_id;
   // The client's label.
@@ -93,9 +93,12 @@ class AgentForwarder {
   const TargetRegistry& registry() const { return registry_; }
 
   // The indicator's buttons (design section 9.2): the user hands a paused
-  // tab back to the agent, or takes a tab of theirs back from it.
+  // tab back to the agent, takes a tab of theirs back from it, or takes over
+  // an agent's tab (pauses it, as their input in it would).
   void HandBack(const std::string& target_id);
   void TakeBack(const std::string& target_id);
+  void TakeOver(const std::string& target_id);
+  // Every tab an agent holds.
   std::vector<ControlledTab> ControlledTabs() const;
 
  private:
@@ -149,6 +152,8 @@ class AgentForwarder {
   // From the watcher: the user's own input in the tab, and a committed
   // navigation of it.
   void OnUserInput(const std::string& target_id);
+  // Pauses a driven tab; `reason` goes with Koan.paused.
+  void Pause(const std::string& target_id, std::string_view reason);
   void OnTabNavigated(const std::string& target_id, const GURL& url);
 
   void ForEachFacadeOf(std::string_view client_id,

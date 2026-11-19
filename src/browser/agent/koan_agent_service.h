@@ -75,11 +75,13 @@ class AgentControlService {
   // forgotten; the gateway keeps listening if Agent ready is on.
   void StopAllAgents();
 
-  // The tabs the indicator offers a button for (design section 9.2), and the
-  // buttons: hand a paused tab back to its agent, take a user tab back.
+  // Every tab an agent holds, which the indicator shows (design sections 6.2
+  // and 9.2), and its buttons: hand a paused tab back to its agent, take a
+  // user tab back, take over (pause) an agent's own tab.
   std::vector<ControlledTab> controlled_tabs() const;
   void HandBack(const std::string& target_id);
   void TakeBack(const std::string& target_id);
+  void TakeOver(const std::string& target_id);
   // What pages in agent tabs wait to show the user (design section 9.4), and
   // the indicator's Open and Dismiss.
   std::vector<HeldPrompt> user_prompts() const;

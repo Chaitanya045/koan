@@ -588,6 +588,8 @@ std::string AgentForwarder::AddAgentTab(content::WebContents* contents,
       connection->facade().OnTargetAdded(target_id);
     }
   }
+  // The indicator marks the agent's tabs.
+  NotifyChanged();
   return target_id;
 }
 
@@ -849,17 +851,26 @@ bool AgentForwarder::ReleaseUserTab(const std::string& target_id) {
 }
 
 void AgentForwarder::OnUserInput(const std::string& target_id) {
+  // Detect after delivery: this input already reached the page; what the
+  // agent queued behind it is not sent (CdpFacade::MayDispatch()).
+  Pause(target_id, "user-input");
+}
+
+void AgentForwarder::TakeOver(const std::string& target_id) {
+  Pause(target_id, "user");
+}
+
+void AgentForwarder::Pause(const std::string& target_id,
+                           std::string_view reason) {
   const TargetEntry* entry = registry_.Find(target_id);
   if (!entry || entry->state != TabState::kDriven) {
     return;
   }
-  // Detect after delivery: this input already reached the page; what the
-  // agent queued behind it is not sent (CdpFacade::MayDispatch()).
   registry_.Pause(target_id);
   const std::string client_id = entry->client_id;
   AuditEvent("pause", target_id, client_id);
   ForEachFacadeOf(client_id, [&](CdpFacade& facade) {
-    facade.OnTargetStateChanged(target_id, "Koan.paused", "user-input");
+    facade.OnTargetStateChanged(target_id, "Koan.paused", reason);
   });
   NotifyChanged();
 }
@@ -921,7 +932,7 @@ std::vector<ControlledTab> AgentForwarder::ControlledTabs() const {
   std::vector<ControlledTab> tabs;
   for (const auto& [target_id, watcher] : tabs_) {
     const TargetEntry* entry = registry_.Find(target_id);
-    if (!entry || (entry->agent_owned && entry->state != TabState::kPaused)) {
+    if (!entry) {
       continue;
     }
     ControlledTab tab;
