@@ -589,6 +589,30 @@ Persistent while any client is connected, layered so one survives every layout i
 Gap: with compact mode, the sidebar hidden and the agent in another Space, only the menu-bar item and the Dock
 badge show (decision 6; a minimal strip is shown while a driven tab is the visible one).
 
+**Built (indicator layers PR):** the first layer used to be one pill per window, shown on every tab while any client
+was connected; it is now layered per tab (`koan_agent_indicator_logic.*`, pure and unit-tested; drawn by
+`koan_agent_indicator.cc`):
+- *Shown tab an agent holds* (a taken-over user tab, or an agent tab the user switched to; in a split, a paused pane
+  first): the pill on that tab only, "● *Claude Code* is controlling this tab" (*can read this tab* when readable,
+  *paused: you used this tab* / *asks to continue in this tab* when paused), with **Take back** (user tab),
+  **Take over** (the agent's own driven tab: pauses it, `Koan.paused {reason: "user"}`), **Hand back** (paused) and
+  **Stop**, plus a 2 px accent border round that page's container (a child widget with `accept_events = false`, so
+  the page gets its events). A held prompt (section 9.4) of the shown tab takes the pill's place with Open / Dismiss.
+- *Every other tab*: the chip in the sidebar's column above the Space bar (as the media cards): dot + client name, or
+  "2 agents", with "· N waiting" for prompts and paused tabs not shown here. Its menu: "Go to" each prompt's tab and
+  each agent tab (paused first), then **Stop all agents**. A prompt's "Go to" brings the tab forward, where the pill
+  offers Open / Dismiss.
+- *Sidebar hidden* (compact mode hiding it, or the chip not drawn: full screen, no sidebar) and no pill: a dot pill in
+  the page's bottom corner away from the sidebar, with the waiting count and the same menu. So T10 holds in every
+  layout.
+- Agent tabs in the sidebar's list carry the dot (top trailing corner of the row or Essentials tile, `PaintSidebarTab()`).
+- Toasts: "*X* connected" / "*X* disconnected" in the front window (`GetLastActiveBrowserWindowInterfaceWithAnyProfile`),
+  "*X* paused: you used its tab" in the tab's window.
+- Colours: `kColorKoanAgentAccent`, `kColorKoanAgentBorder`, `kColorKoanAgentChip`, `kColorKoanAgentChipForeground`
+  (both looks' mixers); the pill and the corner dot keep the toast's.
+- Not yet: the Koan menu-bar item ("Agent control ▸ … · Stop all agents": a main-menu patch on the Mac, a follow-up),
+  the agent Space's glow, and the URL pill's client name.
+
 ### 6.3 Audit log
 
 JSON lines in `<user-data-dir>/AgentControl/audit/YYYY-MM-DD.jsonl` (0600): time, client id and label, connection id,

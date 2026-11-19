@@ -363,6 +363,17 @@ command with `Koan.interstitial` while `SecurityInterstitialTabHelper::IsDisplay
 `beforeunload` dialog; the page target id of `GetOrCreateFor()` stays the tab's across its navigations (UNVERIFIED across a
 prerender activation, T-cdp-5).
 
+The layered indicator (`koan_agent_indicator.cc`, logic in `src/browser/agent/koan_agent_indicator_logic.*`; the sidebar
+dot in `koan_sidebar_tabs.cc`'s `PaintSidebarTab()` hook, which already exists) adds no patch: it is a
+`TabStripModelObserver` (`OnTabStripModelChanged`, `OnSplitTabChanged`) of its window, puts its chip in the sidebar's
+column through `GetSidebarContentColumn()` (as the media cards) and draws the pill, the border and the corner dot as child
+widgets. Symbols: `TabStripModel::GetActiveTab`, `tabs::TabInterface::GetSplit`,
+`MultiContentsView::GetContentsContainerViewFor`, `views::Widget::InitParams::accept_events` (the border takes no
+events; on the Mac `NativeWidgetMac` maps it to `-[NSWindow setIgnoresMouseEvents:]`), `views::MenuRunner`. Behaviour
+it relies on: the border widget lets clicks through to the page, and the sidebar's tab rows are `TabView`s (their
+repaint when an agent takes or lets go of a tab walks the strip for that class); the Mac steps
+(`scripts/mac/steps/agent_indicator.md` 3 and 6) and e2e `agent_indicator` check both.
+
 Take-over and pause (`koan_agent_forwarder.cc`'s `TabWatcher`, `RequestTakeOver`; the prompt in `koan_agent_approval_dialog.cc`;
 the Hand back / Take back buttons in `koan_agent_indicator.cc`) add no patch. Symbols: `WebContentsObserver::DidGetUserInteraction`,
 `RenderWidgetHost::InputEventObserver::OnInputEvent`, `RenderWidgetHostObserver::RenderWidgetHostDestroyed`,

@@ -20,6 +20,9 @@ welcome_input timeout=240
 import_sources timeout=240
 lights_hover_steady timeout=120
 agent_cli timeout=540
+# Agent control's indicator (#180, design 6.2): the pill on the taken-over
+# tab only, the sidebar chip elsewhere, the corner dot in compact mode.
+agent_indicator timeout=420
 # Copy current URL with several tabs selected (palette, test_helper).
 copy_urls timeout=180
 # The command palette (Zen's actions in the URL bar), two restarts; the URL
