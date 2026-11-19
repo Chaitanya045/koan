@@ -19,6 +19,7 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
+#include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -3164,6 +3165,7 @@ bool KeepWindowOnLastTabClosed(BrowserWindowInterface* browser) {
   // one would also close this window when its last tab *closes* while a drag
   // runs in another window.
   if (!controller->workspaces()->LastTabsWereClosed()) {
+    VLOG(1) << "Koan: the last tab left the window (not closed): it closes";
     return false;
   }
   // A window whose close is under way (its tabs' beforeunload or unload
@@ -3172,8 +3174,10 @@ bool KeepWindowOnLastTabClosed(BrowserWindowInterface* browser) {
   // before BrowserWindowFeatures makes the UnloadController).
   if (const UnloadController* unload = UnloadController::From(browser);
       unload && unload->is_attempting_to_close_browser()) {
+    VLOG(1) << "Koan: the last tab closed with the window: it closes";
     return false;
   }
+  VLOG(1) << "Koan: the last tab closed: the window stays, on an empty tab";
   controller->workspaces()->ExpectEmptyTab();
   // Not from inside the tab strip's close: it can't be modified there.
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(

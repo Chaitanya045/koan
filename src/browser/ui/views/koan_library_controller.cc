@@ -433,6 +433,10 @@ void KoanLibraryController::CreateWidget() {
   widget_ = std::make_unique<views::Widget>();
   widget_->Init(std::move(params));
   view_ = widget_->SetContentsView(std::make_unique<KoanLibraryView>(this));
+  // On macOS a control widget is shown by Init()
+  // (NativeWidgetMacNSWindowHost::InitWindow()): hidden until Open() or
+  // StartSwipe() lays it out.
+  widget_->Hide();
   // The panel slides in from the window's edge, not from beyond it.
   widget_->GetLayer()->SetMasksToBounds(true);
   if (!swipe_handler_) {

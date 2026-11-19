@@ -20,6 +20,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/logging.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -1919,14 +1920,21 @@ bool HandleCloseTabCommand(tabs::TabInterface* tab) {
   // Zen (zen.tabs.close-window-with-empty, on): Cmd+W on the empty tab closes
   // the window. (Nothing in a split view, which Koan's split view isn't.)
   if (IsEmptyTab(tab)) {
+    VLOG(1) << "Koan close tab: the empty tab, the window closes";
     tab->GetBrowserWindowInterface()->GetWindow()->Close();
     return true;
   }
   if (!IsPinnedForUser(tab) && KeepAsEmptyTabInsteadOfClosing(tab)) {
+    VLOG(1) << "Koan close tab: the Space's only blank tab stays, as its "
+               "empty tab";
     return true;
   }
   KoanPinnedTabController* controller = KoanPinnedTabController::ForTab(tab);
-  return controller && controller->HandleCloseShortcut(tab);
+  const bool handled = controller && controller->HandleCloseShortcut(tab);
+  VLOG(1) << "Koan close tab: "
+          << (handled ? "Zen's close behaviour of a pinned tab"
+                      : "closes as upstream's");
+  return handled;
 }
 
 bool OnTabDuplicated(content::WebContents* source,

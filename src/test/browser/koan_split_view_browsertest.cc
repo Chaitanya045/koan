@@ -7,6 +7,7 @@
 // (an empty pane with the URL bar, koan_split_view.h). Pages are chrome://
 // ones, which load without a server.
 
+#include <string_view>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
@@ -106,6 +107,26 @@ TwoPanes SplitTwoPages(BrowserWindowInterface* browser, double ratio) {
   }
   tab_strip->ActivateTabAt(tab_strip->GetIndexOfTab(panes.second));
   return panes;
+}
+
+// The window's child widget named `name` (the split header's or the
+// rearrange view's).
+views::Widget* ChildWidgetNamed(BrowserView* browser_view,
+                                std::string_view name) {
+  for (views::Widget* widget : views::Widget::GetAllChildWidgets(
+           browser_view->GetWidget()->GetNativeView())) {
+    if (widget->GetName() == name) {
+      return widget;
+    }
+  }
+  return nullptr;
+}
+
+// Whether the child widget named `name` is shown with its contents.
+bool ChildWidgetShows(BrowserView* browser_view, std::string_view name) {
+  views::Widget* widget = ChildWidgetNamed(browser_view, name);
+  return widget && widget->IsVisible() && widget->GetContentsView() &&
+         widget->GetContentsView()->GetVisible();
 }
 
 const split_tabs::SplitTabVisualData& VisualData(TabStripModel* tab_strip,
@@ -409,6 +430,39 @@ IN_PROC_BROWSER_TEST_F(KoanSplitViewBrowserTest,
   EXPECT_FALSE(drag->UpdatePaneDrag(panes.first, page));
   drag->DropPane(panes.first, /*keep_selection=*/false);
   EXPECT_TRUE(panes.first->IsSplit());
+}
+
+// The Mac run (cycle 17, split_header): the first header never showed, and
+// the first grip drag had no rearrange view. On macOS a control widget is
+// shown by Init() (NativeWidgetMacNSWindowHost::InitWindow()), and the
+// controller showed the view only when its widget was hidden. Each widget is
+// hidden with its view now, and both show from the first time. (Off macOS
+// this passes either way: it guards that upstream behaviour.)
+IN_PROC_BROWSER_TEST_F(KoanSplitViewBrowserTest,
+                       TheHeaderAndTheRearrangeViewShowTheFirstTime) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  TwoPanes panes = SplitTwoPages(browser(), 0.5);
+  ASSERT_TRUE(panes.first && panes.second && panes.first->IsSplit());
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
+  KoanSplitHeaderController* header =
+      KoanBrowserViewController::From(browser_view)->split_header();
+  ASSERT_TRUE(header);
+  EXPECT_FALSE(ChildWidgetNamed(browser_view, "KoanSplitHeader"));
+
+  // The header's own hover (Zen's :hover) shows the first pane's.
+  EXPECT_TRUE(base::test::RunUntil([&] {
+    header->OnHeaderHovered(0, true);
+    return ChildWidgetShows(browser_view, "KoanSplitHeader");
+  }));
+  // Its grip's drag shows the rearrange view.
+  EXPECT_TRUE(base::test::RunUntil([&] {
+    header->StartRearrange(0);
+    return ChildWidgetShows(browser_view, "KoanSplitRearrange");
+  }));
+  header->CancelRearrange();
+  EXPECT_TRUE(base::test::RunUntil(
+      [&] { return !ChildWidgetShows(browser_view, "KoanSplitRearrange"); }));
+  header->OnHeaderHovered(0, false);
 }
 
 }  // namespace koan

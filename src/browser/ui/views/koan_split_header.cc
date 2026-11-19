@@ -599,6 +599,9 @@ void KoanSplitHeaderController::StartRearrange(int pane) {
     rearrange_view_->SetPaintToLayer();
     rearrange_view_->layer()->SetFillsBoundsOpaquely(false);
     rearrange_view_->SetVisible(false);
+    // Hidden with its view: on macOS a control widget is shown by Init()
+    // (NativeWidgetMacNSWindowHost::InitWindow()).
+    rearrange_widget_->Hide();
   }
   rearrange_hide_timer_.Stop();
   rearrange_view_->Reset();
@@ -982,6 +985,10 @@ void KoanSplitHeaderController::EnsureWidget(int index) {
   pane.view->SetPaintToLayer();
   pane.view->layer()->SetFillsBoundsOpaquely(false);
   pane.view->SetVisible(false);
+  // Hidden with its view: on macOS a control widget is shown by Init()
+  // (NativeWidgetMacNSWindowHost::InitWindow()), and SetWanted() would leave
+  // the view hidden in a shown widget, as the Mac's first header was.
+  pane.widget->Hide();
 }
 
 void KoanSplitHeaderController::LayoutHeaders() {
