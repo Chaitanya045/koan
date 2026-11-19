@@ -259,6 +259,15 @@ enum KoanColorIds : ui::ColorId {
   kColorKoanSplitDropZone,
   kColorKoanSplitDragImage,
 
+  // Agent control's indicator (koan_agent_indicator.cc, koan_sidebar_tabs.cc):
+  // the agent's dot (on the chip, the pill and the sidebar's agent tabs), the
+  // border round a page an agent controls, and the sidebar chip's background
+  // and text.
+  kColorKoanAgentAccent,
+  kColorKoanAgentBorder,
+  kColorKoanAgentChip,
+  kColorKoanAgentChipForeground,
+
   kKoanColorsEnd,
 };
 

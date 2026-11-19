@@ -600,6 +600,13 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   mixer[kColorKoanSplitDropZone] = {t.Alpha(Token::kSecondary, 0.3f)};
   mixer[kColorKoanSplitDragImage] = {t[Token::kCard]};
 
+  // Agent control: the dot and the page's border in `primary` (the border at
+  // 60%), the sidebar chip a `sidebar-accent` badge.
+  mixer[kColorKoanAgentAccent] = {t[Token::kPrimary]};
+  mixer[kColorKoanAgentBorder] = {t.Alpha(Token::kPrimary, 0.6f)};
+  mixer[kColorKoanAgentChip] = {t[Token::kSidebarAccent]};
+  mixer[kColorKoanAgentChipForeground] = {t[Token::kSidebarAccentForeground]};
+
   // Folders: the folder glyph in `primary` over the sidebar, with
   // `muted-foreground` counts and an `accent` selected search row.
   mixer[kColorKoanFolderIconBack] = {
