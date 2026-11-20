@@ -323,13 +323,19 @@ IN_PROC_BROWSER_TEST_F(KoanAgentAutofillBrowserTest, ALocalCard) {
   EXPECT_FALSE(autofill_->secret_values().empty());
 }
 
-// T-fill-3: a card Chrome must unmask (a server card) waits for the user:
-// the pick says so, and the indicator holds the prompt.
+// T-fill-3: a card Chrome asks the user to verify before it fills waits for
+// the user: the pick says so, and the indicator holds the prompt. A local
+// card with "verify it's you" (mandatory reauth) on: a server card would be
+// one too, but Chrome offers none without a payments account (only "save
+// and fill").
 IN_PROC_BROWSER_TEST_F(KoanAgentAutofillBrowserTest, ACardToVerify) {
-  // In memory, at once.
-  Pdm().payments_data_manager().AddServerCreditCardForTest(
-      std::make_unique<autofill::CreditCard>(
-          autofill::test::GetMaskedServerCard()));
+  {
+    autofill::PersonalDataChangedWaiter waiter(Pdm());
+    Pdm().payments_data_manager().AddCreditCard(
+        autofill::test::GetCreditCard());
+    std::move(waiter).Wait();
+  }
+  Pdm().payments_data_manager().SetPaymentMethodsMandatoryReauthEnabled(true);
   Open("/card");
   const int node = NodeOf("number");
   FacadeBackend::AutofillResult picked = Run(node, false, 1);
@@ -434,9 +440,17 @@ IN_PROC_BROWSER_TEST_F(KoanAgentAutofillBrowserTest, TheSwitches) {
   prefs->SetBoolean(containers::kAgentMayUseAutofill, true);
   EXPECT_EQ(Run(NodeOf("name"), true).error_code, "");
 
+  // No saved password is offered (an address may be, for the username).
   prefs->SetBoolean(containers::kAgentMayUsePasswords, false);
   Open("/login");
-  EXPECT_EQ(Run(NodeOf("user"), true).error_code, "Koan.autofillOff");
+  FacadeBackend::AutofillResult login = Run(NodeOf("user"), true);
+  if (login.error_code.empty()) {
+    for (const base::Value& row : *login.result.FindList("suggestions")) {
+      EXPECT_NE(*row.GetDict().FindString("kind"), "password");
+    }
+  } else {
+    EXPECT_EQ(login.error_code, "Koan.autofillOff");
+  }
 }
 
 // The pick works only on what Chrome's autofill knows as a field.

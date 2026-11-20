@@ -415,10 +415,6 @@ void AgentAutofill::TriggerSuggestions(autofill::FieldGlobalId field) {
 bool AgentAutofill::TakeSuggestions(
     const autofill::AutofillClient::PopupOpenArgs& open_args,
     base::WeakPtr<autofill::AutofillSuggestionDelegate> delegate) {
-  LOG(ERROR) << "KOANDBG Take request=" << !!request_
-             << " picked=" << (request_ && request_->picked) << " same_field="
-             << (request_ && open_args.field_id == request_->field)
-             << " n=" << open_args.suggestions.size();
   if (!request_ || request_->picked || open_args.field_id != request_->field) {
     return false;
   }
@@ -464,9 +460,6 @@ void AgentAutofill::OnSuggestions(
   for (size_t i = 0; i < suggestions.size(); ++i) {
     const Suggestion& suggestion = suggestions[i];
     const std::optional<AutofillKind> kind = KindOf(suggestion.type);
-    LOG(ERROR) << "KOANDBG row type=" << static_cast<int>(suggestion.type)
-               << " kind=" << kind.has_value()
-               << " acceptable=" << suggestion.IsAcceptable();
     if (!kind || !suggestion.IsAcceptable()) {
       continue;
     }
