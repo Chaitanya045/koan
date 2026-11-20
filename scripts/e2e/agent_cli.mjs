@@ -78,8 +78,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { browserCall, check, decodePng, evalIn, finish, pages, setKoanPref, showPane, sleep,
          viewTree, waitFor } from './lib/koan.mjs';
-import { IS_MAC, KOAN_LOG, alive, clickThroughRoot, fatalInLog, realInput, realInputWhyNot, rootMouse,
-         rootOf, skip, skipped, startServer, windowOf } from './lib/mac.mjs';
+import { IS_MAC, KOAN_LOG, alive, clickThroughRoot, fatalInLog, goToAgentTab, realInput, realInputWhyNot,
+         rootMouse, rootOf, skip, skipped, startServer, windowOf } from './lib/mac.mjs';
 
 if (!IS_MAC) skip('agent control\'s CLI needs macOS (its holder resolves peers with LOCAL_PEERTOKEN)');
 const CLI = process.env.KOAN_CLI;
@@ -207,6 +207,18 @@ if (r.code !== 0) {
 r = await koan(['status']);
 check('koan status: paired: yes (Koan knows the pairing)', /^paired: yes$/m.test(r.out), brief(r));
 
+// A tab of the user's (not one an agent opened, `koan tabs --json`'s
+// agentOwned), with a web page or an empty tab: a page object, or null.
+async function userPage() {
+  let agents = new Set();
+  try {
+    agents = new Set(JSON.parse((await koan(['tabs', '--json'])).out).tabs
+        .filter(e => e.agentOwned).map(e => e.targetId));
+  } catch {}
+  return (await pages()).find(p => p.type === 'page' && !agents.has(p.id) && !/^(chrome|devtools)/.test(p.url)) ??
+         null;
+}
+
 // --- Stale pairings: a record Koan has never heard of (as after its profile
 // was replaced), newer than the good one so that it would be the default.
 // Pinned to this agent as the good one is (koan pair pins it): koan prefers
@@ -326,10 +338,12 @@ check('koan screenshot: a PNG of the page', r.code === 0 && png.subarray(1, 4).t
           r.code === 0 && near(pngSize(plain), want.normal) && json?.path === plain &&
           json?.width === pngSize(plain)?.[0] && json?.imageTokens > 0 && json?.cssPxPerPx > 0, brief(r));
 
-    // The button's box, 8 CSS px around it, cut to the viewport.
+    // The button's box, 8 CSS px around it, cut to the viewport and rounded
+    // outwards to whole DIPs, as Koan copies (koan_agent_capture.cc).
     const { b } = view;
-    const left = Math.max(0, b.x - 8), top = Math.max(0, b.y - 8);
-    const cw = Math.min(w, b.x + b.width + 8) - left, ch = Math.min(h, b.y + b.height + 8) - top;
+    const left = Math.max(0, Math.floor(b.x - 8)), top = Math.max(0, Math.floor(b.y - 8));
+    const cw = Math.min(w, Math.ceil(b.x + b.width + 8)) - left;
+    const ch = Math.min(h, Math.ceil(b.y + b.height + 8)) - top;
     const clipped = path.join(AGENT_HOME, 'shot-clip.png');
     r = await koan(['screenshot', tab, '--clip', ref ?? '@0', '-o', clipped]);
     check(`koan screenshot --clip ${ref}: the button's box at device pixels (${Math.round(cw * dpr)}×${Math.round(ch * dpr)})`,
@@ -866,14 +880,21 @@ if (!realInput() || !agentShots) {
         /^stopped at 2\/2 fill @\d+: Koan\.staleRef/m.test(r.out), brief(r));
 
   // The user takes the tab while a batch runs: it stops before the next
-  // step, and says where. The tab is shown so that its pill (Take over) is.
+  // step, and says where. The tab is shown so that its pill (Take over) is:
+  // it is in the agent's Space, so through the chip's menu ("Go to", real
+  // clicks), as the user reaches it (CDP's activation of it is held).
   r = await koan(['open', at('/typing'), '--task', 'batch']);
   const typing = r.out.split('\n').at(-1);
   snap = await koan(['snapshot', typing, '--interactive']);
   const [one, check1, two, three] = [/textbox "One"/, /button "Check"/, /textbox "Two"/, /textbox "Three"/]
       .map(re => refOf(snap.out, re) ?? '@0');
-  const shown = await browserCall('Target.activateTarget', { targetId: typing });
-  await sleep(1500);
+  await sleep(1000);
+  const mine = await userPage();
+  const went = !realInput() ? { ok: false, why: realInputWhyNot() }
+             : mine ? await goToAgentTab('Typing', mine) : { ok: false, why: 'no tab of the user\'s' };
+  const shown = went.ok ? {} : { error: { message: `the chip's "Go to Typing": ${went.why}; ` +
+                                                    `${JSON.stringify(went.items ?? [])}` } };
+  await sleep(500);
   let tookOver = false;
   const batch = koan(['act', typing, 'fill', one, 'first', 'click', check1, 'fill', two, 'second',
                       'fill', three, 'third'], {
@@ -905,7 +926,9 @@ if (!realInput() || !agentShots) {
     if (back) await clickThroughRoot(vs, back);
     await sleep(800);
   }
-  const user = (await pages()).find(p => p.id !== typing && !/^(chrome|devtools)/.test(p.url));
+  // Back to a tab of the user's (CDP's activation of an agent's tab would
+  // be held as a focus request).
+  const user = await userPage();
   if (user) await browserCall('Target.activateTarget', { targetId: user.id });
 
   // --diff after a change: only the change. A ref stays the same while its
@@ -1067,8 +1090,10 @@ async function userTabShots(when, taken) {
           `${brief(r)}; the PNG is ${got?.join('×')}`);
   }
   const { b } = view;
-  const left = Math.max(0, b.x - 8), top = Math.max(0, b.y - 8);
-  const cw = Math.min(view.w, b.x + b.width + 8) - left, ch = Math.min(view.h, b.y + b.height + 8) - top;
+  // Rounded outwards to whole DIPs, as Koan copies (koan_agent_capture.cc).
+  const left = Math.max(0, Math.floor(b.x - 8)), top = Math.max(0, Math.floor(b.y - 8));
+  const cw = Math.min(view.w, Math.ceil(b.x + b.width + 8)) - left;
+  const ch = Math.min(view.h, Math.ceil(b.y + b.height + 8)) - top;
   const clipped = path.join(AGENT_HOME, 'user-shot-clip.png');
   let r = await koan(['screenshot', taken, '--clip', 'loc:role=button[name="Press me"]', '-o', clipped]);
   check(`${when}: ...--clip with a locator on the user's tab: the button's box at device pixels ` +
@@ -1201,8 +1226,13 @@ check('Switches off: koan end', r.code === 0, brief(r));
     c.on('error', () => res(false));
   });
   check('...and runs', !!viaLink);
-  await evalIn(settings, `${button('#agent-setup-remove')}.click()`);
-  await waitFor(() => !fs.existsSync(skillOf('.claude/skills')), 10000);
+  // Remove shows once the page has re-read what is set up (after "Set up.",
+  // not with it): wait for it, then for all three to go.
+  const remove = await waitFor(() => evalIn(settings, `!!${button('#agent-setup-remove')}`), 10000);
+  check('Set up agents: a Remove button once set up', !!remove);
+  await evalIn(settings, `${button('#agent-setup-remove')}?.click()`);
+  await waitFor(() => !fs.existsSync(skillOf('.claude/skills')) && !fs.existsSync(skillOf('.agents/skills')) &&
+                      !fs.existsSync(path.join(AGENT_HOME, '.local/bin/koan')), 10000);
   check('Set up agents: Remove takes the skills and the link out',
         !fs.existsSync(skillOf('.claude/skills')) && !fs.existsSync(skillOf('.agents/skills')) &&
         !fs.existsSync(path.join(AGENT_HOME, '.local/bin/koan')));

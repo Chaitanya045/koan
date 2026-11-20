@@ -28,8 +28,6 @@
 #include "components/autofill/core/common/aliases.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/prefs/pref_service.h"
-#include "components/user_prefs/user_prefs.h"
-#include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -55,6 +53,21 @@ using autofill::SuggestionType;
 // How long the renderer and autofill have to offer suggestions, and to fill
 // once a row is accepted.
 constexpr base::TimeDelta kSuggestionWait = base::Seconds(3);
+// A switch in Settings > Agent Control keeps these from agents.
+constexpr char kAutofillOff[] = "Koan.autofillOff";
+constexpr char kPasswordsOffMessage[] =
+    "the user does not let agents use saved passwords (Settings > Agent "
+    "Control > What agents can use)";
+constexpr char kAutofillOffMessage[] =
+    "the user does not let agents use addresses and cards (Settings > Agent "
+    "Control > What agents can use)";
+// Chrome's renderer drops an ask for a field's suggestions that comes within
+// 100 ms of the one before for the same field (AutofillAgent::
+// ShouldThrottleAskForValuesToFill(), crbug.com/40284788): a pick right
+// after a list (one `koan` call is about 11 ms) would get none. Koan's next
+// ask for that field waits this long after the last. Guarded by
+// KoanAgentAutofillBrowserTest (a list, then a pick at once).
+constexpr base::TimeDelta kRendererAskInterval = base::Milliseconds(120);
 constexpr base::TimeDelta kFillWait = base::Seconds(3);
 // A login's fill is not reported to the browser: its frame is read this
 // often, this many times, until its password field holds a value.
@@ -198,8 +211,10 @@ bool NeedsUserToVerify(content::WebContents* contents,
   }
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
   if (kind == AutofillKind::kPassword) {
-    const PrefService* prefs =
-        user_prefs::UserPrefs::Get(contents->GetBrowserContext());
+    // The profile's prefs, through the tab's autofill client (Chrome's
+    // GetPrefs(): the original profile's).
+    autofill::ContentAutofillClient* client = ClientOf(contents);
+    const PrefService* prefs = client ? client->GetPrefs() : nullptr;
     return prefs &&
            prefs->FindPreference(password_manager::prefs::
                                      kBiometricAuthenticationBeforeFilling) &&
@@ -357,14 +372,43 @@ void AgentAutofill::Run(content::RenderFrameHost* root,
     }
   }
   request_ = std::move(pending);
-  request_->timer.Start(FROM_HERE, kSuggestionWait,
+  // Not within the renderer's window after Koan's last ask for this field.
+  const base::TimeTicks now = base::TimeTicks::Now();
+  const base::TimeDelta wait =
+      last_ask_field_ == found->field
+          ? std::max(base::TimeDelta(), last_ask_ + kRendererAskInterval - now)
+          : base::TimeDelta();
+  last_ask_field_ = found->field;
+  last_ask_ = now + wait;
+  request_->timer.Start(FROM_HERE, kSuggestionWait + wait,
                         base::BindOnce(&AgentAutofill::OnNoSuggestions,
                                        weak_factory_.GetWeakPtr()));
-  // As a click on the field asks for them.
+  if (wait.is_positive()) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&AgentAutofill::TriggerSuggestions,
+                       weak_factory_.GetWeakPtr(), found->field),
+        wait);
+    return;
+  }
+  TriggerSuggestions(found->field);
+}
+
+void AgentAutofill::TriggerSuggestions(autofill::FieldGlobalId field) {
+  if (!request_ || request_->taken || request_->field != field) {
+    return;
+  }
+  content::RenderFrameHost* frame = FrameOf(field);
   autofill::AutofillDriver* driver =
-      autofill::ContentAutofillDriver::GetForRenderFrameHost(found->frame);
+      frame ? autofill::ContentAutofillDriver::GetForRenderFrameHost(frame)
+            : nullptr;
+  if (!driver) {
+    // The frame went: OnNoSuggestions() answers when the wait ends.
+    return;
+  }
+  // As a click on the field asks for them.
   driver->RendererShouldTriggerSuggestions(
-      found->field,
+      field,
       autofill::AutofillSuggestionTriggerSource::kFormControlElementClicked);
 }
 
@@ -407,10 +451,24 @@ void AgentAutofill::OnSuggestions(
   std::vector<size_t> offered;
   std::vector<AutofillKind> kinds;
   std::vector<std::string> labels;
+  // Rows the user's "What agents can use" switches keep from agents. Chrome
+  // offers addresses whatever IsAutofillEnabled() says (its address and
+  // card rows have switches of their own), so the switches are applied
+  // here, to what is offered.
+  bool blocked_passwords = false;
+  bool blocked_autofill = false;
   for (size_t i = 0; i < suggestions.size(); ++i) {
     const Suggestion& suggestion = suggestions[i];
     const std::optional<AutofillKind> kind = KindOf(suggestion.type);
     if (!kind || !suggestion.IsAcceptable()) {
+      continue;
+    }
+    const bool is_password = *kind == AutofillKind::kPassword;
+    if (koan::containers::BlocksAgent(
+            web_contents(),
+            is_password ? koan::containers::AgentCapability::kPasswords
+                        : koan::containers::AgentCapability::kAutofill)) {
+      (is_password ? blocked_passwords : blocked_autofill) = true;
       continue;
     }
     // What the label must never show: the card's number.
@@ -425,7 +483,13 @@ void AgentAutofill::OnSuggestions(
     labels.push_back(LabelFor(RowFor(suggestion, *kind), secrets));
   }
   if (offered.empty()) {
-    OnNoSuggestions();
+    if (blocked_passwords) {
+      Finish(Error(kAutofillOff, kPasswordsOffMessage));
+    } else if (blocked_autofill) {
+      Finish(Error(kAutofillOff, kAutofillOffMessage));
+    } else {
+      OnNoSuggestions();
+    }
     return;
   }
   if (request_->request.list) {
@@ -755,17 +819,13 @@ void AgentAutofill::OnNoSuggestions() {
   if (login &&
       koan::containers::BlocksAgent(
           web_contents(), koan::containers::AgentCapability::kPasswords)) {
-    Finish(Error("Koan.autofillOff",
-                 "the user does not let agents use saved passwords (Settings "
-                 "> Agent Control > What agents can use)"));
+    Finish(Error(kAutofillOff, kPasswordsOffMessage));
     return;
   }
   if (!login &&
       koan::containers::BlocksAgent(
           web_contents(), koan::containers::AgentCapability::kAutofill)) {
-    Finish(Error("Koan.autofillOff",
-                 "the user does not let agents use addresses and cards "
-                 "(Settings > Agent Control > What agents can use)"));
+    Finish(Error(kAutofillOff, kAutofillOffMessage));
     return;
   }
   Finish(Error("Koan.noSuggestions",

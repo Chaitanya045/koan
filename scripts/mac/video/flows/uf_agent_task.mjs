@@ -112,7 +112,9 @@ await step('UF-AGT-5', 'A validation error shows in --interactive; --diff prints
   r = await koan(['act', tab, 'click', next ?? '@0', '--interactive']);
   t.check('Next without a choice: the alert "Choose your experience" is in the interactive snapshot',
           /Choose your experience/.test(r.out), r.out.slice(0, 300));
-  r = await koan(['act', tab, 'fill', city ?? '@0', 'Paris', '--diff']);
+  // The same mode as the last snapshot (--interactive): a diff against a
+  // snapshot of another mode starts a new baseline, by design.
+  r = await koan(['act', tab, 'fill', city ?? '@0', 'Paris', '--interactive', '--diff']);
   const body = r.out.split('\n').filter(l => /^[+~-] /.test(l));
   t.check('--diff after a fill prints only what changed', /^diff since the last snapshot/m.test(r.out) &&
           body.some(l => /^~ textbox "City" = "Paris"/.test(l)) && body.length <= 4, r.out.slice(0, 300));
@@ -149,11 +151,18 @@ await step('UF-AGT-7', 'koan shell: many commands over one connection, faster pe
   let t0 = Date.now();
   for (let i = 0; i < N; i++) await koan(['snapshot', tab, '--interactive']);
   const separate = (Date.now() - t0) / N;
+  // The same N commands in one shell (the time includes starting koan and
+  // connecting once, as each separate call's does).
+  t0 = Date.now();
+  const same = await koan(['shell'], { input: `${Array.from({ length: N }, () => `snapshot ${tab} --interactive`)
+      .join('\n')}\n` });
+  const together = (Date.now() - t0) / N;
+  t.check(`the same ${N} snapshots in one shell all answer`,
+          (same.out.match(/^--- exit 0$/gm) ?? []).length === N, same.out.slice(0, 200));
+  // A mixed shell: a plain line, a comment, a JSON line and the snapshots.
   const lines = [`koan tabs`, `# a note`, JSON.stringify({ id: 'j1', args: ['act', tab, 'press', 'Tab'] }),
                  ...Array.from({ length: N }, () => `snapshot ${tab} --interactive`)];
-  t0 = Date.now();
   const r = await koan(['shell'], { input: lines.join('\n') + '\n' });
-  const together = (Date.now() - t0) / (N + 2);
   const exits = r.out.match(/^--- exit \d+$/gm) ?? [];
   t.check(`every plain line answered "--- exit 0" (${N + 1})`, exits.length === N + 1 && exits.every(e => e === '--- exit 0'),
           `${exits.length}: ${r.out.slice(0, 200)}`);

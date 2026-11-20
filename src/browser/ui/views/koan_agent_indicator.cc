@@ -41,6 +41,7 @@
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/menu_source_type.mojom-shared.h"
+#include "ui/color/color_provider.h"
 #include "ui/gfx/canvas.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
@@ -83,6 +84,7 @@ constexpr int kChipGap = 6;
 constexpr int kChipRowInsets = 6;
 constexpr int kCornerDotSize = 28;
 constexpr int kBorderWidth = 2;
+constexpr int kBorderContrastWidth = 1;
 
 // The buttons act from a fresh task: what they do changes the pill, which
 // replaces this view, and a button must not be destroyed inside its own
@@ -301,15 +303,25 @@ class KoanAgentBorderView : public views::View {
   }
 
   void OnPaint(gfx::Canvas* canvas) override {
+    // The accent, and inside it a line in the colour on the accent: one of
+    // the two shows on any page (dark mode's accent is near white).
+    const ui::ColorProvider* colors = GetColorProvider();
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
     flags.setStyle(cc::PaintFlags::kStroke_Style);
     flags.setStrokeWidth(kBorderWidth);
-    flags.setColor(GetColorProvider()->GetColor(kColorKoanAgentBorder));
+    flags.setColor(colors->GetColor(kColorKoanAgentBorder));
     gfx::RectF bounds(GetLocalBounds());
     bounds.Inset(kBorderWidth / 2.f);
     canvas->DrawRoundRect(bounds, std::max(0.f, radius_ - kBorderWidth / 2.f),
                           flags);
+    flags.setStrokeWidth(kBorderContrastWidth);
+    flags.setColor(colors->GetColor(kColorKoanAgentBorderContrast));
+    bounds.Inset((kBorderWidth + kBorderContrastWidth) / 2.f);
+    canvas->DrawRoundRect(
+        bounds,
+        std::max(0.f, radius_ - kBorderWidth - kBorderContrastWidth / 2.f),
+        flags);
   }
 
  private:

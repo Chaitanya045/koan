@@ -45,8 +45,9 @@ import path from 'node:path';
 import { AGENT_HOME, CLI, PROFILE, allow, allowWhy, brief, koan, spawnKoan } from './lib/agent.mjs';
 import { browserCall, check, decodePng, evalIn, finish, front, pages, sleep, viewTree, waitFor }
     from './lib/koan.mjs';
-import { IS_MAC, KOAN_PID, alive, fatalInLog, realInput, realInputWhyNot, rootMouse, rootOf,
-         selectTabRow, setWindowState, skip, skipped, startServer, windowOf } from './lib/mac.mjs';
+import { IS_MAC, KOAN_PID, alive, benchCannotMinimise, fatalInLog, goToAgentTab, minimiseWithButton, realInput,
+         realInputWhyNot,
+         rootMouse, rootOf, skip, skipped, startServer, unminimise, windowOf } from './lib/mac.mjs';
 
 if (!IS_MAC) skip('the agent CLI needs macOS (its holder resolves peers with LOCAL_PEERTOKEN)');
 if (!CLI || !fs.existsSync(CLI)) skip(`no koan CLI (KOAN_CLI=${CLI ?? ''})`);
@@ -536,16 +537,25 @@ if (!realInput() || windowId === undefined) {
   }
   await waitFor(async () => await visibility(frontPage) === 'visible', 8000);
 
-  // Minimised (Browser.setWindowBounds, as Window > Minimize).
-  await setWindowState(windowId, 'minimized');
-  const minimised = await waitFor(async () => await visibility(frontPage) === 'hidden', 8000);
-  check('Minimised window: Koan\'s window is minimised (its shown tab went hidden)', !!minimised,
-        `the front tab is ${await visibility(frontPage)}`);
-  // By code a background tab under a capturer has its own compositor
-  // (BrowserCompositorMac with no parent layer), so minimising the window
-  // must not stop it: the PR's analysis.
-  if (minimised) await liveCase('Minimised window');
-  await setWindowState(windowId, 'normal');
+  // Minimised as a person does it: a real click on its minimise button
+  // (CDP's Browser.setWindowBounds minimized did not minimise it on the Mac,
+  // cycle 19). Nothing minimises while the session is locked (as it is
+  // while the person is away): asked first, so that a stalled minimise never
+  // leaves the window half-minimised for the cases after.
+  const cannot = benchCannotMinimise();
+  if (cannot) {
+    skipped('Minimised window', cannot);
+  } else {
+    const m = await minimiseWithButton();
+    const minimised = m.ok && await waitFor(async () => await visibility(frontPage) === 'hidden', 8000);
+    check('Minimised window (a real click on its minimise button): Koan\'s window is minimised (its shown tab ' +
+          'went hidden)', !!minimised, `${m.why}; the front tab is ${await visibility(frontPage)}`);
+    // By code a background tab under a capturer has its own compositor
+    // (BrowserCompositorMac with no parent layer), so minimising the window
+    // must not stop it: the PR's analysis.
+    if (minimised) await liveCase('Minimised window');
+    unminimise();
+  }
   await waitFor(async () => await visibility(frontPage) === 'visible', 8000);
   await front(frontPage);
   await releaseCase('Release after the window cases');
@@ -621,10 +631,13 @@ if (!realInput() || windowId === undefined) {
   check('Stop: before it, Koan holds its assertion for the screencast and the watch',
         (koanAssertions() ?? []).length > 0, `assertions: ${JSON.stringify(koanAssertions())}`);
   // Shown as the user does (CDP's bringToFront of a tab an agent holds is
-  // held): its row, under a title of its own.
+  // held, and an agent's tab is in its own Space): the chip's menu, "Go to
+  // Lease A (...)", with real clicks.
   await evalIn(agentA, "document.title = 'Lease A'");
   await sleep(500);
-  if (!(await selectTabRow('Lease A'))) await front(agentA);
+  const g = realInput() ? await goToAgentTab('Lease A', frontPage) : { ok: false, why: realInputWhyNot() };
+  check('Stop: the agent\'s tab shown from the chip\'s menu ("Go to", real clicks)', g.ok,
+        `${g.why}; ${JSON.stringify(g.items ?? [])}`);
   // The pill's widgets are made as the tab shows; read the tree once settled.
   await sleep(1500);
   const vs = await viewTree();

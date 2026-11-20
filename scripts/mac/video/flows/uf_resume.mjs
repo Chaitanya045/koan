@@ -9,8 +9,8 @@
 // Settings rows (on/off, 2-60 s) change what happens.
 import fs from 'node:fs';
 import { settingsCall, showPane } from '../../../e2e/lib/koan.mjs';
-import { CLI, begin, brief, browserCall, clickElement, clickPill, end, evalIn, indicator, keyPress, koan,
-         lastLine, loc, openAnchor, pageById, pair, parkPointer, recalibrate, refOf, sayIndicator, show,
+import { CLI, begin, brief, browserCall, clickElement, clickPill, end, evalIn, goToAgentTab, indicator, keyPress,
+         koan, lastLine, loc, openAnchor, pageById, pair, parkPointer, recalibrate, refOf, sayIndicator, show,
          skipFlow, sleep, step, tabEntry, tabIdOk, waitFor } from './uf_lib.mjs';
 
 // The auto-resume switch's control, or what a click on it should hit when
@@ -24,10 +24,18 @@ const plain = anchor.id;
 await parkPointer();
 let form = null, formPage = null;
 const state = async () => (await tabEntry(form)) ?? {};
+// The agent's tab is in its own Space: the person goes there with real
+// clicks on the chip and its "Go to <title> (UF agent)" (never CDP, which
+// Koan holds for a tab an agent holds). Already in front, the menu has no
+// item for it and the pill shows: that's fine too.
 const front = async () => {
-  await show(form);
+  formPage = await pageById(form);
+  const g = await goToAgentTab(formPage?.title ?? '');
+  const ok = g.ok || (!g.item && (await indicator(200)).pill);
+  if (!ok) console.log(`  (front: ${g.why}; ${JSON.stringify(g.items)})`);
   formPage = await pageById(form);
   await recalibrate(formPage);
+  return { ok, why: `${g.why}; ${JSON.stringify(g.items)}` };
 };
 // The person clicks in the agent's page (a real click), optionally types.
 const use = async (selector, typed) => {
@@ -47,7 +55,8 @@ await step('UF-RES-1', 'The person pairs the agent; it opens the checkout page',
 
 let typedAt = 0;
 await step('UF-RES-2', 'The person clicks in the agent\'s tab and types: it pauses (user-input)', async t => {
-  await front();
+  const f = await front();
+  t.check('the agent\'s tab in front: real clicks on the chip and "Go to Checkout (UF agent)"', f.ok, f.why);
   const c = await use('#name', 'a');
   typedAt = Date.now();
   t.check('a real click in the Name field and a key', c.ok, c.why);
@@ -180,6 +189,9 @@ await step('UF-RES-9', 'Settings > Agent Control: "Continues after" 2 s, then au
       s.selectedIndex = ${JSON.stringify(secs?.options?.map(o => +o.value) ?? [])}.indexOf(2); s.dispatchEvent(new Event('change')); })()`);
   const two = await waitFor(async () => (await settingsCall(settings, 'koanGetSettings'))?.prefs?.['koan.agent_control.auto_resume_seconds'] === 2, 3000);
   t.check('set to 2 s', !!two);
+  // A fresh page: RES-8 left the focus in the card field, and a click out
+  // of it is still held as secret-field (the PR's open question).
+  await koan(['act', form, 'navigate', fixtures.url('/secret')]);
   await front();
   await use('h1', 'b');
   const at = Date.now();

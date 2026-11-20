@@ -489,10 +489,21 @@ bool AgentPageSurfaces::HoldPrint(content::WebContents* contents,
   return true;
 }
 
-void AgentPageSurfaces::HoldActivation(content::WebContents* contents) {
+bool AgentPageSurfaces::HoldActivation(content::WebContents* contents) {
+  // The tab the user sees in the window they use: nothing comes forward, and
+  // a "wants your attention" for it would only ask them to look at what they
+  // look at (and hold its pause until they answer).
+  tabs::TabInterface* tab = tabs::TabInterface::MaybeGetFromContents(contents);
+  BrowserWindowInterface* window =
+      tab ? tab->GetBrowserWindowInterface() : nullptr;
+  if (tab && tab->IsActivated() && window && window->GetWindow() &&
+      window->GetWindow()->IsActive()) {
+    return false;
+  }
   // Open brings the tab forward; nothing else to show.
   Hold(contents, PageSurface::kFocus, std::string(),
        {base::DoNothing(), base::DoNothing()});
+  return true;
 }
 
 uint64_t AgentPageSurfaces::HoldAutofillVerify(content::WebContents* contents,

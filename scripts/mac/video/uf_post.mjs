@@ -62,11 +62,17 @@ if (cmd === 'edge') {
                                          '--out', report], { encoding: 'utf8', timeout: 600000 });
   fs.writeFileSync(path.join(dir, 'edge_check.log'), `${r.stdout ?? ''}${r.stderr ?? ''}`);
   const lines = (r.stdout ?? '').trim().split('\n');
+  // The check's own self-test first: it must still see a notch beside the
+  // sliding sidebar, and not take the sidebar for one.
+  const self = spawnSync(process.execPath, [path.join(here, 'edge_check.mjs'), '--self-test'],
+                         { encoding: 'utf8', timeout: 60000 });
   const s = readSummary();
   addStep(s, { id: 'UF-CMP-5', title: 'The recording: no black at the window\'s edges in any frame of any transition',
-               ok: r.status === 0, checks: [{
+               ok: r.status === 0 && self.status === 0, checks: [{
+                 name: 'edge_check.mjs --self-test: it catches a synthetic notch and passes a sliding sidebar',
+                 ok: self.status === 0, detail: (self.stdout ?? '').trim().split('\n').join(' | ') }, {
                  name: 'edge_check.mjs: PASS (every frame of every compact-on/off and peek-in/out)', ok: r.status === 0,
-                 detail: r.status === 0 ? lines.at(-1) : `${lines.filter(l => /glitch|FAIL/.test(l)).slice(0, 4).join(' | ')} ` +
+                 detail: r.status === 0 ? lines.at(-1) : `${lines.filter(l => /BLACK|FAIL/.test(l)).slice(0, 4).join(' | ')} ` +
                          `(exit ${r.status}; edge_check.log)` }] });
   process.exit(0);
 }

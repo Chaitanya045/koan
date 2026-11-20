@@ -44,8 +44,9 @@ the way in, and it is the one the user approved.
    [collapsed], [disabled], [required], [invalid], ...), each with an
    @ref, plus the headings and dialogs around them and the text of alerts
    and status messages. Plain `koan snapshot <tab>` adds the page's text
-   (each block on one line); `--full` prints every node of the tree (same
-   refs). A long page (over 250 lines) is cut to what the viewport shows,
+   (each block on one line) and its named images, canvases and figures,
+   each with an @ref for `screenshot --clip`; `--full` prints every node of
+   the tree (same refs). A long page (over 250 lines) is cut to what the viewport shows,
    with `[more above: N nodes]` / `[more below: N nodes]`; `--scope full`
    prints all of it, `--scope @12` only that element and what is in it.
    An open dropdown's list, a menu or a dialog is printed first, under a

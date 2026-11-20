@@ -1411,14 +1411,18 @@ on a private unix socket in `~/Library/Application Support/Koan/AgentControl/`,
 and **every new program has to be approved in a dialog that names it** before
 it can do anything. While an agent is connected, a **chip** at the bottom of the
 sidebar, above the Spaces, shows a dot and the agent's name (and how many tabs
-wait for you, if any); click it to go to an agent's tab or to **Stop all
-agents**. Tabs an agent holds carry the same dot in the sidebar. With compact
+wait for you, if any); click it to go to an agent's tab (**Go to** *title*
+(*agent*): an agent's own tabs are in a Space of its own, and Go to switches
+to it) or to **Stop all agents**. Tabs an agent holds carry the same dot in
+the sidebar. With compact
 mode hiding the sidebar, a small dot in the page's bottom corner stands in for
 the chip. On the tab an agent controls, while you look at it, a pill in the
 page's bottom corner says so ("Claude Code is controlling this tab") with
 **Take back** (your tab) or **Take over** (the agent's own tab: pauses it),
 **Hand back** once you paused it, and **Stop**, and the page gets a thin accent
-border; a page there that waits for you shows **Open** and **Dismiss** in the
+border (the accent with a thin line inside it in the colour on the accent,
+so that it shows on light and dark pages); a page there that waits for you
+shows **Open** and **Dismiss** in the
 pill instead. A short toast says when an agent connects or disconnects and when
 your input pauses it. **Stop** closes every agent connection and forgets every
 approval.
@@ -1549,7 +1553,9 @@ tokens for a 1440×900 window; `--size mini` (640 px on the long side, ~330
 tokens) and `--size micro` (320 px, ~80) are for checking the state of a page;
 `--size full` is the Retina display's own pixels (at most 2576 on the long
 side, up to ~4,800 tokens). `--clip @12` (a ref or a locator) or `--clip
-x,y,w,h` captures one element or rectangle, sharp. Koan draws the page at
+x,y,w,h` captures one element or rectangle, sharp: the snapshot gives a named
+image, canvas or figure (a chart) a ref of its own for that. A clip is the
+element's box with 8 CSS px round it, rounded outwards to whole points. Koan draws the page at
 that size, so small images keep their text as crisp as they can. `koan act
 <tab> ... --screenshot micro` adds one after the steps. Sizes and clips work
 on every tab, yours too: Koan scales a copy of the frame the tab already drew

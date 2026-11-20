@@ -164,7 +164,10 @@ class PageSurfaceDelegate {
   // dropped and the caller goes on).
   virtual bool HoldPrint(content::WebContents* contents,
                          base::OnceCallback<void(bool show)> show) = 0;
-  virtual void HoldActivation(content::WebContents* contents) = 0;
+  // Returns false if there is nothing to hold: the tab is in front already
+  // (the active tab of the active window), and coming forward changes
+  // nothing.
+  virtual bool HoldActivation(content::WebContents* contents) = 0;
   // Whether the pickers of `contents`, which an agent holds, may be held: not
   // in an agent container (they stay refused there).
   virtual bool MayHoldPickers(content::WebContents* contents) = 0;

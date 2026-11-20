@@ -6,6 +6,11 @@
 #
 #   scripts/mac/video/run_flows.sh [--app <Koan.app>] [--only uf_a,uf_b]
 #       [--out <dir>] [--keep-raw] [--no-video] [--note <text>]
+#       [--build-app <signed Koan.app>]
+#
+# --build-app: the app whose signature and bundle uf_build checks (read
+# only, never launched), by default --app; a dev build (out/Koan) is ad hoc
+# signed, and uf_build's signature steps SKIP on it, saying so.
 #
 # Per flow: launch.sh (a fresh profile under rec-*, Agent ready on through
 # its Local State, the flow's prefs and extensions), record.sh (the window,
@@ -46,7 +51,7 @@ LOCK="${KOAN_UF_LOCK:-$M/tmp/e2e.lock}"
 ALL=(uf_build uf_onboarding uf_agent_task uf_indicator uf_resume uf_shots uf_render uf_toprow uf_compact uf_autofill)
 
 usage() { sed -n '2,/^set -uo/p' "$0" | sed 's/^# \{0,1\}//; /^set -uo/d'; exit 2; }
-app="$M/koan/chromium/src/out/Koan/Koan.app" only="" out="" keep_raw=0 video=1 note=""
+app="$M/koan/chromium/src/out/Koan/Koan.app" only="" out="" keep_raw=0 video=1 note="" build_app=""
 args=("$@")
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -56,6 +61,7 @@ while [[ $# -gt 0 ]]; do
     --keep-raw) keep_raw=1; shift ;;
     --no-video) video=0; shift ;;
     --note) note="$2"; shift 2 ;;
+    --build-app) build_app="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "run_flows.sh: unknown argument $1" >&2; usage ;;
   esac
@@ -159,6 +165,8 @@ for name in "${flows[@]}"; do
     uf_toprow)
       launch_env+=(KOAN_EXTRA_EXTENSIONS="$ROOT/scripts/e2e/extensions/action_popup"
                    KOAN_PREFS="$ROOT/scripts/e2e/prefs/sidebar_top_row.json") ;;
+    # chrome://components lists Widevine only with the component updater on.
+    uf_build) launch_env+=(KOAN_COMPONENT_UPDATE=1) ;;
   esac
   log "--- $name"
   if ! env "${launch_env[@]}" "$here/launch.sh" "$app" >"$fdir/launch.out" 2>&1; then
@@ -184,6 +192,7 @@ for name in "${flows[@]}"; do
   flow_env=(MARKS="$fdir/marks.json" UF_OUT="$fdir" KOAN_CLI="$app/Contents/Resources/bin/koan" KOAN_APP="$app"
             KOAN_AGENT_HOME="$fdir/home" KOAN_AGENT_SETUP_HOME="$fdir/setup-home" KOAN_ROOT="$ROOT")
   [[ $keep_raw == 1 ]] && flow_env+=(UF_KEEP_RAW=1)
+  [[ -n $build_app ]] && flow_env+=(KOAN_BUILD_APP="$build_app")
   run_timeout "$FLOW_SECS" "$fdir/flow.log" env "${flow_env[@]}" "$NODE" "$here/flows/$name.mjs"
   status=$?
   [[ $recording == 1 ]] && "$here/record.sh" stop "$vid" >>"$fdir/record.log" 2>&1

@@ -115,12 +115,12 @@ async function run(mode) {
     let chart;
     if (mode === 'micro') {
       await call(['screenshot', report, '--size', 'micro', '-o', file()]);
-      // By a locator: the snapshot shows a named image without a ref (only
-      // actions and landmarks get one), as `image "Sales by quarter"`.
+      // By its ref: the snapshot gives a named image one
+      // (`image "Sales by quarter" @N`), as an agent would use it.
       const line = snap.out.split('\n').find(l => /"Sales by quarter"/.test(l));
-      const role = line?.trim().split(/\s+/)[0] ?? 'image';
-      chart = await call(['screenshot', report, '--clip', `loc:role=${role}[name="Sales by quarter"]`,
-                          '-o', file()]);
+      const ref = line?.match(/@\d+/)?.[0];
+      chart = ref ? await call(['screenshot', report, '--clip', ref, '-o', file()])
+                  : { code: 1, out: `no ref on the chart's line: ${line ?? 'none'}` };
     } else {
       chart = await call(['screenshot', report, '--size', mode, '-o', file()]);
     }

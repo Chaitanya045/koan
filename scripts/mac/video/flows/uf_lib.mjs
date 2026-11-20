@@ -33,8 +33,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { UI_PORT, browserCall, connect, decodePng, evalIn, onPage, pages, sleep, viewTree,
          waitFor } from '../../../e2e/lib/koan.mjs';
-import { KOAN_PID, calibrate, makeKey, realInput, rootMouse, rootOf, windowOf }
-    from '../../../e2e/lib/mac.mjs';
+import { KOAN_PID, calibrate, clickNativeMenuItem, closeNativeMenu, makeKey, realInput, rootMouse, rootOf,
+         waitNativeMenu, windowOf } from '../../../e2e/lib/mac.mjs';
 import { TOOLS, clickAt, finish as commonFinish, keyPress, mark, out, pointer, save, setRound,
          startFlow } from './common.mjs';
 
@@ -229,20 +229,28 @@ export function regionStats(s, r, ref = null, tol = 40) {
   }
   return { n, off, mean: n ? sum.map(v => Math.round(v / n)) : null };
 }
-// Pixels that differ between two shots of the same rect, inside `r`.
-export function diffPixels(a, b, r, tol = 24) {
+// Pixels that differ between two shots of the same rect, inside `r`; with
+// `lines` ('rows' or 'cols'), also the rows (columns) of `r` with any pixel
+// changed (a thin strip across a border of several lines of colour).
+export function diffPixels(a, b, r, tol = 24, lines = null) {
   const { scale, rect } = a;
   let n = 0, changed = 0;
+  const hit = new Map();
   const x0 = Math.round((r.x - rect.x) * scale), y0 = Math.round((r.y - rect.y) * scale);
   const x1 = Math.round((r.x + r.w - rect.x) * scale), y1 = Math.round((r.y + r.h - rect.y) * scale);
   for (let y = Math.max(0, y0); y < Math.min(a.frame.height, b.frame.height, y1); y++) {
     for (let x = Math.max(0, x0); x < Math.min(a.frame.width, b.frame.width, x1); x++) {
       const p = a.frame.pixel(x, y), q = b.frame.pixel(x, y);
       n++;
-      if (Math.max(Math.abs(p[0] - q[0]), Math.abs(p[1] - q[1]), Math.abs(p[2] - q[2])) > tol) changed++;
+      const line = lines === 'cols' ? x : y;
+      if (!hit.has(line)) hit.set(line, false);
+      if (Math.max(Math.abs(p[0] - q[0]), Math.abs(p[1] - q[1]), Math.abs(p[2] - q[2])) > tol) {
+        changed++;
+        hit.set(line, true);
+      }
     }
   }
-  return { n, changed };
+  return { n, changed, lines: hit.size, linesChanged: [...hit.values()].filter(Boolean).length };
 }
 
 // --- Fixture pages.
@@ -515,8 +523,10 @@ export async function pair(ctx, label = 'UF agent', extra = []) {
     timeout: 120000,
     whileRunning: async printed => {
       approval = await approve(ctx, /^Allow a program to control Koan\?$/, printed, t => /paired as/.test(t), {
+        // The capabilities are check rows ("Also list my tabs", ...:
+        // DialogModelCheckbox, a views::Checkbox).
         inspect: dialog => ({
-          toggles: dialog.filter(v => v.shown && /Toggle/.test(v.cls)).length,
+          toggles: dialog.filter(v => v.shown && /Toggle|Checkbox/.test(v.cls)).length,
           labels: dialog.filter(v => v.shown && v.cls === 'Label').map(v => v.props.Text).filter(Boolean),
         }) });
     } });
@@ -575,6 +585,33 @@ export async function clickPill(text) {
                               v.wname === 'KoanAgentIndicator');
   if (!button) return { ok: false, why: `no "${text}" in the pill` };
   return clickView(button, vs, 900);
+}
+
+// How the person reaches an agent's tab (its own tabs are in the agent's
+// Space, design 2026-11-10): a real click on the sidebar chip, then a real
+// click on the menu's "Go to <title> (<agent>...)", which switches to the
+// tab's Space and selects it. Never CDP: Koan holds a CDP activation of a
+// tab an agent holds (#232) as a "focus" prompt. With the sidebar hidden,
+// `from` is the corner dot (KoanAgentCornerDot), which opens the same menu.
+// {ok, why, items}.
+export async function goToAgentTab(title, settle = 900, from = 'KoanAgentChipButton') {
+  const vs = await viewTree();
+  const chip = vs.find(v => v.cls === from && v.shown && v.w > 0);
+  if (!chip) return { ok: false, why: `no ${from} on screen`, items: [] };
+  const c = await clickView(chip, vs, 300);
+  if (!c.ok) return { ok: false, why: `chip: ${c.why}`, items: [] };
+  const menu = await waitNativeMenu(true, undefined, 4000);
+  const items = menu?.items ?? [];
+  if (!menu) return { ok: false, why: 'the chip\'s menu did not open', items };
+  const want = `Go to ${title} (`;
+  const item = items.find(i => (i ?? '').startsWith(want));
+  if (!item) {
+    await closeNativeMenu();
+    return { ok: false, why: `no "${want}..." item`, items };
+  }
+  const picked = await clickNativeMenuItem(item, { click: async (x, y) => { await clickAt(x, y); return true; } });
+  await sleep(settle);
+  return { ok: picked.ok, why: picked.detail, items, item };
 }
 
 // The page's rates (uf_canvas.html's window.__rates(from, to)) through the

@@ -18,6 +18,7 @@
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "components/autofill/core/browser/foundations/autofill_client.h"
 #include "components/autofill/core/browser/foundations/autofill_manager.h"
@@ -183,6 +184,9 @@ class AgentAutofill final : public autofill::AutofillManager::Observer,
       base::WeakPtr<autofill::AutofillSuggestionDelegate> delegate);
   // No suggestions came: the error, by the switch the field needs.
   void OnNoSuggestions();
+  // Asks the field's renderer for its suggestions, as a click on it does
+  // (for the request in flight, if it is still for `field`).
+  void TriggerSuggestions(autofill::FieldGlobalId field);
   // Accepts the row as its click would; then waits for the fill.
   void Accept();
   // The fill of a password: its values, read in the frame's Chrome-only
@@ -255,6 +259,10 @@ class AgentAutofill final : public autofill::AutofillManager::Observer,
   base::OneShotTimer read_soon_;
   base::OneShotTimer read_timeout_;
   autofill::FieldGlobalId focused_;
+  // The field Koan last asked suggestions for, and when that ask goes to its
+  // renderer (Run(): Chrome drops a second ask too soon after).
+  autofill::FieldGlobalId last_ask_field_;
+  base::TimeTicks last_ask_;
   // ShowCrossDomainConfirmationPopup() was asked during the pick.
   bool cross_domain_refused_ = false;
   bool accepting_ = false;

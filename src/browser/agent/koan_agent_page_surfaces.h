@@ -106,7 +106,7 @@ class AgentPageSurfaces : public PageSurfaceDelegate {
       HttpAuthRequest request) override;
   bool HoldPrint(content::WebContents* contents,
                  base::OnceCallback<void(bool show)> show) override;
-  void HoldActivation(content::WebContents* contents) override;
+  bool HoldActivation(content::WebContents* contents) override;
   bool MayHoldPickers(content::WebContents* contents) override;
   bool IsShowingHeld(content::WebContents* contents) override;
   uint64_t HoldPicker(content::RenderFrameHost* frame,

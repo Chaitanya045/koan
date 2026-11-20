@@ -71,6 +71,45 @@ class EdgeCheckTest(unittest.TestCase):
         self.assertEqual(0, r.returncode, r.stdout + r.stderr)
         self.assertIn('PASS', r.stdout)
 
+    def test_passes_a_late_slide_with_text(self):
+        # Cycle 19: the peek starts about 0.6 s after the pointer reaches
+        # the edge and its light text slides in with it; the old rule (the
+        # sidebar's columns watched from 0.5 s on) took both for black. The
+        # sidebar's measured rect is followed instead. The sidebar (with a
+        # line of light text) is a second input,
+        # overlaid at an x that follows the time (drawbox can't move).
+        sw = SIDEBAR_W * SCALE
+        slide = f"-{sw}+{sw}*min(1\\,max(0\\,(t-1.6)/0.4))"
+        with tempfile.TemporaryDirectory() as tmp:
+            video = os.path.join(tmp, 'edge.mp4')
+            subprocess.run([
+                FFMPEG, '-v', 'error', '-y', '-f', 'lavfi', '-i',
+                f'color=c=white:s={W * SCALE}x{H * SCALE}:r=30:d=3', '-f',
+                'lavfi', '-i', f'color=c=0x141414:s={sw}x{H * SCALE}:r=30:d=3',
+                '-filter_complex',
+                '[1]drawbox=x=20:y=100:w=30:h=8:color=0xf0f0f0:t=fill[s];'
+                f"[0][s]overlay=x='{slide}':y=0", '-pix_fmt', 'yuv420p', video
+            ], check=True)
+            with open(video + '.rec.json', 'w') as f:
+                json.dump({'rect': {'x': 0, 'y': 0, 'w': W, 'h': H},
+                           'scale': SCALE, 'fps': 30, 't0': 0}, f)
+            marks = os.path.join(tmp, 'edge.marks.json')
+            with open(marks, 'w') as f:
+                json.dump({'marks': [{
+                    't': 1000, 'round': 1, 'label': 'peek-in',
+                    'action': True, 'rect': {'x': 0, 'y': 0, 'w': W, 'h': H},
+                    'sidebarW': SIDEBAR_W, 'pointer': [[140, 60], [1, 60]],
+                }]}, f)
+            r = subprocess.run([NODE, str(CHECK), video, marks],
+                               env={**os.environ, 'FFMPEG': FFMPEG},
+                               capture_output=True, text=True)
+        self.assertEqual(0, r.returncode, r.stdout + r.stderr)
+
+    def test_self_test(self):
+        r = subprocess.run([NODE, str(CHECK), '--self-test'],
+                           capture_output=True, text=True)
+        self.assertEqual(0, r.returncode, r.stdout + r.stderr)
+
     def test_fails_on_a_dark_notch_at_the_top(self):
         # Upstream's floating corner: 8 points square, beside where the
         # sidebar will be, for a tenth of a second.

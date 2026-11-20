@@ -10,6 +10,11 @@
 //   click   {clicked} after pressing the item at `path`, a list of titles
 //           (trimmed) or positions (separators count) from the top menu down
 //           through submenus; else {missing, items} or {disabled}.
+//   point   {point: {x, y}, title} the screen point (points) at the middle of
+//           the top menu's item `path[0]` (a title, trimmed, or a position),
+//           for a real click on it; else {missing, items}. Read by the hit
+//           scan below (each item's rows), else the item's AXPosition and
+//           AXSize through System Events.
 //   cancel  {cancelled}: closes the open menu (AXCancel).
 //   dump    {app, focused, windows, hit}: the roles Accessibility sees (the
 //           application's children, the focused element's, each window's
@@ -177,8 +182,11 @@ function rawAx(pid) {
         continue;
       }
       const t = title(e);
-      if (last !== null && last.title === t) continue;
-      last = { e, title: t, y };
+      if (last !== null && last.title === t) {
+        last.y2 = y;
+        continue;
+      }
+      last = { e, title: t, y, y2: y, x: w.x + w.w / 2 };
       out.push(last);
     }
     return out;
@@ -329,6 +337,35 @@ function run(argv) {
     title, items: m => m.menuItems(), menus: i => i.menus(),
     enabled: i => i.enabled(), perform: (e, action) => { perform(e, action); return true; },
   };
+  if (a.op === 'point') {
+    const want = a.path[0];
+    const pick = list => (typeof want === 'number' ? list[want]
+                                                  : list.find(i => i.title.trim() === want));
+    try {
+      const raw = rawAx(a.pid);
+      const m = raw.scanMenu();
+      if (m) {
+        const list = raw.scan.items(m);
+        const item = pick(list);
+        if (!item) return out({ open: true, via: 'hit scan', missing: want, items: list.map(i => i.title) });
+        return out({ open: true, via: 'hit scan', title: item.title,
+                     point: { x: Math.round(item.x), y: Math.round((item.y + item.y2) / 2) } });
+      }
+    } catch (x) {}
+    const m = openMenu();
+    if (!m) return out({ open: false });
+    const list = viaSe.items(m).map(e => ({ e, title: title(e) }));
+    const item = pick(list);
+    if (!item) return out({ open: true, via: 'tree', missing: want, items: list.map(i => i.title) });
+    try {
+      const [x, y] = item.e.position();
+      const [w, h] = item.e.size();
+      return out({ open: true, via: 'tree', title: item.title,
+                   point: { x: Math.round(x + w / 2), y: Math.round(y + h / 2) } });
+    } catch (x) {
+      return out({ open: true, via: 'tree', title: item.title, error: `no frame: ${x}` });
+    }
+  }
   let A = viaSe, via = 'tree';
   let menu = openMenu();
   if (!menu && a.hit !== false) {

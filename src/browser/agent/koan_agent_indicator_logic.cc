@@ -191,9 +191,10 @@ std::vector<MenuEntry> MenuFor(const std::vector<IndicatorTab>& tabs,
         continue;
       }
       const std::u16string title = tab.title.empty() ? u"Untitled" : tab.title;
+      // "Go to Mail (Claude Code)", "Go to Mail (Claude Code, paused)".
       entries.push_back(
-          {.label = base::StrCat(
-               {AgentName(tab.label), paused ? u" (paused): " : u": ", title}),
+          {.label = base::StrCat({u"Go to ", title, u" (", AgentName(tab.label),
+                                  paused ? u", paused)" : u")"}),
            .target_id = tab.target_id});
     }
   }

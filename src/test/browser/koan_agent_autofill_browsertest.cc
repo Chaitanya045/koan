@@ -115,9 +115,10 @@ class KoanAgentAutofillBrowserTest : public InProcessBrowserTest,
  public:
   void SetUpOnMainThread() override {
     InProcessBrowserTest::SetUpOnMainThread();
-    embedded_test_server()->RegisterRequestHandler(
-        base::BindRepeating(&ServePage));
-    ASSERT_TRUE(embedded_test_server()->Start());
+    // HTTPS: Chrome offers no saved card on a page that isn't
+    // (kInsecureContextPaymentDisabledMessage instead).
+    https_.RegisterRequestHandler(base::BindRepeating(&ServePage));
+    ASSERT_TRUE(https_.Start());
     page_ = browser()->GetTabStripModel()->GetActiveWebContents();
     autofill_ = std::make_unique<AgentAutofill>(
         page_, base::BindRepeating(
@@ -152,8 +153,7 @@ class KoanAgentAutofillBrowserTest : public InProcessBrowserTest,
   }
 
   void Open(const std::string& path) {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), embedded_test_server()->GetURL(path)));
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), https_.GetURL(path)));
   }
 
   // The field's backend DOM node id (its renderer id), once autofill has
@@ -212,8 +212,8 @@ class KoanAgentAutofillBrowserTest : public InProcessBrowserTest,
   void SaveLogin() {
     password_manager::StoredCredential form;
     form.scheme = password_manager::PasswordForm::Scheme::kHtml;
-    form.signon_realm = embedded_test_server()->base_url().spec();
-    form.url = embedded_test_server()->GetURL("/login");
+    form.signon_realm = https_.base_url().spec();
+    form.url = https_.GetURL("/login");
     form.username_value = u"ada@example.com";
     form.password_value =
         password_manager::PasswordString(std::u16string(kPassword16));
@@ -232,6 +232,7 @@ class KoanAgentAutofillBrowserTest : public InProcessBrowserTest,
                                        containers::NewContainerId(false)});
   }
 
+  net::EmbeddedTestServer https_{net::EmbeddedTestServer::TYPE_HTTPS};
   raw_ptr<content::WebContents> page_ = nullptr;
   std::unique_ptr<AgentAutofill> autofill_;
   std::vector<std::string> secrets_;
@@ -308,13 +309,19 @@ IN_PROC_BROWSER_TEST_F(KoanAgentAutofillBrowserTest, ALocalCard) {
   EXPECT_FALSE(autofill_->secret_values().empty());
 }
 
-// T-fill-3: a card Chrome must unmask (a server card) waits for the user:
-// the pick says so, and the indicator holds the prompt.
+// T-fill-3: a card Chrome asks the user to verify before it fills waits for
+// the user: the pick says so, and the indicator holds the prompt. A local
+// card with "verify it's you" (mandatory reauth) on: a server card would be
+// one too, but Chrome offers none without a payments account (only "save
+// and fill").
 IN_PROC_BROWSER_TEST_F(KoanAgentAutofillBrowserTest, ACardToVerify) {
-  // In memory, at once.
-  Pdm().payments_data_manager().AddServerCreditCardForTest(
-      std::make_unique<autofill::CreditCard>(
-          autofill::test::GetMaskedServerCard()));
+  {
+    autofill::PersonalDataChangedWaiter waiter(Pdm());
+    Pdm().payments_data_manager().AddCreditCard(
+        autofill::test::GetCreditCard());
+    std::move(waiter).Wait();
+  }
+  Pdm().payments_data_manager().SetPaymentMethodsMandatoryReauthEnabled(true);
   Open("/card");
   const int node = NodeOf("number");
   FacadeBackend::AutofillResult picked = Run(node, false, 1);
@@ -342,6 +349,11 @@ IN_PROC_BROWSER_TEST_F(KoanAgentAutofillBrowserTest, ACardToVerify) {
 // script (Koan.secretField) and the scrubber knows the value.
 IN_PROC_BROWSER_TEST_F(KoanAgentAutofillBrowserTest, ALoginAndTSec1) {
   SaveLogin();
+  // An agent's tab: Chrome fills nothing there on load (the
+  // content_password_manager_driver.cc hook). In a tab of the user's it
+  // previews the only saved login on load, and then offers no suggestions
+  // for the field (AutofillAgent::ShowSuggestions(): a suggested value).
+  MakeAgentTab();
   Open("/login");
   const int user = NodeOf("user");
   FacadeBackend::AutofillResult listed;
@@ -390,6 +402,7 @@ IN_PROC_BROWSER_TEST_F(KoanAgentAutofillBrowserTest, ALoginAndTSec1) {
 // T-fill-5: a form that sends what is typed to another site gets no login.
 IN_PROC_BROWSER_TEST_F(KoanAgentAutofillBrowserTest, AFormSentElsewhere) {
   SaveLogin();
+  MakeAgentTab();  // As in ALoginAndTSec1.
   Open("/elsewhere");
   const int user = NodeOf("user");
   FacadeBackend::AutofillResult result;
@@ -419,9 +432,17 @@ IN_PROC_BROWSER_TEST_F(KoanAgentAutofillBrowserTest, TheSwitches) {
   prefs->SetBoolean(containers::kAgentMayUseAutofill, true);
   EXPECT_EQ(Run(NodeOf("name"), true).error_code, "");
 
+  // No saved password is offered (an address may be, for the username).
   prefs->SetBoolean(containers::kAgentMayUsePasswords, false);
   Open("/login");
-  EXPECT_EQ(Run(NodeOf("user"), true).error_code, "Koan.autofillOff");
+  FacadeBackend::AutofillResult login = Run(NodeOf("user"), true);
+  if (login.error_code.empty()) {
+    for (const base::Value& row : *login.result.FindList("suggestions")) {
+      EXPECT_NE(*row.GetDict().FindString("kind"), "password");
+    }
+  } else {
+    EXPECT_EQ(login.error_code, "Koan.autofillOff");
+  }
 }
 
 // The pick works only on what Chrome's autofill knows as a field.

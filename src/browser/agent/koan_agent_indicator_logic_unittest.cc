@@ -241,13 +241,13 @@ TEST(KoanAgentIndicatorLogicTest, MenuGoesToWhatIsNotShown) {
   EXPECT_EQ(entries[0], (MenuEntry{.label = u"a.test asks you to sign in",
                                    .prompt_id = 7}));
   // Then paused tabs, then the others; the shown tab is left out.
-  EXPECT_EQ(entries[1], (MenuEntry{.label = u"Claude Code (paused): Page",
+  EXPECT_EQ(entries[1], (MenuEntry{.label = u"Go to Page (Claude Code, paused)",
                                    .target_id = "p"}));
-  EXPECT_EQ(entries[2],
-            (MenuEntry{.label = u"Claude Code: Mail", .target_id = "b"}));
+  EXPECT_EQ(entries[2], (MenuEntry{.label = u"Go to Mail (Claude Code)",
+                                   .target_id = "b"}));
   // A tab of another window is listed (`shown` there doesn't hide it here).
-  EXPECT_EQ(entries[3],
-            (MenuEntry{.label = u"Claude Code: Untitled", .target_id = "c"}));
+  EXPECT_EQ(entries[3], (MenuEntry{.label = u"Go to Untitled (Claude Code)",
+                                   .target_id = "c"}));
 }
 
 TEST(KoanAgentIndicatorLogicTest, EventToasts) {

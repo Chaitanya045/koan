@@ -254,8 +254,7 @@ bool HoldActivationForAgent(content::WebContents* contents) {
   if (!surfaces) {
     return false;
   }
-  surfaces->HoldActivation(contents);
-  return true;
+  return surfaces->HoldActivation(contents);
 }
 
 bool HoldsPickersForAgent(content::RenderFrameHost* frame) {

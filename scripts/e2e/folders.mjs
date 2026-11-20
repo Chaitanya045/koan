@@ -18,7 +18,7 @@
 // Reopen Closed Tab (Cmd+Shift+T, a main-menu key there) is a real key.
 import { spawn } from 'node:child_process';
 import {
-  ACCEL, CDP_PORT, IS_MAC, SHIFT, check, createSpace, evalIn, finish, pages, sleep, visiblePage,
+  ACCEL, CDP_PORT, IS_MAC, SHIFT, check, createSpace, evalIn, finish, pages, sleep, visiblePage, waitFor,
 } from './lib/koan.mjs';
 import {
   activate, browserCdp, click, clickMenuItem, cls, findAll, folderMenu, loosest,
@@ -278,7 +278,13 @@ check('...removes the folder and closes its tab (and only it)',
 const spaceTwo = 'Two';
 await createSpace(await visiblePage(), spaceTwo);
 await sleep(1500);
+// A Space whose only tab is Koan's empty tab has no row to right-click (Zen's
+// empty tab isn't listed): a page first, then a folder of it.
 async function folderOfOnlyTab() {
+  if (!(await visibleTabs()).length) {
+    await browserCdp('Target.createTarget', { url: 'https://example.com/?only', background: false });
+    await sleep(1500);
+  }
   await moveToFolder(ts => ts[0], 'kKoanTabNewFolderItem');
   await pressKey(/^KoanFolderNameField$/, VK.ESCAPE);
   await sleep(800);
@@ -287,9 +293,12 @@ await folderOfOnlyTab();
 await folderMenu('New Folder', 'kKoanFolderDeleteItem');
 await sleep(1500);
 labels = (await spaceButtons()).map(l => l.name);
-check('Deleting the folder holding all of a Space\'s tabs keeps the Space',
-      !!spaceTwo && labels.includes(spaceTwo) && (await visibleTabs()).length === 1,
-      `${JSON.stringify(labels)}, ${(await visibleTabs()).length} tab(s)`);
+// The Space keeps a fresh tab: Koan's empty tab (Zen's), which has no row.
+const emptyTabShown = async () => (await visiblePage().catch(() => null))?.url?.startsWith('chrome://newtab');
+check('Deleting the folder holding all of a Space\'s tabs keeps the Space, on its empty tab',
+      !!spaceTwo && labels.includes(spaceTwo) && (await visibleTabs()).length === 0 && await emptyTabShown(),
+      `${JSON.stringify(labels)}, ${(await visibleTabs()).length} row(s), shown ` +
+      `${(await visiblePage().catch(() => null))?.url}`);
 await folderOfOnlyTab();
 await folderMenu('New Folder', 'kKoanFolderChangeSpaceItem');
 // The menu lists the Spaces in the bottom bar's order.
@@ -312,7 +321,10 @@ check('...and converting it to a Space', labels.includes(spaceTwo) &&
 // tabs, like Zen's (they're pinned there).
 await switcher(spaceTwo);
 await sleep(1000);
-for (const q of ['c1', 'c2']) {
+// (c0: a loose tab for Clear to close. A Space starts on its empty tab, which
+// isn't listed, and with the selected tab its only loose one Clear closes
+// that too, as Zen's does: KoanShortcutController::CloseUnpinnedTabs().)
+for (const q of ['c0', 'c1', 'c2']) {
   await browserCdp('Target.createTarget', { url: `https://example.com/?${q}`, background: false });
 }
 await sleep(2000);
@@ -324,14 +336,19 @@ await sleep(800);
 // find out would switch Spaces).
 const kept = (await pages()).filter(p => p.url.endsWith('?c2')).map(p => p.url);
 const c1 = (await pages()).find(p => p.url.endsWith('?c1'));
-if (c1) await activate(c1);
+if (c1) {
+  // Selected before Clear (it keeps the selected tab): shown, not only asked.
+  await activate(c1);
+  await waitFor(async () => (await visiblePage().catch(() => null))?.id === c1.id, 4000);
+}
 await pageKey(c1 ?? (await pages())[0], 75, ACCEL | SHIFT, 'K');  // Ctrl+Shift+K, Cmd on macOS
 const urls = (await pages()).map(p => p.url);
 r = await rows();
 check('Clear keeps the folder\'s tab', kept.length === 1 && urls.includes(kept[0]) &&
       r.find(x => x.name === 'Keep')?.count === 1, `${JSON.stringify(kept)} in ${JSON.stringify(urls)}`);
 check('...and closes the loose tabs but the selected one', urls.includes(c1?.url) &&
-      (await visibleTabs()).length === 2, `${(await visibleTabs()).length} shown`);
+      !urls.some(u => u.endsWith('?c0')) && (await visibleTabs()).length === 2,
+      `${(await visibleTabs()).length} shown; ${JSON.stringify(urls)}`);
 
 // (Dragging tabs in and out of folders: folders_drag.mjs, with real input;
 // headless Ozone can't run a tab drag.)
@@ -356,8 +373,15 @@ const order = () => withView(/^TabView$/, 0, async (s) => {
   return { ts: ts.map(t => t.ay), row };
 });
 await activate(c1);
-await pageKey(c1, 68, ACCEL | SHIFT, 'D');
-await sleep(1500);
+// On macOS a real ⌘⇧D in the key window (a CDP key reaches the shortcuts
+// only there, and the main menu has the key too).
+if (IS_MAC && realInput()) {
+  await makeKey(c1);
+  await realKey('d', 'cs', 1500);
+} else {
+  await pageKey(c1, 68, ACCEL | SHIFT, 'D');
+  await sleep(1500);
+}
 let o = await order();
 check('A pinned tab goes above the folders, loose tabs below',
       o.ts.length === 2 && o.ts[0] < o.row && o.row < o.ts[1], JSON.stringify(o));
@@ -386,7 +410,8 @@ if (!IS_MAC) {
 await sleep(1500);
 r = await rows();
 if (reopened) {
-  check(reopenName, closedOk && r.find(x => x.name === 'Keep')?.count === 1, names(r));
+  check(reopenName, closedOk && r.find(x => x.name === 'Keep')?.count === 1,
+        `closed: ${closedOk ? 'Keep:0' : 'not seen'}; reopened: ${names(r)}`);
 } else {
   skipped(reopenName, `Cmd+Shift+T is a main-menu key on macOS: ${realInputWhyNot() ||
                       'its window did not become key'}`);
