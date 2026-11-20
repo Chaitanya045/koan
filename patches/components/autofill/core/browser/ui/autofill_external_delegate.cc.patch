@@ -1,17 +1,16 @@
 diff --git a/components/autofill/core/browser/ui/autofill_external_delegate.cc b/components/autofill/core/browser/ui/autofill_external_delegate.cc
 --- a/components/autofill/core/browser/ui/autofill_external_delegate.cc
 +++ b/components/autofill/core/browser/ui/autofill_external_delegate.cc
-@@ -465,6 +465,9 @@
+@@ -465,6 +465,8 @@
      const FormFieldData& trigger_field,
      const std::vector<Suggestion>& input_suggestions,
      std::u16string prefilled_query) {
 +  LOG(ERROR) << "KOANDBG AED OnSuggestionsReturned n=" << input_suggestions.size()
-+             << " same_field=" << (trigger_field.global_id() == last_query_.field_id)
-+             << " last_queried=" << manager_->client().IsLastQueriedField(trigger_field.global_id());
++             << " same_field=" << (trigger_field.global_id() == last_query_.field_id);
    // These are guards against outdated suggestion results.
    if (trigger_field.global_id() != last_query_.field_id) {
      return;
-@@ -508,6 +511,9 @@
+@@ -508,6 +510,9 @@
    CHECK(!*ignore_focus_loss || is_update)
        << "Ignoring focus loss is only supported for updates";
  
