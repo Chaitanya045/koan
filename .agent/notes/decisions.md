@@ -215,3 +215,20 @@
   A docked sidebar keeps them.
 - **Official build** (approved 2026-11-20): ThinLTO+PGO in `out/KoanOfficial`,
   built on the Mac, offered to the user as a stable update only.
+- **Auto-resume after the user stops using a tab** (user, 2026-11-20): when the
+  user clicks or types in a tab an agent drives, the agent pauses, and now
+  carries on by itself once they stop, from where they left the page. Left
+  the tab (another tab, window or app, minimised): after N s without input
+  (Settings > Agent Control, "When you stop using a tab, the agent continues
+  after [5] s", 2 to 60 s, on by default; off is "Wait for Hand back"). Still
+  on the tab: after N s the pill counts down "<agent> continues in 5s · Keep
+  paused · Hand back", then resumes. Mouse movement over the page restarts
+  the wait but never pauses. Only a pause from input in the page resumes by
+  itself; Take over, Keep paused, focus in a password or payment field, a
+  page asking the user (Koan.userNeeded), an interstitial, a dialog or a
+  permission prompt keep it until Hand back. Stop, revocation and closing
+  the tab end a pause without a resume. Koan.resumed {reason: "user-idle" |
+  "handed-back", pausedMs, url, title, navigated, changed} makes old refs
+  stale, and `koan wait <tab> --resumed` returns a fresh snapshot, so the
+  agent goes on from the page as it is, in one turn. Principle: agents use
+  the browser as the user does.

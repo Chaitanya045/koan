@@ -968,9 +968,38 @@ Agent-Space tabs start `driven`.
   reads still work (`captureScreenshot`, `Accessibility`, `DOM` reads, `Page.getFrameTree`). Event
   `Koan.paused {tab, reason:"user-input"}` and a toast. Other agent tabs are unaffected. agent-browser's liveness
   probe (`Runtime.evaluate "1"`, D§3) fails on a paused tab and reports a wedged tab; acceptable.
-* **Hand back to the agent**: the banner's *Hand back* button (sticky pause by default so a stray click does not
-  release the agent into a half-finished form); optional setting *auto-resume after N seconds of no input* (off).
-  The agent cannot resume itself (`Koan.resume` only asks the user via the banner).
+* **Hand back to the agent, or auto-resume** (user decision, 2026-11-20; it replaces "sticky by default, optional
+  auto-resume (off)"): the pill's *Hand back* button, or, for a pause caused by the user's input in the page
+  (`reason: "user-input"`), by itself once the user stops using the tab. Settings > Agent Control: *When you stop
+  using a tab, the agent continues after [5] s* (2 to 60 s, on by default; off is *Wait for Hand back*; local-state
+  prefs `koan.agent_control.auto_resume` and `auto_resume_seconds`, no 0 or unlimited value).
+  - *The user left the tab* (it is not shown in its window, the window is not the active one, it is minimised, or
+    Koan is not the active app): N s after their last input in it, the tab resumes (`reason: "user-idle"`). Coming
+    back before then counts as activity and hands over to the countdown below.
+  - *The user stays on the tab*: N s after their last input the pill shows "*<agent>* continues in 5s · Keep
+    paused · Hand back" with a visible countdown, then resumes. Mouse movement over the page restarts the wait and
+    ends a countdown, but never pauses on its own; real input (the pause signals above, wheel included) does too.
+  - *Sticky until Hand back*: the pill's *Take over* (`reason: "user"`), focus in a password field
+    (`IsFocusedElementPasswordLike()`) or a payment field (autofill's credit-card, CVC or IBAN types, or
+    `autocomplete=cc-*`), an outstanding `Koan.userNeeded`, an interstitial, a held surface being shown (a dialog,
+    a picker), a permission prompt, and the pill's *Keep paused*. A hold lasts until Hand back; it is checked at
+    the pause, on every one-second tick and just before a resume. Stop, revocation and the tab closing end a pause
+    without a resume.
+  - *Events*: `Koan.paused {targetId, state, reason, pauseReason, sticky?, resumesAt?}` (sent again when a pause
+    becomes sticky); `Koan.resumed {targetId, state, reason: "user-idle" | "handed-back", pausedMs, url, title,
+    navigated, changed}`, where `changed` is a navigation, a frame created, or a DOM or form-value change during
+    the pause (a MutationObserver and input/change listeners in Chrome's internal isolated world of each frame,
+    started at the pause and read at the resume, 300 ms at most). `Koan.listTabs` shows `paused` and `pause
+    {pauseReason, sticky?, resumesAt?}` per tab. Any resume makes the tab's old refs answer `Koan.staleRef` (the
+    holder's `RefBook::Resumed()`) until the next snapshot.
+  - *The agent*: `koan act` batches stop on `Koan.paused` and say to run `koan wait <tab> --resumed`, which blocks
+    (no lease, no keep-alive) until `Koan.resumed`, then prints a fresh interactive snapshot; it exits 1 on a sticky
+    pause ("the user is handling this tab: ask them"), Stop, the tab closing, the user taking it back, or
+    `--timeout` (default 10m). The agent still cannot resume itself (`Koan.resume` only asks the user via the
+    pill).
+  - *Where*: the policy is pure (`koan_agent_auto_resume.*`, unit-tested); `PauseWatch` (`koan_agent_pause_watch.*`)
+    gathers the browser's facts per tab; the forwarder drives both from the existing pause signals plus mouse
+    moves from the same per-widget `InputEventObserver`. No patch.
 * During an atomic multi-step action the gateway may use `WebContents::IgnoreInputEvents(audit_cb)` returning true
   for `kFromDebugger`, false (and pause) otherwise; this also keeps the user's keystrokes out of the page for the
   few milliseconds an injected sequence runs (B§7; note the `ShouldIgnoreInputEvents` effect is Aura-only, so
@@ -1539,7 +1568,11 @@ Port to a `scripts/mac/agent.sh` driver and `scripts/e2e/agent_*.mjs` specs.
 | T-take-1 | agent drives the user's active tab (approved); user types/clicks in the page | `Koan.paused`; mutating calls rejected; reads allowed; banner shows; no further injected input |
 | T-take-1b | as T-take-1 with the input in a **cross-origin iframe** (payment widget) and as a wheel scroll | pauses for both; the in-flight batch step is the documented detect-after-delivery case |
 | T-take-2 | CDP-injected input does **not** pause (`kFromDebugger` filter); `Input.insertText` too | agent keeps running |
-| T-take-3 | hand back via banner; agent resumes; `Koan.resume` alone does nothing | resumes only after the user's click |
+| T-take-3 | hand back via the pill; agent resumes; `Koan.resume` alone does nothing | `Koan.resumed {reason: "handed-back"}` after the user's click only |
+| T-take-3b | auto-resume, the user leaves: a real click in the driven page, then another tab shown | `Koan.paused {user-input}`; `Koan.resumed {reason: "user-idle", pausedMs, url, title, navigated, changed}` about 5 s after the last input; `koan wait <tab> --resumed` returns a fresh snapshot (exit 0) |
+| T-take-3c | auto-resume, the user stays idle on the tab | the pill counts down "continues in Ns · Keep paused · Hand back", then the tab resumes; a ref from before the pause answers `Koan.staleRef`; moving the mouse over the page restarts the wait and never pauses |
+| T-take-3d | sticky pauses: a real click on Keep paused; a click into a password field (and a `cc-number` field); Take over; a page prompt | no resume, however long the user is away; `Koan.listTabs` shows `sticky`; `koan wait --resumed` exits 1 ("the user is handling this tab") until Hand back |
+| T-take-3e | Settings > Agent Control: auto-resume off, then 2 s and 60 s | off: only Hand back resumes; the delay follows the setting at the next check |
 | T-take-4 | move into agent Space and take back; pinned/Essentials refused; user closes the tab mid-run | origin Space/index restored; refusals; `detachedFromTarget` |
 | T-take-5 | user switches Space / tab while the agent works | agent unaffected; the agent's tabs keep rendering |
 | T-take-6 | two clients, two tasks | two Spaces, isolated registries; revoke one |
