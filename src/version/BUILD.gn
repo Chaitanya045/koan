@@ -1,0 +1,34 @@
+# Copyright 2026 The Koan Authors
+# Use of this source code is governed by the MIT license that can be
+# found in the LICENSE file.
+
+# Koan's version from VERSION at the root of the repository
+# (koan_version.py). VERSION is outside //koan's tree as GN sees it, so it
+# reaches ninja through the depfile, as the commit stamp does
+# (//koan/browser/updates:lastchange).
+action("version_header") {
+  script = "koan_version.py"
+  outputs = [ "$target_gen_dir/koan_version_values.h" ]
+  depfile = "$target_gen_dir/koan_version_values.d"
+  args = [
+    "header",
+    "--output",
+    rebase_path(outputs[0], root_build_dir),
+    "--depfile",
+    rebase_path(depfile, root_build_dir),
+  ]
+}
+
+# What About and chrome://version show (koan_version.h). Only this file sees
+# the generated header, so a new VERSION recompiles one file.
+source_set("version") {
+  sources = [
+    "koan_version.cc",
+    "koan_version.h",
+  ]
+  public_deps = [ "//base" ]
+  deps = [
+    ":version_header",
+    "//components/version_info",
+  ]
+}

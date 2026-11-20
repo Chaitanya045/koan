@@ -1,8 +1,31 @@
-diff --git a/chrome/BUILD.gn b/chrome/BUILD.gn
-index 06bfcf5a90d093b9ac8e255e93ef2ffd0a00421e..23f0f26fedffc6738989d11b646c89b637e47589 100644
 --- a/chrome/BUILD.gn
 +++ b/chrome/BUILD.gn
-@@ -573,6 +573,10 @@ if (is_win) {
+@@ -53,6 +53,7 @@
+   import("//chrome/updater/branding.gni")
+   import("//chrome/version.gni")
+   import("//content/public/app/mac_helpers.gni")
++  import("//koan/version/version.gni")
+   import("//media/cdm/library_cdm/cdm_paths.gni")
+   import("//services/on_device_model/on_device_model.gni")
+   import("//third_party/icu/config.gni")
+@@ -540,10 +541,15 @@
+     }
+   }
+ 
++  # Koan: Koan's version in the app's Info.plist (koan/version/version.gni).
++  koan_app_version_plist("koan_app_plist") {
++    plist_target = ":chrome_app_plist"
++  }
++
+   mac_app_bundle("chrome_app") {
+     output_name = chrome_product_full_name
+ 
+-    info_plist_target = ":chrome_app_plist"
++    info_plist_target = ":koan_app_plist"
+     extra_substitutions = [
+       "CHROMIUM_BUNDLE_ID=$chrome_mac_bundle_id",
+       "CHROMIUM_SHORT_NAME=$chrome_product_short_name",
+@@ -573,6 +579,10 @@
        ":chrome_versioned_bundle_data",
      ]
  

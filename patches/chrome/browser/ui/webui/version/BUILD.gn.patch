@@ -1,0 +1,10 @@
+--- a/chrome/browser/ui/webui/version/BUILD.gn
++++ b/chrome/browser/ui/webui/version/BUILD.gn
+@@ -30,6 +30,7 @@
+     "//components/webui/version",
+     "//components/webui/version/resources",
+     "//content/public/common",
++    "//koan/version",
+     "//ui/base",
+     "//v8:v8_version",
+   ]
