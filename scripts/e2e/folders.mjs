@@ -18,7 +18,7 @@
 // Reopen Closed Tab (Cmd+Shift+T, a main-menu key there) is a real key.
 import { spawn } from 'node:child_process';
 import {
-  ACCEL, CDP_PORT, IS_MAC, SHIFT, check, createSpace, evalIn, finish, pages, sleep, visiblePage,
+  ACCEL, CDP_PORT, IS_MAC, SHIFT, check, createSpace, evalIn, finish, pages, sleep, visiblePage, waitFor,
 } from './lib/koan.mjs';
 import {
   activate, browserCdp, click, clickMenuItem, cls, findAll, folderMenu, loosest,
@@ -333,7 +333,11 @@ await sleep(800);
 // find out would switch Spaces).
 const kept = (await pages()).filter(p => p.url.endsWith('?c2')).map(p => p.url);
 const c1 = (await pages()).find(p => p.url.endsWith('?c1'));
-if (c1) await activate(c1);
+if (c1) {
+  // Selected before Clear (it keeps the selected tab): shown, not only asked.
+  await activate(c1);
+  await waitFor(async () => (await visiblePage().catch(() => null))?.id === c1.id, 4000);
+}
 await pageKey(c1 ?? (await pages())[0], 75, ACCEL | SHIFT, 'K');  // Ctrl+Shift+K, Cmd on macOS
 const urls = (await pages()).map(p => p.url);
 r = await rows();
