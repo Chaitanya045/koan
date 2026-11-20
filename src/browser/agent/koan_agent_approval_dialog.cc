@@ -14,6 +14,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
@@ -205,6 +206,17 @@ void CancelTakeOverDialog(uint64_t dialog_id) {
   }
   it->second.answer.Reset();
   AnswerTakeOver(dialog_id, false);
+}
+
+size_t AnswerTakeOverDialogsForTesting(bool allowed) {
+  std::vector<uint64_t> ids;
+  for (const auto& [id, dialog] : OpenTakeOvers()) {
+    ids.push_back(id);
+  }
+  for (uint64_t id : ids) {
+    AnswerTakeOver(id, allowed);
+  }
+  return ids.size();
 }
 
 void ShowApprovalDialog(const ApprovalRequest& request,

@@ -11,6 +11,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "base/containers/span.h"
@@ -149,8 +150,21 @@ class FakeBackend : public FacadeBackend {
     copy.locked = facts.locked;
     copy.focused_locked = facts.focused_locked;
     copy.card_filled = facts.card_filled;
+    copy.unknown = facts.unknown;
     copy.fields = facts.fields;
     return copy;
+  }
+  bool SecretsCurrent(const std::string& target_id,
+                      const std::string& frame_id) override {
+    return secrets_current;
+  }
+  void RefreshSecrets(const std::string& target_id,
+                      const std::string& frame_id,
+                      base::OnceClosure done) override {
+    refreshes.push_back(std::move(done));
+  }
+  void SecretsMayHaveChanged(const std::string& target_id) override {
+    ++secrets_changed;
   }
   CardFields CardFieldsOf(const std::string& target_id) override {
     return card_fields;
@@ -215,6 +229,10 @@ class FakeBackend : public FacadeBackend {
   // Secrets Koan filled (design section 4.5).
   SecretFacts facts;
   std::vector<std::string> secrets_asked;
+  // The fields' read (RefreshSecrets()), answered by the test.
+  bool secrets_current = true;
+  std::vector<base::OnceClosure> refreshes;
+  int secrets_changed = 0;
   CardFields card_fields;
   std::vector<ScreenshotMask> masks;
   std::string masked_format;
@@ -1363,10 +1381,22 @@ TEST_F(KoanAgentFacadeTest, ScriptWaitsWhileASecretIsFilledInThePage) {
        base::DictValue().Set("type", "keyUp").Set("key", "a"), session);
   EXPECT_EQ(ErrorCode(9), "");
 
-  // The page moved on (or the field was cleared): script runs again.
+  // The page moved on (or the field was cleared): script runs again, once
+  // the tab has handled the input before it.
+  std::vector<std::pair<std::string, int>> unanswered;
+  for (const FakeBackend::Sent& sent : backend_.sent) {
+    unanswered.emplace_back(sent.target_id, *sent.command.FindInt("id"));
+  }
+  for (const auto& [target, id] : unanswered) {
+    facade_.OnTabMessage(target,
+                         *base::WriteJson(base::DictValue().Set("id", id).Set(
+                             "result", base::DictValue())));
+  }
   backend_.facts = FacadeBackend::SecretFacts();
   Send(10, "Runtime.evaluate", base::DictValue().Set("expression", "1"),
        session);
+  EXPECT_EQ(*backend_.sent.back().command.FindString("method"),
+            "Runtime.evaluate");
   EXPECT_EQ(ErrorCode(10), "");
   // Each refusal is audited, without the script.
   bool audited = false;
@@ -1376,6 +1406,100 @@ TEST_F(KoanAgentFacadeTest, ScriptWaitsWhileASecretIsFilledInThePage) {
     EXPECT_EQ(record.summary.find("querySelector"), std::string::npos);
   }
   EXPECT_TRUE(audited);
+}
+
+// S1 (#412 review): a password Koan did not fill (the password manager's on
+// load, or one the user typed) locks script too. Before a script read the
+// backend reads the fields if anything changed them; the read's commands,
+// and those after them, wait in order.
+TEST_F(KoanAgentFacadeTest, ScriptWaitsForTheSecretFieldsToBeRead) {
+  const std::string session = AttachTo("T1");
+  backend_.secrets_current = false;
+  // Not script: no read.
+  Send(1, "DOM.getDocument", base::DictValue(), session);
+  ASSERT_EQ(backend_.sent.size(), 1u);
+  EXPECT_TRUE(backend_.refreshes.empty());
+  // Script waits, and so does what comes after it.
+  Send(2, "Runtime.evaluate", base::DictValue().Set("expression", "1"),
+       session);
+  Send(3, "DOM.getDocument", base::DictValue(), session);
+  EXPECT_EQ(backend_.sent.size(), 1u);
+  ASSERT_EQ(backend_.refreshes.size(), 1u);
+  EXPECT_EQ(Answer(2), nullptr);
+  // The read found a password the user typed: refused, then the next goes.
+  backend_.facts.locked = true;
+  backend_.secrets_current = true;
+  std::move(backend_.refreshes[0]).Run();
+  EXPECT_EQ(ErrorCode(2), "Koan.secretField");
+  ASSERT_EQ(backend_.sent.size(), 2u);
+  EXPECT_EQ(*backend_.sent[1].command.FindString("method"), "DOM.getDocument");
+  // A read that is current is not made again.
+  backend_.facts = FacadeBackend::SecretFacts();
+  Send(4, "Runtime.evaluate", base::DictValue().Set("expression", "1"),
+       session);
+  EXPECT_EQ(backend_.refreshes.size(), 1u);
+  EXPECT_EQ(backend_.sent.size(), 3u);
+  // A frame that did not answer counts as locked.
+  backend_.facts.unknown = true;
+  Send(5, "Runtime.callFunctionOn",
+       base::DictValue()
+           .Set("objectId", "o")
+           .Set("functionDeclaration", "function(){return this.value}"),
+       session);
+  EXPECT_EQ(ErrorCode(5), "Koan.secretField");
+}
+
+TEST_F(KoanAgentFacadeTest, ScriptWaitsForTheInputBeforeIt) {
+  const std::string session = AttachTo("T1");
+  // A click (which may show a password filled on load) is in flight.
+  Send(1, "Input.dispatchMouseEvent",
+       base::DictValue()
+           .Set("type", "mousePressed")
+           .Set("x", 1)
+           .Set("y", 1)
+           .Set("button", "left"),
+       session);
+  ASSERT_EQ(backend_.sent.size(), 1u);
+  Send(2, "Runtime.evaluate", base::DictValue().Set("expression", "1"),
+       session);
+  EXPECT_EQ(backend_.sent.size(), 1u);
+  // Its answer: the fields may have changed, and they are read first.
+  backend_.secrets_current = false;
+  AnswerLast(base::DictValue());
+  EXPECT_EQ(backend_.secrets_changed, 1);
+  EXPECT_EQ(ErrorCode(1), "");
+  ASSERT_EQ(backend_.refreshes.size(), 1u);
+  EXPECT_EQ(backend_.sent.size(), 1u);
+  backend_.secrets_current = true;
+  std::move(backend_.refreshes[0]).Run();
+  ASSERT_EQ(backend_.sent.size(), 2u);
+  EXPECT_EQ(*backend_.sent[1].command.FindString("method"), "Runtime.evaluate");
+}
+
+TEST_F(KoanAgentFacadeTest, CommandsThatWaitEndWithTheSession) {
+  const std::string session = AttachTo("T1");
+  backend_.secrets_current = false;
+  Send(1, "Runtime.evaluate", base::DictValue().Set("expression", "1"),
+       session);
+  Send(2, "Page.reload", base::DictValue(), session);
+  facade_.OnTabDetached("T1");
+  EXPECT_EQ(ErrorCode(1), "Koan.targetClosed");
+  EXPECT_EQ(ErrorCode(2), "Koan.targetClosed");
+  // The read's answer after that is nothing.
+  ASSERT_EQ(backend_.refreshes.size(), 1u);
+  std::move(backend_.refreshes[0]).Run();
+  EXPECT_TRUE(backend_.sent.empty());
+}
+
+// DOMSnapshot carries the live value of every input: its domain stays denied.
+TEST_F(KoanAgentFacadeTest, DomSnapshotIsDenied) {
+  const std::string session = AttachTo("T1");
+  for (const char* method :
+       {"DOMSnapshot.captureSnapshot", "DOMSnapshot.getSnapshot"}) {
+    Send(1, method, base::DictValue(), session);
+    EXPECT_EQ(ErrorCode(1), "Koan.notPermitted") << method;
+  }
+  EXPECT_TRUE(backend_.sent.empty());
 }
 
 TEST_F(KoanAgentFacadeTest, ACardFilledStopsPrintAndScreencast) {
@@ -1412,6 +1536,28 @@ TEST_F(KoanAgentFacadeTest, SecretFieldsAreHiddenOnTheAgentsOwnTab) {
   Send(2, "DOM.getAttributes", base::DictValue().Set("nodeId", 9), session);
   AnswerLast(Parse(R"({"attributes": ["type", "password", "value", "pw"]})"));
   EXPECT_EQ(base::WriteJson(*Answer(2))->find("\"pw\""), std::string::npos);
+  // A card field's, by its autocomplete, in every DOM read.
+  Send(3, "DOM.getAttributes", base::DictValue().Set("nodeId", 10), session);
+  AnswerLast(Parse(R"({"attributes": ["autocomplete", "cc-number",
+      "value", "4111111111111111"]})"));
+  Send(4, "DOM.describeNode", base::DictValue().Set("nodeId", 10), session);
+  AnswerLast(Parse(R"({"node": {"nodeId": 10, "backendNodeId": 50,
+      "nodeName": "INPUT", "attributes": ["autocomplete", "cc-number",
+      "value", "4111111111111111"]}})"));
+  Send(5, "DOM.getOuterHTML", base::DictValue().Set("nodeId", 1), session);
+  AnswerLast(Parse(
+      R"({"outerHTML": "<form><input autocomplete='cc-number' )"
+      R"(value='4111111111111111'><input type=password value=pw2></form>"})"));
+  // A field autofill classifies as a card, whatever its markup says.
+  Send(6, "DOM.describeNode", base::DictValue().Set("nodeId", 11), session);
+  AnswerLast(Parse(R"({"node": {"nodeId": 11, "backendNodeId": 41,
+      "nodeName": "INPUT", "attributes": ["name", "n", "value",
+      "4111111111111111"]}})"));
+  for (int id : {3, 4, 5, 6}) {
+    const std::string json = *base::WriteJson(*Answer(id));
+    EXPECT_EQ(json.find("4111"), std::string::npos) << json;
+    EXPECT_EQ(json.find("pw2"), std::string::npos) << json;
+  }
 }
 
 TEST_F(KoanAgentFacadeTest, NothingSentCarriesASecretKoanFilled) {

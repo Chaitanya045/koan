@@ -26,6 +26,7 @@
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "components/autofill/core/browser/ui/autofill_suggestion_delegate.h"
 #include "components/autofill/core/common/aliases.h"
+#include "components/autofill/core/common/form_field_data.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/navigation_handle.h"
@@ -68,6 +69,34 @@ constexpr char16_t kReadPasswordsScript[] =
 constexpr char16_t kReadValuesScript[] =
     uR"((() => Array.from(document.querySelectorAll('input, textarea'),
     (e) => e.value).filter((v) => v).slice(0, 500))())";
+// The values of the fields the page marks as secret (a password field, or
+// autocomplete="cc-*"), in open shadow roots too, whoever filled them.
+constexpr char16_t kReadSecretFieldsScript[] =
+    uR"((() => {
+  const found = [];
+  const visit = (root) => {
+    for (const e of root.querySelectorAll('*')) {
+      if (e.shadowRoot) visit(e.shadowRoot);
+      if (e.localName !== 'input' || !e.value || found.length >= 50) continue;
+      const card = (e.getAttribute('autocomplete') || '').toLowerCase()
+          .split(/\s+/).some((t) => t.startsWith('cc-'));
+      if (e.type === 'password' || card) found.push(e.value);
+    }
+  };
+  visit(document);
+  return found;
+})())";
+
+// How long after input the secret fields are read again, and how long a
+// frame has to answer a read the facade waits for.
+constexpr base::TimeDelta kSecretReadDelay = base::Milliseconds(60);
+constexpr base::TimeDelta kSecretReadTimeout = base::Seconds(2);
+// The values found in a tab's fields that the scrubber keeps.
+constexpr size_t kMaxFoundValues = 256;
+
+bool IsReadable(content::RenderFrameHost* frame) {
+  return frame->IsActive() && frame->IsRenderFrameLive();
+}
 
 // The rows an agent may pick, by what they fill. Everything else (manage,
 // passkeys, generation, footers, separators) is not offered.
@@ -773,6 +802,134 @@ void AgentAutofill::NoteSecret(const std::u16string& value) {
   on_secret_.Run(text);
 }
 
+void AgentAutofill::NoteFound(const std::string& value) {
+  if (value.size() < kMinSecretLength || found_.size() >= kMaxFoundValues ||
+      std::ranges::find(values_, value) != values_.end() ||
+      std::ranges::find(found_, value) != found_.end()) {
+    return;
+  }
+  found_.push_back(value);
+  on_secret_.Run(value);
+}
+
+bool AgentAutofill::SecretsCurrent(content::RenderFrameHost* root) {
+  if (!root) {
+    return true;
+  }
+  bool current = true;
+  web_contents()->ForEachRenderFrameHost([&](content::RenderFrameHost* frame) {
+    if (!current || !IsReadable(frame) ||
+        frame->GetProcess() != root->GetProcess()) {
+      return;
+    }
+    auto it = frame_secrets_.find(frame->GetFrameTreeNodeId());
+    current = it != frame_secrets_.end() && !it->second.reading &&
+              it->second.read_at == secrets_generation_;
+  });
+  return current;
+}
+
+void AgentAutofill::RefreshSecrets(base::OnceClosure done) {
+  ReadSecretFields();
+  secrets_waiting_.push_back(std::move(done));
+  if (!read_timeout_.IsRunning()) {
+    read_timeout_.Start(FROM_HERE, kSecretReadTimeout,
+                        base::BindOnce(&AgentAutofill::OnSecretReadTimeout,
+                                       weak_factory_.GetWeakPtr()));
+  }
+  MaybeFinishSecretRead();
+}
+
+void AgentAutofill::InvalidateSecrets(bool soon) {
+  ++secrets_generation_;
+  if (soon && !read_soon_.IsRunning()) {
+    read_soon_.Start(FROM_HERE, kSecretReadDelay,
+                     base::BindOnce(&AgentAutofill::ReadSecretFields,
+                                    weak_factory_.GetWeakPtr()));
+  }
+}
+
+void AgentAutofill::ReadSecretFields() {
+  web_contents()->ForEachRenderFrameHost([&](content::RenderFrameHost* frame) {
+    if (!IsReadable(frame)) {
+      return;
+    }
+    const content::FrameTreeNodeId id = frame->GetFrameTreeNodeId();
+    FrameSecrets& secrets = frame_secrets_[id];
+    if (secrets.reading || secrets.read_at == secrets_generation_) {
+      return;
+    }
+    secrets.reading = next_read_token_++;
+    frame->ExecuteJavaScriptInIsolatedWorld(
+        kReadSecretFieldsScript,
+        base::BindOnce(&AgentAutofill::OnSecretFieldsRead,
+                       weak_factory_.GetWeakPtr(), id, secrets.reading,
+                       secrets_generation_),
+        ISOLATED_WORLD_ID_CHROME_INTERNAL);
+  });
+}
+
+void AgentAutofill::OnSecretFieldsRead(content::FrameTreeNodeId frame,
+                                       uint64_t token,
+                                       uint64_t generation,
+                                       base::Value values) {
+  // What was there is the scrubber's, even if the page moved on since.
+  const bool listed = values.is_list();
+  bool filled = false;
+  if (listed) {
+    for (const base::Value& value : values.GetList()) {
+      if (const std::string* text = value.GetIfString()) {
+        filled = filled || !text->empty();
+        NoteFound(*text);
+      }
+    }
+  }
+  auto it = frame_secrets_.find(frame);
+  if (it != frame_secrets_.end() && it->second.reading == token) {
+    it->second.reading = 0;
+    it->second.read_at = generation;
+    it->second.filled = filled || !listed;
+    it->second.unknown = !listed;
+  }
+  // Input came during the read: read again, for the scrubber.
+  if (generation != secrets_generation_ && !read_soon_.IsRunning()) {
+    read_soon_.Start(FROM_HERE, kSecretReadDelay,
+                     base::BindOnce(&AgentAutofill::ReadSecretFields,
+                                    weak_factory_.GetWeakPtr()));
+  }
+  MaybeFinishSecretRead();
+}
+
+void AgentAutofill::OnSecretReadTimeout() {
+  // A frame that did not answer counts as locked, and is read again next
+  // time.
+  for (auto& [frame, secrets] : frame_secrets_) {
+    if (secrets.reading) {
+      secrets.reading = 0;
+      secrets.read_at = 0;
+      secrets.filled = true;
+      secrets.unknown = true;
+    }
+  }
+  MaybeFinishSecretRead();
+}
+
+void AgentAutofill::MaybeFinishSecretRead() {
+  if (std::ranges::any_of(frame_secrets_, [](const auto& item) {
+        return item.second.reading != 0;
+      })) {
+    return;
+  }
+  read_timeout_.Stop();
+  // Posted: the facade's answer may run script, and this may be inside a
+  // frame's deletion.
+  for (base::OnceClosure& done : secrets_waiting_) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(FROM_HERE,
+                                                             std::move(done));
+  }
+  secrets_waiting_.clear();
+}
+
 void AgentAutofill::CheckCleared(const autofill::FieldGlobalId& field) {
   content::RenderFrameHost* frame = FrameOf(field);
   if (!frame || !frame->IsRenderFrameLive()) {
@@ -850,6 +1007,13 @@ FacadeBackend::SecretFacts AgentAutofill::SecretsIn(
     facts.locked = facts.locked || frames.contains(filled.frame);
     facts.card_filled = facts.card_filled || filled.masked;
   }
+  // Whoever filled them.
+  for (const auto& [frame, secrets] : frame_secrets_) {
+    if (frames.contains(frame)) {
+      facts.locked = facts.locked || secrets.filled;
+      facts.unknown = facts.unknown || secrets.unknown;
+    }
+  }
   facts.focused_locked = focused_ && filled_.contains(focused_);
   for (autofill::AutofillManager* manager : managers) {
     std::as_const(*manager).ForEachCachedForm(
@@ -859,6 +1023,10 @@ FacadeBackend::SecretFacts AgentAutofill::SecretsIn(
             if (tokens.contains(field->host_frame()) && IsSecretField(*field)) {
               facts.fields.insert(
                   static_cast<int>(field->renderer_id().value()));
+              // A field autofill classifies as secret that the page's
+              // markup does not say is: autofill's copy of its value.
+              facts.locked = facts.locked || (!IsSecretByMarkup(*field) &&
+                                              !field->value().empty());
             }
           }
         });
@@ -910,6 +1078,16 @@ void AgentAutofill::OnAfterTextFieldValueChanged(
     autofill::FormGlobalId form,
     autofill::FieldGlobalId field) {
   CheckCleared(field);
+  // The user typed: what a secret field holds now is the scrubber's at once
+  // (autofill's copy), and every secret field is read again.
+  const autofill::FormStructure* cached =
+      std::as_const(manager).FindCachedFormById(form);
+  const autofill::AutofillField* changed =
+      cached ? cached->GetFieldById(field) : nullptr;
+  if (changed && IsSecretField(*changed)) {
+    NoteFound(base::UTF16ToUTF8(changed->value()));
+  }
+  InvalidateSecrets(/*soon=*/true);
 }
 
 void AgentAutofill::OnAfterJavaScriptChangedAutofilledValue(
@@ -917,6 +1095,38 @@ void AgentAutofill::OnAfterJavaScriptChangedAutofilledValue(
     autofill::FormGlobalId form,
     autofill::FieldGlobalId field) {
   CheckCleared(field);
+  InvalidateSecrets(/*soon=*/true);
+}
+
+void AgentAutofill::OnAfterFormSubmitted(autofill::AutofillManager& manager,
+                                         const autofill::FormData& form) {
+  // What a form sends is known before its request starts: the values of its
+  // secret fields are the scrubber's (the request's URL and what the next
+  // page echoes).
+  const autofill::FormStructure* cached =
+      std::as_const(manager).FindCachedFormById(form.global_id());
+  for (const autofill::FormFieldData& data : form.fields()) {
+    const autofill::AutofillField* field =
+        cached ? cached->GetFieldById(data.global_id()) : nullptr;
+    if (data.form_control_type() == autofill::FormControlType::kInputPassword ||
+        (field && IsSecretField(*field))) {
+      NoteFound(base::UTF16ToUTF8(data.value()));
+    }
+  }
+  InvalidateSecrets(/*soon=*/true);
+}
+
+void AgentAutofill::OnAfterFormsSeen(
+    autofill::AutofillManager& manager,
+    base::span<const autofill::FormGlobalId> updated_forms,
+    base::span<const autofill::FormGlobalId> removed_forms) {
+  InvalidateSecrets(/*soon=*/false);
+}
+
+void AgentAutofill::DidGetUserInteraction(const blink::WebInputEvent& event) {
+  // A key, a click (which also shows a password the password manager filled
+  // on load to the page): the user's or the agent's.
+  InvalidateSecrets(/*soon=*/true);
 }
 
 void AgentAutofill::OnFillOrPreviewForm(
@@ -932,6 +1142,7 @@ void AgentAutofill::OnFillOrPreviewForm(
   if (action_persistence != autofill::mojom::ActionPersistence::kFill) {
     return;
   }
+  InvalidateSecrets(/*soon=*/true);
   // Whoever filled it (the agent, or the user in a tab the agent holds),
   // what autofill put in a secret field is kept from the agent.
   const autofill::FormStructure* form =
@@ -969,6 +1180,7 @@ void AgentAutofill::OnFillOrPreviewField(
   if (action_persistence != autofill::mojom::ActionPersistence::kFill) {
     return;
   }
+  InvalidateSecrets(/*soon=*/true);
   const autofill::FormStructure* form =
       std::as_const(manager).FindCachedFormById(form_id);
   const autofill::AutofillField* field =
@@ -992,6 +1204,11 @@ void AgentAutofill::DidFinishNavigation(content::NavigationHandle* handle) {
   }
   const content::FrameTreeNodeId frame = handle->GetFrameTreeNodeId();
   ForgetFrame(frame);
+  // A new document: its fields are read before the next script read (the
+  // values found stay the scrubber's).
+  frame_secrets_.erase(frame);
+  InvalidateSecrets(/*soon=*/false);
+  MaybeFinishSecretRead();
   if (verify_ && verify_->frame == frame) {
     if (verify_->prompt) {
       AgentPageSurfaces::Get().ForgetAutofillVerify(verify_->prompt);
@@ -1005,6 +1222,8 @@ void AgentAutofill::DidFinishNavigation(content::NavigationHandle* handle) {
 
 void AgentAutofill::RenderFrameDeleted(content::RenderFrameHost* frame) {
   ForgetFrame(frame->GetFrameTreeNodeId());
+  frame_secrets_.erase(frame->GetFrameTreeNodeId());
+  MaybeFinishSecretRead();
 }
 
 }  // namespace koan::agent

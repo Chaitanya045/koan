@@ -67,9 +67,15 @@
 // Page.captureScreenshot with clip and scale (device emulation); a user's
 // tab never does.
 //
-// The secrets Koan fills for an agent (design section 4.5, "Secrets Koan
-// filled"; `koan autofill`): in a frame where one is filled, script and value
-// reads are refused (Koan.secretField) and typing into the filled field too;
+// The secrets in a page the agent drives (design section 4.5, "Secrets Koan
+// filled"; `koan autofill`): in a frame where a password or card field holds
+// a value, whoever filled it (Koan, the password manager on load, the user
+// typing it), script and value reads are refused (Koan.secretField), and
+// typing into a field Koan filled too. Before a script read the backend
+// reads those fields in their frames' Chrome-only world if anything could
+// have changed them since it last did (FacadeBackend::SecretsCurrent()); the
+// session's commands wait behind that read, and behind its Input commands
+// still in flight, in order;
 // secret fields read as filled or empty in DOM and accessibility answers on
 // every tab; a screenshot paints over filled card fields (CollectCaptureMasks()
 // for Koan.captureScaled, a re-encode for a relay's Page.captureScreenshot),
@@ -196,9 +202,13 @@ class FacadeBackend {
   // own: the frames are those of its renderer process, whose script can
   // reach one another.
   struct SecretFacts {
-    // A secret that autofill or the password manager filled is in one of
-    // those frames: script and value reads are refused.
+    // A secret field in one of those frames holds a value, whoever filled it
+    // (Koan, the password manager, the user, the page): script and value
+    // reads are refused.
     bool locked = false;
+    // A frame did not answer the read of its fields (RefreshSecrets()): it
+    // counts as locked.
+    bool unknown = false;
     // The focused field holds such a secret: typing into it is refused.
     bool focused_locked = false;
     // A card number, CVC or IBAN Koan filled is anywhere in the tab.
@@ -209,6 +219,21 @@ class FacadeBackend {
   };
   virtual SecretFacts SecretsIn(const std::string& target_id,
                                 const std::string& frame_id);
+  // Whether SecretsIn() is current for those frames: their secret fields
+  // were read (in each frame's Chrome-only world, never sent to the agent)
+  // since anything that could change them did (input, a fill, a navigation,
+  // Hand back). If not, RefreshSecrets() reads them, gives the values it
+  // found to the scrubber, and runs `done` once every frame answered or the
+  // read timed out (SecretFacts::unknown). `done` may run inside the call.
+  virtual bool SecretsCurrent(const std::string& target_id,
+                              const std::string& frame_id);
+  virtual void RefreshSecrets(const std::string& target_id,
+                              const std::string& frame_id,
+                              base::OnceClosure done);
+  // An Input command the agent sent to the tab was handled: what its fields
+  // hold may have changed (a key, or a click that showed a password the
+  // password manager filled on load).
+  virtual void SecretsMayHaveChanged(const std::string& target_id);
   // The filled card fields a screenshot of the tab paints over: nodes its
   // own session reaches, and frames (frame target ids) in other processes,
   // whose whole box is painted over.
@@ -384,8 +409,19 @@ class CdpFacade {
                     std::string target_id,
                     base::TimeTicks start,
                     FacadeBackend::AutofillResult result);
-  // Why `method` may not run in `session` while a secret Koan filled is in
-  // its page, or nullopt.
+  // Script reads wait for the secret fields to be read (design section 4.5):
+  // a session's command that must wait, and every one after it, is held and
+  // run in order once it may go.
+  enum class SecretsWait { kNone, kInput, kRead };
+  SecretsWait MustWait(const TabSession& session, std::string_view method);
+  void DispatchSessionMethod(AgentMessage message, TabSession& session);
+  void RunHeld(const std::string& session_id);
+  void OnSecretsRefreshed(const std::string& session_id);
+  // An Input command of the tab was answered or dropped.
+  void OnInputDone(const std::string& target_id);
+  bool InputInFlight(std::string_view target_id) const;
+  // Why `method` may not run in `session` while a secret is in its page, or
+  // nullopt.
   std::optional<std::string_view> SecretRefusal(const TabSession& session,
                                                 std::string_view method,
                                                 const base::DictValue& params);

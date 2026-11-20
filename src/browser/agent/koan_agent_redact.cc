@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 
 namespace koan::agent {
@@ -32,6 +33,18 @@ bool IsSecretType(std::string_view type, bool hidden = true) {
          base::EqualsCaseInsensitiveASCII(trimmed, "password");
 }
 
+// autocomplete="cc-*" (any token): a card field, whatever its type.
+bool HasCardToken(std::string_view autocomplete) {
+  for (std::string_view token : base::SplitStringPiece(
+           autocomplete, base::kWhitespaceASCII, base::TRIM_WHITESPACE,
+           base::SPLIT_WANT_NONEMPTY)) {
+    if (base::StartsWith(token, "cc-", base::CompareCase::INSENSITIVE_ASCII)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // What RedactNodes() hides: hidden inputs' values too, and the nodes whose
 // value is a secret whatever their type.
 struct NodeRedaction {
@@ -39,17 +52,25 @@ struct NodeRedaction {
   raw_ptr<const std::set<int>> fields = nullptr;
 };
 
-// Empties every `value` of a flat [name, value, ...] list if `secret`, or
-// if its first `type` is a secret type.
+// Empties every `value` of a flat [name, value, ...] list if `secret`, if
+// its first `type` is a secret type, or if its first `autocomplete` names a
+// card field.
 void RedactAttributes(base::ListValue& attributes, bool hidden, bool secret) {
-  if (!secret) {
-    for (size_t i = 0; i + 1 < attributes.size(); i += 2) {
-      const std::string* name = attributes[i].GetIfString();
-      const std::string* value = attributes[i + 1].GetIfString();
-      if (name && value && base::EqualsCaseInsensitiveASCII(*name, "type")) {
-        secret = IsSecretType(*value, hidden);
-        break;
-      }
+  bool type_seen = false;
+  bool autocomplete_seen = false;
+  for (size_t i = 0; !secret && i + 1 < attributes.size(); i += 2) {
+    const std::string* name = attributes[i].GetIfString();
+    const std::string* value = attributes[i + 1].GetIfString();
+    if (!name || !value) {
+      continue;
+    }
+    if (!type_seen && base::EqualsCaseInsensitiveASCII(*name, "type")) {
+      type_seen = true;
+      secret = IsSecretType(*value, hidden);
+    } else if (!autocomplete_seen &&
+               base::EqualsCaseInsensitiveASCII(*name, "autocomplete")) {
+      autocomplete_seen = true;
+      secret = HasCardToken(*value);
     }
   }
   if (!secret) {
@@ -292,15 +313,24 @@ std::string RedactInputsInHtml(std::string_view html, bool hidden) {
     if (!closing && tag == "input") {
       // A tag the string cuts off is not known not to be secret.
       secret = !ended;
+      // The first `type` and the first `autocomplete` count, as in HTML.
+      bool type_seen = false;
+      bool autocomplete_seen = false;
       for (const Attribute& attribute : attributes) {
-        if (base::EqualsCaseInsensitiveASCII(attribute.name, "type")) {
+        const std::string_view value =
+            attribute.has_value
+                ? html.substr(attribute.value_begin,
+                              attribute.value_end - attribute.value_begin)
+                : std::string_view();
+        if (!type_seen &&
+            base::EqualsCaseInsensitiveASCII(attribute.name, "type")) {
+          type_seen = true;
           secret =
-              secret || (attribute.has_value &&
-                         IsSecretType(html.substr(attribute.value_begin,
-                                                  attribute.value_end -
-                                                      attribute.value_begin),
-                                      hidden));
-          break;  // the first one counts, as in HTML
+              secret || (attribute.has_value && IsSecretType(value, hidden));
+        } else if (!autocomplete_seen && base::EqualsCaseInsensitiveASCII(
+                                             attribute.name, "autocomplete")) {
+          autocomplete_seen = true;
+          secret = secret || HasCardToken(value);
         }
       }
     }

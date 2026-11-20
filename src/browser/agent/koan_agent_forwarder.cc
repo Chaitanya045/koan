@@ -490,6 +490,30 @@ class AgentForwarder::Connection final : public FacadeBackend {
     return frame ? autofill->SecretsIn(frame) : SecretFacts();
   }
 
+  bool SecretsCurrent(const std::string& target_id,
+                      const std::string& frame_id) override {
+    AgentAutofill* autofill = forwarder_->AutofillFor(target_id);
+    content::RenderFrameHost* frame =
+        autofill ? forwarder_->FrameFor(target_id, frame_id) : nullptr;
+    return !frame || autofill->SecretsCurrent(frame);
+  }
+
+  void RefreshSecrets(const std::string& target_id,
+                      const std::string& frame_id,
+                      base::OnceClosure done) override {
+    if (AgentAutofill* autofill = forwarder_->AutofillFor(target_id)) {
+      autofill->RefreshSecrets(std::move(done));
+      return;
+    }
+    std::move(done).Run();
+  }
+
+  void SecretsMayHaveChanged(const std::string& target_id) override {
+    if (AgentAutofill* autofill = forwarder_->AutofillFor(target_id)) {
+      autofill->InvalidateSecrets(/*soon=*/true);
+    }
+  }
+
   CardFields CardFieldsOf(const std::string& target_id) override {
     AgentAutofill* autofill = forwarder_->AutofillFor(target_id);
     return autofill ? autofill->CardFields() : CardFields();
@@ -807,8 +831,9 @@ void AgentForwarder::RemoveTab(const std::string& target_id, bool destroyed) {
   std::unique_ptr<TabWatcher> watcher = std::move(it->second);
   tabs_.erase(it);
   resume_asked_.erase(target_id);
-  // The secrets Koan filled in it go with it.
-  if (!watcher->autofill().secret_values().empty()) {
+  // The secrets Koan filled in it, and those found in its fields, go with it.
+  if (!watcher->autofill().secret_values().empty() ||
+      !watcher->autofill().found_values().empty()) {
     RebuildScrubber(client_id);
   }
   NotifyChanged();
@@ -1196,6 +1221,12 @@ void AgentForwarder::FinishResume(const std::string& target_id,
     return;
   }
   resume_asked_.erase(target_id);
+  // The user may have typed or shown a password during the pause: the
+  // fields are read again before the agent's next script read, and soon
+  // for the scrubber.
+  if (AgentAutofill* autofill = AutofillFor(target_id)) {
+    autofill->InvalidateSecrets(/*soon=*/true);
+  }
   const std::string client_id = entry->client_id;
   AuditEvent(reason == "handed-back" ? "hand-back" : "auto-resume", target_id,
              client_id);
@@ -1293,6 +1324,9 @@ void AgentForwarder::RebuildScrubber(const std::string& client_id) {
       continue;
     }
     for (const std::string& value : watcher->autofill().secret_values()) {
+      scrubber->Add(value);
+    }
+    for (const std::string& value : watcher->autofill().found_values()) {
       scrubber->Add(value);
     }
   }

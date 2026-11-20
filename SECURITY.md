@@ -88,7 +88,13 @@ What that means, plainly:
   a request) with "[secret]" in everything sent to the agent. Nothing is
   filled when an agent's page loads, and silent sign-in
   (`navigator.credentials.get`) is off in agent tabs, so Koan knows every
-  password it filled. A login is filled only on its own site, into a form that
+  password it filled. A password or card number Koan did not fill (one the
+  password manager filled in your own tab, or one you typed before you
+  handed the tab back) is treated the same way: Koan reads those fields
+  itself, in a world neither the page nor the agent sees, locks script and
+  scrubs the value. Known limit there: a value a page puts into a field by
+  script, after the last input Koan saw, is found only at the agent's next
+  script read. A login is filled only on its own site, into a form that
   sends it there. When Chrome would ask you first (Touch ID, your device
   password, a card's CVC), it still asks you: the agent waits until you verify
   in Koan. Known limits: the page itself can read what is filled (it has to,

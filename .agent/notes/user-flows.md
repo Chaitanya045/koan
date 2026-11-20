@@ -187,6 +187,8 @@ compresses).
 | UF-AFL-3 | The agent runs `--pick 1` | Chrome fills the form (the page has the password); the agent's snapshot shows `•••• (filled)`; no snapshot (`--full`, `--json`) carries the secret | UF-AFL-3 | |
 | UF-AFL-4 | The agent ends | | UF-AFL-4 | |
 | UF-AFL-5 | A card that must be verified; a grouped (affiliated) match; a form posting off-site | `userNeeded: autofill-verify` and the pill's Open; `Koan.offSite` | to write with #412's e2e | real |
+| UF-AFL-6 | In a tab of the person's where Chrome filled the saved login on load: the agent runs `koan take-over`, the person clicks into the password field, then **Hand back**; the agent runs script on the page (`koan agent-browser eval ...value`), `koan snapshot`, then `koan act <tab> press Enter` | The eval is refused (Koan.secretField, "…by Koan, the password manager or the user"); the snapshot shows `•••• (filled)`; after sign-in, nothing the agent gets has the password, and a page that echoes it reads `[secret]` | `KoanAgentSecretLockBrowserTest.APasswordFilledOnLoadInAUsersTab` (T-sec-18); UF-AFL-6 to write in `uf_autofill` | real |
+| UF-AFL-7 | The same with no saved login: the person types a password into the field themselves, then **Hand back** | As UF-AFL-6 | `KoanAgentSecretLockBrowserTest.APasswordTheUserTypedInAUsersTab` (T-sec-19); UF-AFL-7 to write in `uf_autofill` | real |
 
 ## Agent usage across the flows
 

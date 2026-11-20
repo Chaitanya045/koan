@@ -39,6 +39,12 @@ bool IsSecretField(const autofill::AutofillField& field) {
          HasCardAutocomplete(field);
 }
 
+bool IsSecretByMarkup(const autofill::AutofillField& field) {
+  return field.form_control_type() ==
+             autofill::FormControlType::kInputPassword ||
+         HasCardAutocomplete(field);
+}
+
 bool IsMaskedField(const autofill::AutofillField& field) {
   if (field.form_control_type() == autofill::FormControlType::kInputPassword) {
     return false;

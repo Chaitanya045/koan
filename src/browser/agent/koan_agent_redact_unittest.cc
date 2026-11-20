@@ -175,5 +175,40 @@ TEST(KoanAgentRedactTest, ADrivenTabHidesPasswordsAndSecretFields) {
   EXPECT_EQ(base::WriteJson(attributes)->find("p4ss"), std::string::npos);
 }
 
+// S1 (#412 review): a card field is secret by its autocomplete too, in
+// every DOM read, whatever its type and wherever the attribute is.
+TEST(KoanAgentRedactTest, CardFieldsByTheirAutocomplete) {
+  EXPECT_EQ(
+      RedactInputsInHtml(
+          R"(<input value="4111" AUTOCOMPLETE="section-pay CC-Number">)"
+          R"(<input autocomplete="name" value="Ada">)"
+          R"(<input autocomplete="off" autocomplete="cc-csc" value="123">)",
+          /*hidden=*/false),
+      R"(<input value="" AUTOCOMPLETE="section-pay CC-Number">)"
+      R"(<input autocomplete="name" value="Ada">)"
+      R"(<input autocomplete="off" autocomplete="cc-csc" value="123">)");
+
+  base::DictValue attributes = *base::JSONReader::ReadDict(
+      R"({"attributes": ["value", "4111", "autocomplete", "cc-number"]})",
+      base::JSON_PARSE_RFC);
+  RedactSecretFields("DOM.getAttributes", attributes, {}, false);
+  EXPECT_EQ(base::WriteJson(attributes)->find("4111"), std::string::npos);
+
+  base::DictValue node = *base::JSONReader::ReadDict(
+      R"({"node": {"nodeName": "INPUT", "backendNodeId": 9,
+           "attributes": ["type", "tel", "autocomplete", "cc-exp",
+                          "value", "08/29"]}})",
+      base::JSON_PARSE_RFC);
+  RedactSecretFields("DOM.describeNode", node, {}, false);
+  EXPECT_EQ(base::WriteJson(node)->find("08/29"), std::string::npos);
+
+  // A readable tab's redaction hides them too.
+  base::DictValue read = *base::JSONReader::ReadDict(
+      R"({"attributes": ["autocomplete", "cc-number", "value", "4111"]})",
+      base::JSON_PARSE_RFC);
+  RedactSecretInputs("DOM.getAttributes", read);
+  EXPECT_EQ(base::WriteJson(read)->find("4111"), std::string::npos);
+}
+
 }  // namespace
 }  // namespace koan::agent

@@ -203,9 +203,10 @@ class AgentForwarder : public AutofillHooksDelegate {
   // target `frame_id` of a child session; null if gone.
   content::RenderFrameHost* FrameFor(std::string_view target_id,
                                      std::string_view frame_id) const;
-  // A secret Koan filled in a tab (`koan autofill`): its client's scrubber
-  // takes it. The scrubber is made again from the client's other tabs when a
-  // tab leaves (a value lives as long as its tab).
+  // A secret Koan filled in a tab (`koan autofill`), or one found in a
+  // secret field of a tab (filled by the password manager, the user or the
+  // page): its client's scrubber takes it. The scrubber is made again from the
+  // client's other tabs when a tab leaves (a value lives as long as its tab).
   void OnSecretFilled(const std::string& target_id, const std::string& value);
   void RebuildScrubber(const std::string& client_id);
   const SecretScrubber* ScrubberFor(std::string_view client_id) const;

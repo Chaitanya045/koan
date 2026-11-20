@@ -4,6 +4,8 @@
 
 #include "koan/browser/agent/koan_agent_facade.h"
 
+#include <algorithm>
+#include <deque>
 #include <limits>
 #include <utility>
 #include <vector>
@@ -84,6 +86,19 @@ FacadeBackend::SecretFacts FacadeBackend::SecretsIn(
   return SecretFacts();
 }
 
+bool FacadeBackend::SecretsCurrent(const std::string& target_id,
+                                   const std::string& frame_id) {
+  return true;
+}
+
+void FacadeBackend::RefreshSecrets(const std::string& target_id,
+                                   const std::string& frame_id,
+                                   base::OnceClosure done) {
+  std::move(done).Run();
+}
+
+void FacadeBackend::SecretsMayHaveChanged(const std::string& target_id) {}
+
 FacadeBackend::CardFields FacadeBackend::CardFieldsOf(
     const std::string& target_id) {
   return CardFields();
@@ -130,6 +145,10 @@ struct CdpFacade::TabSession {
   std::string child_type;
   // Page.startScreencast was sent and not stopped: the tab's lease is held.
   bool screencast = false;
+  // Commands that wait for the tab's secret fields to be read (a script
+  // read, and every command after it), in order; and whether that read runs.
+  std::deque<AgentMessage> held;
+  bool refreshing = false;
   bool is_child() const { return !child_session.empty(); }
 };
 
@@ -142,6 +161,9 @@ constexpr size_t kMaxChildSessions = 64;
 // (LeaseScheduler::kMaxKeepAlive).
 constexpr size_t kMaxKeepAlives = 16;
 constexpr int kMaxKeepAliveSeconds = 600;
+
+// Commands a session may have waiting for its tab's secret fields to be read.
+constexpr size_t kMaxHeldCommands = 256;
 
 // The child targets an agent may have: frames and the page's own workers.
 // Shared and service workers outlive the tab and serve the user's other tabs
@@ -290,7 +312,7 @@ void CdpFacade::OnClientMessage(AgentMessage message) {
     HandleBrowserMethod(message);
     return;
   }
-  HandleSessionMethod(message, *session);
+  DispatchSessionMethod(std::move(message), *session);
 }
 
 void CdpFacade::HandleBrowserMethod(AgentMessage& message) {
@@ -1434,6 +1456,9 @@ void CdpFacade::OnCommandDropped(int command_id) {
   if (!pending.client_message_id) {
     return;
   }
+  if (pending.method.starts_with("Input.")) {
+    OnInputDone(pending.target_id);
+  }
   if (pending.method == "Page.createIsolatedWorld") {
     if (TabSession* session = SessionFor(pending.session_id)) {
       session->contexts.OnIsolatedWorldAnswered(std::nullopt);
@@ -1523,7 +1548,18 @@ void CdpFacade::EndSession(const std::string& session_id, bool tell_client) {
   for (InternalAnswer& answer : unanswered) {
     std::move(answer).Run(nullptr);
   }
+  // Commands that waited for the fields to be read are answered too.
+  for (const AgentMessage& held : session->held) {
+    AuditCommand(held.method, session->target_id, std::string(),
+                 AuditOutcome::kError, base::TimeDelta());
+    ReplyError(held.id, held.session_id, "Koan.targetClosed",
+               session->is_child() ? "the frame or worker went away"
+                                   : "the tab went away");
+  }
+  session->held.clear();
   if (session->is_child()) {
+    // The tab's other sessions may have waited for its Input commands.
+    OnInputDone(session->target_id);
     if (tell_client) {
       base::DictValue params;
       params.Set("sessionId", session_id);
@@ -1612,7 +1648,14 @@ void CdpFacade::OnTabMessage(const std::string& target_id,
     session = child_session;
   }
   if (message->contains("id")) {
+    const std::optional<int> id = message->FindInt("id");
+    auto pending = id ? pending_.find(*id) : pending_.end();
+    const bool input = pending != pending_.end() &&
+                       pending->second.method.starts_with("Input.");
     HandleTabAnswer(*session, std::move(*message));
+    if (input) {
+      OnInputDone(target_id);
+    }
   } else if (!HandleChildTargetEvent(*session, *message)) {
     HandleTabEvent(*session, std::move(*message));
   }
@@ -2036,8 +2079,9 @@ bool IsRedactedMethod(std::string_view method) {
 }
 
 constexpr char kSecretLockText[] =
-    "a password or card number Koan filled is in this page: script and value "
-    "reads wait until the page moves on or the field is cleared. Click, "
+    "a password or card number is filled in this page (by Koan, the password "
+    "manager or the user): script and value reads wait until the page moves "
+    "on or the field is cleared. Click, "
     "press keys in other fields and submit as usual";
 
 }  // namespace
@@ -2067,6 +2111,10 @@ std::optional<std::string_view> CdpFacade::SecretRefusal(
   if (script && facts.locked) {
     return kSecretLockText;
   }
+  if (script && facts.unknown) {
+    return "Koan could not read this page's password and card fields (the "
+           "page did not answer), so script waits; try again";
+  }
   if (edit && facts.focused_locked) {
     return "the focused field holds a password or card number Koan filled; "
            "only the user can change it";
@@ -2076,6 +2124,110 @@ std::optional<std::string_view> CdpFacade::SecretRefusal(
            "wait until the page moves on (screenshots hide it)";
   }
   return std::nullopt;
+}
+
+CdpFacade::SecretsWait CdpFacade::MustWait(const TabSession& session,
+                                           std::string_view method) {
+  // A worker reaches no page; only script reads what a field holds (the DOM
+  // and accessibility answers hide it whatever the read found).
+  if (session.child_type == "worker" || !IsScriptRead(method)) {
+    return SecretsWait::kNone;
+  }
+  // A click or a key the tab has not handled yet may still change a field,
+  // or show a password the password manager filled on load.
+  if (InputInFlight(session.target_id)) {
+    return SecretsWait::kInput;
+  }
+  return backend_->SecretsCurrent(session.target_id, FrameIdOf(session))
+             ? SecretsWait::kNone
+             : SecretsWait::kRead;
+}
+
+void CdpFacade::DispatchSessionMethod(AgentMessage message,
+                                      TabSession& session) {
+  if (session.held.empty() &&
+      MustWait(session, message.method) == SecretsWait::kNone) {
+    HandleSessionMethod(message, session);
+    return;
+  }
+  if (session.held.size() >= kMaxHeldCommands) {
+    AuditCommand(message.method, session.target_id, std::string(),
+                 AuditOutcome::kDenied, base::TimeDelta());
+    ReplyError(message.id, message.session_id, "Koan.busy",
+               "too many commands wait while Koan reads the page's password "
+               "and card fields; wait for their answers first");
+    return;
+  }
+  const std::string session_id = session.session_id;
+  session.held.push_back(std::move(message));
+  RunHeld(session_id);
+}
+
+void CdpFacade::RunHeld(const std::string& session_id) {
+  // Each command may end the session (or the facade's tab): look it up again.
+  while (TabSession* session = SessionFor(session_id)) {
+    if (session->held.empty() || session->refreshing) {
+      return;
+    }
+    switch (MustWait(*session, session->held.front().method)) {
+      case SecretsWait::kInput:
+        // OnInputDone() goes on.
+        return;
+      case SecretsWait::kRead:
+        session->refreshing = true;
+        backend_->RefreshSecrets(
+            session->target_id, FrameIdOf(*session),
+            base::BindOnce(&CdpFacade::OnSecretsRefreshed,
+                           weak_factory_.GetWeakPtr(), session_id));
+        return;
+      case SecretsWait::kNone:
+        break;
+    }
+    AgentMessage message = std::move(session->held.front());
+    session->held.pop_front();
+    HandleSessionMethod(message, *session);
+  }
+}
+
+void CdpFacade::OnSecretsRefreshed(const std::string& session_id) {
+  TabSession* session = SessionFor(session_id);
+  if (!session) {
+    return;
+  }
+  session->refreshing = false;
+  // What was read is as current as it gets: the first command goes now
+  // (SecretRefusal() decides on it), even if input changed a field since,
+  // so that steady input cannot hold it for ever.
+  if (!session->held.empty() && !InputInFlight(session->target_id)) {
+    AgentMessage message = std::move(session->held.front());
+    session->held.pop_front();
+    HandleSessionMethod(message, *session);
+  }
+  RunHeld(session_id);
+}
+
+void CdpFacade::OnInputDone(const std::string& target_id) {
+  backend_->SecretsMayHaveChanged(target_id);
+  if (InputInFlight(target_id)) {
+    return;
+  }
+  std::vector<std::string> waiting;
+  for (const auto& [id, session] : sessions_) {
+    if (session->target_id == target_id && !session->held.empty()) {
+      waiting.push_back(id);
+    }
+  }
+  for (const std::string& id : waiting) {
+    RunHeld(id);
+  }
+}
+
+bool CdpFacade::InputInFlight(std::string_view target_id) const {
+  return std::ranges::any_of(pending_, [&](const auto& item) {
+    return item.second.client_message_id &&
+           item.second.target_id == target_id &&
+           item.second.method.starts_with("Input.");
+  });
 }
 
 void CdpFacade::RedactFields(const TabSession& session,

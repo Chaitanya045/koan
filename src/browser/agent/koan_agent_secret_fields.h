@@ -19,6 +19,11 @@ namespace koan::agent {
 // event hides its value (`koan autofill`).
 bool IsSecretField(const autofill::AutofillField& field);
 
+// Of those, the ones the page's markup marks as secret (a password field, or
+// autocomplete="cc-*"), which Koan reads in the page itself; autofill's copy
+// of the form tells the others.
+bool IsSecretByMarkup(const autofill::AutofillField& field);
+
 // Of those, the ones a screenshot paints over once Koan filled them: a card
 // number, a CVC or an IBAN (a password field shows dots).
 bool IsMaskedField(const autofill::AutofillField& field);

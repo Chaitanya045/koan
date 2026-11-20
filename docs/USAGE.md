@@ -1552,8 +1552,8 @@ side, up to ~4,800 tokens). `--clip @12` (a ref or a locator) or `--clip
 x,y,w,h` captures one element or rectangle, sharp. Koan draws the page at
 that size, so small images keep their text as crisp as they can. `koan act
 <tab> ... --screenshot micro` adds one after the steps. Sizes and clips work
-on the agent's own tabs; a tab of yours is captured whole at its full size, so
-that Koan never resizes it.
+on every tab, yours too: Koan scales a copy of the frame the tab already drew
+(`Koan.captureScaled`), so it never resizes or re-lays out a tab of yours.
 
 Agents fill forms with your saved addresses, cards and logins the way you do,
 through Chrome's own autofill, never by typing them. `koan autofill <tab>
@@ -1567,7 +1567,11 @@ sees a password, a card number, a CVC or an IBAN: a filled one reads "•••�
 until the page moves on or the field is cleared (clicks, keys in other
 fields and Sign in still work), screenshots show filled card fields as solid
 boxes, and any copy of a value Koan filled reads "[secret]" in what the
-agent gets. When Chrome asks you first (Touch ID, your device password, a
+agent gets. The same holds for a password or card number Koan did not fill:
+one Chrome's password manager filled when the page loaded, or one you typed
+yourself before you handed a tab back. Koan checks those fields itself
+(where neither the page nor the agent can see) before the agent runs script
+in the page. When Chrome asks you first (Touch ID, your device password, a
 card's CVC), the pill says "Claude Code needs you to verify a card":
 **Open** brings the tab forward and Chrome asks you there; the agent waits.
 A login is filled only on its own site, into a form that sends it there
