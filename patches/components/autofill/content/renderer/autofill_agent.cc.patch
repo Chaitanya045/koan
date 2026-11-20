@@ -1,0 +1,39 @@
+diff --git a/components/autofill/content/renderer/autofill_agent.cc b/components/autofill/content/renderer/autofill_agent.cc
+--- a/components/autofill/content/renderer/autofill_agent.cc
++++ b/components/autofill/content/renderer/autofill_agent.cc
+@@ -1692,6 +1692,13 @@
+   // TODO(crbug.com/40068004): Make this a CHECK.
+   DCHECK(form_util::MaybeWasOwnedByFrame(element, unsafe_render_frame()));
+   CHECK_NE(trigger_source, AutofillSuggestionTriggerSource::kUnspecified);
++  LOG(ERROR) << "KOANDBG renderer ShowSuggestions enabled=" << element.IsEnabled()
++             << " ro=" << element.IsReadOnly() << " suggested_empty="
++             << element.SuggestedValue().IsEmpty() << " sel=" << element.SelectionStart()
++             << "-" << element.SelectionEnd() << " len=" << element.EditingValue().length()
++             << " focusable=" << element.IsFocusable()
++             << " secure=" << element.GetDocument().IsSecureContext()
++             << " need_secure=" << config_.secure_context_required;
+ 
+   if (!element.IsEnabled() || element.IsReadOnly()) {
+     return;
+@@ -1728,6 +1735,7 @@
+               element.SelectionEnd() != value.length()));
+   }();
+   if (!element_value_valid) {
++    LOG(ERROR) << "KOANDBG renderer value invalid";
+     // Any popup currently showing is obsolete.
+     HidePopup();
+     return;
+@@ -1768,10 +1776,13 @@
+   auto& [form, field] = *form_and_field;
+ 
+   if (ShouldThrottleAskForValuesToFill(field.renderer_id(), trigger_source)) {
++    LOG(ERROR) << "KOANDBG renderer throttled";
+     return;
+   }
+ 
+   is_popup_possibly_visible_ = true;
++  LOG(ERROR) << "KOANDBG renderer AskForValuesToFill field_focusable=" << field.is_focusable()
++             << " driver=" << !!unsafe_autofill_driver();
+   if (auto* autofill_driver = unsafe_autofill_driver()) {
+     autofill_driver->AskForValuesToFill(form, field.renderer_id(),
+                                         GetCaretBounds(), trigger_source,
