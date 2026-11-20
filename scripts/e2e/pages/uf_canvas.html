@@ -1,0 +1,58 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Live chart</title>
+<!-- The user flows' animating page (scripts/mac/video/flows/uf_render.mjs):
+     a canvas that changes every frame, a CSS animation and a 16 ms timer.
+     Every frame and timer tick is logged with its time, and
+     window.__rates(from, to) (epoch ms) gives the counts in that window and
+     the longest gap between frames, read over the harness's own DevTools
+     connection (which takes no capturer). The heading shows the counts, so
+     an agent's screenshot or snapshot sees the page move too. -->
+<style>
+  body { margin: 0; font: 16px -apple-system, sans-serif; background: #fff; color: #18181b; }
+  #c { position: absolute; left: 24px; top: 80px; border: 1px solid #e4e4e7; }
+  #box { position: absolute; left: 24px; top: 360px; width: 40px; height: 40px; background: #e11d48;
+         animation: slide 1s linear infinite alternate; }
+  @keyframes slide { from { transform: translateX(0); } to { transform: translateX(480px); } }
+  h1 { margin: 24px; font-size: 22px; }
+</style>
+<h1 id=h>frames 0 · ticks 0</h1>
+<canvas id=c width=520 height=240></canvas>
+<div id=box></div>
+<script>
+  const MAX = 40000, log = { raf: [], timer: [], vis: [] };
+  let raf = 0, ticks = 0;
+  const now = () => performance.timeOrigin + performance.now();
+  const push = (list, t) => { list.push(t); if (list.length > MAX) list.splice(0, list.length - MAX); };
+  const h = document.getElementById('h'), ctx = document.getElementById('c').getContext('2d');
+  const points = [];
+  function frame() {
+    raf++;
+    push(log.raf, now());
+    points.push(120 + 90 * Math.sin(raf / 9) * Math.cos(raf / 31));
+    if (points.length > 260) points.shift();
+    ctx.fillStyle = `hsl(${(raf * 3) % 360} 70% 96%)`;
+    ctx.fillRect(0, 0, 520, 240);
+    ctx.strokeStyle = '#2563eb';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    points.forEach((y, i) => (i ? ctx.lineTo(i * 2, y) : ctx.moveTo(0, y)));
+    ctx.stroke();
+    ctx.fillStyle = '#18181b';
+    ctx.font = '28px -apple-system, sans-serif';
+    ctx.fillText(String(raf), 16, 36);
+    h.textContent = `frames ${raf} · ticks ${ticks}`;
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  setInterval(() => { ticks++; push(log.timer, now()); }, 16);
+  document.addEventListener('visibilitychange', () => log.vis.push([now(), document.visibilityState]));
+  window.__rates = (from, to) => {
+    const inside = list => list.filter(t => t >= from && t < to);
+    const frames = inside(log.raf);
+    let gap = frames.length ? Math.max(frames[0] - from, to - frames.at(-1)) : to - from;
+    for (let i = 1; i < frames.length; i++) gap = Math.max(gap, frames[i] - frames[i - 1]);
+    return { raf: frames.length, timers: inside(log.timer).length, gap: Math.round(gap),
+             visibility: document.visibilityState, total: raf };
+  };
+</script>

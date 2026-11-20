@@ -1,0 +1,115 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Sign up</title>
+<!-- The user flows' 3-page signup (scripts/mac/video/flows/uf_agent_task.mjs,
+     served at /signup/1, /2 and /3 by flows/uf_lib.mjs; /signup/done records
+     what was sent). Page 2 has a custom dropdown like Material UI's Select: a
+     div with role=combobox that opens on mousedown, a listbox appended to the
+     body (a portal) that grows in with a 300 ms transform, and options that
+     take a click only after a pointerdown with the left button down. Each
+     page carries the earlier pages' values in hidden fields. -->
+<style>
+  body { margin: 0; font: 16px -apple-system, sans-serif; background: #fafafa; color: #18181b; }
+  main { max-width: 520px; margin: 32px auto; padding: 24px; background: #fff; border: 1px solid #e4e4e7;
+         border-radius: 12px; }
+  label { display: block; margin: 14px 0 4px; }
+  input[type=text], input[type=email], select { width: 100%; box-sizing: border-box; padding: 8px;
+         font: inherit; border: 1px solid #d4d4d8; border-radius: 6px; }
+  #exp { border: 1px solid #d4d4d8; border-radius: 6px; padding: 8px; cursor: pointer; }
+  button { margin-top: 20px; padding: 8px 20px; font: inherit; }
+  [role=alert] { color: #b91c1c; min-height: 1.2em; }
+  .steps { color: #71717a; font-size: 14px; }
+</style>
+<main id=main></main>
+<script>
+  const step = Number(location.pathname.split('/').pop()) || 1;
+  const carried = [...new URLSearchParams(location.search)];
+  const hidden = carried.map(([k, v]) => {
+    const i = document.createElement('input');
+    i.type = 'hidden';
+    i.name = k;
+    i.value = v;
+    return i;
+  });
+  const main = document.getElementById('main');
+  const EXPERIENCE = ['Less than 1 year', '1-3 years', '3-5 years', '5-10 years', 'More than 10 years'];
+  if (step === 1) {
+    main.innerHTML = `<p class=steps>Step 1 of 3</p><h1>Your details</h1>
+      <form action=/signup/2 method=get>
+        <label for=first>First name</label><input type=text id=first name=first required>
+        <label for=last>Last name</label><input type=text id=last name=last required>
+        <label for=email>Email</label><input type=email id=email name=email required>
+        <label for=country>Country</label>
+        <select id=country name=country><option>India</option><option>Uganda</option>
+          <option>United Kingdom</option><option>United States</option></select>
+        <button>Next</button>
+      </form>`;
+  } else if (step === 2) {
+    main.innerHTML = `<p class=steps>Step 2 of 3</p><h1>Experience</h1>
+      <form action=/signup/3 method=get id=f>
+        <label id=exp-label>Experience</label>
+        <div id=exp role=combobox tabindex=0 aria-labelledby=exp-label aria-haspopup=listbox
+             aria-expanded=false aria-controls=exp-list>Choose</div>
+        <input type=hidden name=experience id=exp-value>
+        <label for=city>City</label><input type=text id=city name=city>
+        <p role=alert id=err></p>
+        <button>Next</button>
+      </form>`;
+    const cb = document.getElementById('exp');
+    let pop = null;
+    const close = () => { pop?.remove(); pop = null; cb.setAttribute('aria-expanded', 'false'); };
+    cb.addEventListener('mousedown', e => {
+      if (e.button !== 0 || pop) return;
+      e.preventDefault();
+      pop = document.createElement('div');
+      pop.style = 'position:fixed;inset:0';
+      pop.addEventListener('click', ev => { if (ev.target === pop) close(); });
+      const list = document.createElement('ul');
+      list.id = 'exp-list';
+      list.setAttribute('role', 'listbox');
+      list.setAttribute('aria-labelledby', 'exp-label');
+      const r = cb.getBoundingClientRect();
+      list.style = `position:absolute;left:${r.left}px;top:${r.bottom + 4}px;width:${r.width}px;margin:0;` +
+                   'padding:4px;list-style:none;background:#fff;border:1px solid #a1a1aa;border-radius:6px;' +
+                   'transform:scale(0.6);transform-origin:top left;transition:transform 300ms';
+      for (const name of EXPERIENCE) {
+        const li = document.createElement('li');
+        li.setAttribute('role', 'option');
+        li.textContent = name;
+        li.style = 'padding:6px 12px;cursor:pointer';
+        li.addEventListener('pointerdown', ev => { li.dataset.down = String(ev.buttons); });
+        li.addEventListener('click', () => {
+          if (li.dataset.down !== '1') return;
+          cb.textContent = name;
+          document.getElementById('exp-value').value = name;
+          document.getElementById('err').textContent = '';
+          close();
+        });
+        list.append(li);
+      }
+      pop.append(list);
+      document.body.append(pop);
+      cb.setAttribute('aria-expanded', 'true');
+      requestAnimationFrame(() => requestAnimationFrame(() => { list.style.transform = 'scale(1)'; }));
+    });
+    document.getElementById('f').addEventListener('submit', e => {
+      if (!document.getElementById('exp-value').value) {
+        e.preventDefault();
+        document.getElementById('err').textContent = 'Choose your experience';
+      }
+    });
+  } else {
+    const q = new URLSearchParams(location.search);
+    main.innerHTML = `<p class=steps>Step 3 of 3</p><h1>Confirm</h1>
+      <p id=summary></p>
+      <form action=/signup/done method=get>
+        <label><input type=checkbox name=agree id=agree required style="margin-right:8px">I agree to the terms</label>
+        <button>Create account</button>
+      </form>`;
+    document.getElementById('summary').textContent =
+        `${q.get('first') ?? ''} ${q.get('last') ?? ''}, ${q.get('email') ?? ''}, ${q.get('country') ?? ''}, ` +
+        `${q.get('experience') ?? ''}, ${q.get('city') ?? ''}`;
+  }
+  const form = main.querySelector('form');
+  for (const i of hidden) form.prepend(i);
+</script>

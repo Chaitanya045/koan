@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import { CDP_PORT, UI_PORT, browserCall, connect, onPage, pages, sleep, viewTree,
          waitFor } from '../../../e2e/lib/koan.mjs';
-import { KOAN_PID, calibrate, hold, ptr, realClick, realInput, realInputWhyNot,
+import { KOAN_PID, calibrate, hold, ptr, realClick, realInput, realInputWhyNot, realKey,
          windowOf } from '../../../e2e/lib/mac.mjs';
 
 export const TOOLS = process.env.KOAN_MAC_TOOLS;
@@ -93,6 +93,13 @@ export async function drag(cmd, x, y, ms) {
   if (back) stop(`the user is back (${back})`);
   if (!(await hold(cmd, x, y, ms))) stop(`real input stopped: ${realInputWhyNot()}`);
   heldAt = cmd === 'up' ? null : [Math.round(x), Math.round(y)];
+}
+// A real key (keypress2, to our Koan's pid; flags: c cmd, s shift, k ctrl,
+// a alt), after the same gates.
+export async function keyPress(name, flags = '', settle = 500) {
+  const back = userBack();
+  if (back) stop(`the user is back (${back})`);
+  if (!(await realKey(name, flags, settle))) stop(`real input stopped: ${realInputWhyNot()}`);
 }
 export async function clickAt(x, y) {
   const back = userBack();

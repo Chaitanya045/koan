@@ -25,6 +25,18 @@ clang -fobjc-arc -framework Cocoa -o "$KOAN_MAC_TOOLS/hold" scripts/mac/tools/ho
 | `edge_check.mjs <video> <marks.json>` | the black-edge check for `compact_edge.mjs`: every frame of every transition, the window's top and bottom 24 rows and left 24 columns; a pixel that goes dark (< 64) while it is light (> 150) just before the action and at its end is a glitch (in the sidebar's columns only from 0.5 s on, and never near the pointer). Prints a line per action and PASS, or FAIL and exits 1. Self-test: `scripts/tests/test_edge_check.py`. |
 | `flows/pin_drag.mjs` | pinning and unpinning by dragging (`hold`): normal tabs onto the separator and among the pinned tabs, a pinned tab onto + New Tab, Essentials onto the normal tabs, + New Tab and the separator, pinned tabs onto the empty-Essentials promo and onto a tile (its header says each round's check). |
 | `frames.sh <video> <out dir> --marks <marks.json>` | builds contact sheets around the action marks, plus `diff.tsv` / `sheets.tsv` / `changed.tsv` (below). `sheet.mjs` is its node half. |
+| `compress.sh [--720\|--1080] [--jpeg] [--sheet] [--check] [-o out] <files>` | the review tool: screenshots within 1920x1080 (PNG, or JPEG q90 with `--jpeg`; `--720` for overviews), videos H.264 within 1280x720 (`--1080`), 30 fps kept, contact sheets 1280 wide; never enlarged. `--check` prints the sizes and the SSIM against the original and warns below 0.97 (stills) / 0.95 (video). Self-test: `scripts/tests/test_compress.py`. |
+| `run_flows.sh [--app <Koan.app>] [--only uf_a,uf_b]` | runs the user flows below, each on its own launch.sh Koan, recorded; then the recording's checks (`uf_post.mjs`), sheets and the 720p video; writes `<out>/index.md` (`uf_index.mjs`), the page to read first. Holds `$KOAN_MAC_ROOT/tmp/e2e.lock` (`scripts/mac/tools/flock_run.py`). See "User flows" below. |
+| `flows/uf_onboarding.mjs` | #397: pairing approved with a real click (every capability), `koan status`, stale pairings, `koan skill`, Settings > Set Up Agents and Remove (real clicks, under `KOAN_AGENT_SETUP_HOME`) |
+| `flows/uf_indicator.mjs` | #398: the chip, the pill and the accent border on a taken-over tab only (pixels), the chip's menu, the dot on agent tabs (pixels), compact mode's corner dot, the toasts |
+| `flows/uf_compact.mjs` | #399: ⌘S and peeks with the real pointer (pixels); run_flows.sh runs `edge_check.mjs` on its recording (UF-CMP-5) |
+| `flows/uf_toprow.mjs` | #400: back/forward/reload with real clicks (the window stays), the pill's extras fading in (pixels), the extension's popup, Copy URL, the extensions menu, none while editing or on an empty tab |
+| `flows/uf_agent_task.mjs` | #401, #406: an agent signs up on a 3-page form with a custom dropdown in ≤ 3 koan calls; choose, `--interactive`, `--diff`, `--scope`, navigate's 504 and `--timeout`, `koan shell` |
+| `flows/uf_render.mjs` | #403, #407: agent tabs animating while covered (`cover.m`) and minimised, the person's tab throttled, `pmset` assertions, holds released by end and Stop |
+| `flows/uf_resume.mjs` | #408: the person interrupts (real clicks and keys), auto-resume, the countdown, a batch stopped, Keep paused, Hand back, password and card fields, the Settings rows |
+| `flows/uf_shots.mjs` | #409, #410: every screenshot size and clip on an agent tab and a taken-over tab; the person's page sees nothing (and the still check of the recording, with a control) |
+| `flows/uf_build.mjs` | #393-#395, #405: signed with a stable identity, Widevine in the bundle |
+| `flows/uf_autofill.mjs` | #412 (stub until merged; skips without `koan autofill`): saved password used by the agent, never read |
 
 ## The gates (do not bypass)
 
@@ -193,3 +205,41 @@ look at.**
 The stamps are video time. `wall_ms` in `diff.tsv` and `t` in the marks are on the same wall clock. `t0` in
 `<video>.rec.json` comes from ffmpeg's progress reports, so it can be up to about 0.1 s late. A mark can therefore
 land a few frames before what it caused, never after.
+
+## User flows (`run_flows.sh`, `flows/uf_*.mjs`)
+
+End-user flows for what each cycle adds, one per feature; the test cases (IDs `UF-<area>-N`, what the person or their
+agent does, what they should see, what checks it) are in `.agent/notes/user-flows.md`. Each flow is built on
+`flows/common.mjs` (the gates, the marks) and `flows/uf_lib.mjs`:
+
+* **steps:** `step(id, title, fn)` writes an action mark (frames.sh cuts there), takes window screenshots at its key
+  moments (`screencapture -R` of the window's rectangle: the pill, its border, toasts and dialog sheets are child
+  windows that `-l <window>` would leave out; then `compress.sh`: within 1920x1080, PNG, in `shots/`) and checks what the
+  person would see: the view tree (UI DevTools), the CLI's output, or the pixels of the screenshots. A step with no
+  check, a failed check or an exception is a FAIL; nothing passes silently.
+* **real input only** for what the person does: `ptr` clicks at the real on-screen position (the browser window's
+  root view measured with the real pointer, a dialog's or the pill's widget origin, a page element's box), `keypress2`
+  keys, each after the gates (the user away, our pid frontmost, no input but ours). The pairing and take-over dialogs
+  are approved with a real click on Allow; if that click doesn't answer the dialog, the flow presses it through UI
+  DevTools to go on and the step FAILS.
+* **the agent** is the real `koan` from the app bundle (`KOAN_CLI`) with the flow's own HOME, against our Koan's
+  profile; every call is counted and timed, per step and per flow.
+* **the summary** (`summary.json`): per step pass/fail, checks, timings, koan calls, screenshots; written after
+  every step and when a gate stops the flow.
+
+`run_flows.sh` turns Agent ready on for each Koan (its Local State: it is off in a non-default `--user-data-dir`), sets
+`KOAN_AGENT_SETUP_HOME` to the flow's own folder (Set Up Agents never writes the real `~/.claude`), and for
+`uf_toprow` loads and pins `scripts/e2e/extensions/action_popup` (`launch.sh` takes `KOAN_LOCAL_STATE`,
+`KOAN_PREFS` and `KOAN_EXTRA_EXTENSIONS` for this; unset, it starts Koan as before). After each flow:
+
+* `uf_post.mjs edge` (uf_compact): `edge_check.mjs` on the recording, as step UF-CMP-5;
+* `uf_post.mjs still`: for marks with `still` and `stillRect` (uf_shots: the person's page while the agent captures
+  it), no pixel of that rect may change in any frame; a `control` mark (the page changed on purpose) must be seen.
+  Self-test: `scripts/tests/test_uf_post.py`;
+* `frames.sh` sheets at the marks (`--fps $UF_SHEET_FPS`, 10 by default: one 4x4 sheet per mark), compressed to 1280
+  wide; the video compressed to 720p (`compress.sh --check`: its SSIM is in the index); the full-size video and the
+  profile deleted unless `--keep-raw`.
+
+Read `<out>/index.md` first: a line per flow, then per step its result, the first failing check, its time, its koan
+calls, its key screenshot and its sheet. Open pictures only for a FAIL. `scripts/tests/test_uf_flows.py` checks the
+flows' imports, that every flow is wired here and in run_flows.sh, and that every step ID is in the catalogue.
