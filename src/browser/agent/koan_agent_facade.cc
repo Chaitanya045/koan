@@ -55,6 +55,22 @@ const char* StateName(TabState state) {
   return "";
 }
 
+// A pause as the agent sees it (Koan.paused, Koan.listTabs): why, why it
+// waits for Hand back (absent if it may resume by itself), and when it
+// resumes by itself (ms since the epoch) if nothing else happens.
+base::DictValue PauseFields(const TargetEntry::Pause& pause) {
+  base::DictValue fields;
+  fields.Set("pauseReason", pause.reason);
+  if (!pause.sticky.empty()) {
+    fields.Set("sticky", pause.sticky);
+  }
+  if (pause.resumes_at) {
+    fields.Set("resumesAt",
+               pause.resumes_at->InMillisecondsFSinceUnixEpochIgnoringNull());
+  }
+  return fields;
+}
+
 }  // namespace
 
 FacadeBackend::~FacadeBackend() = default;
@@ -796,6 +812,10 @@ void CdpFacade::ListTabs(const AgentMessage& message) {
     tab.Set("agentOwned", entry->agent_owned);
     tab.Set("state", StateName(entry->state));
     tab.Set("attached", IsAttached(target_id));
+    tab.Set("paused", entry->state == TabState::kPaused);
+    if (entry->pause) {
+      tab.Set("pause", PauseFields(*entry->pause));
+    }
     tabs.Append(std::move(tab));
   }
   base::DictValue result;
@@ -956,7 +976,31 @@ void CdpFacade::OnTargetStateChanged(const std::string& target_id,
   params.Set("targetId", target_id);
   params.Set("state", StateName(entry->state));
   params.Set("reason", reason);
+  if (entry->pause) {
+    params.Merge(PauseFields(*entry->pause));
+  }
   SendEvent(event, std::move(params), std::nullopt);
+}
+
+void CdpFacade::OnTargetResumed(const std::string& target_id,
+                                const Resumed& resumed) {
+  const TargetEntry* entry = registry_->Find(target_id);
+  if (!entry || entry->client_id != client_id_) {
+    return;
+  }
+  base::DictValue params;
+  params.Set("targetId", target_id);
+  params.Set("state", StateName(entry->state));
+  params.Set("reason", resumed.reason);
+  params.Set("pausedMs",
+             static_cast<double>(resumed.paused_for.InMilliseconds()));
+  if (std::optional<TabFacts> facts = backend_->DescribeTab(target_id)) {
+    params.Set("url", facts->url.possibly_invalid_spec());
+    params.Set("title", facts->title);
+  }
+  params.Set("navigated", resumed.navigated);
+  params.Set("changed", resumed.changed || resumed.navigated);
+  SendEvent("Koan.resumed", std::move(params), std::nullopt);
 }
 
 void CdpFacade::OnUserNeeded(const std::string& target_id,

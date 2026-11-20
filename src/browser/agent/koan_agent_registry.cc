@@ -151,6 +151,17 @@ bool TargetRegistry::Resume(std::string_view target_id) {
     return false;
   }
   it->second.state = TabState::kDriven;
+  it->second.pause.reset();
+  return true;
+}
+
+bool TargetRegistry::SetPause(std::string_view target_id,
+                              TargetEntry::Pause pause) {
+  auto it = entries_.find(target_id);
+  if (it == entries_.end() || it->second.state != TabState::kPaused) {
+    return false;
+  }
+  it->second.pause = std::move(pause);
   return true;
 }
 
@@ -162,6 +173,7 @@ bool TargetRegistry::SetReadable(std::string_view target_id) {
   }
   it->second.state = TabState::kReadable;
   it->second.site.clear();
+  it->second.pause.reset();
   return true;
 }
 

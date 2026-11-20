@@ -224,6 +224,13 @@ constexpr Option kAgentPrompts[] = {
     {"1", "1"}, {"2", "2"}, {"3", "3 (default)"}, {"4", "4"}, {"5", "5"},
     {"6", "6"}, {"7", "7"}, {"8", "8"},           {"9", "9"}, {"10", "10"},
 };
+// "When you stop using a tab, the agent continues after [5] s": 2 to 60
+// (koan_agent_auto_resume.h kAutoResumeSecondsLimit).
+constexpr Option kAgentAutoResumeSeconds[] = {
+    {"2", "2 s"},   {"3", "3 s"},   {"5", "5 s (default)"},
+    {"10", "10 s"}, {"15", "15 s"}, {"20", "20 s"},
+    {"30", "30 s"}, {"45", "45 s"}, {"60", "60 s"},
+};
 constexpr Option kAgentFailures[] = {
     {"1", "1"},           {"2", "2"},   {"3", "3"},   {"4", "4"},
     {"5", "5 (default)"}, {"6", "6"},   {"7", "7"},   {"8", "8"},
@@ -607,6 +614,26 @@ constexpr Row kRows[] = {
      .label = "Limit a taken-over tab to its site (off: once you allow it, "
               "the agent keeps control wherever the tab goes)",
      .is_available = IsAgentControlAllowed},
+    // Auto-resume (agent-control.md section 9.2; user, 2026-11-20).
+    {.group = "agent-access",
+     .control = Control::kCheckbox,
+     .pref = prefs::kAgentControlAutoResume,
+     .label = "When you stop using a tab, the agent continues (off: wait for "
+              "Hand back)",
+     .is_available = IsAgentControlAllowed,
+     .local_state = true,
+     .note = "It waits for Hand back after Take over or Keep paused, while "
+             "a password or card field has focus, and while the page asks "
+             "you something."},
+    {.group = "agent-access",
+     .control = Control::kMenu,
+     .pref = prefs::kAgentControlAutoResumeSeconds,
+     .label = "Continues after",
+     .options = kAgentAutoResumeSeconds,
+     .depends_on = prefs::kAgentControlAutoResume,
+     .is_available = IsAgentControlAllowed,
+     .indent = true,
+     .local_state = true},
     {.group = "agent-limits",
      .control = Control::kMenu,
      .pref = prefs::kAgentControlMaxLeasedTabs,

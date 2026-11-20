@@ -73,6 +73,19 @@ source_set("limits") {
   public_deps = [ "//base" ]
 }
 
+# When a tab the user's input paused goes back to its agent by itself
+# (design section 9.2, auto-resume).
+source_set("auto_resume") {
+  sources = [
+    "koan_agent_auto_resume.cc",
+    "koan_agent_auto_resume.h",
+  ]
+  public_deps = [
+    ":limits",
+    "//base",
+  ]
+}
+
 # When an agent tab holds the visible capturer of its keep-alive lease, and
 # which power assertion Koan takes while an agent is at work.
 source_set("lease_scheduler") {
@@ -214,6 +227,8 @@ if (is_posix) {
       "koan_agent_lease.h",
       "koan_agent_page_surfaces.cc",
       "koan_agent_page_surfaces.h",
+      "koan_agent_pause_watch.cc",
+      "koan_agent_pause_watch.h",
       "koan_agent_reach_content.cc",
       "koan_agent_reach_content.h",
       "koan_agent_service.cc",
@@ -225,6 +240,7 @@ if (is_posix) {
     }
     public_deps = [
       ":audit",
+      ":auto_resume",
       ":facade",
       ":lease_scheduler",
       ":prompts",
@@ -255,9 +271,12 @@ if (is_posix) {
       "//chrome/browser/ui/tabs:tab_strip",
       "//chrome/common",
       "//chrome/common:constants",
+      "//components/autofill/content/browser",
+      "//components/autofill/core/browser",
       "//components/embedder_support:user_agent",
       "//components/javascript_dialogs",
       "//components/performance_manager",
+      "//components/permissions",
       "//components/security_interstitials/content:security_interstitial_page",
       "//components/tabs:public",
       "//components/version_info",
@@ -387,6 +406,7 @@ test("koan_agent_unittests") {
     "koan_agent_admission_unittest.cc",
     "koan_agent_audit_unittest.cc",
     "koan_agent_auth_unittest.cc",
+    "koan_agent_auto_resume_unittest.cc",
     "koan_agent_contexts_unittest.cc",
     "koan_agent_events_unittest.cc",
     "koan_agent_facade_unittest.cc",
@@ -407,6 +427,7 @@ test("koan_agent_unittests") {
     ":admission",
     ":audit",
     ":auth",
+    ":auto_resume",
     ":contexts",
     ":events",
     ":facade",

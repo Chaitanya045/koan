@@ -391,6 +391,14 @@ inline constexpr char kAgentControlMaxPromptsPerMinute[] =
     "koan.agent_control.max_prompts_per_minute";
 inline constexpr char kAgentControlMaxAuthFailures[] =
     "koan.agent_control.max_auth_failures";
+// "When you stop using a tab, the agent continues after [5] s" (design
+// section 9.2, auto-resume; user, 2026-11-20): on by default; off is "Wait
+// for Hand back". The seconds are 2 to 60 (koan_agent_auto_resume.h
+// kAutoResumeSecondsLimit): read both with ReadAutoResumeSettings().
+inline constexpr char kAgentControlAutoResume[] =
+    "koan.agent_control.auto_resume";
+inline constexpr char kAgentControlAutoResumeSeconds[] =
+    "koan.agent_control.auto_resume_seconds";
 
 // Whether Agent ready is on by default for this launch: the default
 // user-data-dir, not --incognito, not --guest. Computed once, at registration.

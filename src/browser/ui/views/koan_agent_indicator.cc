@@ -9,8 +9,10 @@
 
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/time/time.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -216,8 +218,8 @@ class KoanAgentIndicatorView : public views::View {
         gfx::Insets::VH(0, kToastPadding), kToastGap));
     layout->set_cross_axis_alignment(
         views::BoxLayout::CrossAxisAlignment::kCenter);
-    auto* label = AddChildView(std::make_unique<views::Label>(content.text));
-    label->SetEnabledColor(kColorKoanToastForeground);
+    label_ = AddChildView(std::make_unique<views::Label>(content.text));
+    label_->SetEnabledColor(kColorKoanToastForeground);
     // The buttons act on the tab or the prompt they were shown for.
     const std::string target_id = content.target_id;
     if (content.prompt_id) {
@@ -229,6 +231,12 @@ class KoanAgentIndicatorView : public views::View {
           u"Dismiss", u"Say no to what the page asks",
           base::BindRepeating(&PromptLater, &AgentControlService::DismissPrompt,
                               content.prompt_id));
+    }
+    if (content.keep_paused) {
+      AddButton(u"Keep paused",
+                u"Keep the agent paused until you hand this tab back",
+                base::BindRepeating(&Later, &AgentControlService::KeepPaused,
+                                    target_id));
     }
     if (content.hand_back) {
       AddButton(u"Hand back", u"Let the agent continue in this tab",
@@ -251,6 +259,9 @@ class KoanAgentIndicatorView : public views::View {
     GetViewAccessibility().SetRole(ax::mojom::Role::kStatus);
   }
 
+  // The countdown's next second: the same pill, its text only.
+  void SetText(const std::u16string& text) { label_->SetText(text); }
+
   void AddButton(const std::u16string& label,
                  const std::u16string& accessible_name,
                  views::Button::PressedCallback callback) {
@@ -266,6 +277,9 @@ class KoanAgentIndicatorView : public views::View {
     size.set_height(kToastHeight);
     return size;
   }
+
+ private:
+  raw_ptr<views::Label> label_ = nullptr;
 };
 
 BEGIN_METADATA(KoanAgentIndicatorView)
@@ -472,6 +486,11 @@ KoanAgentIndicator::Snapshot KoanAgentIndicator::TakeSnapshot() const {
     tab.state = controlled.state;
     tab.agent_owned = controlled.agent_owned;
     tab.resume_asked = controlled.resume_asked;
+    tab.auto_resumes = controlled.auto_resumes;
+    if (controlled.countdown_ends) {
+      tab.countdown_seconds = base::ClampCeil(
+          (*controlled.countdown_ends - base::TimeTicks::Now()).InSecondsF());
+    }
     if (content::WebContents* contents = controlled.contents) {
       tab.title = contents->GetTitle();
       tab.in_window =
@@ -584,6 +603,21 @@ void KoanAgentIndicator::ShowEventToasts(const koan::agent::EventState& state) {
 
 void KoanAgentIndicator::ShowPill(const PillContent& content) {
   if (pill_) {
+    // From one second of the countdown to the next only the text changes:
+    // the pill stays (a click on Keep paused is not lost to a new view), and
+    // a screen reader hears the countdown once.
+    if (content_.pill && content.countdown_seconds &&
+        content_.pill->countdown_seconds) {
+      PillContent same = content;
+      same.text = content_.pill->text;
+      same.countdown_seconds = content_.pill->countdown_seconds;
+      if (same == *content_.pill) {
+        static_cast<KoanAgentIndicatorView*>(pill_->GetContentsView())
+            ->SetText(content.text);
+        PlaceInCorner(pill_.get());
+        return;
+      }
+    }
     if (!content_.pill || content != *content_.pill) {
       pill_->SetContentsView(std::make_unique<KoanAgentIndicatorView>(content));
       pill_->GetContentsView()->GetViewAccessibility().AnnounceText(

@@ -145,6 +145,38 @@ TEST(KoanAgentIndicatorLogicTest, PausedTabs) {
   EXPECT_FALSE(content.pill->take_back);
 }
 
+// Auto-resume (design 9.2): a pause that resumes by itself offers Keep
+// paused, and counts down while the user is on the tab and idle.
+TEST(KoanAgentIndicatorLogicTest, AutoResumingPauseCountsDown) {
+  IndicatorTab tab = Tab("a", true, TabState::kPaused, true);
+  tab.auto_resumes = true;
+  IndicatorContent content = IndicatorFor(Claude(), {tab}, {});
+  ASSERT_TRUE(content.pill);
+  EXPECT_EQ(content.pill->text,
+            u"● Claude Code paused: continues when you stop using this tab");
+  EXPECT_TRUE(content.pill->keep_paused);
+  EXPECT_TRUE(content.pill->hand_back);
+  EXPECT_FALSE(content.pill->countdown_seconds);
+
+  tab.countdown_seconds = 5;
+  content = IndicatorFor(Claude(), {tab}, {});
+  EXPECT_EQ(content.pill->text, u"● Claude Code continues in 5s");
+  EXPECT_EQ(content.pill->countdown_seconds, 5);
+  EXPECT_TRUE(content.pill->keep_paused);
+  EXPECT_TRUE(content.pill->hand_back);
+  tab.countdown_seconds = 0;
+  EXPECT_EQ(IndicatorFor(Claude(), {tab}, {}).pill->text,
+            u"● Claude Code continues in 1s");
+
+  // Held (Keep paused, a password field, ...): no countdown, no Keep paused.
+  tab.auto_resumes = false;
+  content = IndicatorFor(Claude(), {tab}, {});
+  EXPECT_EQ(content.pill->text, u"● Claude Code paused: you used this tab");
+  EXPECT_FALSE(content.pill->keep_paused);
+  EXPECT_FALSE(content.pill->countdown_seconds);
+  EXPECT_TRUE(content.pill->hand_back);
+}
+
 TEST(KoanAgentIndicatorLogicTest, InASplitThePausedPaneWins) {
   const IndicatorContent content =
       IndicatorFor(Claude(),

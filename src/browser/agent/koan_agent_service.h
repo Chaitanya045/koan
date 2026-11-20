@@ -87,6 +87,8 @@ class AgentControlService {
   void HandBack(const std::string& target_id);
   void TakeBack(const std::string& target_id);
   void TakeOver(const std::string& target_id);
+  // Keep paused: a pause that would resume by itself waits for Hand back.
+  void KeepPaused(const std::string& target_id);
   // What pages in agent tabs wait to show the user (design section 9.4), and
   // the indicator's Open and Dismiss.
   std::vector<HeldPrompt> user_prompts() const;

@@ -13,10 +13,12 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/time/default_tick_clock.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
 #include "components/embedder_support/user_agent_utils.h"
+#include "components/prefs/pref_service.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
 #include "components/tabs/public/tab_interface.h"
 #include "components/version_info/version_info.h"
@@ -31,11 +33,13 @@
 #include "koan/browser/agent/koan_agent_facade.h"
 #include "koan/browser/agent/koan_agent_lease.h"
 #include "koan/browser/agent/koan_agent_page_surfaces.h"
+#include "koan/browser/agent/koan_agent_pause_watch.h"
 #include "koan/browser/agent/koan_agent_reach_content.h"
 #include "koan/browser/agent/koan_agent_service.h"
 #include "koan/browser/agent/koan_agent_tab_hooks.h"
 #include "koan/browser/containers/koan_agent_access.h"
 #include "koan/browser/containers/koan_agent_containers.h"
+#include "koan/browser/koan_prefs.h"
 #include "net/base/schemeful_site.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "url/origin.h"
@@ -68,6 +72,19 @@ bool IsUsersInput(const blink::WebInputEvent& event) {
   return !(event.GetModifiers() & blink::WebInputEvent::kFromDebugger);
 }
 
+// Settings > Agent Control, "When you stop using a tab, the agent continues
+// after [5] s", as it is now.
+AutoResumeSettings AutoResumeSettingsNow() {
+  PrefService* local_state =
+      g_browser_process ? g_browser_process->local_state() : nullptr;
+  return ReadAutoResumeSettings(
+      local_state ? &local_state->GetValue(prefs::kAgentControlAutoResume)
+                  : nullptr,
+      local_state
+          ? &local_state->GetValue(prefs::kAgentControlAutoResumeSeconds)
+          : nullptr);
+}
+
 }  // namespace
 
 std::string SiteFor(const GURL& url) {
@@ -90,7 +107,14 @@ class AgentForwarder::TabWatcher final
              std::string target_id)
       : content::WebContentsObserver(contents),
         forwarder_(forwarder),
-        target_id_(std::move(target_id)) {
+        target_id_(std::move(target_id)),
+        pause_watch_(contents,
+                     base::BindRepeating(&AgentForwarder::OnPauseTick,
+                                         base::Unretained(forwarder),
+                                         target_id_),
+                     base::BindRepeating(&AgentForwarder::OnSecretFieldFocused,
+                                         base::Unretained(forwarder),
+                                         target_id_)) {
     // A wheel scroll is not a "user interaction" upstream, and an observer on
     // the root widget alone would miss a cross-origin frame's (a payment
     // widget's), so every frame's widget is watched for it.
@@ -112,6 +136,7 @@ class AgentForwarder::TabWatcher final
   }
   void DidFinishNavigation(content::NavigationHandle* handle) override {
     if (handle->IsInPrimaryMainFrame() && handle->HasCommitted()) {
+      pause_watch_.OnNavigated();
       forwarder_->OnTabNavigated(target_id_, handle->GetURL());
       forwarder_->OnTabChanged(target_id_);
     }
@@ -121,6 +146,7 @@ class AgentForwarder::TabWatcher final
   }
   void RenderFrameCreated(content::RenderFrameHost* frame) override {
     Watch(frame);
+    pause_watch_.OnFrameCreated();
   }
   // Mouse down, key down, the start of a scroll, a touch: in any frame of the
   // tab. Switching to the tab is not input; the omnibox and the tab strip
@@ -135,9 +161,16 @@ class AgentForwarder::TabWatcher final
   void OnInputEvent(const content::RenderWidgetHost& widget,
                     const blink::WebInputEvent& event,
                     InputEventSource source) override {
-    if (event.GetType() == blink::WebInputEvent::Type::kMouseWheel &&
-        IsUsersInput(event)) {
+    if (!IsUsersInput(event)) {
+      return;
+    }
+    if (event.GetType() == blink::WebInputEvent::Type::kMouseWheel) {
       forwarder_->OnUserInput(target_id_);
+    } else if (event.GetType() == blink::WebInputEvent::Type::kMouseMove &&
+               pause_watch_.policy().paused()) {
+      // The user is still there: a paused tab waits longer. Never a pause by
+      // itself.
+      forwarder_->OnUserMouseMove(target_id_);
     }
   }
 
@@ -147,6 +180,8 @@ class AgentForwarder::TabWatcher final
     widget->RemoveObserver(this);
     widgets_.erase(widget);
   }
+
+  PauseWatch& pause_watch() { return pause_watch_; }
 
  private:
   void Watch(content::RenderFrameHost* frame) {
@@ -160,6 +195,8 @@ class AgentForwarder::TabWatcher final
   const raw_ptr<AgentForwarder> forwarder_;
   const std::string target_id_;
   std::set<raw_ptr<content::RenderWidgetHost>> widgets_;
+  // The tab's pause, if any, and what auto-resume needs to know about it.
+  PauseWatch pause_watch_;
 };
 
 // One authenticated connection: its facade, and the DevTools client the facade
@@ -710,6 +747,10 @@ void AgentForwarder::OnPageSurface(content::WebContents* contents,
   ForEachFacadeOf(client_id, [&](CdpFacade& facade) {
     facade.OnUserNeeded(target_id, ReasonFor(surface), held);
   });
+  // The page asks the user: a pause now waits for them.
+  if (held) {
+    HoldPause(target_id, PauseHold::kUserNeeded);
+  }
 }
 
 void AgentForwarder::ForEachFacadeOf(std::string_view client_id,
@@ -891,9 +932,182 @@ bool AgentForwarder::ReleaseUserTab(const std::string& target_id) {
 }
 
 void AgentForwarder::OnUserInput(const std::string& target_id) {
+  const TargetEntry* entry = registry_.Find(target_id);
+  PauseWatch* watch = PauseWatchFor(target_id);
+  if (entry && entry->state == TabState::kPaused && watch) {
+    // Still using it: the wait for auto-resume starts again, and a countdown
+    // or a resume being made ends.
+    const bool showing =
+        watch->policy().phase() == AutoResumePolicy::Phase::kCountdown ||
+        watch->resuming();
+    watch->CancelResume();
+    watch->policy().OnInput(base::TimeTicks::Now());
+    watch->Rearm();
+    if (showing) {
+      SyncPause(target_id, std::string_view());
+      NotifyChanged();
+    }
+    return;
+  }
   // Detect after delivery: this input already reached the page; what the
   // agent queued behind it is not sent (CdpFacade::MayDispatch()).
   Pause(target_id, "user-input");
+}
+
+void AgentForwarder::OnUserMouseMove(const std::string& target_id) {
+  const TargetEntry* entry = registry_.Find(target_id);
+  PauseWatch* watch = PauseWatchFor(target_id);
+  if (!entry || entry->state != TabState::kPaused || !watch) {
+    return;
+  }
+  const bool showing =
+      watch->policy().phase() == AutoResumePolicy::Phase::kCountdown ||
+      watch->resuming();
+  watch->policy().OnMouseMove(base::TimeTicks::Now());
+  // The timer runs on; its next check finds the later activity. Only a
+  // countdown on screen, or a resume being made, needs ending now.
+  if (showing) {
+    watch->CancelResume();
+    watch->Rearm();
+    SyncPause(target_id, std::string_view());
+    NotifyChanged();
+  }
+}
+
+void AgentForwarder::OnSecretFieldFocused(const std::string& target_id) {
+  HoldPause(target_id, PauseHold::kSecretField);
+}
+
+void AgentForwarder::HoldPause(const std::string& target_id, PauseHold hold) {
+  const TargetEntry* entry = registry_.Find(target_id);
+  PauseWatch* watch = PauseWatchFor(target_id);
+  if (!entry || entry->state != TabState::kPaused || !watch ||
+      !watch->policy().paused()) {
+    return;
+  }
+  watch->CancelResume();
+  watch->policy().Hold(hold);
+  watch->Rearm();
+  if (SyncPause(target_id, std::string_view())) {
+    const std::string client_id = entry->client_id;
+    const std::string reason = entry->pause ? entry->pause->reason : "";
+    ForEachFacadeOf(client_id, [&](CdpFacade& facade) {
+      facade.OnTargetStateChanged(target_id, "Koan.paused", reason);
+    });
+  }
+  NotifyChanged();
+}
+
+void AgentForwarder::OnPauseTick(const std::string& target_id) {
+  PauseWatch* watch = PauseWatchFor(target_id);
+  if (!watch) {
+    return;
+  }
+  const TargetEntry* entry = registry_.Find(target_id);
+  if (!entry || entry->state != TabState::kPaused) {
+    // Left the registry's pause another way (the tab became readable).
+    watch->End();
+    return;
+  }
+  AutoResumePolicy& policy = watch->policy();
+  const AutoResumePolicy::Phase before = policy.phase();
+  const base::TimeTicks now = base::TimeTicks::Now();
+  policy.SetSettings(AutoResumeSettingsNow());
+  // Checked before every step, so that no resume goes past a password field
+  // or a question the page asks.
+  policy.Hold(watch->CurrentHold());
+  policy.SetUserOnTab(watch->IsUserOnTab(), now);
+  if (policy.Advance(now)) {
+    BeginResume(target_id, "user-idle");
+    return;
+  }
+  if (SyncPause(target_id, std::string_view())) {
+    const std::string client_id = entry->client_id;
+    const std::string reason = entry->pause ? entry->pause->reason : "";
+    ForEachFacadeOf(client_id, [&](CdpFacade& facade) {
+      facade.OnTargetStateChanged(target_id, "Koan.paused", reason);
+    });
+  }
+  watch->Rearm();
+  // The pill: the countdown's seconds, or its end.
+  if (policy.phase() != before ||
+      policy.phase() == AutoResumePolicy::Phase::kCountdown) {
+    NotifyChanged();
+  }
+}
+
+void AgentForwarder::BeginResume(const std::string& target_id,
+                                 std::string_view reason) {
+  PauseWatch* watch = PauseWatchFor(target_id);
+  if (!watch) {
+    return;
+  }
+  const uint64_t id = watch->BeginResume();
+  watch->QueryChanged(base::BindOnce(&AgentForwarder::FinishResume,
+                                     weak_factory_.GetWeakPtr(), target_id,
+                                     std::string(reason), id));
+}
+
+void AgentForwarder::FinishResume(const std::string& target_id,
+                                  const std::string& reason,
+                                  uint64_t resume_id,
+                                  bool changed) {
+  PauseWatch* watch = PauseWatchFor(target_id);
+  const TargetEntry* entry = registry_.Find(target_id);
+  if (!watch || !entry) {
+    return;
+  }
+  // The user came back meanwhile (input, the mouse, a hold): no user-idle
+  // resume. Hand back is the user's own choice and goes on.
+  if (reason != "handed-back" && !watch->IsResuming(resume_id)) {
+    watch->Rearm();
+    return;
+  }
+  const base::TimeDelta paused_for =
+      base::TimeTicks::Now() - watch->policy().paused_since();
+  const bool navigated = watch->navigated();
+  watch->End();
+  if (!registry_.Resume(target_id)) {
+    return;
+  }
+  resume_asked_.erase(target_id);
+  const std::string client_id = entry->client_id;
+  AuditEvent(reason == "handed-back" ? "hand-back" : "auto-resume", target_id,
+             client_id);
+  const CdpFacade::Resumed resumed{.reason = reason,
+                                   .paused_for = paused_for,
+                                   .navigated = navigated,
+                                   .changed = changed};
+  ForEachFacadeOf(client_id, [&](CdpFacade& facade) {
+    facade.OnTargetResumed(target_id, resumed);
+  });
+  NotifyChanged();
+}
+
+bool AgentForwarder::SyncPause(const std::string& target_id,
+                               std::string_view reason) {
+  const TargetEntry* entry = registry_.Find(target_id);
+  PauseWatch* watch = PauseWatchFor(target_id);
+  if (!entry || entry->state != TabState::kPaused || !watch) {
+    return false;
+  }
+  TargetEntry::Pause pause;
+  pause.reason = !reason.empty() ? std::string(reason)
+                 : entry->pause  ? entry->pause->reason
+                                 : std::string();
+  pause.sticky = std::string(PauseHoldName(watch->policy().hold()));
+  if (std::optional<base::TimeTicks> at = watch->policy().ResumesAt()) {
+    pause.resumes_at = base::Time::Now() + (*at - base::TimeTicks::Now());
+  }
+  const bool sticky_changed =
+      entry->pause && entry->pause->sticky != pause.sticky;
+  registry_.SetPause(target_id, std::move(pause));
+  return sticky_changed;
+}
+
+PauseWatch* AgentForwarder::PauseWatchFor(std::string_view target_id) const {
+  auto it = tabs_.find(target_id);
+  return it == tabs_.end() ? nullptr : &it->second->pause_watch();
 }
 
 void AgentForwarder::TakeOver(const std::string& target_id) {
@@ -909,6 +1123,14 @@ void AgentForwarder::Pause(const std::string& target_id,
   registry_.Pause(target_id);
   const std::string client_id = entry->client_id;
   AuditEvent("pause", target_id, client_id);
+  if (PauseWatch* watch = PauseWatchFor(target_id)) {
+    watch->Begin(reason, AutoResumeSettingsNow());
+    // What already holds it (a password field the user clicked into, a
+    // question the page asks).
+    watch->policy().Hold(watch->CurrentHold());
+    watch->Rearm();
+  }
+  SyncPause(target_id, reason);
   ForEachFacadeOf(client_id, [&](CdpFacade& facade) {
     facade.OnTargetStateChanged(target_id, "Koan.paused", reason);
   });
@@ -938,16 +1160,19 @@ void AgentForwarder::AskToResume(const std::string& target_id) {
 
 void AgentForwarder::HandBack(const std::string& target_id) {
   const TargetEntry* entry = registry_.Find(target_id);
-  if (!entry || !registry_.Resume(target_id)) {
+  if (!entry || entry->state != TabState::kPaused) {
     return;
   }
-  resume_asked_.erase(target_id);
-  const std::string client_id = entry->client_id;
-  AuditEvent("hand-back", target_id, client_id);
-  ForEachFacadeOf(client_id, [&](CdpFacade& facade) {
-    facade.OnTargetStateChanged(target_id, "Koan.resumed", "handed-back");
-  });
-  NotifyChanged();
+  BeginResume(target_id, "handed-back");
+}
+
+void AgentForwarder::KeepPaused(const std::string& target_id) {
+  const TargetEntry* entry = registry_.Find(target_id);
+  if (!entry || entry->state != TabState::kPaused) {
+    return;
+  }
+  AuditEvent("keep-paused", target_id, std::string(entry->client_id));
+  HoldPause(target_id, PauseHold::kKeepPaused);
 }
 
 void AgentForwarder::TakeBack(const std::string& target_id) {
@@ -982,6 +1207,12 @@ std::vector<ControlledTab> AgentForwarder::ControlledTabs() const {
     tab.state = entry->state;
     tab.agent_owned = entry->agent_owned;
     tab.resume_asked = resume_asked_.contains(target_id);
+    const PauseWatch& pause = watcher->pause_watch();
+    tab.auto_resumes = entry->state == TabState::kPaused &&
+                       pause.policy().paused() && !pause.resuming() &&
+                       pause.policy().hold() == PauseHold::kNone;
+    tab.countdown_ends =
+        tab.auto_resumes ? pause.policy().CountdownEnds() : std::nullopt;
     tab.contents = watcher->web_contents();
     tabs.push_back(std::move(tab));
   }

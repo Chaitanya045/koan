@@ -69,10 +69,19 @@ PillContent TabPill(const IndicatorTab& tab) {
   pill.take_back = !tab.agent_owned;
   if (tab.state == TabState::kPaused) {
     pill.hand_back = true;
-    pill.text =
-        base::StrCat({kDot, agent,
-                      tab.resume_asked ? u" asks to continue in this tab"
-                                       : u" paused: you used this tab"});
+    pill.keep_paused = tab.auto_resumes;
+    if (tab.auto_resumes && tab.countdown_seconds) {
+      pill.countdown_seconds = std::max(*tab.countdown_seconds, 1);
+      pill.text =
+          base::StrCat({kDot, agent, u" continues in ",
+                        base::NumberToString16(*pill.countdown_seconds), u"s"});
+      return pill;
+    }
+    pill.text = base::StrCat(
+        {kDot, agent,
+         tab.resume_asked   ? u" asks to continue in this tab"
+         : tab.auto_resumes ? u" paused: continues when you stop using this tab"
+                            : u" paused: you used this tab"});
     return pill;
   }
   // An agent's own tab is paused by taking it over; a user tab is taken

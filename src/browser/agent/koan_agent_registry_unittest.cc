@@ -117,6 +117,30 @@ TEST(KoanAgentRegistryTest, PausedAndReadableTabsOnlyRead) {
   EXPECT_TRUE(registry.MaySend("alice", "T1", "Input.dispatchKeyEvent"));
 }
 
+// Auto-resume (design 9.2): the pause's state is kept for Koan.listTabs
+// while the tab is paused, and goes with the pause.
+TEST(KoanAgentRegistryTest, PauseStateGoesWithThePause) {
+  TargetRegistry registry;
+  ASSERT_EQ(registry.AddAgentTab("T1", "alice", ""), AddResult::kOk);
+  ASSERT_EQ(registry.GrantUserTab("U1", "alice", TabState::kDriven),
+            AddResult::kOk);
+  const TargetEntry::Pause held{.reason = "user-input",
+                                .sticky = "secret-field"};
+  EXPECT_FALSE(registry.SetPause("T1", held));
+  EXPECT_FALSE(registry.SetPause("nope", held));
+  ASSERT_TRUE(registry.Pause("T1"));
+  EXPECT_TRUE(registry.SetPause("T1", held));
+  EXPECT_EQ(registry.Find("T1")->pause, held);
+  EXPECT_TRUE(registry.Resume("T1"));
+  EXPECT_FALSE(registry.Find("T1")->pause);
+  // A paused user tab that becomes readable is no longer paused.
+  ASSERT_TRUE(registry.Pause("U1"));
+  ASSERT_TRUE(registry.SetPause("U1", held));
+  ASSERT_TRUE(registry.SetReadable("U1"));
+  EXPECT_FALSE(registry.Find("U1")->pause);
+  EXPECT_FALSE(registry.Resume("U1"));
+}
+
 TEST(KoanAgentRegistryTest, LeavingTheAllowedSiteEndsWriteAccess) {
   TargetRegistry registry;
   ASSERT_EQ(registry.AddAgentTab("T1", "alice", ""), AddResult::kOk);

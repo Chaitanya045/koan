@@ -47,6 +47,11 @@ struct IndicatorTab {
   bool agent_owned = false;
   // The agent asked to resume (Koan.resume).
   bool resume_asked = false;
+  // Paused, and it goes back to the agent by itself once the user stops
+  // using the tab (design section 9.2, auto-resume).
+  bool auto_resumes = false;
+  // While it counts down to that: the seconds left (at least 1).
+  std::optional<int> countdown_seconds;
   // In this window's tab strip, and shown there (the active tab, or a pane
   // of the active split).
   bool in_window = false;
@@ -70,6 +75,11 @@ struct PillContent {
   bool take_back = false;
   // Pause an agent's own tab (as the user's input in it would).
   bool take_over = false;
+  // Make a pause that would resume by itself wait for Hand back.
+  bool keep_paused = false;
+  // The countdown to the agent going on ("continues in 5s"), in `text`; only
+  // the seconds change from one second to the next.
+  std::optional<int> countdown_seconds;
   // Open and Dismiss a page's prompt.
   uint64_t prompt_id = 0;
   bool operator==(const PillContent&) const = default;
