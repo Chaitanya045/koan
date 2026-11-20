@@ -3,10 +3,13 @@
 #
 #   scripts/ci/mac_package.sh <dest dir>
 #
-# Makes <dest dir>/Koan-<version>-<sha>-arm64.dmg and a .sha256 next to it.
+# Makes <dest dir>/Koan-<version>-<sha>-arm64.dmg and a .sha256 next to it,
+# or Koan-<version>-arm64.dmg with KOAN_RELEASE=1 (release.yml).
 # <version> is Koan's VERSION file when there is one, otherwise the Chromium
-# version (CHROMIUM_VERSION, line 1), which is the version the app reports;
-# <sha> is the Koan commit (KOAN_SHA, or HEAD), 7 characters.
+# version (CHROMIUM_VERSION, line 1); <sha> is the Koan commit (KOAN_SHA, or
+# HEAD), 7 characters. With VERSION, the app's Info.plist must carry it
+# (KoanVersion, CFBundleShortVersionString: //koan/version), or nothing is
+# packed.
 #
 # The app is signed ad hoc (codesign -s -): Apple Silicon only runs signed
 # code, but nothing here has a Developer ID, so Gatekeeper still blocks it
@@ -30,7 +33,28 @@ sha="${KOAN_SHA:-$(git rev-parse HEAD)}"
 name="$(sed -n 's/^PRODUCT_FULLNAME=//p' chromium/src/chrome/app/theme/chromium/BRANDING)"
 app="${KOAN_CI_APP:-chromium/src/out/Koan/$name.app}"
 [[ -d $app ]] || { echo "no $app" >&2; exit 1; }
-dmg="$name-$version-${sha:0:7}-arm64.dmg"
+if [[ ${KOAN_RELEASE:-0} == 1 ]]; then
+  [[ -f VERSION ]] || { echo "KOAN_RELEASE=1 needs a VERSION file" >&2; exit 1; }
+  dmg="$name-$version-arm64.dmg"
+else
+  dmg="$name-$version-${sha:0:7}-arm64.dmg"
+fi
+
+# The version the app reports is the one being released (the build's
+# Info.plist step, koan/version/version.gni, ran).
+if [[ -z ${KOAN_CI_APP:-} && -f VERSION ]]; then
+  plist="$app/Contents/Info.plist"
+  want_short="$(python3 -I src/version/koan_version.py show short)"
+  got="$(plutil -extract KoanVersion raw -o - "$plist" 2>/dev/null || true)"
+  got_short="$(plutil -extract CFBundleShortVersionString raw -o - "$plist")"
+  if [[ $got != "$version" || $got_short != "$want_short" ]]; then
+    echo "$plist says KoanVersion '${got}', CFBundleShortVersionString" \
+      "'$got_short'; VERSION wants '$version', '$want_short'" >&2
+    exit 1
+  fi
+  echo "Info.plist: Koan $got ($got_short, CFBundleVersion" \
+    "$(plutil -extract CFBundleVersion raw -o - "$plist"))"
+fi
 
 # Widevine's VMP signature goes into the framework's Resources, which the
 # code signature below seals, so it comes first. Without the EVS secrets

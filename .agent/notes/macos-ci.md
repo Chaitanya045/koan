@@ -7,6 +7,13 @@ macOS build").
 
 ## Shape
 
+Since the release pipeline (docs/RELEASING.md), the chain from fetch to
+cleanup is the reusable `macos-chain.yml`: `macos.yml` (plan, then the chain,
+then the nightly release) and `release.yml` (checks, the chain with
+`release: true`, then the tagged release) both call it. Job names in the UI
+gain a `Build /` prefix; the artifact names and re-running failed jobs are
+unchanged (it is still one run).
+
 ```
 fetch ──► build-01 ──► build-02 ──► … ──► build-16 ──► check ──► release
  (src)     (out-1)      (out-2)            (.dmg)                (develop)
