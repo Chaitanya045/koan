@@ -1,0 +1,44 @@
+<!doctype html>
+<title>Quarterly report</title>
+<!-- agent_shot_bench's page: what a small screenshot can't read and the
+     text snapshot can (small print, a price), a chart that only an image
+     shows (a canvas), and a dialog and an error that a micro screenshot
+     should show. Deterministic: no fonts or images from the network. -->
+<style>
+  body { margin: 0; font: 15px -apple-system, sans-serif; background: #fff; color: #18181b; }
+  main { padding: 24px 32px; max-width: 900px; }
+  .fine { font-size: 9px; color: #52525b; }
+  .error { background: #fee2e2; color: #991b1b; padding: 8px 12px; border-radius: 6px; }
+  dialog { border: 1px solid #d4d4d8; border-radius: 8px; padding: 16px 20px; }
+</style>
+<main>
+  <h1>Quarterly report</h1>
+  <p>Total due: <strong id=total>$1,234.56</strong></p>
+  <p class=fine>Includes a processing fee of $3.20 and VAT at 20%. Invoice KX-4471-B.</p>
+  <canvas id=chart role=img aria-label="Sales by quarter" width=480 height=200></canvas>
+  <p id=status role=status></p>
+  <p><button id=pay>Pay now</button> <button id=del>Delete report</button></p>
+  <dialog id=confirm aria-label="Delete this report?">
+    <p>Delete this report? This cannot be undone.</p>
+    <button id=no>Cancel</button> <button id=yes>Delete</button>
+  </dialog>
+</main>
+<script>
+  // Four bars with their values, small: the chart's numbers are only in it.
+  const c = document.getElementById('chart').getContext('2d');
+  const bars = [['Q1', 42], ['Q2', 77], ['Q3', 58], ['Q4', 91]];
+  c.font = '10px sans-serif';
+  bars.forEach(([q, v], i) => {
+    c.fillStyle = ['#2563eb', '#16a34a', '#d97706', '#dc2626'][i];
+    c.fillRect(40 + i * 110, 180 - v * 1.6, 60, v * 1.6);
+    c.fillStyle = '#18181b';
+    c.fillText(`${q}: ${v}k`, 44 + i * 110, 195);
+  });
+  document.getElementById('pay').onclick = () => {
+    const s = document.getElementById('status');
+    s.className = 'error';
+    s.textContent = 'Payment failed: card declined (code 51)';
+  };
+  document.getElementById('del').onclick = () => document.getElementById('confirm').showModal();
+  document.getElementById('no').onclick = () => document.getElementById('confirm').close();
+</script>

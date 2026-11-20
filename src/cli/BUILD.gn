@@ -31,6 +31,8 @@ source_set("cli_lib") {
     "koan_cli_protocol.h",
     "koan_cli_router.cc",
     "koan_cli_router.h",
+    "koan_cli_screenshot.cc",
+    "koan_cli_screenshot.h",
     "koan_cli_settle.cc",
     "koan_cli_settle.h",
     "koan_cli_skill.cc",
@@ -128,6 +130,7 @@ if (is_mac) {
 test("koan_cli_unittests") {
   sources = [
     "koan_cli_batch_unittest.cc",
+    "koan_cli_screenshot_unittest.cc",
     "koan_cli_settle_unittest.cc",
     "koan_cli_unittest.cc",
     "koan_relay_gate_unittest.cc",

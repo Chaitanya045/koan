@@ -1535,6 +1535,20 @@ whose guide comes from the installed Koan. An agent on another machine runs
 (`~/Applications/Koan.app/Contents/Resources/bin/koan`); screenshots are
 saved on the Mac.
 
+`koan screenshot <tab>` saves the viewport as a PNG and says what it costs
+an agent's model, which pays for an image by its pixels (about one token per
+28×28): `saved koan-ab12cd34.png (640×400, ~330 image tokens, 1 px = 2.25 CSS
+px)`. `--size normal` (the default) is the page at its CSS pixels, about 1,650
+tokens for a 1440×900 window; `--size mini` (640 px on the long side, ~330
+tokens) and `--size micro` (320 px, ~80) are for checking the state of a page;
+`--size full` is the Retina display's own pixels (at most 2576 on the long
+side, up to ~4,800 tokens). `--clip @12` (a ref or a locator) or `--clip
+x,y,w,h` captures one element or rectangle, sharp. Koan draws the page at
+that size, so small images keep their text as crisp as they can. `koan act
+<tab> ... --screenshot micro` adds one after the steps. Sizes and clips work
+on the agent's own tabs; a tab of yours is captured whole at its full size, so
+that Koan never resizes it.
+
 `koan snapshot` prints the page as a compact outline: controls, links,
 landmarks and headings with `@refs`, each block's text on one line, and
 states such as `[checked]`, `[selected]`, `[expanded]`, `[disabled]` and

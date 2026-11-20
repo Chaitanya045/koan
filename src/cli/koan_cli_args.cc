@@ -109,12 +109,13 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
   bool snapshot_option = false;
   bool timeout_given = false;
   std::string timeout_text;
+  bool screenshot_option = false;
   for (size_t i = 0; i < args.size(); ++i) {
     const std::string& arg = args[i];
     // After `act <tab>`, the steps: each takes its words by count, so a
     // fill's text that looks like an option is the text.
     if (positional.size() == 2 && positional[0] == "act" &&
-        !arg.starts_with("--")) {
+        !arg.starts_with("--") && arg != "-o") {
       size_t at = i;
       std::string error;
       if (!ParseSteps(args, &at, &command.steps, &error)) {
@@ -202,6 +203,36 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
     if (arg == "--snapshot") {
       command.snapshot_after = true;
       act_option = true;
+      continue;
+    }
+    if (std::optional<bool> got = value_of("--size", &value)) {
+      command.shot_size = *got ? ParseShotSize(value) : std::nullopt;
+      if (!command.shot_size) {
+        return Error("--size takes micro, mini, normal or full");
+      }
+      screenshot_option = true;
+      continue;
+    }
+    if (std::optional<bool> got = value_of("--clip", &command.clip)) {
+      std::string error;
+      if (!*got || !ParseClip(command.clip, &error)) {
+        return Error(*got ? error : "--clip needs @ref, a locator or x,y,w,h");
+      }
+      screenshot_option = true;
+      continue;
+    }
+    if (std::optional<bool> got = value_of("--screenshot", &value)) {
+      std::optional<ShotSize> size = *got ? ParseShotSize(value) : std::nullopt;
+      if (!size || *size == ShotSize::kFull) {
+        return Error(
+            "--screenshot takes micro, mini or normal (koan screenshot <tab> "
+            "--size full for a full one)");
+      }
+      if (command.screenshot_after) {
+        return Error("--screenshot is given once");
+      }
+      command.screenshot_after = true;
+      command.shot_size = size;
       continue;
     }
     if (std::optional<bool> got = value_of("--timeout", &timeout_text)) {
@@ -317,6 +348,16 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
   }
   if (act_option && command.kind != CommandKind::kAct) {
     return Error("--snapshot, --timeout and --until are koan act's");
+  }
+  if (screenshot_option && command.kind != CommandKind::kScreenshot) {
+    return Error(
+        command.kind == CommandKind::kAct
+            ? "--size and --clip are koan screenshot's; koan act takes "
+              "--screenshot micro|mini|normal"
+            : "--size and --clip are koan screenshot's");
+  }
+  if (command.screenshot_after && command.kind != CommandKind::kAct) {
+    return Error("--screenshot is koan act's; koan screenshot takes --size");
   }
   if (!command.steps_file.empty() && command.kind != CommandKind::kAct) {
     return Error("--steps is koan act's");
@@ -468,6 +509,11 @@ Options:
                                contains TEXT, or the element is gone (up to
                                --timeout); Koan.untilTimeout if not
   --snapshot                   the snapshot after the steps
+  --screenshot micro|mini|normal
+                               a screenshot after the steps (and after the
+                               snapshot), saved as koan screenshot would
+                               (-o/--output names the file): its line ends
+                               the answer (koan help screenshot)
   --interactive, --diff, --scope S, --locators
                                that snapshot's options (koan help snapshot);
                                each implies --snapshot
@@ -475,7 +521,8 @@ Options:
                                (15)
   --steps <file>               steps from a file, one or more a line ("-":
                                stdin; not in koan shell)
-  --json                       one JSON object: steps, stopped, snapshot
+  --json                       one JSON object: steps, stopped, snapshot,
+                               screenshot
 Exit 0 if every step was done (and --until met), 1 if not.)HELP"},
       {"snapshot", R"HELP(koan snapshot <tab> [options]
 
@@ -518,9 +565,39 @@ Reads commands from stdin, one a line, as a shell splits them (a leading
 "args": [...]}), and runs them over one connection. Each answer ends with
 a line "--- exit N"; a JSON line gets one JSON line {"id", "exit", "out",
 "err"}. --stop-on-error stops at the first command that fails.)HELP"},
-      {"screenshot", R"HELP(koan screenshot <tab> [-o file.png]
+      {"screenshot",
+       R"HELP(koan screenshot <tab> [--size S] [--clip C] [-o file.png]
 
-Saves what the tab shows as a PNG and prints its path.)HELP"},
+Saves what the tab's viewport shows as a PNG, and prints its path, its size
+in pixels, about how many tokens a model is charged for it (one per 28x28
+pixels), and how many CSS pixels one pixel of it is:
+  saved koan-ab12cd34.png (640x400, ~330 image tokens, 1 px = 2.25 CSS px)
+The browser draws the page at that size, so text stays as sharp as it can.
+
+Options:
+  --size normal     (the default) CSS pixels (1x), long edge at most 1568:
+                    about 1,700 tokens for a 1440x900 window
+  --size mini       long edge 640: about 330 tokens. Is it the page you
+                    expected, which state is it in, did the layout change
+  --size micro      long edge 320: about 80 tokens. Did it load, is a
+                    dialog or an error showing
+  --size full       device pixels (2x on a Retina display), long edge at
+                    most 2576: up to about 4,800 tokens
+  --clip @ref | loc:role=...[name="..."]
+                    only that element (as koan act finds it; scrolled into
+                    view), with 8 CSS px around it, at device pixels unless
+                    --size is given; for small text, a price, an error, a
+                    chart or an image
+  --clip x,y,w,h    only that rectangle, in CSS pixels from the viewport's
+                    top left (in a screenshot, pixels times its "1 px = N
+                    CSS px")
+  -o, --output F    where to save it (default koan-<tab>.png)
+  --json            {path, width, height, imageTokens, cssPxPerPx}
+Sizes never enlarge: a small window gives a smaller image. Read text from
+koan snapshot, not from a small image. The image is always a PNG: JPEG or
+WebP would save bytes, not tokens (a model pays for pixels).
+A tab of the user's (take-over, or read) is captured whole at device pixels
+(--size and --clip need a tab of the agent's own: they resize its view).)HELP"},
       {"status", R"HELP(koan status [--json]
 
 Whether Koan runs, the pairing, the connection, the tasks and tabs, and
@@ -585,8 +662,12 @@ std::string UsageText() {
                          the page as an outline, with @refs for act;
                          --interactive: only controls, headings, messages;
                          --diff: only what changed since the last snapshot
-  koan screenshot <tab> [-o file.png]
+  koan screenshot <tab> [--size micro|mini|normal|full] [--clip @ref|x,y,w,h]
+                         [-o file.png]
+                         save the viewport as a PNG (normal: CSS pixels);
+                         prints its size and about how many image tokens
   koan act <tab> <step> [<step> ...] [--until C] [--snapshot] [--diff]
+           [--screenshot micro|mini|normal]
                          steps: click @ref | fill @ref <text> | select @ref
                          <option> | choose @ref <option> | press <key> |
                          scroll <pixels> | navigate <url>, in order, each
