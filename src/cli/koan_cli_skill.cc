@@ -148,9 +148,9 @@ the way in, and it is the one the user approved.
      are in the image.
    - If a small image is unclear, take a clip or a normal one; do not
      guess.
-   A PNG either way: JPEG or WebP save bytes, not tokens. A tab of the
-   user's is captured whole at full size (--size and --clip need a tab of
-   your own).
+   A PNG either way: JPEG or WebP save bytes, not tokens. Every size and
+   --clip work the same on a tab of the user's: Koan copies what it already
+   drew, so their tab does not flicker.
 5. A tab of the user's (to work on a page they have open, signed in): tell
    the user to bring that tab to the front in Koan, then run
    `koan take-over`. Koan asks them; once they allow it, you get the tab

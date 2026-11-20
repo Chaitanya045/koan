@@ -250,3 +250,19 @@
   chart, an image); normal before anything positional; a clip or a normal
   one when a small image is unclear, never a guess. PNG only: JPEG or WebP
   save bytes, not tokens.
+- **One capture path for every tab** (user, 2026-11-20): `koan screenshot`
+  (every size and `--clip`) and `act --screenshot` use `Koan.captureScaled`
+  on the agent's own tabs and the user's alike. It copies the frame the
+  compositor already drew, scaled on the GPU to the target size
+  (`RenderWidgetHostView::CopyFromSurface` with an output size, as tab
+  thumbnails do), and encodes the small bitmap on a worker thread. Why:
+  CDP's clip and scale go through device emulation, which lays out and draws
+  the page again at a new scale and then restores it. The page can see that
+  (devicePixelRatio, resize, media queries, srcset reloads), a user's tab
+  would flicker, so #409 had to give a user's tab a full device-pixel capture
+  (~4,800 tokens), and encoding a 2880×1800 PNG is slow. The fallback: a
+  hidden agent tab gets the lease's capturer and a fresh frame; if no surface
+  comes within 1 s, an agent's own tab (which nobody looks at) is drawn by CDP
+  with emulation and the answer says so, and a user's tab gets
+  `Koan.noSurface`, never emulation. Masks for secret fields paint over the
+  bitmap before it is encoded, in the same path.

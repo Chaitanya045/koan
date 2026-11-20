@@ -1498,6 +1498,12 @@ approve the agent; then `koan open <url>`, `koan snapshot <tab>`,
 `koan act <tab> click @12`, `koan screenshot <tab>`, `koan take-over` (asks
 you, then takes the tab you have in front) and `koan end`.
 
+`koan screenshot <tab>` copies what Koan has already drawn for the tab,
+scaled to the size asked for (`--size micro|mini|normal|full`, `--clip` for
+one element). The page is not drawn again and can't tell, so a tab of yours
+that an agent took over or reads doesn't flicker or resize while it is
+captured, and it gets the same small sizes as the agent's own tabs.
+
 A plain `koan pair` asks for everything an agent can do: tabs of its own,
 listing your tabs, looking at and controlling a tab you give it, and keeping
 the display awake. The dialog has a switch, on, for each; turn off what it

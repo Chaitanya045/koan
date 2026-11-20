@@ -10,7 +10,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
@@ -38,11 +37,6 @@ int LongEdgeOf(ShotSize size) {
   return kNormalLongEdge;
 }
 
-// At least one pixel, as Page.captureScreenshot rounds a clip's side.
-int Pixels(double css, double pixels_per_css) {
-  return std::max(1, base::ClampRound(css * pixels_per_css));
-}
-
 // "2.25", "1", "0.5".
 std::string ShortNumber(double value) {
   std::string text = base::StringPrintf("%.2f", value);
@@ -53,10 +47,6 @@ std::string ShortNumber(double value) {
     text.pop_back();
   }
   return text;
-}
-
-ShotPlanResult PlanError(std::string text) {
-  return {std::nullopt, std::move(text)};
 }
 
 }  // namespace
@@ -83,15 +73,6 @@ std::string_view ShotSizeName(ShotSize size) {
       return "full";
   }
   return "normal";
-}
-
-int EstimateImageTokens(int width, int height) {
-  if (width <= 0 || height <= 0) {
-    return 0;
-  }
-  const double pixels = static_cast<double>(width) * height;
-  return std::min(kMaxImageTokens,
-                  std::max(1, base::ClampCeil(pixels / kPixelsPerToken)));
 }
 
 std::optional<ClipSpec> ParseClip(std::string_view text, std::string* error) {
@@ -135,45 +116,6 @@ std::optional<ClipSpec> ParseClip(std::string_view text, std::string* error) {
   return clip;
 }
 
-std::optional<ViewportMetrics> ReadViewportMetrics(
-    const base::DictValue& layout_metrics) {
-  const base::DictValue* css = layout_metrics.FindDict("cssVisualViewport");
-  if (!css) {
-    css = layout_metrics.FindDict("cssLayoutViewport");
-  }
-  if (!css) {
-    return std::nullopt;
-  }
-  ViewportMetrics metrics;
-  metrics.page_x = css->FindDouble("pageX").value_or(0);
-  metrics.page_y = css->FindDouble("pageY").value_or(0);
-  metrics.width = css->FindDouble("clientWidth").value_or(0);
-  metrics.height = css->FindDouble("clientHeight").value_or(0);
-  if (!(metrics.width > 0 && metrics.height > 0) ||
-      !std::isfinite(metrics.width) || !std::isfinite(metrics.height) ||
-      !std::isfinite(metrics.page_x) || !std::isfinite(metrics.page_y)) {
-    return std::nullopt;
-  }
-  const double zoom = css->FindDouble("zoom").value_or(1);
-  metrics.zoom = std::isfinite(zoom) && zoom > 0 ? zoom : 1;
-  // visualViewport's size is in device pixels (Blink's own), the CSS one's
-  // in CSS pixels: their ratio is the zoom times the device scale factor.
-  const base::DictValue* device = layout_metrics.FindDict("visualViewport");
-  const double device_width =
-      device ? device->FindDouble("clientWidth").value_or(0) : 0;
-  double scale = device_width / metrics.width / metrics.zoom;
-  if (!std::isfinite(scale) || scale <= 0) {
-    scale = 1;
-  }
-  // The ratio of a rounded size: snap to the quarter it means (1, 2, 3, 1.5).
-  const double quarter = std::round(scale * 4) / 4;
-  if (quarter > 0 && std::abs(scale - quarter) < 0.02) {
-    scale = quarter;
-  }
-  metrics.device_scale = scale;
-  return metrics;
-}
-
 std::optional<CssRect> QuadsBounds(const base::DictValue& quads_result) {
   const base::ListValue* quads = quads_result.FindList("quads");
   if (!quads) {
@@ -205,87 +147,42 @@ std::optional<CssRect> QuadsBounds(const base::DictValue& quads_result) {
   return CssRect{left, top, right - left, bottom - top};
 }
 
-ShotPlanResult PlanShot(const ViewportMetrics& viewport,
-                        std::optional<ShotSize> size,
-                        std::optional<CssRect> region,
-                        double margin,
-                        std::string_view what,
-                        bool may_clip) {
-  if (!(viewport.width > 0 && viewport.height > 0)) {
-    return PlanError(
-        "Koan.pageError: the tab did not say how big its viewport is; retry");
-  }
-  // Device pixels per CSS pixel.
-  const double device = viewport.zoom * viewport.device_scale;
-  CssRect area{0, 0, viewport.width, viewport.height};
-  if (region) {
-    if (!may_clip) {
-      return PlanError(
-          "Koan.notPermitted: --clip works on the agent's own tabs (Koan "
-          "captures a tab of the user's only as a whole, at full size, so "
-          "that it never resizes it); take koan screenshot <tab> without "
-          "--clip");
-    }
-    if (!(region->width > 0 && region->height > 0)) {
-      return PlanError("Koan.emptyElement: " + std::string(what) +
-                       " has no size on the page (hidden, collapsed or "
-                       "empty); clip what holds it, or take a screenshot of "
-                       "the tab");
-    }
-    const double left = std::max(0.0, region->x - margin);
-    const double top = std::max(0.0, region->y - margin);
-    const double right =
-        std::min(viewport.width, region->x + region->width + margin);
-    const double bottom =
-        std::min(viewport.height, region->y + region->height + margin);
-    if (right - left < 1 || bottom - top < 1) {
-      return PlanError("Koan.offScreen: " + std::string(what) +
-                       " is outside the viewport; scroll to it (koan act "
-                       "<tab> scroll <pixels>) and try again");
-    }
-    area = {left, top, right - left, bottom - top};
-  }
-
-  ShotPlan plan;
-  if (!may_clip) {
-    // What the tab shows, as it shows it.
-    plan.image_width = Pixels(area.width, device);
-    plan.image_height = Pixels(area.height, device);
-    plan.css_per_pixel = 1 / device;
-    return {plan, ""};
-  }
+base::DictValue CaptureParams(std::string_view target,
+                              std::optional<ShotSize> size,
+                              std::optional<CssRect> region,
+                              double margin) {
   const ShotSize effective =
       size.value_or(region ? ShotSize::kFull : ShotSize::kNormal);
-  // Image pixels per CSS pixel before fitting: never more than the display
-  // has (a page zoomed out is not drawn larger than it shows).
-  const double natural =
-      effective == ShotSize::kFull ? device : std::min(1.0, device);
-  const double long_css = std::max(area.width, area.height);
-  double fit = std::min(1.0, LongEdgeOf(effective) / (long_css * natural));
-  const double pixels =
-      area.width * area.height * (natural * fit) * (natural * fit);
-  const double max_pixels =
-      static_cast<double>(kMaxImageTokens) * kPixelsPerToken;
-  if (pixels > max_pixels) {
-    fit *= std::sqrt(max_pixels / pixels);
+  base::DictValue params;
+  params.Set("targetId", target);
+  params.Set("longEdge", LongEdgeOf(effective));
+  // Image pixels per CSS pixel at most: CSS pixels, or as sharp as the
+  // display draws (the browser caps it there).
+  params.Set("scale",
+             effective == ShotSize::kFull ? agent::kMaxCaptureScale : 1.0);
+  params.Set("format", "png");
+  if (region) {
+    params.Set("clip", base::DictValue()
+                           .Set("x", region->x - margin)
+                           .Set("y", region->y - margin)
+                           .Set("width", region->width + 2 * margin)
+                           .Set("height", region->height + 2 * margin));
   }
-  const double per_css = natural * fit;
-  plan.image_width = Pixels(area.width, per_css);
-  plan.image_height = Pixels(area.height, per_css);
-  plan.css_per_pixel = 1 / per_css;
-  plan.scale = per_css / device;
-  // The whole viewport at device pixels is the plain capture: no clip, so
-  // the tab's view is not resized for it.
-  plan.clip = region.has_value() || std::abs(plan.scale - 1) > 1e-6;
-  if (plan.clip) {
-    plan.x = (viewport.page_x + area.x) * viewport.zoom;
-    plan.y = (viewport.page_y + area.y) * viewport.zoom;
-    plan.width = area.width * viewport.zoom;
-    plan.height = area.height * viewport.zoom;
-  } else {
-    plan.scale = 1;
+  return params;
+}
+
+std::string ClipRefusal(std::string_view code, std::string_view what) {
+  if (code == "Koan.offScreen") {
+    return "Koan.offScreen: " + std::string(what) +
+           " is outside the viewport; scroll to it (koan act <tab> scroll "
+           "<pixels>) and try again";
   }
-  return {plan, ""};
+  if (code == "Koan.emptyElement") {
+    return "Koan.emptyElement: " + std::string(what) +
+           " has no size on the page (hidden, collapsed or empty); clip what "
+           "holds it, or take a screenshot of the tab";
+  }
+  return std::string();
 }
 
 std::optional<std::pair<int, int>> PngSize(base::span<const uint8_t> png) {
@@ -313,7 +210,7 @@ std::string ShotLine(std::string_view path,
                      int width,
                      int height,
                      double css_per_pixel) {
-  int tokens = EstimateImageTokens(width, height);
+  int tokens = agent::EstimateImageTokens(width, height);
   // An estimate: to the nearest ten above a hundred.
   if (tokens >= 100) {
     tokens = (tokens + 5) / 10 * 10;
@@ -333,7 +230,7 @@ base::DictValue ShotJson(std::string_view path,
   json.Set("path", path);
   json.Set("width", width);
   json.Set("height", height);
-  json.Set("imageTokens", EstimateImageTokens(width, height));
+  json.Set("imageTokens", agent::EstimateImageTokens(width, height));
   json.Set("cssPxPerPx", std::round(css_per_pixel * 1000) / 1000);
   return json;
 }

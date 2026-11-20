@@ -43,6 +43,7 @@ source_set("cli_lib") {
   public_deps = [
     "//base",
     "//koan/browser/agent:auth",
+    "//koan/browser/agent:capture",
     "//koan/browser/agent:frame",
   ]
 }

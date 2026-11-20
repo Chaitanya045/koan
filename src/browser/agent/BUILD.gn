@@ -64,6 +64,17 @@ source_set("session") {
   deps = [ "//third_party/icu" ]
 }
 
+# Koan.captureScaled's pure part: its parameters, the CSS px -> DIP -> device
+# pixel mapping, the image's size, the CDP fallback and where masks land
+# (koan_agent_capture.h). Also the image budget the `koan` CLI uses.
+source_set("capture") {
+  sources = [
+    "koan_agent_capture.cc",
+    "koan_agent_capture.h",
+  ]
+  public_deps = [ "//base" ]
+}
+
 # The limits the user can change, and how a stored value is read.
 source_set("limits") {
   sources = [
@@ -233,6 +244,8 @@ if (is_posix) {
       "koan_agent_reach_content.h",
       "koan_agent_service.cc",
       "koan_agent_service.h",
+      "koan_agent_surface_capture.cc",
+      "koan_agent_surface_capture.h",
     ]
     if (is_mac) {
       sources += [ "koan_agent_lease_mac.mm" ]
@@ -241,6 +254,7 @@ if (is_posix) {
     public_deps = [
       ":audit",
       ":auto_resume",
+      ":capture",
       ":facade",
       ":lease_scheduler",
       ":prompts",
@@ -280,14 +294,17 @@ if (is_posix) {
       "//components/security_interstitials/content:security_interstitial_page",
       "//components/tabs:public",
       "//components/version_info",
+      "//components/viz/common",
       "//content/public/browser",
       "//content/public/common",
       "//koan/browser:prefs",
       "//koan/browser/containers",
       "//koan/browser/containers:partition",
       "//net",
+      "//skia",
       "//third_party/blink/public/common",
       "//ui/base",
+      "//ui/gfx/codec",
       "//ui/gfx/geometry",
       "//ui/views",
     ]
@@ -381,6 +398,7 @@ source_set("facade") {
   ]
   public_deps = [
     ":audit",
+    ":capture",
     ":session",
     "//base",
     "//url",
@@ -407,6 +425,7 @@ test("koan_agent_unittests") {
     "koan_agent_audit_unittest.cc",
     "koan_agent_auth_unittest.cc",
     "koan_agent_auto_resume_unittest.cc",
+    "koan_agent_capture_unittest.cc",
     "koan_agent_contexts_unittest.cc",
     "koan_agent_events_unittest.cc",
     "koan_agent_facade_unittest.cc",
@@ -428,6 +447,7 @@ test("koan_agent_unittests") {
     ":audit",
     ":auth",
     ":auto_resume",
+    ":capture",
     ":contexts",
     ":events",
     ":facade",

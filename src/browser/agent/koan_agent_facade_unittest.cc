@@ -114,6 +114,18 @@ class FakeBackend : public FacadeBackend {
   void AskToResume(const std::string& target_id) override {
     resume_asked.push_back(target_id);
   }
+  std::optional<SurfaceGeometry> DescribeSurface(
+      const std::string& target_id) override {
+    if (!tabs.contains(target_id) || !surface) {
+      return std::nullopt;
+    }
+    return surface;
+  }
+  void CopySurface(const std::string& target_id,
+                   SurfaceCaptureJob job,
+                   SurfaceCaptureCallback done) override {
+    copies.push_back({target_id, std::move(job), std::move(done)});
+  }
   base::DictValue BrowserVersion() override {
     base::DictValue version;
     version.Set("product", "Koan/test");
@@ -154,6 +166,15 @@ class FakeBackend : public FacadeBackend {
   };
   std::map<std::string, KeptAlive> keep_alives;
   bool low_power = false;
+  // Koan.captureScaled: the view, and the copies asked for (answered by the
+  // test).
+  std::optional<SurfaceGeometry> surface = SurfaceGeometry{1440, 900, 2};
+  struct Copy {
+    std::string target_id;
+    SurfaceCaptureJob job;
+    SurfaceCaptureCallback done;
+  };
+  std::vector<Copy> copies;
 };
 
 class KoanAgentFacadeTest : public testing::Test {
@@ -1239,4 +1260,127 @@ TEST_F(KoanAgentFacadeTest, PauseAndResumeEventsDescribeThePause) {
 }
 
 }  // namespace
+// Koan.captureScaled: the page's viewport, then a copy of the surface.
+constexpr char kLayoutMetrics[] = R"({
+    "cssVisualViewport": {"pageX": 0, "pageY": 0, "clientWidth": 1440,
+                          "clientHeight": 900, "zoom": 1, "scale": 1}})";
+
+TEST_F(KoanAgentFacadeTest, CaptureScaledCopiesTheSurfaceOfAUsersTab) {
+  // A user's tab, taken over: the same capture as an agent's own tab.
+  registry_.GrantUserTab("U1", "alice", TabState::kDriven);
+  const std::string session = AttachTo("U1");
+  ASSERT_FALSE(session.empty());
+  Send(1, "Koan.captureScaled",
+       Parse(R"({"targetId": "U1", "longEdge": 640, "scale": 1})"));
+  // It asked the page for its viewport, nothing else (no emulation).
+  ASSERT_FALSE(backend_.sent.empty());
+  EXPECT_EQ(*backend_.sent.back().command.FindString("method"),
+            "Page.getLayoutMetrics");
+  AnswerLast(Parse(kLayoutMetrics));
+  ASSERT_EQ(backend_.copies.size(), 1u);
+  FakeBackend::Copy& copy = backend_.copies[0];
+  EXPECT_EQ(copy.target_id, "U1");
+  EXPECT_TRUE(copy.job.whole);
+  EXPECT_EQ(copy.job.image_width, 640);
+  EXPECT_EQ(copy.job.image_height, 400);
+  EXPECT_TRUE(copy.job.masks.empty());
+  EXPECT_FALSE(Answer(1));
+  SurfaceCaptureResult copied;
+  copied.status = SurfaceStatus::kOk;
+  copied.encoded = {1, 2, 3};
+  copied.width = 640;
+  copied.height = 400;
+  std::move(copy.done).Run(std::move(copied));
+  const base::DictValue* answer = Answer(1);
+  ASSERT_TRUE(answer);
+  EXPECT_EQ(*answer->FindStringByDottedPath("result.data"), "AQID");
+  EXPECT_EQ(answer->FindIntByDottedPath("result.width"), 640);
+  EXPECT_EQ(answer->FindIntByDottedPath("result.height"), 400);
+  EXPECT_EQ(answer->FindDoubleByDottedPath("result.cssPerPixel"), 2.25);
+  EXPECT_EQ(*answer->FindStringByDottedPath("result.via"), "surface");
+  for (const FakeBackend::Sent& sent : backend_.sent) {
+    EXPECT_NE(*sent.command.FindString("method"), "Page.captureScreenshot");
+  }
+  ASSERT_FALSE(backend_.audits.empty());
+  EXPECT_EQ(backend_.audits.back().event, "Koan.captureScaled");
+  EXPECT_EQ(backend_.audits.back().outcome, AuditOutcome::kOk);
+
+  // CDP's clip (device emulation, which resizes the view) stays refused on
+  // the user's tab.
+  Send(2, "Page.captureScreenshot",
+       Parse(R"({"clip": {"x": 0, "y": 0, "width": 10, "height": 10,
+                          "scale": 1}})"),
+       session);
+  EXPECT_EQ(ErrorCode(2), "Koan.notPermitted");
+}
+
+TEST_F(KoanAgentFacadeTest, CaptureScaledOnAReadOnlyTabAndItsErrors) {
+  // A tab the agent may only read: a screenshot is a read.
+  registry_.GrantUserTab("U1", "alice", TabState::kReadable);
+  Send(1, "Koan.captureScaled", Parse(R"({"targetId": "U1"})"));
+  EXPECT_EQ(ErrorCode(1), "Koan.notAttached");
+  ASSERT_FALSE(AttachTo("U1").empty());
+  Send(2, "Koan.captureScaled",
+       Parse(R"({"targetId": "U1", "clip": {"x": 2000, "y": 0,
+                                           "width": 50, "height": 50}})"));
+  AnswerLast(Parse(kLayoutMetrics));
+  EXPECT_EQ(ErrorCode(2), "Koan.offScreen");
+  Send(3, "Koan.captureScaled",
+       Parse(R"({"targetId": "U1", "clip": {"x": 10, "y": 10, "width": 0,
+                                           "height": 0}})"));
+  AnswerLast(Parse(kLayoutMetrics));
+  EXPECT_EQ(ErrorCode(3), "Koan.emptyElement");
+  Send(4, "Koan.captureScaled", Parse(R"({"targetId": "U1", "longEdge": 5})"));
+  EXPECT_EQ(ErrorCode(4), "Koan.invalidParams");
+  // Not the client's tab.
+  Send(5, "Koan.captureScaled", Parse(R"({"targetId": "T2"})"));
+  EXPECT_EQ(ErrorCode(5), "Koan.unknownTarget");
+  EXPECT_TRUE(backend_.copies.empty());
+}
+
+TEST_F(KoanAgentFacadeTest, CaptureScaledFallsBackToCdpOnlyOnAgentTabs) {
+  // An agent's own tab with no surface: CDP draws it, and the answer says so.
+  const std::string session = AttachTo("T1");
+  Send(1, "Koan.captureScaled",
+       Parse(R"({"targetId": "T1", "longEdge": 320, "scale": 1})"));
+  AnswerLast(Parse(kLayoutMetrics));
+  ASSERT_EQ(backend_.copies.size(), 1u);
+  SurfaceCaptureResult failed;
+  failed.status = SurfaceStatus::kNoSurface;
+  std::move(backend_.copies[0].done).Run(std::move(failed));
+  const base::DictValue& fallback = backend_.sent.back().command;
+  EXPECT_EQ(*fallback.FindString("method"), "Page.captureScreenshot");
+  EXPECT_EQ(fallback.FindDoubleByDottedPath("params.clip.width"), 1440);
+  EXPECT_NEAR(fallback.FindDoubleByDottedPath("params.clip.scale").value_or(0),
+              320.0 / 2880, 1e-9);
+  AnswerLast(Parse(R"({"data": "AQID"})"));
+  const base::DictValue* answer = Answer(1);
+  ASSERT_TRUE(answer);
+  EXPECT_EQ(*answer->FindStringByDottedPath("result.via"), "cdp");
+  EXPECT_EQ(*answer->FindStringByDottedPath("result.fallbackReason"),
+            "noSurface");
+  EXPECT_EQ(answer->FindIntByDottedPath("result.width"), 320);
+
+  // A user's tab never: no emulation there, an error instead.
+  registry_.GrantUserTab("U1", "alice", TabState::kDriven);
+  ASSERT_FALSE(AttachTo("U1").empty());
+  Send(2, "Koan.captureScaled", Parse(R"({"targetId": "U1"})"));
+  AnswerLast(Parse(kLayoutMetrics));
+  ASSERT_EQ(backend_.copies.size(), 2u);
+  const size_t sent_before = backend_.sent.size();
+  SurfaceCaptureResult none;
+  none.status = SurfaceStatus::kNoSurface;
+  std::move(backend_.copies[1].done).Run(std::move(none));
+  EXPECT_EQ(ErrorCode(2), "Koan.noSurface");
+  EXPECT_EQ(backend_.sent.size(), sent_before);
+}
+
+TEST_F(KoanAgentFacadeTest, CaptureScaledEndsWithTheSession) {
+  const std::string session = AttachTo("T1");
+  Send(1, "Koan.captureScaled", Parse(R"({"targetId": "T1"})"));
+  // The tab goes before it says how big its viewport is.
+  facade_.OnTabDetached("T1");
+  EXPECT_EQ(ErrorCode(1), "Koan.targetClosed");
+}
+
 }  // namespace koan::agent
