@@ -18,6 +18,9 @@
 #                                 loaded beside test_helper
 #   KOAN_AGENT_SETUP_HOME         (inherited by Koan) where Settings > Agent
 #                                 Control > Set up agents writes
+#   KOAN_COMPONENT_UPDATE=1       the component updater on (registers and
+#                                 fetches components such as Widevine; off
+#                                 by default)
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$here/../../.." && pwd)"
@@ -55,8 +58,10 @@ if [[ -n "${KOAN_PREFS:-}" ]]; then
 fi
 extensions="$ROOT/scripts/e2e/extensions/test_helper${KOAN_EXTRA_EXTENSIONS:+,$KOAN_EXTRA_EXTENSIONS}"
 # shellcheck disable=SC2054  # "1280,820" is one value
+updates=(--disable-component-update)
+[[ "${KOAN_COMPONENT_UPDATE:-}" == 1 ]] && updates=()
 args=("$exe" --user-data-dir="$prof" --no-first-run --no-default-browser-check
-  --disable-component-update --use-mock-keychain
+  "${updates[@]}" --use-mock-keychain
   --window-position="$POS" --window-size="$SIZE"
   --enable-logging=stderr --enable-ui-devtools="$UI_PORT" --remote-debugging-port="$CDP_PORT"
   --load-extension="$extensions"

@@ -165,6 +165,8 @@ for name in "${flows[@]}"; do
     uf_toprow)
       launch_env+=(KOAN_EXTRA_EXTENSIONS="$ROOT/scripts/e2e/extensions/action_popup"
                    KOAN_PREFS="$ROOT/scripts/e2e/prefs/sidebar_top_row.json") ;;
+    # chrome://components lists Widevine only with the component updater on.
+    uf_build) launch_env+=(KOAN_COMPONENT_UPDATE=1) ;;
   esac
   log "--- $name"
   if ! env "${launch_env[@]}" "$here/launch.sh" "$app" >"$fdir/launch.out" 2>&1; then
