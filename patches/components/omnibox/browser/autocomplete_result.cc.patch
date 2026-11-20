@@ -1,0 +1,33 @@
+diff --git a/components/omnibox/browser/autocomplete_result.cc b/components/omnibox/browser/autocomplete_result.cc
+index 0b24734e66f96e4568d6f989d54a82c81b1ee740..07a4cd416731b1ddb50a1286251c059eb4d4c547 100644
+--- a/components/omnibox/browser/autocomplete_result.cc
++++ b/components/omnibox/browser/autocomplete_result.cc
+@@ -58,6 +58,7 @@
+ #include "components/strings/grit/components_strings.h"
+ #include "components/url_formatter/url_fixer.h"
+ #include "extensions/buildflags/buildflags.h"
++#include "koan/browser/omnibox/koan_omnibox_hooks.h"
+ #include "omnibox_triggered_feature_service.h"
+ #include "third_party/metrics_proto/omnibox_event.pb.h"
+ #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
+@@ -730,6 +731,20 @@ void AutocompleteResult::SortAndCull(
+             std::make_unique<IOSWebZpsSection>(suggestion_groups_map_));
+       }
+     }
++    // Koan: Zen's empty URL bar lists open tabs and top sites. None of the
++    // sections above takes them (Google's: tabs from other devices, trending
++    // and personalized searches, most-visited tiles with a zero limit), so
++    // Koan's provider's matches (koan/browser/ui/views/koan_zero_suggest.h)
++    // get one of their own, and no other navigation joins them.
++    if (koan::UsesLocalZeroSuggestSection(input.current_page_classification())) {
++      std::erase_if(matches_, [](const AutocompleteMatch& match) {
++        return match.suggestion_group_id == omnibox::GROUP_OTHER_NAVS &&
++               !koan::IsLocalZeroSuggestMatch(match);
++      });
++      sections.push_back(std::make_unique<ZpsSection>(
++          8u, Groups{Group(8u, {{omnibox::GROUP_OTHER_NAVS, 8u}})},
++          suggestion_groups_map_));
++    }
+     matches_ = Section::GroupMatches(std::move(sections), matches_);
+   } else if (use_grouping_for_non_zps) {
+     PSections sections;

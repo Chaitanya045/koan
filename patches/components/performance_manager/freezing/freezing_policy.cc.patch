@@ -1,0 +1,98 @@
+diff --git a/components/performance_manager/freezing/freezing_policy.cc b/components/performance_manager/freezing/freezing_policy.cc
+index 610f1fe35acc940fe003373d776dfb3efdb225d3..b1d712faaba18ee595d80496eca3f52bb4761354 100644
+--- a/components/performance_manager/freezing/freezing_policy.cc
++++ b/components/performance_manager/freezing/freezing_policy.cc
+@@ -52,6 +52,11 @@ using resource_attribution::OriginInBrowsingInstanceContext;
+ 
+ constexpr base::TimeDelta kCPUMeasurementInterval = base::Minutes(1);
+ 
++// Koan: how long after it last played audio a page stays exempt from
++// infinite-tabs and battery-saver freezing
++// (`CannotFreezeReason::kPlayedAudio`).
++constexpr base::TimeDelta kPlayedAudioProtectionTime = base::Hours(1);
++
+ bool HasCannotFreezeReasonForType(
+     const CannotFreezeReasonSet& cannot_freeze_reasons,
+     FreezingPolicy::FreezingType type) {
+@@ -190,6 +195,9 @@ struct FreezingPolicy::PageFreezingState
+   // Timer to remove `CannotFreezeReason::kRecentlyAudible`.
+   base::OneShotTimer recently_audible_timer;
+ 
++  // Timer to remove `CannotFreezeReason::kPlayedAudio` (Koan).
++  base::OneShotTimer played_audio_timer;
++
+   // Timer for periodic unfreezing.
+   base::OneShotTimer periodic_unfreeze_timer;
+ };
+@@ -374,6 +382,10 @@ CannotFreezeReasonSet FreezingPolicy::CannotFreezeReasonsForType(
+   } else {
+     reasons.Remove(CannotFreezeReason::kMostRecentlyUsed);
+   }
++  if (type == FreezingPolicy::FreezingType::kVoting) {
++    reasons.Remove(CannotFreezeReason::kPinnedTab);
++    reasons.Remove(CannotFreezeReason::kPlayedAudio);
++  }
+   return reasons;
+ }
+ 
+@@ -737,6 +749,12 @@ void FreezingPolicy::OnIsAudibleChanged(const PageNode* page_node) {
+   if (page_node->IsAudible()) {
+     OnCannotFreezeReasonChange(page_node, /*add=*/true,
+                                CannotFreezeReason::kAudible);
++    page_freezing_state.played_audio_timer.Stop();
++    if (!page_freezing_state.cannot_freeze_reasons.Has(
++            CannotFreezeReason::kPlayedAudio)) {
++      OnCannotFreezeReasonChange(page_node, /*add=*/true,
++                                 CannotFreezeReason::kPlayedAudio);
++    }
+     if (page_freezing_state.recently_audible_timer.IsRunning()) {
+       page_freezing_state.recently_audible_timer.Stop();
+       OnCannotFreezeReasonChange(page_node, /*add=*/false,
+@@ -756,6 +774,30 @@ void FreezingPolicy::OnIsAudibleChanged(const PageNode* page_node) {
+             // `OnBeforePageNodeRemoved` before `page_node` is deleted.
+             base::Unretained(page_node),
+             /* add=*/false, CannotFreezeReason::kRecentlyAudible));
++
++    // A paused player keeps answering media keys for an hour.
++    if (page_freezing_state.cannot_freeze_reasons.Has(
++            CannotFreezeReason::kPlayedAudio)) {
++      page_freezing_state.played_audio_timer.Start(
++          FROM_HERE, kPlayedAudioProtectionTime,
++          base::BindOnce(&FreezingPolicy::OnCannotFreezeReasonChange,
++                         base::Unretained(this),
++                         // Safe for the same reason as above.
++                         base::Unretained(page_node),
++                         /* add=*/false, CannotFreezeReason::kPlayedAudio));
++    }
++  }
++}
++
++void FreezingPolicy::OnMainFrameDocumentChanged(const PageNode* page_node) {
++  // A new document: the player that made the sound is gone.
++  auto& page_freezing_state = GetFreezingState(page_node);
++  page_freezing_state.played_audio_timer.Stop();
++  if (page_freezing_state.cannot_freeze_reasons.Has(
++          CannotFreezeReason::kPlayedAudio) &&
++      !page_node->IsAudible()) {
++    OnCannotFreezeReasonChange(page_node, /*add=*/false,
++                               CannotFreezeReason::kPlayedAudio);
+   }
+ }
+ 
+@@ -994,6 +1036,16 @@ void FreezingPolicy::OnIsCapturingWindowChanged(const PageNode* page_node) {
+                              CannotFreezeReason::kCapturingWindow);
+ }
+ 
++void FreezingPolicy::OnIsPinnedTabChanged(const PageNode* page_node) {
++  const bool pinned =
++      PageLiveStateDecorator::Data::FromPageNode(page_node)->IsPinnedTab();
++  if (pinned != GetFreezingState(page_node).cannot_freeze_reasons.Has(
++                    CannotFreezeReason::kPinnedTab)) {
++    OnCannotFreezeReasonChange(page_node, /*add=*/pinned,
++                               CannotFreezeReason::kPinnedTab);
++  }
++}
++
+ void FreezingPolicy::OnIsCapturingDisplayChanged(const PageNode* page_node) {
+   OnCannotFreezeReasonChange(page_node,
+                              /*add=*/IsPageCapturingDisplay(page_node),

@@ -1,0 +1,12 @@
+diff --git a/components/site_engagement/content/BUILD.gn b/components/site_engagement/content/BUILD.gn
+index 6287f81ef2f15d617e25f5c4da1adeac073f5aad..b057de2da6225a6b59c80687d86abdbf19fdb15e 100644
+--- a/components/site_engagement/content/BUILD.gn
++++ b/components/site_engagement/content/BUILD.gn
+@@ -35,6 +35,7 @@ source_set("content") {
+     "//components/webapps/browser:webapps_client",
+     "//components/webapps/common",
+     "//content/public/browser",
++    "//koan/browser/containers:partition",
+     "//third_party/blink/public/mojom:mojom_platform_headers",
+     "//url",
+   ]

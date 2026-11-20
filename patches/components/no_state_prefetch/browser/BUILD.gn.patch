@@ -1,0 +1,12 @@
+diff --git a/components/no_state_prefetch/browser/BUILD.gn b/components/no_state_prefetch/browser/BUILD.gn
+index 545288f6726802c110ea3cabb391efaaf67f180a..2d60be41b93c39106a5bc14c7cc9e42b8a72e8b9 100644
+--- a/components/no_state_prefetch/browser/BUILD.gn
++++ b/components/no_state_prefetch/browser/BUILD.gn
+@@ -40,6 +40,7 @@ static_library("browser") {
+     "//components/no_state_prefetch/common:mojo_bindings",
+     "//components/paint_preview/browser",
+     "//content/public/browser",
++    "//koan/browser/containers:partition",
+     "//net",
+     "//services/metrics/public/cpp:ukm_builders",
+     "//ui/gfx/geometry",

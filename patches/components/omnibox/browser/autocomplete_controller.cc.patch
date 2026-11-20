@@ -1,0 +1,20 @@
+diff --git a/components/omnibox/browser/autocomplete_controller.cc b/components/omnibox/browser/autocomplete_controller.cc
+--- a/components/omnibox/browser/autocomplete_controller.cc
++++ b/components/omnibox/browser/autocomplete_controller.cc
+@@ -99,6 +99,7 @@
+ #include "components/search_engines/template_url_starter_pack_data.h"
+ #include "components/strings/grit/components_strings.h"
+ #include "components/url_formatter/elide_url.h"
++#include "koan/browser/omnibox/koan_omnibox_hooks.h"
+ #include "net/base/url_util.h"
+ #include "net/http/http_util.h"
+ #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
+@@ -588,6 +589,8 @@
+   }
+ #endif
+ 
++  koan::AddAutocompleteProviders(this, config_.provider_types, providers_);
++
+   // Create URL scoring signal annotators.
+   if (OmniboxFieldTrial::IsPopulatingUrlScoringSignalsEnabled() &&
+       OmniboxFieldTrial::AreScoringSignalsAnnotatorsEnabled()) {

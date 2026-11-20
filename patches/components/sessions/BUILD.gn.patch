@@ -1,0 +1,12 @@
+diff --git a/components/sessions/BUILD.gn b/components/sessions/BUILD.gn
+index 6cd7e695e54e9cdfa58dad6225e0ddd357e3ac12..99447a1a200dc45a1cf5a86bd4a3674da1099efd 100644
+--- a/components/sessions/BUILD.gn
++++ b/components/sessions/BUILD.gn
+@@ -44,6 +44,7 @@ if (use_blink && !(is_ios && target_platform == "iphoneos")) {
+     deps = [
+       "//base",
+       "//content/public/common",
++      "//koan/browser/containers:partition",
+       "//ui/base",
+       "//url",
+     ]

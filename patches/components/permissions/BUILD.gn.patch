@@ -1,0 +1,11 @@
+diff --git a/components/permissions/BUILD.gn b/components/permissions/BUILD.gn
+--- a/components/permissions/BUILD.gn
++++ b/components/permissions/BUILD.gn
+@@ -161,6 +161,7 @@
+     "//device/bluetooth",
+     "//device/bluetooth/public/cpp",
+     "//extensions/buildflags",
++    "//koan/browser/containers:partition",
+     "//services/device/public/cpp/geolocation",
+     "//services/device/public/mojom",
+     "//services/metrics/public/cpp:ukm_builders",

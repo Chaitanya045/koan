@@ -1,0 +1,20 @@
+diff --git a/components/performance_manager/freezing/freezing_policy.h b/components/performance_manager/freezing/freezing_policy.h
+index ea9c96f58e792043f45ce9c70bebb25eeaf9326f..670558811508e3e77a4174ef29c01507b5becbda 100644
+--- a/components/performance_manager/freezing/freezing_policy.h
++++ b/components/performance_manager/freezing/freezing_policy.h
+@@ -204,6 +204,7 @@ class FreezingPolicy : public PageNodeObserver,
+       std::optional<blink::mojom::PermissionStatus> previous_status) override;
+   void OnMainFrameUrlChanged(const PageNode* page_node,
+                              const GURL& previous_url) override;
++  void OnMainFrameDocumentChanged(const PageNode* page_node) override;
+   void OnLoadingStateChanged(const PageNode* page_node,
+                              PageNode::LoadingState previous_state) override;
+ 
+@@ -228,6 +229,7 @@ class FreezingPolicy : public PageNodeObserver,
+   void OnIsBeingMirroredChanged(const PageNode* page_node) override;
+   void OnIsCapturingWindowChanged(const PageNode* page_node) override;
+   void OnIsCapturingDisplayChanged(const PageNode* page_node) override;
++  void OnIsPinnedTabChanged(const PageNode* page_node) override;
+ 
+   // NodeDataDescriber:
+   base::DictValue DescribePageNodeData(const PageNode* node) const override;
