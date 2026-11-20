@@ -41,7 +41,7 @@ Provider instance `opencode`, reasoning `variant: high`, in this order:
   read-only while a build ran. Good-quality review with file:line evidence
   (claims spot-checked: correct). Found 3 real robustness bugs in
   `apply_patches.sh` export/apply. Its T3 `summary` was only its first
-  sentence; the useful output was the requested file in `.agent/notes/reviews/`.
+  sentence; the useful output was the requested file in `.agent/notes/reviews/` (since removed; reviews are now PR comments).
 - 2026-10-19: DeepSeek free stalled for ~1 h mid-review (no output file)
   and was cancelled; GLM free redid it in ~40 min with a good, verified
   review. Ask for incremental writes and a time budget; check the child

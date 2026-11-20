@@ -15,7 +15,7 @@ running it on this machine (8 cores, 15.8 GB RAM).
 - **The orchestrating thread** reviews each PR, sends the findings back to
   the PR's thread, merges once CI and the e2e tests pass, and tells the other
   threads to rebase. A scheduled check-in every 45 minutes keeps this going.
-  Reviews are saved to [reviews/](reviews/).
+  Reviews were saved to [reviews/](https://github.com/Chaitanya045/koan/tree/ac644383c4884c21aaa7a2a7fc23694e5a5859e0/.agent/notes/reviews) (removed from the tree on 2026-11-20; reviews are now PR comments).
 
 ## One Chromium checkout, one out dir
 
