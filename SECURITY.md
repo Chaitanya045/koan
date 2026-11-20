@@ -2,15 +2,20 @@
 
 ## Supported versions
 
-Koan hasn't had its first release yet. Until it does, security fixes go to
-the `develop` branch only. After v0.1.0, fixes will go to the latest release
-and to `develop`.
+Koan is in alpha (the first release, 0.0.1-alpha.1, came out on
+2026-11-20). Only the latest release on the
+[Releases page](https://github.com/Chaitanya045/koan/releases) is
+supported: security fixes go to `develop` and ship in the next alpha or
+nightly. There's no automatic updater yet, so install new versions by hand.
+While Koan is in alpha, Chromium's security fixes are applied on a
+best-effort basis, not on Chrome's schedule
+([docs/RELEASING.md](docs/RELEASING.md)).
 
 Koan follows Chromium's release branch for its milestone. A Koan build is
 only as secure as the Chromium version it's built on, which is listed in
 [`CHROMIUM_VERSION`](CHROMIUM_VERSION): always a release tag, never a main
-commit. Point releases (Chrome's weekly security fixes) are taken within
-days, and a new milestone within about two weeks of reaching Stable
+commit. The aim is to take point releases (Chrome's weekly security fixes)
+within days, and a new milestone within about two weeks of reaching Stable
 ([docs/REBASE.md](docs/REBASE.md#following-chromium-releases)). A scheduled
 workflow watches for them and keeps one tracking issue up to date.
 

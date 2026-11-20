@@ -7,7 +7,7 @@ and tinting, so a surface in the inventory maps to one Koan icon id.
 
 ## The set: Lucide (ISC), no second set needed
 
-Compared against Zen's glyphs in `screenshots/zen-mac/` (top row, tab rows,
+Compared against Zen's glyphs in [`screenshots/zen-mac/`](https://github.com/Chaitanya045/koan/tree/c6593d31481c0f789c0574d7a4d2376f98a40644/.agent/notes/screenshots/zen-mac) (top row, tab rows,
 bottom bar), on stroke weight, caps, grid and coverage:
 
 | Set | Licence | Grid, default stroke | Stroke / grid | Caps, joins | Coverage of Zen's 158 names |

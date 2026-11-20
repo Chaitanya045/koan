@@ -3,7 +3,7 @@
 Source: Zen 1.24b (`.cache/zen-src-1.24b/`, `.cache/zen-src/omni/modules/zen/ZenGradientGenerator.mjs`).
 Gecko's own window code (widget/cocoa) isn't in those trees; what the
 window material is can only be read off the captures
-(`.agent/notes/screenshots/zen-mac/`).
+([`.agent/notes/screenshots/zen-mac/`](https://github.com/Chaitanya045/koan/tree/c6593d31481c0f789c0574d7a4d2376f98a40644/.agent/notes/screenshots/zen-mac)).
 
 ## What Zen does
 

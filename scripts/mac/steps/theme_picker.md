@@ -6,7 +6,7 @@ Koan is still running. Two DCHECKs matter here: `Spaces:` (the leak detector, `C
 only the ones the theme controller set) and `paints a translucent theme on an opaque layer` (the theme controller's
 opaque-layer detector).
 
-Compare with Zen 1.24b (zen-ref captures in `.agent/notes/screenshots/zen-mac/`, spec `.agent/notes/zen-mac-spec.md`
+Compare with Zen 1.24b (zen-ref captures in [`.agent/notes/screenshots/zen-mac/`](https://github.com/Chaitanya045/koan/tree/c6593d31481c0f789c0574d7a4d2376f98a40644/.agent/notes/screenshots/zen-mac), spec `.agent/notes/zen-mac-spec.md`
 §15). Values in *italics* come from Zen's source, not from screenshots.
 
 Ids TT1–TT10 are the themes audit's Mac tests (`.agent/notes/upstream/themes-glass-ntp.md` §1.5). Tests 1, 3 and 4 are

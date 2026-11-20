@@ -48,5 +48,6 @@ documentation lives in [`docs/`](../../docs) and
 ## Records
 
 - [reviews/](reviews/): code reviews, one per PR (`prNN-review.md`)
-- [screenshots/](screenshots/): screenshots from development steps (the
-  README and docs images are in `docs/screenshots/`)
+- [screenshots/](https://github.com/Chaitanya045/koan/tree/c6593d31481c0f789c0574d7a4d2376f98a40644/.agent/notes/screenshots): screenshots from development steps and the Zen
+  reference captures, removed from the tree on 2026-11-20 and kept at this
+  permalink (the README and docs images are in `docs/screenshots/`)
