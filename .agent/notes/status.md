@@ -14,7 +14,7 @@ _Last updated: 2026-11-02_
   - In progress: #34 Spaces (PR #57), #42 folders (PR #60), #41 theme
     picker (PR #62), #43 Library (PR #64), #44 media/toasts/welcome.
     Merge order: #57, then #60 and #62 (per-Space themes go on #57's Space
-    field), then #64. Reviews are in [reviews/](reviews/).
+    field), then #64. Reviews are in [reviews/](https://github.com/Chaitanya045/koan/tree/ac644383c4884c21aaa7a2a7fc23694e5a5859e0/.agent/notes/reviews).
   - #59 owns the shared hooks the others build on: the tab-menu feature
     table, the per-tab and per-window session stores and
     `koan::IsPinnedForUser` (docs/REBASE.md, "Shared hooks").
@@ -134,7 +134,7 @@ _Last updated: 2026-11-02_
   own window controls were removed; instead the card leaves the caption
   strip free when the toolbar is hidden ([`.agent/notes/screenshots/desktop-*`](https://github.com/Chaitanya045/koan/tree/c6593d31481c0f789c0574d7a4d2376f98a40644/.agent/notes/screenshots)).
 
-- Phase 1-3 code review by GLM (`.agent/notes/reviews/phase1-3-review.md`): no
+- Phase 1-3 code review by GLM ([phase1-3-review.md](https://github.com/Chaitanya045/koan/blob/ac644383c4884c21aaa7a2a7fc23694e5a5859e0/.agent/notes/reviews/phase1-3-review.md)): no
   blockers; both should-fix items and the menu nit fixed (3650450). Accepted
   nits: class-name probes for the switcher/nav mount points (listed in
   docs/REBASE.md) and a cheap mode check on each layout.

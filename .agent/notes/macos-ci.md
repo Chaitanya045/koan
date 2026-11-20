@@ -61,7 +61,7 @@ Concurrency: one group per ref for nightly and manual runs
 most one waiting. Pull requests: `macos-pr-<number>`, cancelled by the next
 push. The release job also has its own `macos-nightly-release` group.
 
-Review of PR #70: [reviews/pr70-review.md](reviews/pr70-review.md).
+Review of PR #70: [reviews/pr70-review.md](https://github.com/Chaitanya045/koan/blob/ac644383c4884c21aaa7a2a7fc23694e5a5859e0/.agent/notes/reviews/pr70-review.md).
 
 ## How ungoogled-chromium-macos does it (checked 2026-11-02)
 

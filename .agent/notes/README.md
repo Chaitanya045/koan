@@ -47,7 +47,8 @@ documentation lives in [`docs/`](../../docs) and
 
 ## Records
 
-- [reviews/](reviews/): code reviews, one per PR (`prNN-review.md`)
+- [license-audit.md](license-audit.md): where Koan's code comes from, under which licence
+- Early per-PR reviews (#11–#93) were removed on 2026-11-20; they're at [reviews/](https://github.com/Chaitanya045/koan/tree/ac644383c4884c21aaa7a2a7fc23694e5a5859e0/.agent/notes/reviews). Reviews now live as comments on each PR
 - [screenshots/](https://github.com/Chaitanya045/koan/tree/c6593d31481c0f789c0574d7a4d2376f98a40644/.agent/notes/screenshots): screenshots from development steps and the Zen
   reference captures, removed from the tree on 2026-11-20 and kept at this
   permalink (the README and docs images are in `docs/screenshots/`)
