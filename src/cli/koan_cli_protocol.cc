@@ -245,8 +245,7 @@ namespace {
 // ~/work are one), and a trailing separator does not matter.
 bool SameDir(const base::FilePath& a, const base::FilePath& b) {
   return base::FilePath::CompareEqualIgnoreCase(
-      a.StripTrailingSeparators().value(),
-      b.StripTrailingSeparators().value());
+      a.StripTrailingSeparators().value(), b.StripTrailingSeparators().value());
 }
 
 }  // namespace
@@ -254,9 +253,8 @@ bool SameDir(const base::FilePath& a, const base::FilePath& b) {
 bool ShouldForget(const ClientInfo& client,
                   const base::FilePath& dialled,
                   const base::FilePath& default_user_data_dir) {
-  return client.user_data_dir.empty()
-             ? SameDir(dialled, default_user_data_dir)
-             : SameDir(client.user_data_dir, dialled);
+  return client.user_data_dir.empty() ? SameDir(dialled, default_user_data_dir)
+                                      : SameDir(client.user_data_dir, dialled);
 }
 
 std::string Request(int id,
