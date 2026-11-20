@@ -49,11 +49,14 @@ check('The top row has back, forward and reload', row.length === 3,
       row.map(v => v.props?.TooltipText).join(', '));
 if (row.length !== 3) finish();
 
-// Real input: the page's window is key, and where its root view is on the
-// screen (the real pointer over the page, see lib/mac.mjs calibrate()).
+// The page's tab in front (the buttons act on the shown tab: the suite's
+// profile starts on another, so UI DevTools' Back stayed on it and Copy URL
+// copied its address), its window key, and with real input where its root
+// view is on the screen (the real pointer over the page, see lib/mac.mjs
+// calibrate()).
+await makeKey(page);
 let origin = null;
 if (realInput()) {
-  await makeKey(page);
   origin = await calibrate(page, vs);
   check('Real pointer: calibrated on the page', !!origin);
 }

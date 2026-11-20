@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/functional/bind.h"
+#include "base/logging.h"  // C19DIAG
 #include "base/i18n/rtl.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
@@ -547,6 +548,20 @@ void KoanAgentIndicator::Update() {
       AgentControlService::Get() &&
           AgentControlService::Get()->keeping_display_awake());
   ShowEventToasts(koan::agent::EventStateFor(snapshot.clients, snapshot.tabs));
+  // C19DIAG
+  VLOG(1) << "C19DIAG Update window=" << browser_view_.get()
+          << " clients=" << snapshot.clients.size()
+          << " tabs=" << snapshot.tabs.size()
+          << " prompts=" << snapshot.prompts.size()
+          << " active=" << browser_view_->browser()->tab_strip_model()->GetActiveWebContents()
+          << " pill=" << content.pill.has_value() << " pill_=" << !!pill_;
+  for (const auto& t : snapshot.tabs) {
+    auto it = snapshot.tab_contents.find(t.target_id);
+    VLOG(1) << "C19DIAG  tab " << t.target_id << " state=" << static_cast<int>(t.state)
+            << " owned=" << t.agent_owned << " in_window=" << t.in_window
+            << " shown=" << t.shown << " contents="
+            << (it == snapshot.tab_contents.end() ? nullptr : it->second);
+  }
 
   std::set<const content::WebContents*> marked;
   if (content.connected) {
@@ -634,6 +649,8 @@ void KoanAgentIndicator::ShowPill(const PillContent& content) {
   pill_->SetContentsView(std::make_unique<KoanAgentIndicatorView>(content));
   PlaceInCorner(pill_.get());
   pill_->Show();
+  VLOG(1) << "C19DIAG pill shown " << pill_->GetWindowBoundsInScreen().ToString()
+          << " visible=" << pill_->IsVisible();  // C19DIAG
   pill_->GetContentsView()->GetViewAccessibility().AnnounceText(content.text);
 }
 

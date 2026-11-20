@@ -10,6 +10,9 @@
 // VerticalTabStripRegionView::IsPositionInWindowCaption() asking
 // koan::IsSidebarClientArea() before its top row's own test.
 
+#include <string>
+
+#include "base/strings/strcat.h"
 #include "base/test/run_until.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -45,6 +48,19 @@ T* FindView(views::View* root) {
     }
   }
   return nullptr;
+}
+
+// `view` and its ancestors, innermost first, with their bounds in the
+// widget: what took the event, for the failure message.
+std::string Describe(const views::View* view) {
+  std::string out;
+  for (; view; view = view->parent()) {
+    base::StrAppend(&out, {out.empty() ? "" : " < ",
+                           std::string(view->GetClassName()), " ",
+                           view->ConvertRectToWidget(view->GetLocalBounds())
+                               .ToString()});
+  }
+  return out.empty() ? "(none)" : out;
 }
 
 bool IsOnScreen(const views::View* view) {
@@ -104,7 +120,9 @@ IN_PROC_BROWSER_TEST_F(KoanSidebarTopRowBrowserTest, NavButtonsAreClientArea) {
     views::View* target =
         widget()->GetRootView()->GetEventHandlerForPoint(centre);
     EXPECT_TRUE(target && button->Contains(target))
-        << button->GetViewAccessibility().GetCachedName();
+        << button->GetViewAccessibility().GetCachedName() << " at "
+        << centre.ToString() << ": " << Describe(button) << "; the event went to "
+        << Describe(target);
   }
 }
 
