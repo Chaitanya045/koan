@@ -2997,7 +2997,10 @@ class ShellAnswer {
                               .Set("err", ReadBack(err_.get())))
               .value_or("{}");
       // The id as the line gave it (any JSON value), first.
-      printf("{\"id\":%s,%s\n", id.c_str(), answer.c_str() + 1);
+      // Splice it in for the answer's opening brace.
+      const std::string line =
+          "{\"id\":" + id + "," + answer.substr(answer.empty() ? 0 : 1);
+      printf("%s\n", line.c_str());
     } else {
       printf("--- exit %d\n", code);
     }
@@ -3011,11 +3014,7 @@ class ShellAnswer {
       return text;
     }
     rewind(file);
-    char buffer[16 * 1024];
-    size_t n;
-    while ((n = fread(buffer, 1, sizeof(buffer), file)) > 0) {
-      text.append(buffer, n);
-    }
+    base::ReadStreamToString(file, &text);
     // One line of JSON: the text is what the command printed, without its
     // last newline.
     if (!text.empty() && text.back() == '\n') {
