@@ -14,6 +14,7 @@
 #include "base/files/scoped_file.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_reader.h"
+#include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "koan/browser/agent/koan_agent_frame.h"
@@ -532,6 +533,11 @@ TEST(KoanCliProtocolTest, WhichStalePairingsAreForgotten) {
   record.user_data_dir = test;
   EXPECT_TRUE(ShouldForget(record, test, koan));
   EXPECT_FALSE(ShouldForget(record, koan, koan));
+  // macOS volumes ignore case, and a trailing separator is the same dir.
+  record.user_data_dir = test;
+  EXPECT_TRUE(ShouldForget(
+      record, base::FilePath(base::ToUpperASCII(test.value())), koan));
+  EXPECT_TRUE(ShouldForget(record, test.AsEndingWithSeparator(), koan));
   // A record from before pairings said which profile: only Koan's own.
   record.user_data_dir = base::FilePath();
   EXPECT_TRUE(ShouldForget(record, koan, koan));

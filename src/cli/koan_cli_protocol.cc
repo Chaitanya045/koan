@@ -239,11 +239,22 @@ std::optional<std::string> ChooseClient(
   return newest->client_id;
 }
 
+namespace {
+
+// The same directory: macOS volumes ignore case by default (~/Work and
+// ~/work are one), and a trailing separator does not matter.
+bool SameDir(const base::FilePath& a, const base::FilePath& b) {
+  return base::FilePath::CompareEqualIgnoreCase(
+      a.StripTrailingSeparators().value(), b.StripTrailingSeparators().value());
+}
+
+}  // namespace
+
 bool ShouldForget(const ClientInfo& client,
                   const base::FilePath& dialled,
                   const base::FilePath& default_user_data_dir) {
-  return client.user_data_dir.empty() ? dialled == default_user_data_dir
-                                      : client.user_data_dir == dialled;
+  return client.user_data_dir.empty() ? SameDir(dialled, default_user_data_dir)
+                                      : SameDir(client.user_data_dir, dialled);
 }
 
 std::string Request(int id,
