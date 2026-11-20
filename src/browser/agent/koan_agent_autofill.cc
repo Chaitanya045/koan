@@ -213,6 +213,9 @@ struct AgentAutofill::Request {
   base::WeakPtr<autofill::AutofillSuggestionDelegate> delegate;
   // The prompt in the indicator, while it waits for the user.
   uint64_t prompt = 0;
+  // The user opened that prompt: Chrome asks them, and may take as long as
+  // they do.
+  bool verified = false;
 };
 
 AgentAutofill::AgentAutofill(
@@ -472,7 +475,8 @@ void AgentAutofill::OnSuggestions(
     }
   }
 
-  if (NeedsUserToVerify(web_contents(), *request_->suggestion,
+  if (!request_->verified &&
+      NeedsUserToVerify(web_contents(), *request_->suggestion,
                         request_->kind)) {
     std::unique_ptr<Request> waiting = std::move(request_);
     const std::string detail =
@@ -524,7 +528,28 @@ void AgentAutofill::RunVerifiedFill() {
     return;
   }
   request_ = std::move(verify_);
-  Accept();
+  // The suggestions are asked for again, so that the row goes to the
+  // delegate as it is now (the page may have moved focus meanwhile), and
+  // the same label picked.
+  request_->verified = true;
+  request_->picked = false;
+  request_->taken = false;
+  request_->request.list = false;
+  request_->request.pick = AutofillPick{.label = request_->label};
+  content::RenderFrameHost* frame = FrameOf(request_->field);
+  autofill::AutofillDriver* driver =
+      frame ? autofill::ContentAutofillDriver::GetForRenderFrameHost(frame)
+            : nullptr;
+  if (!driver) {
+    request_.reset();
+    return;
+  }
+  request_->timer.Start(FROM_HERE, kSuggestionWait,
+                        base::BindOnce(&AgentAutofill::OnNoSuggestions,
+                                       weak_factory_.GetWeakPtr()));
+  driver->RendererShouldTriggerSuggestions(
+      request_->field,
+      autofill::AutofillSuggestionTriggerSource::kFormControlElementClicked);
 }
 
 void AgentAutofill::Accept() {
@@ -652,7 +677,10 @@ void AgentAutofill::OnPasswordsRead(int tries, base::Value values) {
     OnFilled();
     return;
   }
-  if (tries + 1 < kPasswordReadTries) {
+  // After Touch ID the fill waits for the user: read for a minute then.
+  const int most =
+      request_->verified ? kPasswordReadTries * 40 : kPasswordReadTries;
+  if (tries + 1 < most) {
     base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&AgentAutofill::ReadPasswords,
