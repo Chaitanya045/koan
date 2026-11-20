@@ -8,6 +8,16 @@
 #   KOAN_PID UI_PORT CDP_PORT KOAN_LOG KOAN_PROFILE REC_DIR KOAN_MAC_TOOLS KOAN_INPUT
 # It refuses to start when a port is taken, and checks that the CDP port is
 # answered by exactly the pid it started. Stop it with quit.sh <pid>.
+# Optional, for the user flows (run_flows.sh); unset, nothing changes:
+#   KOAN_LOCAL_STATE=<json>       copied to the profile's "Local State" (e.g.
+#                                 Agent ready on: it is off in a non-default
+#                                 --user-data-dir)
+#   KOAN_PREFS=<json>             the profile's Default/Preferences ({profile}
+#                                 is replaced by the profile's path)
+#   KOAN_EXTRA_EXTENSIONS=<dirs>  more unpacked extensions (comma-separated),
+#                                 loaded beside test_helper
+#   KOAN_AGENT_SETUP_HOME         (inherited by Koan) where Settings > Agent
+#                                 Control > Set up agents writes
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$here/../../.." && pwd)"
@@ -35,12 +45,21 @@ rec="$M/rec-$(date +%Y%m%d-%H%M%S)"
 prof="$rec/profile"
 mkdir -p "$prof/Default"
 log="$rec/koan.log"
+if [[ -n "${KOAN_LOCAL_STATE:-}" ]]; then
+  [[ -f "$KOAN_LOCAL_STATE" ]] || { echo "launch.sh: no $KOAN_LOCAL_STATE" >&2; exit 2; }
+  cp "$KOAN_LOCAL_STATE" "$prof/Local State"
+fi
+if [[ -n "${KOAN_PREFS:-}" ]]; then
+  [[ -f "$KOAN_PREFS" ]] || { echo "launch.sh: no $KOAN_PREFS" >&2; exit 2; }
+  sed "s|{profile}|$prof|g" "$KOAN_PREFS" >"$prof/Default/Preferences"
+fi
+extensions="$ROOT/scripts/e2e/extensions/test_helper${KOAN_EXTRA_EXTENSIONS:+,$KOAN_EXTRA_EXTENSIONS}"
 # shellcheck disable=SC2054  # "1280,820" is one value
 args=("$exe" --user-data-dir="$prof" --no-first-run --no-default-browser-check
   --disable-component-update --use-mock-keychain
   --window-position="$POS" --window-size="$SIZE"
   --enable-logging=stderr --enable-ui-devtools="$UI_PORT" --remote-debugging-port="$CDP_PORT"
-  --load-extension="$ROOT/scripts/e2e/extensions/test_helper"
+  --load-extension="$extensions"
   --enable-features=ui-debug-tools-enable-synthetic-events
   --disable-features=MacAppCodeSignClone,KoanWelcome
   "$@")
