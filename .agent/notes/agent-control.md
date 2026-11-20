@@ -1163,7 +1163,7 @@ The agent controls CDP calls; the page controls what it does next. Everything be
 | HTTP auth, client-certificate picker, external-protocol launch, print, `beforeunload` | `userNeeded` approval prompts, never a silent native sheet; `beforeunload` is handled explicitly (T-focus-6) |
 | Permission prompts (location, camera, microphone, notifications, USB, …) | the tab pauses and the normal permission bubble is anchored in the agent Space; the agent can never grant (`Browser.grantPermissions` does not exist); event reason keys as in §19.4 |
 | `alert`/`confirm`/`prompt` | held as `userNeeded {dialog}` prompts (maintainer, 2026-11-11); the agent can still answer with `Page.handleJavaScriptDialog` |
-| `window.focus()`, `clients.focus()` | held as a `userNeeded {focus}` prompt; the tab never comes forward by itself (T-focus-8) |
+| `window.focus()`, `clients.focus()` | held as a `userNeeded {focus}` prompt; the tab never comes forward by itself (T-focus-8). Not held for the tab already in front (the active tab of the active window): nothing would come forward (c19 triage 2). A held focus request waits for nothing: `koan act` batches go on past it (`BatchGate`) |
 | A downloaded file | the normal download UI and Safe Browsing; `Page.setDownloadBehavior` denied |
 
 T-focus-7: nothing in this table changes the active tab, the focused window or the frontmost app.
