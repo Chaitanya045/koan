@@ -1555,6 +1555,28 @@ that size, so small images keep their text as crisp as they can. `koan act
 on the agent's own tabs; a tab of yours is captured whole at its full size, so
 that Koan never resizes it.
 
+Agents fill forms with your saved addresses, cards and logins the way you do,
+through Chrome's own autofill, never by typing them. `koan autofill <tab>
+@ref --list` prints what Chrome would offer for that field, as the dropdown
+shows it ("1. Ada Lovelace · 12 Main St, …", "2. Visa ••••4242 · exp
+08/29", "3. ada@example.com (saved password)"); `koan autofill <tab> @ref
+--pick 2` (or `--pick "Visa"`) fills the form with it, and `koan act <tab>
+autofill @ref 2 click @31` does it as a step of a batch. The agent never
+sees a password, a card number, a CVC or an IBAN: a filled one reads "••••
+(filled)" in its snapshots, script in that page is refused (Koan.secretField)
+until the page moves on or the field is cleared (clicks, keys in other
+fields and Sign in still work), screenshots show filled card fields as solid
+boxes, and any copy of a value Koan filled reads "[secret]" in what the
+agent gets. When Chrome asks you first (Touch ID, your device password, a
+card's CVC), the pill says "Claude Code needs you to verify a card":
+**Open** brings the tab forward and Chrome asks you there; the agent waits.
+A login is filled only on its own site, into a form that sends it there
+(Koan.offSite otherwise), and agent tabs get no password filled when a page
+loads and no silent sign-in, so every password in them is one you or the
+agent picked. Turning off Saved passwords or Addresses and cards in What
+agents can use stops it (Koan.autofillOff). Every fill is in the activity
+log with the field's kind and the row's label, never a value.
+
 `koan snapshot` prints the page as a compact outline: controls, links,
 landmarks and headings with `@refs`, each block's text on one line, and
 states such as `[checked]`, `[selected]`, `[expanded]`, `[disabled]` and

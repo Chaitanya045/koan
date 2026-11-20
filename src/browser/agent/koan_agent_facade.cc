@@ -1729,7 +1729,7 @@ void CdpFacade::HandleTabAnswer(TabSession& session, base::DictValue answer) {
   } else if (result) {
     AuditCommand(pending.method, pending.target_id, pending.summary,
                  AuditOutcome::kOk, duration);
-    RedactFields(session, pending.method, *result);
+    RedactFields(session, pending.method, *result, /*answer=*/true);
     Reply(*pending.client_message_id, session_id, std::move(*result),
           /*binary=*/pending.method == "Page.captureScreenshot" ||
               pending.method == "Page.printToPDF");
@@ -1770,7 +1770,7 @@ void CdpFacade::HandleTabEvent(TabSession& session, base::DictValue event) {
   if (base::DictValue* given = event.FindDict("params")) {
     params = std::move(*given);
   }
-  RedactFields(session, name, params);
+  RedactFields(session, name, params, /*answer=*/false);
   // A screencast shows the page as it is: while a card field Koan filled is
   // on it, its frames are acknowledged here and not passed on.
   if (name == "Page.screencastFrame" &&
@@ -2009,13 +2009,19 @@ std::optional<std::string_view> CdpFacade::SecretRefusal(
 
 void CdpFacade::RedactFields(const TabSession& session,
                              std::string_view method,
-                             base::DictValue& params) {
+                             base::DictValue& params,
+                             bool answer) {
   if (!IsRedactedMethod(method)) {
     return;
   }
   const bool readable = Redacts(session.target_id);
+  // DOM events come often and carry attributes, never what a field holds:
+  // they are redacted by the inputs' types alone. Answers, and the
+  // accessibility tree's events (values), by the secret fields too.
+  const bool by_field = answer || method.starts_with("Accessibility.");
   const FacadeBackend::SecretFacts facts =
-      backend_->SecretsIn(session.target_id, FrameIdOf(session));
+      by_field ? backend_->SecretsIn(session.target_id, FrameIdOf(session))
+               : FacadeBackend::SecretFacts();
   // A tab the agent may only read hides its hidden inputs' values too
   // (#196 N1); one it drives hides the secret fields.
   RedactSecretFields(method, params, facts.fields, /*hidden=*/readable);

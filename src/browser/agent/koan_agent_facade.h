@@ -388,7 +388,8 @@ class CdpFacade {
   // Hides the secret fields in a DOM or Accessibility answer or event.
   void RedactFields(const TabSession& session,
                     std::string_view method,
-                    base::DictValue& params);
+                    base::DictValue& params,
+                    bool answer);
   // Page.captureScreenshot of a tab with a card field Koan filled: the
   // fields are measured, the screenshot taken as PNG, and its boxes painted
   // over before the client sees it.

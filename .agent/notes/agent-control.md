@@ -160,7 +160,7 @@ How agent control compares with Chrome's approval mode:
 | T3 | An unpaired same-uid process drives the browser | The first connection from an unknown client gets **only** `Koan.pair`; the user sees a native prompt whose headline is the **verified executable** (audit token → path, code-signing identity, ancestors), with the client's own label shown as "calls itself". Unanswered prompts time out (60 s); one prompt is open at a time and a user gets 3 a minute by default (a setting, 1 to 10, §6.1), whatever the path of the program (PR #190). With the switch on by default this prompt is the only way in, and it is never skipped: a paired key is never accepted silently. **Client records are encrypted and MACed with Keychain-bound `os_crypt` storage** (§5.4), so editing plaintext Local State while Koan is not running cannot add a client |
 | T4 | A stolen credential is replayed | There is no shared secret in the browser: clients hold an Ed25519 private key and sign a single-use nonce (§5.2). Paired identity is **pinned** (path, signature, ancestors) and a change re-prompts (§5.5). Credentials expire (30 days) and are revocable (flushed before returning, §5.4). **Residual**: a same-uid process that reads `~/.koan/clients/<id>/key` and runs from the same chain is the paired client (§3.5), which is why `observe` is off and `drive` is per tab |
 | T5 | The agent exfiltrates cookies, storage or credentials | Layered: (1) `Storage.*`, `DOMStorage.*`, `IndexedDB.*`, `CacheStorage.*`, `Network.{getCookies,getAllCookies,setCookie,setCookies,deleteCookies,clearBrowserCookies,clearBrowserCache,loadNetworkResource}` and everything unlisted are **denied** by name (§4.3); `Browser.*` and `SystemInfo.*` do not exist for an untrusted client. (2) **`Network.enable` is required by agent-browser and, upstream, leaks cookies including HttpOnly values and `Authorization` through `requestWillBeSentExtraInfo`/`responseReceivedExtraInfo`** (`network_handler.cc:1113-1135, 4033-4058`; review finding 1): the facade rewrites those events and passes only an allowlist of Network events (§4.5), tested by T-sec-4. (3) `getResponseBody` and `setExtraHTTPHeaders` need capability `network` (not offered in v1). **Honest limit**: the agent can run JS in a page, so it can read what that page's JS can read (`document.cookie` minus HttpOnly, that origin's localStorage, the DOM). It is **not limited to the origin it started on**: it can navigate its tab to any site you are logged into and read that page, which is the shared-login point of decision 15. It cannot read HttpOnly cookies, the password store or the cookie jar |
-| T6 | The agent reads passwords / autofill | The `Autofill`, `Security`, `Browser` domains are absent for untrusted clients. Risk: password-manager autofill into a form the agent drives, then JS reads the value. Chrome hides autofilled passwords from script until a user gesture; a CDP-injected click may count as one (UNVERIFIED, test T-sec-1, §15). Mitigation if it does: disable password/autofill UI in agent-owned tabs (`ContentAutofillClient`/`PasswordManagerClient` per WebContents) |
+| T6 | The agent reads passwords / autofill | The `Autofill`, `Security`, `Browser` domains are absent for untrusted clients. Agents use autofill only through `koan autofill` (§7.0): labels only, Chrome's own fill. A filled secret's page refuses script, secret fields read "•••• (filled)", screenshots mask card fields, and the egress scrubber replaces any copy of a value Koan filled (§4.5, "Secrets Koan filled"). No fill on load and no silent sign-in in agent tabs, so every password there is one Koan knows. T-sec-1: the page can read a picked password (as it must, to send it; from the source, asserted by a browser test that runs in the Mac cycle); the agent cannot |
 | T7 | The agent reaches privileged or sensitive pages and worlds: `chrome://`, Koan settings, DevTools, `file://`, the Agent-control page, **extension frames injected into ordinary pages and extension content-script worlds** | A strict Koan-only allowlist (§4.4): a frame is reachable only if http(s)/`about:blank`/the unreachable-error URL, non-WebUI, non-privileged, non-guest, non-PDF/MimeHandler, with every ancestor and the embedder passing the same; `chrome-extension://` frames are not attached; execution contexts other than the main world or the agent's own isolated worlds are dropped and their `contextId`s rejected. `MayReadLocalFiles=false` blocks `file://`, `DOM.setFileInputFiles` and `Network.loadNetworkResource`. Network-error pages do not detach the tab (the original draft would have) |
 | T8 | The agent raises windows, switches tabs, quits, resizes, loads extensions | `Page.bringToFront`/`Target.activateTarget` → no-op success + log; `Browser.*`, `Extensions.*`, `SystemInfo.*` absent; `Target.createBrowserContext`/`disposeBrowserContext`/`attachToBrowserTarget` denied; window bounds denied |
 | T9 | Prompt injection: a page the agent reads tells it to do harm | Cannot be solved in the browser. Reduced by: agent-Space scope, per-tab consent for the user's own tabs, optional per-client **site allow/deny list** (default: deny nothing, but banking/payment categories are a settings suggestion), indicator, pause on user input, audit log, `Fetch`/network interception off by default |
@@ -390,6 +390,44 @@ events** (`requestWillBeSent`, `responseReceived`, `loadingFinished`, `loadingFa
 `webSocketCreated` URL-only, and the scrubbed ExtraInfo pair). The same scrubber applies to `Fetch.requestPaused` if
 `network` is ever granted. Test: T-sec-4 asserts a login flow shows no cookie or Authorization value in any frame
 received by the client.
+
+**Secrets Koan filled (2026-11-20, `koan autofill`, section 7.0).** The secrets are passwords, card numbers, CVCs and
+IBANs; addresses may be seen, as the page shows them. The browser knows each one it filled: a login's password read in
+the frame's Chrome-only world after the fill, a card's number from the `CreditCard` autofill filled
+(`AutofillManager::Observer::OnFillOrPreviewForm`, also when the user fills in a tab the agent holds), an IBAN's from
+`OnFillOrPreviewField`; and which fields hold one (autofill's form cache, `IsSecretField()`). Layers, all in the
+browser:
+1. **Redaction on every tab** (`RedactSecretFields()`): in DOM answers and events the `value` attribute of every password
+   input and of every secret field (by backend node id) is emptied (hidden inputs too on a readable tab, #196 N1); in
+   accessibility answers and events (the snapshot) a secret field's value is "•••• (filled)" or "•••• (empty)" and the
+   text inside it is emptied.
+2. **No script while a secret is filled.** In a session whose renderer process holds a frame with a secret Koan filled,
+   `Runtime.evaluate`, `callFunctionOn`, `getProperties` and `awaitPromise` are refused (Koan.secretField), and so is
+   typing into the filled field (`insertText`, `imeSetComposition`, a key with text, Backspace, Delete); clicks, keys in
+   other fields, Enter and Tab still go. The lock goes when the frame navigates, or when an edit autofill sees leaves
+   none of the values Koan filled in the frame (read in its Chrome-only world). The CLI's `fill` of another field types
+   without reading the field then.
+3. **Screenshots** of a tab with a card number, CVC or IBAN Koan filled are taken as PNG after the fields are measured
+   (`Page.getLayoutMetrics`, `DOM.getContentQuads` per field, `DOM.getFrameOwner` for a field in another process, whose
+   whole frame is boxed), the boxes (2 CSS px of margin, `MaskRects()`) painted with a solid fill, and the image encoded
+   in the format asked for (`koanMasked` in the answer). A field that cannot be found refuses the screenshot. While one
+   is filled, `Page.printToPDF` and `Page.startScreencast` are refused and a running screencast's frames are
+   acknowledged and dropped. Password fields show dots already.
+4. **The egress scrubber**, the backstop (`SecretScrubber`, `koan_agent_secrets.h`): the client's values, in memory for
+   their tab's life, each looked for in every message sent to the agent as serialized JSON: as the writer escapes it,
+   as JSON.stringify inside a page's string, URL-encoded (encodeURIComponent and form encoding, either hex case) and in
+   base64 (standard and URL-safe, the stable run at each of the three byte alignments, 8 chars and longer), and of its
+   URL-encoded and stringified forms. Values of 6 characters and longer only (a CVC is covered by 1 and 2). One
+   Aho-Corasick pass per message; screenshot, screencast and PDF data is passed over (masked or refused instead). An
+   occurrence becomes "[secret]", taking any JSON escape it starts inside with it. This covers every answer and event,
+   console messages, Network request bodies and URLs, and everything koan-relay forwards.
+5. **T-sec-1** (`KoanAgentAutofillBrowserTest.ALoginAndTSec1`, which asserts the answer; it runs in the Mac cycle):
+   after a pick of a login (and a CDP click), page script reads the password. From the source: a pick ends in
+   `PasswordAutofillManager::FillSuggestion` -> the renderer's fill of the real value (not a suggested, gesture-gated
+   one), as for the user's own pick, so that the page can send it; the gesture gate applies only to the fill on load,
+   which agent tabs no longer get. Whatever the run says, 2 and 4 keep it from the agent.
+Kept as they were: a password the agent types itself is the agent's, and still hidden by 1; cookies and tokens stay
+scrubbed; passkeys and MFA codes go to the user (Koan.userNeeded).
 
 `Input.dispatchKeyEvent {commands}` is forwarded unfiltered upstream (`input_handler.cc:790-800`);
 `commands:["paste"]` pastes the OS clipboard into a focused field and `copy`/`cut` write it. The facade **strips
@@ -662,8 +700,8 @@ browser as the user does.** Settings > Agent Control > **What agents can use** h
 | Switch | On (default) | Off |
 |---|---|---|
 | **Your logins** | the task's tabs open in the user's own partition, with their cookies and sessions (mode *Your logins* below) | a container: throwaway, or a saved one the agent may use |
-| **Saved passwords** | the password manager fills and saves in agent tabs | blocked (B4) |
-| **Addresses and cards** | autofill and autocomplete in agent tabs | blocked (B5) |
+| **Saved passwords** | the password manager fills (through `koan autofill`, never on load) and saves in agent tabs | blocked (B4) |
+| **Addresses and cards** | autofill and autocomplete in agent tabs (through `koan autofill`) | blocked (B5) |
 | **Your extensions** | extensions run in agent tabs: content scripts and extension APIs in a container's processes, webRequest, `chrome.debugger`, tab ids, webNavigation | blocked (B3). With *Your logins* on the agent tab shares the user's processes, so only what is decided per tab is blocked (tab ids, debugger, webRequest by frame, webNavigation); **content scripts still run**, as Settings and SECURITY.md say |
 | **History** | agent visits go into History (with their icons) and history-based suggestions | blocked (B7, and the Favicons database) |
 
@@ -690,6 +728,59 @@ container. The pairing and task prompts show what the tabs get, and the user can
 
 With *Your logins* off there is no free run in the user's own jar: an agent gets the default partition only through a
 per-tab lease the user approved.
+
+#### Autofill for agents (`koan autofill`; user, 2026-11-20)
+
+"I want agents to use my browser exactly the way I do. That means agents should be able to use my autofills but should
+not read those values (mainly for passwords)." With the two switches on, an agent fills forms through Chrome's own
+autofill, and never receives a secret (section 4.5, "Secrets Koan filled").
+
+* **What upstream offers.** Autofill and the password manager both show their dropdown through
+  `AutofillClient::ShowAutofillSuggestions(PopupOpenArgs, WeakPtr<AutofillSuggestionDelegate>)` (Chrome's
+  `ChromeAutofillClient`), and a row click is `delegate->DidAcceptSuggestion(suggestion, metadata, form, field)`
+  (`AutofillPopupControllerImpl::AcceptSuggestion`). What follows is Chrome's own fill: `BrowserAutofillManager`'s form
+  fill, the `CreditCardAccessManager` (mandatory reauth for local cards, unmasking for server and virtual cards), the
+  password manager's `FillSuggestion` after its own matching (exact, PSL, affiliated; a grouped match asks the user
+  through `ShowCrossDomainConfirmationPopup`) and its optional Touch ID before filling. A click on a field asks for the
+  suggestions (`AutofillDriver::RendererShouldTriggerSuggestions(field, kFormControlElementClicked)`). A field's
+  `FieldRendererId` is its `DOMNodeIds` id, which is CDP's `backendNodeId` (`IdentifiersFactory::IntIdForNode`), so an
+  agent's `@ref` names the field autofill knows. Chrome's own actor (`IsActorTaskActive()`) turns password suggestions
+  off for itself; Koan's agents need them, so that hook is not reused.
+* **What Zen does.** Nothing: Zen has no agent control (Firefox's autofill, unchanged).
+* **Design.** `Koan.autofill {backendNodeId, list | pick | pickLabel}`, sent in a tab's or a frame's session, on a
+  driven tab only (paused: Koan.paused; readable: Koan.notPermitted; an interstitial: Koan.interstitial). The browser
+  (`AgentAutofill`, one per registry tab) finds the field in autofill's form cache among the frames of the session's
+  process (else Koan.notAField), asks for its suggestions as a click would, and the hook in `ShowAutofillSuggestions`
+  (`TakeAgentSuggestions()`, `koan_agent_autofill_hooks.h`) hands them to it instead of the popup, so no dropdown shows
+  in an agent's tab. Rows that fill (addresses, cards, virtual cards, IBANs, logins, previous values and datalists;
+  never manage, generation, passkey or footer rows) become labels (`LabelFor()`, `koan_agent_autofill_logic.h`): the
+  dropdown's texts, never a login's own label (the password as dots), any run of 7+ digits cut to "••••" and its last
+  four, the row's card number replaced if it shows. A pick (`MatchPick()`: its number, the label, or the only label
+  containing it) goes to the delegate as the row click does. Refusals: Koan.autofillOff (the switch), Koan.noSuggestions,
+  Koan.noSuchSuggestion / Koan.ambiguousSuggestion, Koan.offSite, Koan.notFilled (no fill within 3 s), Koan.busy.
+* **Logins.** Chrome matches the login to the frame (its PSL and affiliation rules). Koan adds the form check: the
+  form's action (autofill's `target_url()`) must be on the frame's site (`net::SchemefulSite`), and the frame http(s);
+  else Koan.offSite. A grouped match, which Chrome confirms with the user, is refused while an agent's pick runs
+  (`RefusesAgentCrossDomainFill()` in `ShowCrossDomainConfirmationPopup`: no popup, no fill, Koan.offSite). So that
+  every password in an agent tab is one Koan knows: no fill on load in an agent tab (the password manager's
+  `wait_for_username` is set for the renderer, `content_password_manager_driver.cc`), and no silent sign-in
+  (`IsAutoSignInEnabled()` false: `navigator.credentials.get` would hand the page, and so the agent, a password).
+* **Verification.** Chrome asks the user before filling a card that must be unmasked (any card but a local one) or with
+  mandatory reauth on (`PaymentsAutofillClient::IsMandatoryReauthEnabled()`), and a login with "Use Touch ID before
+  filling" on (`password_manager::prefs::kBiometricAuthenticationBeforeFilling`, Mac/Windows). Koan does not start
+  that flow in a background tab (a Touch ID sheet over the user's work): the pick answers `{filled: false, userNeeded:
+  "autofill-verify"}` and holds `PageSurface::kAutofillVerify` in the indicator ("<agent> needs you to verify a card",
+  Koan.userNeeded {reason: "autofill-verify"}, section 9.4). Open brings the tab forward and, once it is visible,
+  accepts the row: Chrome asks the user there. Dismiss, the page moving on or the agent letting go drops it. A card
+  fetch Koan did not foresee (`CreditCardAccessManager::ShouldClearPreviewedForm()` false after the accept) is held the
+  same way. There is no way around it for the agent.
+* **Audit.** One `Koan.autofill` line per list and per pick: the kind and the row's label, never a value.
+* **The CLI.** `koan autofill <tab> @field [--list | --pick N | --pick "label"]` resolves `@field` as act does (refs
+  and locators); `--pick` runs as act's one `autofill` step (`autofill @ref <pick>` in a batch), with BatchGate's
+  checks; it works in `koan shell`. The guide (`koan skill`) says to use it for addresses, cards and logins instead of
+  typing, that the agent never sees a secret and should not try, that verification and MFA are the user's (wait on
+  Koan.userNeeded), and that the final Pay or Confirm click follows the payment rule of section 9.4 unchanged.
+  `kAgentInterfaceVersion` 4.
 
 ### 7.1 How a container works (E§1-E§6)
 
@@ -1494,6 +1585,7 @@ C1 (in `content/`, which cannot depend on `//koan`), whose logic is generic and 
 | **B3** | `extensions/browser/renderer_startup_helper.cc` (`OnRenderProcessHostCreated`, `OnRenderProcessLaunched`), `extensions/browser/api/web_request/web_request_api.cc` (`MaybeProxyURLLoaderFactory`), `chrome/browser/extensions/api/debugger/debugger_api.cc` (`ExtensionMayAttachToWebContents`), `chrome/browser/extensions/extension_tab_util.cc` (`GetTabById`) | skip / refuse for agent processes and tabs | extensions | blocks PR |
 | **B4** | `chrome/browser/password_manager/chrome_password_manager_client.cc` (`IsFillingEnabled`) | false for agent tabs | passwords | blocks PR |
 | **B5** | `chrome/browser/ui/autofill/chrome_autofill_client.cc` (`IsAutofillEnabled`, `IsAutocompleteEnabled`) | false | autofill | blocks PR |
+| **A1** | `chrome/browser/ui/autofill/chrome_autofill_client.cc` (`ShowAutofillSuggestions`: `TakeAgentSuggestions()`), `chrome/browser/password_manager/chrome_password_manager_client.cc` (`IsAutoSignInEnabled`: false in an agent tab; `ShowCrossDomainConfirmationPopup`: nothing while an agent's pick runs), `components/password_manager/content/browser/content_password_manager_driver.cc` (`PropagateFillDataOnParsingCompletion`: `wait_for_username` in an agent tab) | the suggestions an agent asked for go to it, not to the popup; no silent sign-in, no fill on load, no grouped-match confirmation for an agent | `koan autofill` (§7.0, §4.5) | this PR |
 | **B6** | `chrome/browser/download/download_target_determiner.cc` (`DoGenerateTargetPath`) | agent folder, no prompt | downloads | blocks PR |
 | **B7** | `chrome/browser/history/history_tab_helper.cc` (`DidFinishNavigation`, before `ShouldUpdateHistory()`); `chrome/browser/autocomplete/tab_matcher_desktop.cc` (`GetOpenWebContents`) | skip agent tabs | history, omnibox, `@tabs`, Switch to tab (decision 18) | blocks PR |
 | **B8** | `chrome/browser/ui/sync/tab_contents_synced_tab_delegate.cc` (`ShouldSync`) | false | open-tab sync | blocks PR |
@@ -1619,7 +1711,16 @@ Port to a `scripts/mac/agent.sh` driver and `scripts/e2e/agent_*.mjs` specs.
 | T-win-1 | Koan on another display / Space, `Koan.openTab` | no Space switch, no window raise |
 | T-win-2 | no window open (windowless Mac app) then `Koan.openTab` | window appears inactive, does not take focus |
 | **Security** | | |
-| T-sec-1 | password manager: saved login, agent clicks the username field, reads the password field via `Runtime.evaluate` | value not readable (else disable autofill in agent tabs) |
+| T-sec-1 | password manager: saved login, agent picks it (`koan autofill`) and clicks in the page, reads the password field via `Runtime.evaluate` and `callFunctionOn`; the page's own script reads it | the agent's reads are refused (Koan.secretField); the page reads it (`KoanAgentAutofillBrowserTest.ALoginAndTSec1` asserts it: Chrome sets the real value on a pick); no message the agent gets has it (the scrubber) |
+| T-fill-1 | `koan autofill <tab> @name --list` on an address form, then `--pick 1` | numbered labels as the dropdown shows them, no popup in the tab; the form fills; the snapshot shows the address; an audit line with the kind and label |
+| T-fill-2 | a saved login: `--list`, then `koan act <tab> autofill @email 1 click @signin` | "user (saved password)", never the password; the password field reads "•••• (filled)"; the form submits; the server gets the password; no agent reply has it, raw, URL-encoded or base64 |
+| T-fill-3 | in the filled login's page: `Runtime.evaluate`, `callFunctionOn`, typing into the password field; then a navigation | Koan.secretField for each; clicks and other fields work; script works again after the navigation |
+| T-fill-4 | a local card with mandatory reauth off: `--pick 1`, snapshot, `koan screenshot` (viewport, `--clip`, full page, scrolled, a card form in a cross-origin iframe) | filled; "•••• (filled)"; the card fields (the iframe's whole box) painted over, "hidden" said; print and screencast refused while filled |
+| T-fill-5 | a card with mandatory reauth on, or a server card | Koan.userNeeded autofill-verify; the pill "<agent> needs you to verify a card"; Open: Chrome asks for Touch ID or the CVC in the tab, then fills; Dismiss: nothing filled |
+| T-fill-6 | a login form whose action is another site; a grouped affiliation match | Koan.offSite; no confirmation popup; nothing filled |
+| T-fill-7 | Saved passwords off, Addresses and cards off | Koan.autofillOff on the login and the address form |
+| T-fill-8 | an agent tab loading a page with a saved login; `navigator.credentials.get({password: true, mediation: "silent"})` there | nothing filled or previewed on load; no credential (no silent sign-in); a user tab unchanged |
+| T-fill-9 | the tab paused, readable, behind an interstitial | Koan.paused, Koan.notPermitted, Koan.interstitial |
 | T-sec-2 | socket perms: dir 0700, socket 0600; a second uid and an unpaired same-uid client | other uid refused; unpaired gets only `Koan.pair` |
 | T-sec-3 | web page attack: page JS `fetch('http://127.0.0.1:*')`, DNS-rebinding page against the relay, `Origin`-bearing WebSocket | no connection |
 | T-sec-4 | denied methods: call every row of the §4.3 deny list and `Storage.*`, `Network.{getAllCookies,getCookies,setCookie,deleteCookies,clearBrowserCache,loadNetworkResource}`, `Browser.close`, `Extensions.loadUnpacked`, `SystemInfo.getInfo`, `Page.navigate` to `file:///etc/hosts`, `javascript:`, `view-source:`, `data:` and `chrome://settings` (each must be `Koan.urlNotAllowed`, not a detach), `DOM.setFileInputFiles`, `DOM.getFileInfo`; navigation to `chrome-extension://`; **and log in to a test site (HttpOnly Set-Cookie, an Authorization header, a POST body carrying a password) with `Network.enable` on** | each denied call returns the expected error; no cookie value, `associatedCookies`, `Set-Cookie`, `Authorization`, `Proxy-Authorization`, `postData` or `postDataEntries` (the POSTed password) appears in any frame the client receives; audit entries present |
