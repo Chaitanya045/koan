@@ -232,3 +232,21 @@
   stale, and `koan wait <tab> --resumed` returns a fresh snapshot, so the
   agent goes on from the page as it is, in one turn. Principle: agents use
   the browser as the user does.
+- **Cheap screenshots that don't cost accuracy** (user, 2026-11-20): models pay
+  for images by area (~w×h/784 tokens, at most ~4,784 at 2576 px on the long
+  edge), and `koan screenshot` captured device pixels (~4,800 tokens a shot on
+  a Retina Mac). Now `--size micro|mini|normal|full` (long edge 320, 640, CSS
+  pixels up to 1568, device pixels up to 2576; never enlarged), and the
+  default is **normal, at 1×**. `--clip @ref|loc:…|x,y,w,h` crops one element
+  (8 CSS px margin) or rectangle, sharp (device pixels) unless `--size` is
+  given. The browser draws at the target scale (`Page.captureScreenshot` clip
+  and scale), never a full capture shrunk in the CLI. `act --screenshot
+  micro|mini|normal` returns one in the same answer. Sizes and clips work on
+  the agent's own tabs only (the facade's filter: they resize the view); a
+  user's tab is captured whole at device pixels, with a note. The guide's
+  rules: read and act from the text snapshot, never from text in a micro or
+  mini image; micro or mini only to check state (loaded, a dialog or error,
+  layout changed); `--clip` for detail (small text, a price, an error, a
+  chart, an image); normal before anything positional; a clip or a normal
+  one when a small image is unclear, never a guess. PNG only: JPEG or WebP
+  save bytes, not tokens.

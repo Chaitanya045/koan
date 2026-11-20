@@ -58,6 +58,7 @@
 #include "koan/cli/koan_cli_keepalive.h"
 #include "koan/cli/koan_cli_protocol.h"
 #include "koan/cli/koan_cli_router.h"
+#include "koan/cli/koan_cli_screenshot.h"
 #include "koan/cli/koan_cli_settle.h"
 #include "koan/cli/koan_cli_skill.h"
 #include "koan/cli/koan_cli_snapshot.h"
@@ -2045,11 +2046,196 @@ bool WaitUntil(Link& link,
   return false;
 }
 
+// --- Screenshots (koan_cli_screenshot.h) -----------------------------------
+
+// A screenshot saved: where, and how big.
+struct Shot {
+  std::string path;
+  int width = 0;
+  int height = 0;
+  double css_per_pixel = 1;
+  // Why it is not the size asked for ("" if it is).
+  std::string note;
+};
+
+// Whether the tab is one the agent opened (Koan.listTabs's agentOwned):
+// only on those does the facade allow a screenshot's clip and scale.
+bool IsAgentTab(Link& link, const std::string& target) {
+  std::optional<Message> answer = link.Call("Koan.listTabs", base::DictValue());
+  const base::ListValue* tabs =
+      answer && answer->result ? answer->result->FindList("tabs") : nullptr;
+  if (!tabs) {
+    return false;
+  }
+  for (const base::Value& tab : *tabs) {
+    const base::DictValue* dict = tab.GetIfDict();
+    const std::string* id = dict ? dict->FindString("targetId") : nullptr;
+    if (id && *id == target) {
+      return dict->FindBool("agentOwned").value_or(false);
+    }
+  }
+  return false;
+}
+
+// The element --clip names, as koan act finds it (a ref of the page as it
+// is now, or a locator), scrolled into view: its box in viewport CSS pixels,
+// of no size if it has none. nullopt (printed) if it is not on the page.
+std::optional<CssRect> ClipBox(Link& link,
+                               const Command& command,
+                               const std::string& target,
+                               const std::string& session,
+                               int* exit_code) {
+  std::optional<int> node;
+  if (command.clip.starts_with("loc:")) {
+    std::string error;
+    std::optional<Locator> locator = ParseLocator(command.clip, &error);
+    if (!locator) {
+      *exit_code = Fail(error, kUsage);
+      return std::nullopt;
+    }
+    std::optional<base::DictValue> tree = Expect(
+        link.Call("Accessibility.getFullAXTree", base::DictValue(), session),
+        exit_code);
+    if (!tree) {
+      return std::nullopt;
+    }
+    const LocatorMatch match = MatchLocator(*tree, *locator, command.clip);
+    if (!match.node) {
+      *exit_code = Fail(match.error);
+      return std::nullopt;
+    }
+    node = match.node;
+  } else {
+    Command probe = command;
+    probe.ref = command.clip;
+    if (!RefIsCurrent(link, probe, target, session, exit_code)) {
+      return std::nullopt;
+    }
+    node = ParseRef(command.clip);
+  }
+  const base::DictValue params = base::DictValue().Set("backendNodeId", *node);
+  std::optional<Message> scrolled =
+      link.Call("DOM.scrollIntoViewIfNeeded", params.Clone(), session);
+  if (!scrolled) {
+    *exit_code = Fail(Describe(scrolled));
+    return std::nullopt;
+  }
+  // An element with no layout box (display: none) has no quads: no size.
+  std::optional<Message> quads =
+      link.Call("DOM.getContentQuads", params.Clone(), session);
+  if (!quads) {
+    *exit_code = Fail(Describe(quads));
+    return std::nullopt;
+  }
+  std::optional<CssRect> box = quads->is_error() || !quads->result
+                                   ? std::nullopt
+                                   : QuadsBounds(*quads->result);
+  return box.value_or(CssRect());
+}
+
+// Takes the screenshot `command` asks for (koan screenshot's --size and
+// --clip, or act's --screenshot) and saves it. nullopt (printed) if not.
+std::optional<Shot> TakeScreenshot(Link& link,
+                                   const Command& command,
+                                   const std::string& target,
+                                   const std::string& session,
+                                   int* exit_code) {
+  const bool agent_tab = IsAgentTab(link, target);
+  std::optional<ClipSpec> clip;
+  if (!command.clip.empty()) {
+    std::string error;
+    clip = ParseClip(command.clip, &error);
+    if (!clip) {
+      *exit_code = Fail(error, kUsage);
+      return std::nullopt;
+    }
+  }
+  std::optional<CssRect> region;
+  std::string what = "the rectangle";
+  if (clip && agent_tab && !clip->target.empty()) {
+    region = ClipBox(link, command, target, session, exit_code);
+    if (!region) {
+      return std::nullopt;
+    }
+    what = clip->target;
+  } else if (clip) {
+    // On a user's tab this is refused (PlanShot()) before anything is
+    // scrolled.
+    region = clip->rect.value_or(CssRect{0, 0, 1, 1});
+  }
+  std::optional<base::DictValue> layout =
+      Expect(link.Call("Page.getLayoutMetrics", base::DictValue(), session),
+             exit_code);
+  if (!layout) {
+    return std::nullopt;
+  }
+  std::optional<ViewportMetrics> viewport = ReadViewportMetrics(*layout);
+  if (!viewport) {
+    *exit_code = Fail(
+        "Koan.pageError: the tab did not say how big its viewport is; retry");
+    return std::nullopt;
+  }
+  const double margin = clip && !clip->target.empty() ? kClipMargin : 0;
+  ShotPlanResult planned =
+      PlanShot(*viewport, command.shot_size, region, margin, what, agent_tab);
+  if (!planned.plan) {
+    *exit_code = Fail(planned.error);
+    return std::nullopt;
+  }
+  const ShotPlan& plan = *planned.plan;
+  base::DictValue params;
+  params.Set("format", "png");
+  if (plan.clip) {
+    params.Set("clip", base::DictValue()
+                           .Set("x", plan.x)
+                           .Set("y", plan.y)
+                           .Set("width", plan.width)
+                           .Set("height", plan.height)
+                           .Set("scale", plan.scale));
+  }
+  std::optional<base::DictValue> answer =
+      Expect(link.Call("Page.captureScreenshot", std::move(params), session),
+             exit_code);
+  const std::string* data = answer ? answer->FindString("data") : nullptr;
+  std::optional<std::vector<uint8_t>> png =
+      data ? base::Base64Decode(*data) : std::nullopt;
+  if (!png) {
+    if (answer) {
+      *exit_code = Fail("the screenshot was empty");
+    }
+    return std::nullopt;
+  }
+  Shot shot;
+  shot.path = command.output.empty() ? "koan-" + target.substr(0, 8) + ".png"
+                                     : command.output;
+  if (!base::WriteFile(base::FilePath(shot.path), *png)) {
+    *exit_code = Fail("cannot write " + shot.path);
+    return std::nullopt;
+  }
+  shot.width = plan.image_width;
+  shot.height = plan.image_height;
+  shot.css_per_pixel = plan.css_per_pixel;
+  if (std::optional<std::pair<int, int>> size = PngSize(*png)) {
+    // As drawn: the browser rounds its sides.
+    shot.css_per_pixel = plan.css_per_pixel * plan.image_width / size->first;
+    shot.width = size->first;
+    shot.height = size->second;
+  }
+  if (!agent_tab &&
+      command.shot_size.value_or(ShotSize::kNormal) != ShotSize::kFull) {
+    shot.note =
+        "a tab of the user's is captured whole, at device pixels (--size "
+        "needs a tab of the agent's own)";
+  }
+  return shot;
+}
+
 // `koan act`: its steps in order over this connection (koan_cli_batch.h),
 // each after the page settled from the one before, stopping at the first
 // failure and before any step once the user has the tab or the page waits
-// for them; then --until, then --snapshot. One step prints as it always
-// did ("ok", or the error); several print one receipt each.
+// for them; then --until, then --snapshot and --screenshot. One step
+// prints as it always did ("ok", or the error); several print one receipt
+// each.
 int Act(Link& link,
         const Command& command,
         const std::string& target,
@@ -2173,14 +2359,24 @@ int Act(Link& link,
   }
   std::optional<std::string> snapshot;
   int snapshot_code = kOk;
-  if (command.snapshot_after && !tab_gone && code != kUsage) {
+  std::optional<Shot> shot;
+  int shot_code = kOk;
+  // What to show of the page after the steps: --snapshot, --screenshot.
+  const bool after = (command.snapshot_after || command.screenshot_after) &&
+                     !tab_gone && code != kUsage;
+  if (after) {
     // "ok" first: it was done, even if the snapshot then fails.
     if (!command.json && !numbered && !stopped) {
       printf("%s\n", done[0].line.c_str());
       fflush(stdout);
     }
-    snapshot = TakeSnapshot(link, SnapshotRequestOf(command), target, session,
-                            &snapshot_code);
+    if (command.snapshot_after) {
+      snapshot = TakeSnapshot(link, SnapshotRequestOf(command), target, session,
+                              &snapshot_code);
+    }
+    if (command.screenshot_after) {
+      shot = TakeScreenshot(link, command, target, session, &shot_code);
+    }
   }
 
   if (command.json) {
@@ -2217,9 +2413,19 @@ int Act(Link& link,
     if (snapshot) {
       json.Set("snapshot", *snapshot);
     }
+    if (shot) {
+      base::DictValue taken =
+          ShotJson(shot->path, shot->width, shot->height, shot->css_per_pixel);
+      if (!shot->note.empty()) {
+        taken.Set("note", shot->note);
+      }
+      json.Set("screenshot", std::move(taken));
+    }
     json.Set("ok", all_done);
     PrintJson(json);
-    return code != kOk ? code : snapshot_code;
+    return code != kOk            ? code
+           : snapshot_code != kOk ? snapshot_code
+                                  : shot_code;
   }
 
   if (numbered) {
@@ -2237,9 +2443,7 @@ int Act(Link& link,
         printf("%s\n", left.c_str());
       }
     }
-  } else if (!done.empty() && !stopped && !command.snapshot_after) {
-    printf("%s\n", done[0].line.c_str());
-  } else if (!done.empty() && !stopped && command.snapshot_after && tab_gone) {
+  } else if (!done.empty() && !stopped && !after) {
     printf("%s\n", done[0].line.c_str());
   }
   if (!blocked_after.empty()) {
@@ -2255,8 +2459,16 @@ int Act(Link& link,
   if (snapshot) {
     printf("%s", snapshot->c_str());
   }
+  if (shot) {
+    printf("%s\n",
+           ShotLine(shot->path, shot->width, shot->height, shot->css_per_pixel)
+               .c_str());
+    if (!shot->note.empty()) {
+      fprintf(stderr, "koan: %s\n", shot->note.c_str());
+    }
+  }
   fflush(stdout);
-  return code != kOk ? code : snapshot_code;
+  return code != kOk ? code : snapshot_code != kOk ? snapshot_code : shot_code;
 }
 
 // `koan wait <tab> --resumed` (design section 9.2, auto-resume): blocks until
@@ -2610,24 +2822,26 @@ int RunOnHolder(Link& link, const Command& command) {
         return WaitResumed(link, command, *target, *session);
       }
       if (command.kind == CommandKind::kScreenshot) {
-        base::DictValue params;
-        params.Set("format", "png");
-        std::optional<base::DictValue> shot = Expect(
-            link.Call("Page.captureScreenshot", std::move(params), *session),
-            &exit_code);
-        const std::string* data = shot ? shot->FindString("data") : nullptr;
-        std::optional<std::vector<uint8_t>> png =
-            data ? base::Base64Decode(*data) : std::nullopt;
-        if (!png) {
-          return shot ? Fail("the screenshot was empty") : exit_code;
+        std::optional<Shot> shot =
+            TakeScreenshot(link, command, *target, *session, &exit_code);
+        if (!shot) {
+          return exit_code;
         }
-        const base::FilePath path(command.output.empty()
-                                      ? "koan-" + target->substr(0, 8) + ".png"
-                                      : command.output);
-        if (!base::WriteFile(path, *png)) {
-          return Fail("cannot write " + path.value());
+        if (command.json) {
+          base::DictValue json = ShotJson(shot->path, shot->width, shot->height,
+                                          shot->css_per_pixel);
+          if (!shot->note.empty()) {
+            json.Set("note", shot->note);
+          }
+          PrintJson(json);
+          return kOk;
         }
-        printf("%s\n", path.value().c_str());
+        printf("%s\n", ShotLine(shot->path, shot->width, shot->height,
+                                shot->css_per_pixel)
+                           .c_str());
+        if (!shot->note.empty()) {
+          fprintf(stderr, "koan: %s\n", shot->note.c_str());
+        }
         return kOk;
       }
       return Act(link, command, *target, *session);

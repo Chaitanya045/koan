@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "koan/cli/koan_cli_batch.h"
+#include "koan/cli/koan_cli_screenshot.h"
 
 // The command line of the `koan` tool (.agent/notes/agent-control.md section
 // 12). Pure: no I/O, so that every way of calling it is unit tested.
@@ -77,8 +78,14 @@ struct Command {
   // snapshot, screenshot, act, take-over, release: the tab (a target id, or
   // a unique prefix of one). Empty for take-over: the tab the user is on.
   std::string tab;
-  // screenshot: -o / --output.
+  // screenshot, and act's screenshot after: -o / --output.
   std::string output;
+  // screenshot: --size (nullopt: normal, or for --clip the region at device
+  // pixels), --clip (ParseClip()). act: --screenshot micro|mini|normal, the
+  // screenshot after the steps (its size in `shot_size`).
+  std::optional<ShotSize> shot_size;
+  std::string clip;
+  bool screenshot_after = false;
   // snapshot: --full, every node of the tree instead of the compact outline.
   bool full = false;
   // snapshot, and act's snapshot after: --interactive (only what an agent

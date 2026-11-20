@@ -49,8 +49,8 @@ the way in, and it is the one the user approved.
    with `[more above: N nodes]` / `[more below: N nodes]`; `--scope full`
    prints all of it, `--scope @12` only that element and what is in it.
    An open dropdown's list, a menu or a dialog is printed first, under a
-   "popup" line naming the control that opened it. `koan screenshot <tab>
-   -o shot.png` saves what the tab shows.
+   "popup" line naming the control that opened it. Screenshots: see
+   "Screenshots" below.
    Refs are the page's own node ids: they stay while the element stays
    (typing, clicks, changes elsewhere), and refs from before a navigation
    or reload fail (Koan.staleRef). A page that re-creates an element gives
@@ -79,7 +79,8 @@ the way in, and it is the one the user approved.
    `--timeout`, 15 s). `--snapshot` prints the snapshot after it;
    `--diff` prints only what changed since your last snapshot of the tab
    (+ added, ~ changed, - removed), or "baseline reset" and the whole
-   snapshot on a new page. `koan help act` lists every option.
+   snapshot on a new page. `--screenshot micro` adds a small screenshot
+   after it, in the same answer. `koan help act` lists every option.
    `navigate` returns once the server answers: `ok (HTTP 504 Gateway
    Timeout)` (exit 0) means the server sent an error page, which the
    snapshot shows; Koan.loadFailed means no page at all (a bad address, a
@@ -119,6 +120,37 @@ the way in, and it is the one the user approved.
    ""}`.
    With agent-browser installed, `koan agent-browser <its usual args>` runs
    it against Koan instead (the first time, the user approves koan-relay).
+   Screenshots: work from the text snapshot; a screenshot is for what text
+   cannot tell you. You pay for an image by its area (about one token per
+   28x28 pixels), so take the smallest one that answers your question.
+   `koan screenshot <tab>` prints the file and what it cost: `saved
+   koan-ab12cd34.png (640×400, ~330 image tokens, 1 px = 2.25 CSS px)`.
+   For a 1440x900 window:
+     --size micro   320x200, about 80 tokens: did it load, is a dialog or
+                    an error showing
+     --size mini    640x400, about 330 tokens: which state the page is in,
+                    did the layout change
+     (default)      normal, 1440x900 (CSS pixels), about 1,650 tokens
+     --size full    device pixels, long edge at most 2576: up to about 4,800
+     --clip @12     one element (a ref or a locator), sharp: small text, a
+                    price, an error, a chart, an image. --clip x,y,w,h is a
+                    rectangle in CSS pixels from the viewport's top left
+   `koan act <tab> ... --screenshot micro` (or mini, normal) returns one
+   after the batch, with the snapshot if you asked for it too.
+   Rules:
+   - Read and act from the snapshot (its text is exact), never from text
+     you read in a micro or mini image.
+   - Use micro or mini only to check state: did the page load, is a dialog
+     or an error showing, did the layout change.
+   - Use --clip for detail: small text, a price, an error, a chart or an
+     image.
+   - Use a normal screenshot before anything that depends on where things
+     are in the image.
+   - If a small image is unclear, take a clip or a normal one; do not
+     guess.
+   A PNG either way: JPEG or WebP save bytes, not tokens. A tab of the
+   user's is captured whole at full size (--size and --clip need a tab of
+   your own).
 5. A tab of the user's (to work on a page they have open, signed in): tell
    the user to bring that tab to the front in Koan, then run
    `koan take-over`. Koan asks them; once they allow it, you get the tab

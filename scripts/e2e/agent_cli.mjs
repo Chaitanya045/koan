@@ -14,7 +14,10 @@
 //   for the installed agents and links ~/.local/bin/koan, in the test's HOME
 //   (KOAN_AGENT_SETUP_HOME), and Remove takes them out again;
 // - open, snapshot (an outline with @refs), act (click lands), screenshot
-//   (a PNG), on a local page, in the agent's own background tab;
+//   (a PNG), on a local page, in the agent's own background tab; each
+//   screenshot size's pixels on the Mac's display (normal is CSS pixels),
+//   --clip @ref / a locator as the element's box, scaled, and act
+//   --screenshot micro (also in koan shell) in the same answer;
 // - settle and return: act waits for the page (a slow fetch after a click
 //   shows in act --snapshot with no sleep); navigate returns with the
 //   server's status (504) at once, and a server that never answers is a
@@ -247,6 +250,101 @@ r = await koan(['screenshot', tab, '-o', shot]);
 const png = fs.existsSync(shot) ? fs.readFileSync(shot) : Buffer.alloc(0);
 check('koan screenshot: a PNG of the page', r.code === 0 && png.subarray(1, 4).toString() === 'PNG' &&
       png.readUInt32BE(16) > 100, brief(r));
+
+// --- Screenshot sizes (2026-11-20): what each size gives on this display
+// (a Retina Mac: 2x), in the agent's own background tab (the lease draws
+// it); normal is CSS pixels; --clip @ref is the button's box with its 8 px
+// margin, scaled; act --screenshot micro returns a file in the same answer,
+// and so does the same line in koan shell.
+{
+  const pngSize = f => {
+    const b = fs.existsSync(f) ? fs.readFileSync(f) : Buffer.alloc(0);
+    return b.subarray(1, 4).toString() === 'PNG' ? [b.readUInt32BE(16), b.readUInt32BE(20)] : null;
+  };
+  const near = (got, want) => !!got && Math.abs(got[0] - want[0]) <= 2 && Math.abs(got[1] - want[1]) <= 2;
+  const LINE = /^saved (.+) \((\d+)×(\d+), ~(\d+) image tokens, 1 px = ([\d.]+) CSS px\)$/m;
+  // koan_cli_screenshot.cc's PlanShot(), for the check.
+  const fitted = (w, h, perCss, edge) => {
+    let f = Math.min(1, edge / (Math.max(w, h) * perCss));
+    const pixels = w * h * (perCss * f) ** 2, max = 4784 * 784;
+    if (pixels > max) f *= Math.sqrt(max / pixels);
+    return [Math.max(1, Math.round(w * perCss * f)), Math.max(1, Math.round(h * perCss * f))];
+  };
+  const agentPage = (await pages()).find(p => p.id === tab);
+  const view = agentPage && JSON.parse(await evalIn(agentPage,
+      'JSON.stringify({ w: visualViewport.width, h: visualViewport.height, dpr: devicePixelRatio, ' +
+      'b: document.querySelector("button").getBoundingClientRect() })') ?? 'null');
+  check('Screenshot sizes: the agent tab says its viewport and display scale', !!view?.w, JSON.stringify(view));
+  if (view?.w) {
+    const { w, h, dpr } = view;
+    const want = { micro: fitted(w, h, Math.min(1, dpr), 320), mini: fitted(w, h, Math.min(1, dpr), 640),
+                   normal: fitted(w, h, Math.min(1, dpr), 1568), full: fitted(w, h, dpr, 2576) };
+    const tokens = {};
+    for (const size of ['micro', 'mini', 'normal', 'full']) {
+      const f = path.join(AGENT_HOME, `shot-${size}.png`);
+      r = await koan(['screenshot', tab, '--size', size, '-o', f]);
+      const got = pngSize(f);
+      const line = r.out.match(LINE);
+      tokens[size] = line ? +line[4] : NaN;
+      check(`koan screenshot --size ${size}: ${want[size].join('×')} on this ${dpr}× display, as its line says`,
+            r.code === 0 && near(got, want[size]) && !!line && +line[2] === got[0] && +line[3] === got[1],
+            `${brief(r)}; the PNG is ${got?.join('×')}`);
+    }
+    console.log(`INFO  screenshot tokens for a ${w}×${h} viewport at ${dpr}×: ${JSON.stringify(tokens)}`);
+    check('...normal is CSS pixels (1×), the viewport\'s own size when it fits 1568',
+          Math.max(w, h) > 1568 || near(pngSize(path.join(AGENT_HOME, 'shot-normal.png')), [Math.round(w), Math.round(h)]));
+    check('...micro costs at most a tenth of full', tokens.micro * 10 <= tokens.full, JSON.stringify(tokens));
+    const plain = path.join(AGENT_HOME, 'shot-default.png');
+    r = await koan(['screenshot', tab, '-o', plain, '--json']);
+    let json = null;
+    try { json = JSON.parse(r.out); } catch {}
+    check('koan screenshot (no --size) is normal; --json gives path, width, height, imageTokens, cssPxPerPx',
+          r.code === 0 && near(pngSize(plain), want.normal) && json?.path === plain &&
+          json?.width === pngSize(plain)?.[0] && json?.imageTokens > 0 && json?.cssPxPerPx > 0, brief(r));
+
+    // The button's box, 8 CSS px around it, cut to the viewport.
+    const { b } = view;
+    const left = Math.max(0, b.x - 8), top = Math.max(0, b.y - 8);
+    const cw = Math.min(w, b.x + b.width + 8) - left, ch = Math.min(h, b.y + b.height + 8) - top;
+    const clipped = path.join(AGENT_HOME, 'shot-clip.png');
+    r = await koan(['screenshot', tab, '--clip', ref ?? '@0', '-o', clipped]);
+    check(`koan screenshot --clip ${ref}: the button's box at device pixels (${Math.round(cw * dpr)}×${Math.round(ch * dpr)})`,
+          r.code === 0 && near(pngSize(clipped), [cw * dpr, ch * dpr]), `${brief(r)}; ${pngSize(clipped)?.join('×')}`);
+    r = await koan(['screenshot', tab, '--clip', ref ?? '@0', '--size', 'normal', '-o', clipped]);
+    check('...with --size normal, at CSS pixels', r.code === 0 && near(pngSize(clipped), [cw, ch]),
+          `${brief(r)}; ${pngSize(clipped)?.join('×')}`);
+    r = await koan(['screenshot', tab, '--clip', 'loc:role=button[name="Press me"]', '-o', clipped]);
+    check('...a locator works as the ref does', r.code === 0 && near(pngSize(clipped), [cw * dpr, ch * dpr]), brief(r));
+    r = await koan(['screenshot', tab, '--clip', `${Math.round(w) + 50},0,20,20`, '-o', clipped]);
+    check('...a rectangle off the viewport is Koan.offScreen', r.code !== 0 && /Koan\.offScreen/.test(r.err), brief(r));
+    r = await koan(['screenshot', tab, '--clip', 'loc:role=button[name="Press me"]', '--size', 'micro', '-o', clipped]);
+    check('...--clip with --size micro is at most 320 on its long side',
+          r.code === 0 && Math.max(...(pngSize(clipped) ?? [999])) <= 320, brief(r));
+
+    const after = path.join(AGENT_HOME, 'shot-act.png');
+    fs.rmSync(after, { force: true });
+    r = await koan(['act', tab, 'click', ref ?? '@0', '--screenshot', 'micro', '-o', after]);
+    const acted = r.out.match(LINE);
+    check('koan act --screenshot micro: "ok", then the screenshot\'s line, in the same answer',
+          r.code === 0 && /^ok/.test(r.out) && !!acted && acted[1] === after && near(pngSize(after), want.micro),
+          `${brief(r)}; ${r.out.split('\n').slice(-1)[0]}`);
+    r = await koan(['act', tab, 'click', ref ?? '@0', '--snapshot', '--diff', '--screenshot', 'mini', '-o', after,
+                    '--json']);
+    try { json = JSON.parse(r.out); } catch { json = null; }
+    check('koan act --snapshot --diff --screenshot mini --json: the snapshot and the screenshot',
+          r.code === 0 && typeof json?.snapshot === 'string' && json?.screenshot?.path === after &&
+          near([json.screenshot.width, json.screenshot.height], want.mini), brief(r));
+    const sh = await new Promise(resolve => {
+      const child = spawn(CLI, ['shell'], { env, stdio: ['pipe', 'pipe', 'pipe'] });
+      let out = '';
+      child.stdout.on('data', d => (out += d));
+      child.on('close', code => resolve({ code, out }));
+      child.stdin.end(`act ${tab} press Tab --screenshot micro -o ${after}\n`);
+    });
+    check('koan shell: act --screenshot micro answers with the screenshot\'s line',
+          LINE.test(sh.out) && /^--- exit 0$/m.test(sh.out), sh.out.slice(0, 200));
+  }
+}
 
 // --- A form: dropdowns, states, stale refs (#340).
 {
