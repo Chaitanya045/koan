@@ -321,7 +321,10 @@ check('...and converting it to a Space', labels.includes(spaceTwo) &&
 // tabs, like Zen's (they're pinned there).
 await switcher(spaceTwo);
 await sleep(1000);
-for (const q of ['c1', 'c2']) {
+// (c0: a loose tab for Clear to close. A Space starts on its empty tab, which
+// isn't listed, and with the selected tab its only loose one Clear closes
+// that too, as Zen's does: KoanShortcutController::CloseUnpinnedTabs().)
+for (const q of ['c0', 'c1', 'c2']) {
   await browserCdp('Target.createTarget', { url: `https://example.com/?${q}`, background: false });
 }
 await sleep(2000);
@@ -344,7 +347,8 @@ r = await rows();
 check('Clear keeps the folder\'s tab', kept.length === 1 && urls.includes(kept[0]) &&
       r.find(x => x.name === 'Keep')?.count === 1, `${JSON.stringify(kept)} in ${JSON.stringify(urls)}`);
 check('...and closes the loose tabs but the selected one', urls.includes(c1?.url) &&
-      (await visibleTabs()).length === 2, `${(await visibleTabs()).length} shown`);
+      !urls.some(u => u.endsWith('?c0')) && (await visibleTabs()).length === 2,
+      `${(await visibleTabs()).length} shown; ${JSON.stringify(urls)}`);
 
 // (Dragging tabs in and out of folders: folders_drag.mjs, with real input;
 // headless Ozone can't run a tab drag.)
