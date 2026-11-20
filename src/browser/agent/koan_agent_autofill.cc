@@ -53,6 +53,14 @@ using autofill::SuggestionType;
 // How long the renderer and autofill have to offer suggestions, and to fill
 // once a row is accepted.
 constexpr base::TimeDelta kSuggestionWait = base::Seconds(3);
+// A switch in Settings > Agent Control keeps these from agents.
+constexpr char kAutofillOff[] = "Koan.autofillOff";
+constexpr char kPasswordsOffMessage[] =
+    "the user does not let agents use saved passwords (Settings > Agent "
+    "Control > What agents can use)";
+constexpr char kAutofillOffMessage[] =
+    "the user does not let agents use addresses and cards (Settings > Agent "
+    "Control > What agents can use)";
 // Chrome's renderer drops an ask for a field's suggestions that comes within
 // 100 ms of the one before for the same field (AutofillAgent::
 // ShouldThrottleAskForValuesToFill(), crbug.com/40284788): a pick right
@@ -447,6 +455,12 @@ void AgentAutofill::OnSuggestions(
   std::vector<size_t> offered;
   std::vector<AutofillKind> kinds;
   std::vector<std::string> labels;
+  // Rows the user's "What agents can use" switches keep from agents. Chrome
+  // offers addresses whatever IsAutofillEnabled() says (its address and
+  // card rows have switches of their own), so the switches are applied
+  // here, to what is offered.
+  bool blocked_passwords = false;
+  bool blocked_autofill = false;
   for (size_t i = 0; i < suggestions.size(); ++i) {
     const Suggestion& suggestion = suggestions[i];
     const std::optional<AutofillKind> kind = KindOf(suggestion.type);
@@ -454,6 +468,14 @@ void AgentAutofill::OnSuggestions(
                << " kind=" << kind.has_value()
                << " acceptable=" << suggestion.IsAcceptable();
     if (!kind || !suggestion.IsAcceptable()) {
+      continue;
+    }
+    const bool is_password = *kind == AutofillKind::kPassword;
+    if (koan::containers::BlocksAgent(
+            web_contents(),
+            is_password ? koan::containers::AgentCapability::kPasswords
+                        : koan::containers::AgentCapability::kAutofill)) {
+      (is_password ? blocked_passwords : blocked_autofill) = true;
       continue;
     }
     // What the label must never show: the card's number.
@@ -468,7 +490,13 @@ void AgentAutofill::OnSuggestions(
     labels.push_back(LabelFor(RowFor(suggestion, *kind), secrets));
   }
   if (offered.empty()) {
-    OnNoSuggestions();
+    if (blocked_passwords) {
+      Finish(Error(kAutofillOff, kPasswordsOffMessage));
+    } else if (blocked_autofill) {
+      Finish(Error(kAutofillOff, kAutofillOffMessage));
+    } else {
+      OnNoSuggestions();
+    }
     return;
   }
   if (request_->request.list) {
@@ -798,17 +826,13 @@ void AgentAutofill::OnNoSuggestions() {
   if (login &&
       koan::containers::BlocksAgent(
           web_contents(), koan::containers::AgentCapability::kPasswords)) {
-    Finish(Error("Koan.autofillOff",
-                 "the user does not let agents use saved passwords (Settings "
-                 "> Agent Control > What agents can use)"));
+    Finish(Error(kAutofillOff, kPasswordsOffMessage));
     return;
   }
   if (!login &&
       koan::containers::BlocksAgent(
           web_contents(), koan::containers::AgentCapability::kAutofill)) {
-    Finish(Error("Koan.autofillOff",
-                 "the user does not let agents use addresses and cards "
-                 "(Settings > Agent Control > What agents can use)"));
+    Finish(Error(kAutofillOff, kAutofillOffMessage));
     return;
   }
   Finish(Error("Koan.noSuggestions",

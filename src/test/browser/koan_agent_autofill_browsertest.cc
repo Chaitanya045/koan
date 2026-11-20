@@ -23,6 +23,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/run_until.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/password_manager/factories/profile_password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -39,6 +40,7 @@
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/test_utils/autofill_test_util.h"
 #include "components/keyed_service/core/service_access_type.h"
+#include "components/password_manager/core/browser/features/password_features.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_store/password_store_interface.h"
 #include "components/password_manager/core/browser/password_store/stored_credential.h"
@@ -113,11 +115,23 @@ std::unique_ptr<net::test_server::HttpResponse> ServePage(
 class KoanAgentAutofillBrowserTest : public InProcessBrowserTest,
                                      public agent::AutofillHooksDelegate {
  public:
+  KoanAgentAutofillBrowserTest() {
+    // Chrome fills a page's only saved login on load (a preview, real on
+    // the first gesture), and then offers no suggestions for the field
+    // (AutofillAgent::ShowSuggestions(): a suggested value). With "fill on
+    // account select" it waits for a pick, as it does in an actor's tab
+    // (password_form_filling.cc, kActorTaskOngoing). What Koan should do in
+    // an agent's tab is the PR's open question (c19 triage 2).
+    features_.InitAndEnableFeature(
+        password_manager::features::kFillOnAccountSelect);
+  }
+
   void SetUpOnMainThread() override {
     InProcessBrowserTest::SetUpOnMainThread();
-    embedded_test_server()->RegisterRequestHandler(
-        base::BindRepeating(&ServePage));
-    ASSERT_TRUE(embedded_test_server()->Start());
+    // HTTPS: Chrome offers no saved card on a page that isn't
+    // (kInsecureContextPaymentDisabledMessage instead).
+    https_.RegisterRequestHandler(base::BindRepeating(&ServePage));
+    ASSERT_TRUE(https_.Start());
     page_ = browser()->GetTabStripModel()->GetActiveWebContents();
     autofill_ = std::make_unique<AgentAutofill>(
         page_, base::BindRepeating(
@@ -152,8 +166,7 @@ class KoanAgentAutofillBrowserTest : public InProcessBrowserTest,
   }
 
   void Open(const std::string& path) {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), embedded_test_server()->GetURL(path)));
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), https_.GetURL(path)));
   }
 
   // The field's backend DOM node id (its renderer id), once autofill has
@@ -212,8 +225,8 @@ class KoanAgentAutofillBrowserTest : public InProcessBrowserTest,
   void SaveLogin() {
     password_manager::StoredCredential form;
     form.scheme = password_manager::PasswordForm::Scheme::kHtml;
-    form.signon_realm = embedded_test_server()->base_url().spec();
-    form.url = embedded_test_server()->GetURL("/login");
+    form.signon_realm = https_.base_url().spec();
+    form.url = https_.GetURL("/login");
     form.username_value = u"ada@example.com";
     form.password_value =
         password_manager::PasswordString(std::u16string(kPassword16));
@@ -232,6 +245,8 @@ class KoanAgentAutofillBrowserTest : public InProcessBrowserTest,
                                        containers::NewContainerId(false)});
   }
 
+  base::test::ScopedFeatureList features_;
+  net::EmbeddedTestServer https_{net::EmbeddedTestServer::TYPE_HTTPS};
   raw_ptr<content::WebContents> page_ = nullptr;
   std::unique_ptr<AgentAutofill> autofill_;
   std::vector<std::string> secrets_;
