@@ -22,37 +22,6 @@ base::DictValue Dict(std::string_view json) {
       .TakeDict();
 }
 
-ViewportMetrics Viewport(double width,
-                         double height,
-                         double device_scale,
-                         double zoom = 1) {
-  ViewportMetrics viewport;
-  viewport.width = width;
-  viewport.height = height;
-  viewport.device_scale = device_scale;
-  viewport.zoom = zoom;
-  return viewport;
-}
-
-ShotPlan Plan(const ViewportMetrics& viewport,
-              std::optional<ShotSize> size,
-              std::optional<CssRect> region = std::nullopt,
-              double margin = 0) {
-  ShotPlanResult result =
-      PlanShot(viewport, size, region, margin, "@12", /*may_clip=*/true);
-  EXPECT_TRUE(result.plan) << result.error;
-  return result.plan.value_or(ShotPlan());
-}
-
-std::string PlanErrorOf(const ViewportMetrics& viewport,
-                        std::optional<CssRect> region,
-                        bool may_clip = true) {
-  ShotPlanResult result =
-      PlanShot(viewport, std::nullopt, region, kClipMargin, "@12", may_clip);
-  EXPECT_FALSE(result.plan);
-  return result.error;
-}
-
 TEST(KoanCliScreenshotTest, SizeNames) {
   for (ShotSize size : {ShotSize::kMicro, ShotSize::kMini, ShotSize::kNormal,
                         ShotSize::kFull}) {
@@ -62,246 +31,47 @@ TEST(KoanCliScreenshotTest, SizeNames) {
   EXPECT_FALSE(ParseShotSize(""));
 }
 
-TEST(KoanCliScreenshotTest, TokenEstimate) {
-  // About one token per 28x28 pixels, rounded up.
-  EXPECT_EQ(EstimateImageTokens(28, 28), 1);
-  EXPECT_EQ(EstimateImageTokens(1, 1), 1);
-  EXPECT_EQ(EstimateImageTokens(640, 400), 327);
-  EXPECT_EQ(EstimateImageTokens(320, 200), 82);
-  EXPECT_EQ(EstimateImageTokens(1440, 900), 1654);
-  EXPECT_EQ(EstimateImageTokens(2576, 1449), 4761);
-  // A bigger image is scaled down by the model's API: it costs no more.
-  EXPECT_EQ(EstimateImageTokens(2880, 1800), kMaxImageTokens);
-  EXPECT_EQ(EstimateImageTokens(0, 400), 0);
+// What koan screenshot asks the browser for, at each size.
+TEST(KoanCliScreenshotTest, CaptureParams) {
+  base::DictValue normal = CaptureParams("T1", std::nullopt, std::nullopt, 0);
+  EXPECT_EQ(*normal.FindString("targetId"), "T1");
+  EXPECT_EQ(normal.FindInt("longEdge"), kNormalLongEdge);
+  EXPECT_EQ(normal.FindDouble("scale"), 1);
+  EXPECT_EQ(*normal.FindString("format"), "png");
+  EXPECT_FALSE(normal.contains("clip"));
+  EXPECT_EQ(CaptureParams("T1", ShotSize::kMicro, std::nullopt, 0)
+                .FindInt("longEdge"),
+            kMicroLongEdge);
+  EXPECT_EQ(
+      CaptureParams("T1", ShotSize::kMini, std::nullopt, 0).FindDouble("scale"),
+      1);
+  // Full: as sharp as the display draws (the browser caps the scale).
+  base::DictValue full = CaptureParams("T1", ShotSize::kFull, std::nullopt, 0);
+  EXPECT_EQ(full.FindInt("longEdge"), kFullLongEdge);
+  EXPECT_EQ(full.FindDouble("scale"), agent::kMaxCaptureScale);
+  // A clip is sharp by default, with the margin around an element.
+  base::DictValue clip =
+      CaptureParams("T1", std::nullopt, CssRect{100, 200, 50, 20}, kClipMargin);
+  EXPECT_EQ(clip.FindInt("longEdge"), kFullLongEdge);
+  EXPECT_EQ(clip.FindDouble("scale"), agent::kMaxCaptureScale);
+  const base::DictValue* box = clip.FindDict("clip");
+  ASSERT_TRUE(box);
+  EXPECT_EQ(box->FindDouble("x"), 92);
+  EXPECT_EQ(box->FindDouble("y"), 192);
+  EXPECT_EQ(box->FindDouble("width"), 66);
+  EXPECT_EQ(box->FindDouble("height"), 36);
+  // With a size, that size's.
+  EXPECT_EQ(CaptureParams("T1", ShotSize::kMini, CssRect{0, 0, 10, 10}, 0)
+                .FindInt("longEdge"),
+            kMiniLongEdge);
 }
 
-// A 1440x900 window on a Retina display, the sizes as the help states them.
-TEST(KoanCliScreenshotTest, SizesOnARetinaDisplay) {
-  const ViewportMetrics retina = Viewport(1440, 900, 2);
-
-  ShotPlan normal = Plan(retina, ShotSize::kNormal);
-  EXPECT_EQ(normal.image_width, 1440);
-  EXPECT_EQ(normal.image_height, 900);
-  EXPECT_DOUBLE_EQ(normal.css_per_pixel, 1);
-  // Drawn at half the device's scale: the clip is the viewport.
-  EXPECT_TRUE(normal.clip);
-  EXPECT_DOUBLE_EQ(normal.scale, 0.5);
-  EXPECT_DOUBLE_EQ(normal.width, 1440);
-  EXPECT_DOUBLE_EQ(normal.height, 900);
-  // The default is normal.
-  ShotPlan by_default = Plan(retina, std::nullopt);
-  EXPECT_EQ(by_default.image_width, 1440);
-  EXPECT_DOUBLE_EQ(by_default.scale, 0.5);
-
-  ShotPlan mini = Plan(retina, ShotSize::kMini);
-  EXPECT_EQ(mini.image_width, 640);
-  EXPECT_EQ(mini.image_height, 400);
-  EXPECT_DOUBLE_EQ(mini.css_per_pixel, 2.25);
-
-  ShotPlan micro = Plan(retina, ShotSize::kMicro);
-  EXPECT_EQ(micro.image_width, 320);
-  EXPECT_EQ(micro.image_height, 200);
-  EXPECT_DOUBLE_EQ(micro.css_per_pixel, 4.5);
-
-  // Device pixels would be 2880x1800: fitted to the long edge, then to what
-  // kMaxImageTokens is worth.
-  ShotPlan full = Plan(retina, ShotSize::kFull);
-  EXPECT_LE(full.image_width, kFullLongEdge);
-  EXPECT_GE(full.image_width, 2400);
-  EXPECT_LE(EstimateImageTokens(full.image_width, full.image_height),
-            kMaxImageTokens);
-  EXPECT_NEAR(static_cast<double>(full.image_width) / full.image_height, 1.6,
-              0.01);
-  EXPECT_TRUE(full.clip);
-  EXPECT_LT(full.scale, 1);
-}
-
-TEST(KoanCliScreenshotTest, DeviceScaleFactors) {
-  // 1x: normal and full are the viewport as it is, the plain capture (no
-  // clip: the tab's view is not resized).
-  for (ShotSize size : {ShotSize::kNormal, ShotSize::kFull}) {
-    ShotPlan plan = Plan(Viewport(1440, 900, 1), size);
-    EXPECT_EQ(plan.image_width, 1440);
-    EXPECT_EQ(plan.image_height, 900);
-    EXPECT_FALSE(plan.clip);
-    EXPECT_DOUBLE_EQ(plan.scale, 1);
-  }
-  ShotPlan mini1 = Plan(Viewport(1440, 900, 1), ShotSize::kMini);
-  EXPECT_EQ(mini1.image_width, 640);
-  EXPECT_TRUE(mini1.clip);
-
-  // 3x: normal is still CSS pixels.
-  ShotPlan normal3 = Plan(Viewport(1000, 600, 3), ShotSize::kNormal);
-  EXPECT_EQ(normal3.image_width, 1000);
-  EXPECT_EQ(normal3.image_height, 600);
-  EXPECT_DOUBLE_EQ(normal3.scale, 1.0 / 3);
-  ShotPlan full3 = Plan(Viewport(1000, 600, 3), ShotSize::kFull);
-  EXPECT_LE(full3.image_width, kFullLongEdge);
-  EXPECT_LE(EstimateImageTokens(full3.image_width, full3.image_height),
-            kMaxImageTokens);
-  // 2x, small enough: full is the device's pixels, the plain capture.
-  ShotPlan full2 = Plan(Viewport(800, 500, 2), ShotSize::kFull);
-  EXPECT_EQ(full2.image_width, 1600);
-  EXPECT_EQ(full2.image_height, 1000);
-  EXPECT_FALSE(full2.clip);
-  EXPECT_DOUBLE_EQ(full2.css_per_pixel, 0.5);
-}
-
-TEST(KoanCliScreenshotTest, NeverEnlarges) {
-  // A viewport smaller than the size: CSS pixels, not 320 or 640.
-  const ViewportMetrics tiny = Viewport(200, 100, 2);
-  for (ShotSize size : {ShotSize::kMicro, ShotSize::kMini, ShotSize::kNormal}) {
-    ShotPlan plan = Plan(tiny, size);
-    EXPECT_EQ(plan.image_width, 200);
-    EXPECT_EQ(plan.image_height, 100);
-    EXPECT_DOUBLE_EQ(plan.css_per_pixel, 1);
-  }
-  ShotPlan full = Plan(tiny, ShotSize::kFull);
-  EXPECT_EQ(full.image_width, 400);
-  EXPECT_FALSE(full.clip);
-  // A page zoomed out (50% on a 1x display) is not drawn larger than it
-  // shows: normal is the device's pixels then.
-  ShotPlan zoomed_out = Plan(Viewport(2000, 1000, 1, 0.5), ShotSize::kNormal);
-  EXPECT_EQ(zoomed_out.image_width, 1000);
-  EXPECT_LE(zoomed_out.scale, 1);
-}
-
-TEST(KoanCliScreenshotTest, VeryWideAndVeryTallViewports) {
-  ShotPlan wide = Plan(Viewport(5000, 300, 2), ShotSize::kNormal);
-  EXPECT_EQ(wide.image_width, kNormalLongEdge);
-  EXPECT_EQ(wide.image_height, 94);
-  ShotPlan wide_micro = Plan(Viewport(5000, 300, 2), ShotSize::kMicro);
-  EXPECT_EQ(wide_micro.image_width, 320);
-  EXPECT_EQ(wide_micro.image_height, 19);
-  ShotPlan tall = Plan(Viewport(400, 10000, 2), ShotSize::kMini);
-  EXPECT_EQ(tall.image_width, 26);
-  EXPECT_EQ(tall.image_height, 640);
-  // Never a side of no pixels.
-  ShotPlan sliver = Plan(Viewport(10000, 2, 1), ShotSize::kMicro);
-  EXPECT_EQ(sliver.image_width, 320);
-  EXPECT_EQ(sliver.image_height, 1);
-}
-
-TEST(KoanCliScreenshotTest, ZoomAndScroll) {
-  // 125% zoom on a 2x display: 1152x720 CSS pixels, scrolled 100 down. The
-  // clip is in DIPs from the document's top.
-  ViewportMetrics viewport = Viewport(1152, 720, 2, 1.25);
-  viewport.page_y = 100;
-  ShotPlan normal = Plan(viewport, ShotSize::kNormal);
-  EXPECT_EQ(normal.image_width, 1152);
-  EXPECT_EQ(normal.image_height, 720);
-  EXPECT_DOUBLE_EQ(normal.scale, 0.4);
-  EXPECT_DOUBLE_EQ(normal.x, 0);
-  EXPECT_DOUBLE_EQ(normal.y, 125);
-  EXPECT_DOUBLE_EQ(normal.width, 1440);
-  EXPECT_DOUBLE_EQ(normal.height, 900);
-}
-
-TEST(KoanCliScreenshotTest, ClipAnElement) {
-  ViewportMetrics viewport = Viewport(1440, 900, 2);
-  viewport.page_y = 1000;
-  // Sharp by default: device pixels, with the margin around it.
-  ShotPlan sharp =
-      Plan(viewport, std::nullopt, CssRect{100, 200, 50, 20}, kClipMargin);
-  EXPECT_TRUE(sharp.clip);
-  EXPECT_DOUBLE_EQ(sharp.x, 92);
-  EXPECT_DOUBLE_EQ(sharp.y, 1192);
-  EXPECT_DOUBLE_EQ(sharp.width, 66);
-  EXPECT_DOUBLE_EQ(sharp.height, 36);
-  EXPECT_DOUBLE_EQ(sharp.scale, 1);
-  EXPECT_EQ(sharp.image_width, 132);
-  EXPECT_EQ(sharp.image_height, 72);
-  EXPECT_DOUBLE_EQ(sharp.css_per_pixel, 0.5);
-  // With a size, that size's rule (never enlarged).
-  ShotPlan mini =
-      Plan(viewport, ShotSize::kMini, CssRect{100, 200, 50, 20}, kClipMargin);
-  EXPECT_EQ(mini.image_width, 66);
-  EXPECT_DOUBLE_EQ(mini.scale, 0.5);
-  // A big element at full size is capped like the viewport.
-  ShotPlan big =
-      Plan(viewport, std::nullopt, CssRect{0, 0, 1440, 900}, kClipMargin);
-  EXPECT_LE(big.image_width, kFullLongEdge);
-}
-
-TEST(KoanCliScreenshotTest, ClipAtTheViewportsEdge) {
-  const ViewportMetrics viewport = Viewport(1440, 900, 2);
-  // Cut to the viewport.
-  ShotPlan corner =
-      Plan(viewport, std::nullopt, CssRect{1430, 890, 50, 50}, kClipMargin);
-  EXPECT_DOUBLE_EQ(corner.x, 1422);
-  EXPECT_DOUBLE_EQ(corner.y, 882);
-  EXPECT_DOUBLE_EQ(corner.width, 18);
-  EXPECT_DOUBLE_EQ(corner.height, 18);
-  ShotPlan top_left =
-      Plan(viewport, std::nullopt, CssRect{-30, -30, 50, 50}, kClipMargin);
-  EXPECT_DOUBLE_EQ(top_left.x, 0);
-  EXPECT_DOUBLE_EQ(top_left.width, 28);
-  // A rectangle the agent gave: no margin.
-  ShotPlan rect = Plan(viewport, ShotSize::kNormal, CssRect{10, 20, 300, 40});
-  EXPECT_DOUBLE_EQ(rect.x, 10);
-  EXPECT_EQ(rect.image_width, 300);
-  EXPECT_EQ(rect.image_height, 40);
-}
-
-TEST(KoanCliScreenshotTest, ClipErrors) {
-  const ViewportMetrics viewport = Viewport(1440, 900, 2);
-  EXPECT_TRUE(PlanErrorOf(viewport, CssRect{2000, 100, 50, 50})
+TEST(KoanCliScreenshotTest, ClipRefusals) {
+  EXPECT_TRUE(ClipRefusal("Koan.offScreen", "@12")
                   .starts_with("Koan.offScreen: @12 is outside the viewport"));
-  EXPECT_TRUE(PlanErrorOf(viewport, CssRect{100, -500, 50, 50})
-                  .starts_with("Koan.offScreen"));
-  EXPECT_TRUE(PlanErrorOf(viewport, CssRect{10, 10, 0, 0})
+  EXPECT_TRUE(ClipRefusal("Koan.emptyElement", "@12")
                   .starts_with("Koan.emptyElement: @12 has no size"));
-  EXPECT_TRUE(PlanErrorOf(viewport, CssRect{10, 10, 30, 0})
-                  .starts_with("Koan.emptyElement"));
-  // A tab of the user's: no clip (it would resize their view).
-  EXPECT_TRUE(PlanErrorOf(viewport, CssRect{10, 10, 30, 30}, false)
-                  .starts_with("Koan.notPermitted"));
-  EXPECT_TRUE(
-      PlanErrorOf(Viewport(0, 900, 2), std::nullopt).starts_with("Koan."));
-}
-
-TEST(KoanCliScreenshotTest, UsersTabIsTheWholeViewport) {
-  ShotPlanResult result = PlanShot(Viewport(1440, 900, 2), ShotSize::kMicro,
-                                   std::nullopt, 0, "", /*may_clip=*/false);
-  ASSERT_TRUE(result.plan);
-  EXPECT_FALSE(result.plan->clip);
-  EXPECT_EQ(result.plan->image_width, 2880);
-  EXPECT_EQ(result.plan->image_height, 1800);
-  EXPECT_DOUBLE_EQ(result.plan->css_per_pixel, 0.5);
-}
-
-TEST(KoanCliScreenshotTest, ReadsTheViewport) {
-  std::optional<ViewportMetrics> retina = ReadViewportMetrics(Dict(R"({
-      "cssVisualViewport": {"pageX": 0, "pageY": 50.5, "clientWidth": 1440,
-                            "clientHeight": 900, "zoom": 1, "scale": 1},
-      "visualViewport": {"clientWidth": 2880, "clientHeight": 1800}})"));
-  ASSERT_TRUE(retina);
-  EXPECT_DOUBLE_EQ(retina->page_y, 50.5);
-  EXPECT_DOUBLE_EQ(retina->width, 1440);
-  EXPECT_DOUBLE_EQ(retina->device_scale, 2);
-  EXPECT_DOUBLE_EQ(retina->zoom, 1);
-  // A rounded size: the ratio snaps to the scale it means.
-  std::optional<ViewportMetrics> rounded = ReadViewportMetrics(Dict(R"({
-      "cssVisualViewport": {"clientWidth": 1439.5, "clientHeight": 900},
-      "visualViewport": {"clientWidth": 2879}})"));
-  ASSERT_TRUE(rounded);
-  EXPECT_DOUBLE_EQ(rounded->device_scale, 2);
-  // Zoomed: the device scale without the zoom.
-  std::optional<ViewportMetrics> zoomed = ReadViewportMetrics(Dict(R"({
-      "cssVisualViewport": {"clientWidth": 1152, "clientHeight": 720,
-                            "zoom": 1.25},
-      "visualViewport": {"clientWidth": 2880}})"));
-  ASSERT_TRUE(zoomed);
-  EXPECT_DOUBLE_EQ(zoomed->device_scale, 2);
-  EXPECT_DOUBLE_EQ(zoomed->zoom, 1.25);
-  // No device size: 1x.
-  std::optional<ViewportMetrics> plain = ReadViewportMetrics(Dict(R"({
-      "cssLayoutViewport": {"clientWidth": 800, "clientHeight": 600}})"));
-  ASSERT_TRUE(plain);
-  EXPECT_DOUBLE_EQ(plain->device_scale, 1);
-  EXPECT_FALSE(ReadViewportMetrics(Dict(R"({
-      "cssVisualViewport": {"clientWidth": 0, "clientHeight": 600}})")));
-  EXPECT_FALSE(ReadViewportMetrics(Dict("{}")));
+  EXPECT_EQ(ClipRefusal("Koan.noSurface", "@12"), "");
 }
 
 TEST(KoanCliScreenshotTest, QuadsBounds) {

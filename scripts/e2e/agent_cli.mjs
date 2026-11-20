@@ -17,7 +17,9 @@
 //   (a PNG), on a local page, in the agent's own background tab; each
 //   screenshot size's pixels on the Mac's display (normal is CSS pixels),
 //   --clip @ref / a locator as the element's box, scaled, and act
-//   --screenshot micro (also in koan shell) in the same answer;
+//   --screenshot micro (also in koan shell) in the same answer; with Koan's
+//   window covered by another app's (real input only), the agent tab's
+//   capture still has the page in it (Koan.captureScaled under the lease);
 // - settle and return: act waits for the page (a slow fetch after a click
 //   shows in act --snapshot with no sleep); navigate returns with the
 //   server's status (504) at once, and a server that never answers is a
@@ -46,9 +48,12 @@
 //   site permissions are the user's (prompt, not denied);
 // - an agent tab showing a certificate warning: acting on it is refused
 //   (Koan.interstitial);
-// - take-over of the user's tab (approved in its dialog the same way): a
-//   same-site navigate works, and so does an off-site one (no limit); then
-//   release;
+// - take-over of the user's tab (approved in its dialog the same way): each
+//   screenshot size gives the agent tab's pixels there too (one capture path,
+//   Koan.captureScaled), --clip with a locator is the button's box, and the
+//   page (pages/agent_capture_watch.html) saw no resize, no devicePixelRatio
+//   change and no media query change; a same-site navigate works, and so
+//   does an off-site one (no limit); then release;
 // - end: the tasks close;
 // - every switch off and the site limit on (Settings > Agent Control), then
 //   a new task: its tab is in a container, where the extension doesn't run
@@ -71,10 +76,10 @@ import http from 'node:http';
 import https from 'node:https';
 import os from 'node:os';
 import path from 'node:path';
-import { browserCall, check, evalIn, finish, pages, setKoanPref, showPane, sleep,
+import { browserCall, check, decodePng, evalIn, finish, pages, setKoanPref, showPane, sleep,
          viewTree, waitFor } from './lib/koan.mjs';
-import { IS_MAC, KOAN_LOG, alive, clickThroughRoot, fatalInLog, rootMouse, rootOf, skip,
-         skipped, startServer } from './lib/mac.mjs';
+import { IS_MAC, KOAN_LOG, alive, clickThroughRoot, fatalInLog, realInput, realInputWhyNot, rootMouse,
+         rootOf, skip, skipped, startServer, windowOf } from './lib/mac.mjs';
 
 if (!IS_MAC) skip('agent control\'s CLI needs macOS (its holder resolves peers with LOCAL_PEERTOKEN)');
 const CLI = process.env.KOAN_CLI;
@@ -166,6 +171,7 @@ const server = await startServer({
     Array.from({ length: 40 }, (_, i) =>
       `<p>Paragraph ${i} has <b>bold</b>, <i>italic</i> and <span>split</span> text<br>over two lines.</p>`).join('')}
     <button onclick="document.getElementById('h').textContent='Pressed'">Press here</button>`,
+  '/watch': fs.readFileSync(new URL('./pages/agent_capture_watch.html', import.meta.url), 'utf8'),
   '/agent': `<!doctype html><title>Agent page</title><h1 id=h>Ready</h1>
     <button onclick="document.getElementById('h').textContent='Clicked'">Press me</button>
     <p id=perm>checking</p>
@@ -176,6 +182,8 @@ const server = await startServer({
     </script>`,
 });
 const AGENT_URL = server.url('/agent');
+// What the agent tab's screenshots measured: the take-over's compare to it.
+let agentShots = null;
 
 // --- Agent ready, then pairing.
 await waitFor(() => fs.existsSync(path.join(PROFILE, 'AgentControl', 'agent.json')), 15000);
@@ -291,6 +299,7 @@ check('koan screenshot: a PNG of the page', r.code === 0 && png.subarray(1, 4).t
             `${brief(r)}; the PNG is ${got?.join('×')}`);
     }
     console.log(`INFO  screenshot tokens for a ${w}×${h} viewport at ${dpr}×: ${JSON.stringify(tokens)}`);
+    agentShots = { w, h, dpr, want, fitted, pngSize, near, LINE };
     check('...normal is CSS pixels (1×), the viewport\'s own size when it fits 1568',
           Math.max(w, h) > 1568 || near(pngSize(path.join(AGENT_HOME, 'shot-normal.png')), [Math.round(w), Math.round(h)]));
     check('...micro costs at most a tenth of full', tokens.micro * 10 <= tokens.full, JSON.stringify(tokens));
@@ -344,6 +353,63 @@ check('koan screenshot: a PNG of the page', r.code === 0 && png.subarray(1, 4).t
     check('koan shell: act --screenshot micro answers with the screenshot\'s line',
           LINE.test(sh.out) && /^--- exit 0$/m.test(sh.out), sh.out.slice(0, 200));
   }
+}
+
+// --- A covered window (real input only: it changes what is on the screen):
+// Koan's window under another app's window (scripts/mac/tools/cover.m), the
+// agent's background tab idle past the lease's 3 s hold-off, so it is not
+// drawing. Koan.captureScaled takes the lease's capturer, waits for a fresh
+// frame and copies it: the image is the size asked for and has the page in
+// it (not blank, not the frame from before it was hidden).
+if (!realInput() || !agentShots) {
+  skipped('Covered window: the agent tab\'s capture', agentShots ? realInputWhyNot() : 'the sizes failed');
+} else {
+  let cover = null;
+  try {
+    const bin = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'koan-cover-')), 'cover');
+    execFileSync('clang', ['-fobjc-arc', '-framework', 'AppKit', '-o', bin,
+                           new URL('../mac/tools/cover.m', import.meta.url).pathname],
+                 { stdio: 'ignore', timeout: 120000 });
+    const b = (await windowOf(tab))?.bounds;
+    cover = b && spawn(bin, [b.left, b.top, b.width, b.height, 60].map(String),
+                       { stdio: ['pipe', 'pipe', 'ignore'] });
+    let said = '';
+    cover?.stdout.on('data', d => (said += d));
+    if (cover) await waitFor(() => /ready/.test(said), 10000);
+  } catch (e) {
+    console.log(`  (no cover window: ${e.message})`);
+  }
+  const front = (await pages()).find(p => p.id !== tab && !/^(chrome|devtools)/.test(p.url));
+  const covered = cover && front &&
+      await waitFor(async () => await evalIn(front, 'document.visibilityState') === 'hidden', 8000);
+  check('Covered window: another app\'s window covers Koan\'s (its shown tab went hidden)', !!covered,
+        cover ? 'the front tab stayed visible' : 'the cover tool did not start');
+  if (covered) {
+    await sleep(4000);  // past the lease's hold-off: the agent tab stopped drawing
+    const f = path.join(AGENT_HOME, 'shot-covered.png');
+    const t0 = Date.now();
+    r = await koan(['screenshot', tab, '--size', 'mini', '-o', f]);
+    const ms = Date.now() - t0;
+    const got = agentShots.pngSize(f);
+    let colours = 0;
+    try {
+      const img = decodePng(f);
+      const set = new Set();
+      for (let y = 0; y < img.height; y += 4) {
+        for (let x = 0; x < img.width; x += 4) set.add(img.pixel(x, y).join(','));
+      }
+      colours = set.size;
+    } catch {}
+    check(`Covered window: the agent tab's mini capture is ${agentShots.want.mini.join('×')} and has the page in ` +
+          'it (not blank)', r.code === 0 && agentShots.near(got, agentShots.want.mini) && colours > 2,
+          `${brief(r)}; ${got?.join('×')}, ${colours} colours, ${ms} ms`);
+    console.log(`INFO  covered-window capture of an idle agent tab: ${ms} ms`);
+  }
+  if (cover) {
+    cover.stdin.end();
+    cover.kill('SIGTERM');
+  }
+  if (front) await waitFor(async () => await evalIn(front, 'document.visibilityState') === 'visible', 8000);
 }
 
 // --- A form: dropdowns, states, stale refs (#340).
@@ -921,7 +987,7 @@ await extensionsAndPermissions('Defaults', tab, true);
 // --- Take-over of the user's tab. `limited`: "Limit a taken-over tab to
 // its site" is on, so an off-site navigate is refused.
 async function takeOver(when, limited) {
-  const user = (await browserCall('Target.createTarget', { url: server.url('/p?t=User%20tab') })).result?.targetId;
+  const user = (await browserCall('Target.createTarget', { url: server.url('/watch') })).result?.targetId;
   await sleep(2000);
   await browserCall('Target.activateTarget', { targetId: user });
   await sleep(800);
@@ -933,6 +999,7 @@ async function takeOver(when, limited) {
   const taken = r.out.split('\n').at(-1);
   check(`${when}: koan take-over: the user's tab, after its prompt was allowed`,
         ok && r.code === 0 && !!taken, brief(r));
+  if (!limited) await userTabShots(when, taken);
   r = await koan(['act', taken, 'navigate', server.url('/p?t=Same%20site')]);
   check(`${when}: ...a same-site navigate works`, r.code === 0, brief(r));
   r = await koan(['act', taken, 'navigate', `http://localhost:${server.port}/p?t=Elsewhere`]);
@@ -946,6 +1013,59 @@ async function takeOver(when, limited) {
   check(`${when}: koan release: gives it back`, r.code === 0, brief(r));
   if (user) await browserCall('Target.closeTarget', { targetId: user }).catch(() => {});
 }
+
+// Screenshots of the taken-over tab (2026-11-20, one capture path): every
+// size as on the agent's tab, --clip there, and the page saw nothing.
+async function userTabShots(when, taken) {
+  const page = (await pages()).find(p => p.id === taken);
+  const seen = async () => page && JSON.parse(await evalIn(page, 'JSON.stringify(window.koanSeen ?? null)') ??
+                                              'null');
+  const before = await seen();
+  check(`${when}: the user's tab counts what it sees (pages/agent_capture_watch.html)`, !!before,
+        JSON.stringify(before));
+  if (!agentShots || !page) {
+    skipped(`${when}: screenshots of the user's tab`, agentShots ? 'no page' : 'the agent tab\'s sizes failed');
+    return;
+  }
+  const { want, pngSize, near, LINE, fitted } = agentShots;
+  const view = JSON.parse(await evalIn(page, 'JSON.stringify({ w: visualViewport.width, h: visualViewport.height, ' +
+      'dpr: devicePixelRatio, b: document.getElementById("press").getBoundingClientRect() })') ?? 'null');
+  // The same window: the same viewport as the agent's tab, so the same sizes.
+  const same = view && Math.abs(view.w - agentShots.w) <= 1 && Math.abs(view.h - agentShots.h) <= 1;
+  const mine = view && {
+    micro: fitted(view.w, view.h, Math.min(1, view.dpr), 320),
+    mini: fitted(view.w, view.h, Math.min(1, view.dpr), 640),
+    normal: fitted(view.w, view.h, Math.min(1, view.dpr), 1568),
+    full: fitted(view.w, view.h, view.dpr, 2576) };
+  for (const size of ['micro', 'mini', 'normal', 'full']) {
+    const f = path.join(AGENT_HOME, `user-shot-${size}.png`);
+    const r = await koan(['screenshot', taken, '--size', size, '-o', f]);
+    const got = pngSize(f);
+    const expected = same ? want[size] : mine[size];
+    check(`${when}: koan screenshot --size ${size} of the user's tab: ${expected.join('×')}, as on the agent's tab`,
+          r.code === 0 && near(got, expected) && LINE.test(r.out) && !/whole|device pixels/.test(r.err),
+          `${brief(r)}; the PNG is ${got?.join('×')}`);
+  }
+  const { b } = view;
+  const left = Math.max(0, b.x - 8), top = Math.max(0, b.y - 8);
+  const cw = Math.min(view.w, b.x + b.width + 8) - left, ch = Math.min(view.h, b.y + b.height + 8) - top;
+  const clipped = path.join(AGENT_HOME, 'user-shot-clip.png');
+  let r = await koan(['screenshot', taken, '--clip', 'loc:role=button[name="Press me"]', '-o', clipped]);
+  check(`${when}: ...--clip with a locator on the user's tab: the button's box at device pixels ` +
+        `(${Math.round(cw * view.dpr)}×${Math.round(ch * view.dpr)})`,
+        r.code === 0 && near(pngSize(clipped), [cw * view.dpr, ch * view.dpr]), `${brief(r)}; ` +
+        `${pngSize(clipped)?.join('×')}`);
+  r = await koan(['snapshot', taken, '--interactive']);
+  const ref = r.out.split('\n').find(l => /button "Press me"/.test(l))?.match(/@\d+/)?.[0];
+  r = await koan(['screenshot', taken, '--clip', ref ?? '@0', '--size', 'normal', '-o', clipped]);
+  check(`${when}: ...--clip ${ref} --size normal on the user's tab: CSS pixels`,
+        r.code === 0 && near(pngSize(clipped), [cw, ch]), `${brief(r)}; ${pngSize(clipped)?.join('×')}`);
+  const after = await seen();
+  check(`${when}: ...and the user's page saw no resize, no devicePixelRatio change and no media query change`,
+        !!after && after.resize === 0 && after.viewport === 0 && after.dpr === 0 && after.media === 0 &&
+        after.dprAtLoad === view.dpr, JSON.stringify(after));
+}
+
 await takeOver('Defaults', false);
 
 // --- End.

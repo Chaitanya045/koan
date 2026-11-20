@@ -36,6 +36,7 @@
 #include "koan/browser/agent/koan_agent_pause_watch.h"
 #include "koan/browser/agent/koan_agent_reach_content.h"
 #include "koan/browser/agent/koan_agent_service.h"
+#include "koan/browser/agent/koan_agent_surface_capture.h"
 #include "koan/browser/agent/koan_agent_tab_hooks.h"
 #include "koan/browser/containers/koan_agent_access.h"
 #include "koan/browser/containers/koan_agent_containers.h"
@@ -377,6 +378,18 @@ class AgentForwarder::Connection final : public FacadeBackend {
 
   void AskToResume(const std::string& target_id) override {
     forwarder_->AskToResume(target_id);
+  }
+
+  std::optional<SurfaceGeometry> DescribeSurface(
+      const std::string& target_id) override {
+    return SurfaceGeometryOf(forwarder_->ContentsFor(target_id));
+  }
+
+  void CopySurface(const std::string& target_id,
+                   SurfaceCaptureJob job,
+                   SurfaceCaptureCallback done) override {
+    CaptureSurface(forwarder_->ContentsFor(target_id), std::move(job),
+                   std::move(done));
   }
 
   base::DictValue BrowserVersion() override {

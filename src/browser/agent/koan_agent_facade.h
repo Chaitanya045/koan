@@ -13,6 +13,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
@@ -21,6 +22,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "koan/browser/agent/koan_agent_audit.h"
+#include "koan/browser/agent/koan_agent_capture.h"
 #include "koan/browser/agent/koan_agent_session.h"
 #include "url/gurl.h"
 
@@ -46,8 +48,20 @@
 //
 // The browser-level methods are the facade's own: Target.* over the tabs in
 // the client's scope (nothing else is ever listed or attachable),
-// Browser.getVersion, and Koan.listTabs, Koan.openTab, Koan.closeTab and
-// Koan.keepAlive.
+// Browser.getVersion, and Koan.listTabs, Koan.openTab, Koan.closeTab,
+// Koan.keepAlive and Koan.captureScaled.
+//
+// Screenshots (section 12, "One capture path"): Koan.captureScaled {targetId,
+// longEdge?, scale?, clip?, format?, quality?} copies the frame the tab's
+// compositor already drew, scaled on the GPU (koan_agent_capture.h), on any
+// tab the agent may read: its own, or a user's it was given (driven, read or
+// paused). It takes the tab's attached session through the same checks as
+// Page.captureScreenshot (scope, state, reach at attach), asks the page for
+// its viewport (Page.getLayoutMetrics), plans the image, collects the masks
+// to paint over it (CollectCaptureMasks()) and asks the backend for the
+// copy. Only an agent's own tab with no surface falls back to
+// Page.captureScreenshot with clip and scale (device emulation); a user's
+// tab never does.
 //
 // Keeping a tab rendering between commands (design section 8): a screencast
 // (Page.startScreencast until Page.stopScreencast or the session's end) holds
@@ -146,6 +160,15 @@ class FacadeBackend {
   // Koan.resume: the agent cannot resume a paused tab; this shows the user
   // that it asks to.
   virtual void AskToResume(const std::string& target_id) = 0;
+  // Koan.captureScaled: the size and scale of the tab's view (nullopt if it
+  // has none), and a copy of the frame it drew, scaled, masked and encoded
+  // as `job` says (koan_agent_surface_capture.h). `done` runs once, also if
+  // the tab goes away.
+  virtual std::optional<SurfaceGeometry> DescribeSurface(
+      const std::string& target_id) = 0;
+  virtual void CopySurface(const std::string& target_id,
+                           SurfaceCaptureJob job,
+                           SurfaceCaptureCallback done) = 0;
   // Browser.getVersion's answer.
   virtual base::DictValue BrowserVersion() = 0;
   virtual void Audit(AuditRecord record) = 0;
@@ -227,6 +250,7 @@ class CdpFacade {
  private:
   struct TabSession;
   struct Pending;
+  struct Capture;
 
   // The client's tab sessions by sessionId, and the sessionId of each tab.
   TabSession* SessionFor(std::string_view session_id);
@@ -258,6 +282,23 @@ class CdpFacade {
   void Release(const AgentMessage& message);
   void Resume(const AgentMessage& message);
   void KeepAlive(const AgentMessage& message);
+  // Koan.captureScaled, step by step: the viewport's answer, the masks, the
+  // copy, and (an agent's own tab with no surface) CDP's screenshot.
+  void CaptureScaled(const AgentMessage& message);
+  void OnCaptureAnswer(uint64_t capture_id,
+                       const std::string& method,
+                       base::DictValue* result);
+  // The hook for masking (secret fields Koan filled): the boxes, in viewport
+  // CSS pixels, that are painted over the capture before it is encoded. None
+  // yet: runs `done` at once with none.
+  using CaptureMasksCallback =
+      base::OnceCallback<void(std::vector<ViewportRect> boxes)>;
+  void CollectCaptureMasks(TabSession& session, CaptureMasksCallback done);
+  void CopyCapture(uint64_t capture_id, std::vector<ViewportRect> boxes);
+  void OnSurfaceCopied(uint64_t capture_id, SurfaceCaptureResult result);
+  void FinishCapture(uint64_t capture_id,
+                     std::optional<CaptureAnswer> answer,
+                     std::optional<CaptureError> error);
   // The session's screencast closed (or never opened): its hold goes.
   void EndScreencastHold(TabSession& session);
   // Whether answers and events from the tab are redacted (a user tab the
@@ -289,7 +330,8 @@ class CdpFacade {
                TabSession& session,
                const std::string& method,
                std::string summary,
-               base::DictValue params);
+               base::DictValue params,
+               uint64_t capture_id = 0);
   // Sends a command of the facade's own to the tab (its answer is not given to
   // the client).
   void SendInternal(TabSession& session,
@@ -359,6 +401,9 @@ class CdpFacade {
   };
   std::map<std::string, KeepAliveHold, std::less<>> keep_alives_;
   uint64_t next_hold_ = 1;
+  // Koan.captureScaled requests in progress, by an id of the facade's own.
+  std::map<uint64_t, Capture> captures_;
+  uint64_t next_capture_ = 1;
   bool discover_targets_ = false;
   bool auto_attach_ = false;
 

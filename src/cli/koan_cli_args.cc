@@ -572,7 +572,8 @@ Saves what the tab's viewport shows as a PNG, and prints its path, its size
 in pixels, about how many tokens a model is charged for it (one per 28x28
 pixels), and how many CSS pixels one pixel of it is:
   saved koan-ab12cd34.png (640x400, ~330 image tokens, 1 px = 2.25 CSS px)
-The browser draws the page at that size, so text stays as sharp as it can.
+The browser copies the frame it already drew, scaled to that size: the
+page is not drawn again and cannot tell, on your tabs and the user's alike.
 
 Options:
   --size normal     (the default) CSS pixels (1x), long edge at most 1568:
@@ -595,9 +596,7 @@ Options:
   --json            {path, width, height, imageTokens, cssPxPerPx}
 Sizes never enlarge: a small window gives a smaller image. Read text from
 koan snapshot, not from a small image. The image is always a PNG: JPEG or
-WebP would save bytes, not tokens (a model pays for pixels).
-A tab of the user's (take-over, or read) is captured whole at device pixels
-(--size and --clip need a tab of the agent's own: they resize its view).)HELP"},
+WebP would save bytes, not tokens (a model pays for pixels).)HELP"},
       {"status", R"HELP(koan status [--json]
 
 Whether Koan runs, the pairing, the connection, the tasks and tabs, and

@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/base64.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -107,6 +108,10 @@ constexpr size_t kMaxChildSessions = 64;
 constexpr size_t kMaxKeepAlives = 16;
 constexpr int kMaxKeepAliveSeconds = 600;
 
+// How far past a masked box the paint goes, in CSS pixels (a focus ring, a
+// border the box leaves out).
+constexpr double kCaptureMaskPadding = 2;
+
 // The child targets an agent may have: frames and the page's own workers.
 // Shared and service workers outlive the tab and serve the user's other tabs
 // of the site, so they are not the tab's to hand over.
@@ -126,6 +131,26 @@ struct CdpFacade::Pending {
   std::string summary;
   // For IO.close: the stream it closes.
   std::string stream;
+  base::TimeTicks start;
+  // A step of a Koan.captureScaled (captures_), answered there.
+  uint64_t capture_id = 0;
+};
+
+// A Koan.captureScaled in progress.
+struct CdpFacade::Capture {
+  int client_message_id = 0;
+  std::optional<std::string> reply_session_id;
+  // The tab's session it runs in.
+  std::string session_id;
+  std::string target_id;
+  CaptureRequest request;
+  PageViewport viewport;
+  SurfaceGeometry surface;
+  CapturePlan plan;
+  int masked = 0;
+  bool fresh_frame = false;
+  // Set once the copy failed and CDP draws it instead.
+  std::optional<SurfaceStatus> fallback;
   base::TimeTicks start;
 };
 
@@ -349,9 +374,11 @@ bool CdpFacade::Forward(std::optional<int> client_message_id,
                         TabSession& session,
                         const std::string& method,
                         std::string summary,
-                        base::DictValue params) {
+                        base::DictValue params,
+                        uint64_t capture_id) {
   Pending pending;
   pending.client_message_id = client_message_id;
+  pending.capture_id = capture_id;
   pending.session_id = session.session_id;
   pending.target_id = session.target_id;
   pending.method = method;
@@ -455,6 +482,8 @@ void CdpFacade::HandleKoanMethod(AgentMessage& message) {
     Resume(message);
   } else if (message.method == "Koan.keepAlive") {
     KeepAlive(message);
+  } else if (message.method == "Koan.captureScaled") {
+    CaptureScaled(message);  // audited when it is answered
   } else {
     AuditCommand(message.method, "", "", AuditOutcome::kDenied,
                  base::TimeDelta());
@@ -965,6 +994,218 @@ void CdpFacade::KeepAlive(const AgentMessage& message) {
         base::DictValue().Set("holdId", hold_id).Set("seconds", *seconds));
 }
 
+void CdpFacade::CaptureScaled(const AgentMessage& message) {
+  const std::string* target_param = message.params.FindString("targetId");
+  const std::string target_id = target_param ? *target_param : std::string();
+  auto deny = [&](std::string_view code, std::string_view text) {
+    AuditCommand(message.method, target_id, "", AuditOutcome::kDenied,
+                 base::TimeDelta());
+    ReplyError(message.id, message.session_id, code, text);
+  };
+  if (target_id.empty() || !InScope(target_id) ||
+      !backend_->DescribeTab(target_id)) {
+    deny("Koan.unknownTarget", "no target with this id");
+    return;
+  }
+  base::expected<CaptureRequest, CaptureError> request =
+      ParseCaptureRequest(message.params);
+  if (!request.has_value()) {
+    deny(request.error().code, request.error().message);
+    return;
+  }
+  // The same checks as Page.captureScreenshot's: the client's tab, in a
+  // state that lets it read (driven, read-only or paused), and a session
+  // that was let attach to it (the reach rules and the site limit).
+  if (!registry_->MaySend(client_id_, target_id, "Page.captureScreenshot")) {
+    deny("Koan.notPermitted", "this tab is not in the agent's scope");
+    return;
+  }
+  TabSession* session = SessionForTarget(target_id);
+  if (!session) {
+    deny("Koan.notAttached",
+         "attach to the tab first (Target.attachToTarget), then capture it");
+    return;
+  }
+  const uint64_t capture_id = next_capture_++;
+  Capture& capture = captures_[capture_id];
+  capture.client_message_id = message.id;
+  capture.reply_session_id = message.session_id;
+  capture.session_id = session->session_id;
+  capture.target_id = target_id;
+  capture.request = std::move(*request);
+  capture.start = tick_clock_->NowTicks();
+  // Whether the tab draws now, before the viewport's command turns its
+  // capturer on: if it does not, the copy waits for a fresh frame.
+  const std::optional<SurfaceGeometry> before =
+      backend_->DescribeSurface(target_id);
+  capture.fresh_frame = !before || !before->drawing;
+  // The viewport the clip is in, as the page has it now.
+  if (!Forward(std::nullopt, *session, "Page.getLayoutMetrics", "",
+               base::DictValue(), capture_id)) {
+    FinishCapture(capture_id, std::nullopt,
+                  CaptureError{"Koan.unavailable", "could not ask the page"});
+  }
+}
+
+void CdpFacade::OnCaptureAnswer(uint64_t capture_id,
+                                const std::string& method,
+                                base::DictValue* result) {
+  auto it = captures_.find(capture_id);
+  if (it == captures_.end()) {
+    return;
+  }
+  Capture& capture = it->second;
+  if (method == "Page.captureScreenshot") {
+    // CDP drew it (the fallback).
+    const std::string* data = result ? result->FindString("data") : nullptr;
+    if (!data) {
+      FinishCapture(capture_id, std::nullopt, SurfaceError(*capture.fallback));
+      return;
+    }
+    CaptureAnswer answer;
+    answer.data = *data;
+    answer.width = capture.plan.image_width;
+    answer.height = capture.plan.image_height;
+    answer.css_per_pixel = capture.plan.css_per_pixel;
+    answer.format = capture.request.format;
+    answer.fallback = capture.fallback;
+    FinishCapture(capture_id, std::move(answer), std::nullopt);
+    return;
+  }
+  std::optional<PageViewport> viewport =
+      result ? ReadPageViewport(*result) : std::nullopt;
+  if (!viewport) {
+    FinishCapture(capture_id, std::nullopt,
+                  CaptureError{"Koan.pageError",
+                               "the tab did not say how big its viewport is; "
+                               "retry"});
+    return;
+  }
+  capture.viewport = *viewport;
+  std::optional<SurfaceGeometry> surface =
+      backend_->DescribeSurface(capture.target_id);
+  if (!surface) {
+    FinishCapture(capture_id, std::nullopt,
+                  SurfaceError(SurfaceStatus::kNoView));
+    return;
+  }
+  capture.surface = *surface;
+  base::expected<CapturePlan, CaptureError> plan =
+      PlanCapture(capture.viewport, capture.surface, capture.request);
+  if (!plan.has_value()) {
+    FinishCapture(capture_id, std::nullopt, std::move(plan.error()));
+    return;
+  }
+  capture.plan = std::move(*plan);
+  TabSession* session = SessionFor(capture.session_id);
+  if (!session) {
+    FinishCapture(capture_id, std::nullopt,
+                  CaptureError{"Koan.targetClosed", "the tab went away"});
+    return;
+  }
+  CollectCaptureMasks(*session,
+                      base::BindOnce(&CdpFacade::CopyCapture,
+                                     weak_factory_.GetWeakPtr(), capture_id));
+}
+
+void CdpFacade::CollectCaptureMasks(TabSession& session,
+                                    CaptureMasksCallback done) {
+  std::move(done).Run({});
+}
+
+void CdpFacade::CopyCapture(uint64_t capture_id,
+                            std::vector<ViewportRect> boxes) {
+  auto it = captures_.find(capture_id);
+  if (it == captures_.end()) {
+    return;
+  }
+  Capture& capture = it->second;
+  SurfaceCaptureJob job;
+  job.source = capture.plan.source;
+  job.whole = capture.plan.whole;
+  job.image_width = capture.plan.image_width;
+  job.image_height = capture.plan.image_height;
+  job.format = capture.request.format;
+  job.quality = capture.request.quality;
+  job.fresh_frame = capture.fresh_frame;
+  job.masks = MaskPixels(capture.plan, boxes, kCaptureMaskPadding);
+  // The answer says how many were painted; a fallback could not paint them.
+  capture.masked = static_cast<int>(job.masks.size());
+  backend_->CopySurface(capture.target_id, std::move(job),
+                        base::BindOnce(&CdpFacade::OnSurfaceCopied,
+                                       weak_factory_.GetWeakPtr(), capture_id));
+}
+
+void CdpFacade::OnSurfaceCopied(uint64_t capture_id,
+                                SurfaceCaptureResult result) {
+  auto it = captures_.find(capture_id);
+  if (it == captures_.end()) {
+    return;
+  }
+  Capture& capture = it->second;
+  if (result.status == SurfaceStatus::kOk) {
+    CaptureAnswer answer;
+    answer.data = base::Base64Encode(result.encoded);
+    answer.width = result.width;
+    answer.height = result.height;
+    // As copied: viz rounds the sides.
+    answer.css_per_pixel = result.width > 0
+                               ? capture.plan.shows.width / result.width
+                               : capture.plan.css_per_pixel;
+    answer.format = capture.request.format;
+    answer.masked = capture.masked;
+    FinishCapture(capture_id, std::move(answer), std::nullopt);
+    return;
+  }
+  const TargetEntry* entry = registry_->Find(capture.target_id);
+  TabSession* session = SessionFor(capture.session_id);
+  const bool agent_owned = entry && entry->agent_owned;
+  // CDP cannot paint the masks: a capture that needs them is not drawn
+  // another way.
+  if (ChooseFallback(result.status, agent_owned) != CaptureFallback::kCdp ||
+      !session || capture.masked > 0) {
+    FinishCapture(capture_id, std::nullopt, SurfaceError(result.status));
+    return;
+  }
+  // An agent's own tab, which nobody looks at: CDP draws it again under
+  // device emulation, at the same size.
+  capture.fallback = result.status;
+  if (!Forward(std::nullopt, *session, "Page.captureScreenshot", "",
+               CdpCaptureParams(capture.viewport, capture.surface, capture.plan,
+                                capture.request),
+               capture_id)) {
+    FinishCapture(capture_id, std::nullopt, SurfaceError(result.status));
+  }
+}
+
+void CdpFacade::FinishCapture(uint64_t capture_id,
+                              std::optional<CaptureAnswer> answer,
+                              std::optional<CaptureError> error) {
+  auto it = captures_.find(capture_id);
+  if (it == captures_.end()) {
+    return;
+  }
+  Capture capture = std::move(it->second);
+  captures_.erase(it);
+  const base::TimeDelta duration = tick_clock_->NowTicks() - capture.start;
+  if (!answer) {
+    const CaptureError failed =
+        error.value_or(CaptureError{"Koan.unavailable", "the capture failed"});
+    AuditCommand("Koan.captureScaled", capture.target_id, failed.code,
+                 AuditOutcome::kError, duration);
+    ReplyError(capture.client_message_id, capture.reply_session_id, failed.code,
+               failed.message);
+    return;
+  }
+  AuditCommand("Koan.captureScaled", capture.target_id,
+               base::StrCat({base::NumberToString(answer->width), "x",
+                             base::NumberToString(answer->height), " ",
+                             answer->fallback ? "cdp" : "surface"}),
+               AuditOutcome::kOk, duration);
+  Reply(capture.client_message_id, capture.reply_session_id,
+        CaptureAnswerDict(std::move(*answer)));
+}
+
 void CdpFacade::OnTargetStateChanged(const std::string& target_id,
                                      std::string_view event,
                                      std::string_view reason) {
@@ -1106,6 +1347,10 @@ void CdpFacade::EndSession(const std::string& session_id, bool tell_client) {
     if (pending->second.session_id != session_id) {
       ++pending;
       continue;
+    }
+    if (pending->second.capture_id) {
+      FinishCapture(pending->second.capture_id, std::nullopt,
+                    CaptureError{"Koan.targetClosed", "the tab went away"});
     }
     if (pending->second.client_message_id) {
       AuditCommand(pending->second.method, pending->second.target_id,
@@ -1376,6 +1621,10 @@ void CdpFacade::HandleTabAnswer(TabSession& session, base::DictValue answer) {
     EndScreencastHold(session);
   }
 
+  if (pending.capture_id) {
+    OnCaptureAnswer(pending.capture_id, pending.method, result);
+    return;
+  }
   if (!pending.client_message_id) {
     return;
   }

@@ -1,0 +1,38 @@
+<!doctype html>
+<title>Capture watch</title>
+<!-- What a page could see of a screenshot (agent_cli, agent_capture_bench):
+     every resize event, visualViewport resize, devicePixelRatio change and
+     media query change it could listen to, counted in window.koanSeen.
+     Koan.captureScaled copies the frame the compositor drew, so all stay 0;
+     CDP's clip and scale (device emulation) is what would move them. A box
+     of one colour and a button to clip. -->
+<style>
+  body { margin: 0; font: 15px -apple-system, sans-serif; background: #fff; color: #18181b; }
+  main { padding: 24px 32px; }
+  #box { width: 200px; height: 100px; background: rgb(0, 128, 255); }
+</style>
+<main>
+  <h1 id=title>Capture watch</h1>
+  <div id=box role=img aria-label="Blue box"></div>
+  <p><button id=press>Press me</button></p>
+  <p id=seen>resize=0 dpr=0</p>
+</main>
+<script>
+  const seen = window.koanSeen = { resize: 0, viewport: 0, dpr: 0, media: 0,
+                                   dprAtLoad: devicePixelRatio, width: innerWidth, height: innerHeight };
+  const show = () => {
+    document.getElementById('seen').textContent = `resize=${seen.resize} dpr=${seen.dpr}`;
+  };
+  addEventListener('resize', () => { seen.resize++; show(); });
+  visualViewport.addEventListener('resize', () => { seen.viewport++; });
+  // A query for the ratio it has now: it changes if devicePixelRatio does.
+  const watchRatio = () => {
+    matchMedia(`(resolution: ${devicePixelRatio}dppx)`).addEventListener('change', () => {
+      seen.dpr++;
+      show();
+      watchRatio();
+    }, { once: true });
+  };
+  watchRatio();
+  matchMedia(`(max-width: ${innerWidth - 1}px)`).addEventListener('change', () => { seen.media++; });
+</script>

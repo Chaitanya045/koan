@@ -62,6 +62,7 @@ source_set("browsertests_impl") {
   testonly = true
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
   sources = [
+    "browser/koan_agent_capture_browsertest.cc",
     "browser/koan_agent_pause_watch_browsertest.cc",
     "browser/koan_browser_test_utils.cc",
     "browser/koan_browser_test_utils.h",
@@ -127,6 +128,7 @@ source_set("browsertests_impl") {
     "//koan/browser:prefs",
     "//koan/browser/agent:auto_resume",
     "//koan/browser/agent:browser",
+    "//koan/browser/agent:capture",
     "//koan/browser/containers:partition",
     "//koan/browser/containers:user_containers",
     "//koan/browser/importer",
@@ -137,6 +139,7 @@ source_set("browsertests_impl") {
     "//net",
     "//net:test_support",
     "//services/network/public/mojom",
+    "//skia",
     "//sql",
     "//testing/gmock",
     "//testing/gtest",
@@ -148,6 +151,7 @@ source_set("browsertests_impl") {
     "//ui/events",
     "//ui/events:test_support",
     "//ui/gfx",
+    "//ui/gfx/codec",
     "//ui/gfx/geometry",
     "//ui/views",
     "//ui/views:test_support",

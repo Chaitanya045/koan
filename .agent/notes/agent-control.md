@@ -274,8 +274,8 @@ Payload JSON, CDP-shaped: `{id, method, params, sessionId}` / `{id, result|error
 Two namespaces on one connection:
 
 * **`Koan.*`**, handled in the gateway: `pair`, `authenticate`, `status`, `listTabs`, `openTab`, `closeTab`,
-  `createTask`/`endTask`, `read`, `takeOver`, `release`, `resume`, `keepAlive`, `watch`, and later `snapshot`, `act`,
-  `run` (§10, §20).
+  `createTask`/`endTask`, `read`, `takeOver`, `release`, `resume`, `keepAlive`, `captureScaled` (§12, "One capture
+  path"), `watch`, and later `snapshot`, `act`, `run` (§10, §20).
 * **Standard CDP**, so unmodified CDP clients work through the relay: a **browser-level facade** answers
   `Target.setDiscoverTargets`, `getTargets`, `getTargetInfo`, `attachToTarget {flatten:true}`,
   `setAutoAttach {waitForDebuggerOnStart, flatten}` (with `Runtime.runIfWaitingForDebugger`), `createTarget`,
@@ -347,7 +347,8 @@ navigations the agent did not start (redirects, links). Test: T-sec-4 navigates 
 
 `Page.captureScreenshot` filters: `fromSurface:false` refused (trusted-only upstream, and it needs a really on-screen
 window); `clip`, `captureBeyondViewport` and any emulation allowed only on agent-owned tabs (they resize the real
-NSView, B§1); on the user's own tab a plain viewport capture only.
+NSView, B§1); on the user's own tab a plain viewport capture only. A scaled or clipped capture of **any** tab is
+`Koan.captureScaled` (§12), which copies the drawn surface and never emulates; this filter is unchanged.
 
 ### 4.4 Frames and worlds the agent may reach (review finding 3)
 
@@ -1221,7 +1222,7 @@ koan status                      connected? clients, tasks, driven and paused ta
 koan tabs [--space agent|all]    list tabs the client may see (id, label, title, URL, state)
 koan open <url> [--task T]       open a background tab in the agent Space; prints the tab id
 koan screenshot <tab> [--size micro|mini|normal|full] [--clip @ref|loc:…|x,y,w,h] [-o f]
-                                 the viewport (or one element) drawn at the size asked for (below)
+                                 the viewport (or one element) copied at the size asked for, any tab (below)
 koan task start|end [name]       name/end the agent Space
 koan watch [tab]                 stream events (tab/URL/title, pause, userNeeded, release) as JSON lines;
                                  with a tab, keep it rendering while watched (Koan.keepAlive, §8)
@@ -1374,33 +1375,70 @@ the API's own downscale. Now (`koan_cli_screenshot.*`, pure and unit tested):
 | `full` | device pixels, long edge ≤ 2576 and ≤ 4,784 tokens' area | 2450×1531, ~4,780 tokens |
 
 Sizes never enlarge (a small viewport stays at its CSS pixels; `full` at its device pixels; a zoomed-out page is not
-drawn above its device pixels). **The browser draws at the target scale:** the CLI sends `clip` = the visual viewport in
-DIPs from the document's top (`cssVisualViewport.pageX/pageY × zoom`) and `scale` = image px ÷ device px; upstream's
-`PageHandler::CaptureScreenshot` turns that into a viewport override (`DevToolsEmulator::ForceViewport`, offset and
-scale) and a temporary view size, so Blink rasterises text at that scale rather than a 2× bitmap being shrunk. The
-device scale is `visualViewport.clientWidth ÷ cssVisualViewport.clientWidth ÷ zoom` (Blink's own sizes are physical),
-snapped to a quarter. When the plan is the whole viewport at scale 1 (1× displays at `normal`, or `full` that fits),
-it is the plain capture: no clip, no resize. `--clip @ref | loc:…` resolves the element as `act` does (a ref of the
-page as it is now, else `Koan.staleRef`; a locator naming one element), `DOM.scrollIntoViewIfNeeded`, then the box of
-its `DOM.getContentQuads` (viewport CSS px, frames included) plus 8 CSS px, cut to the viewport; at device pixels unless
-`--size` is given (then that size's rule), capped like `full`. `--clip x,y,w,h` is a rectangle in viewport CSS px (no
-margin). No box (display: none, empty) is `Koan.emptyElement`; nothing left after the cut is `Koan.offScreen`. The line
-is `saved <path> (W×H, ~N image tokens, 1 px = S CSS px)` with W×H read from the PNG's header; `--json` gives `path,
-width, height, imageTokens, cssPxPerPx`. PNG only: JPEG and WebP save bytes, not tokens.
+drawn above its device pixels). `--clip @ref | loc:…` resolves the element as `act` does (one helper, `FindNode()`: a
+ref of the page as it is now, else `Koan.staleRef`; a locator naming one element), `DOM.scrollIntoViewIfNeeded`, then
+the box of its `DOM.getContentQuads` (viewport CSS px, frames included) plus 8 CSS px; at device pixels unless `--size`
+is given (then that size's rule), capped like `full`. `--clip x,y,w,h` is a rectangle in viewport CSS px (no margin).
+No box (display: none, empty) is `Koan.emptyElement`; nothing left after the browser cuts it to the viewport is
+`Koan.offScreen`. The line is `saved <path> (W×H, ~N image tokens, 1 px = S CSS px)` with W×H read from the PNG's
+header; `--json` gives `path, width, height, imageTokens, cssPxPerPx`. PNG only: JPEG and WebP save bytes, not tokens.
+`koan act ... --screenshot micro|mini|normal` takes one after the batch (after `--until` and the snapshot), in the same
+answer, the line last (`screenshot` in `--json`); `koan shell` runs it like any act. `koan skill` carries the rules
+that keep small images from costing accuracy: read and act from the text snapshot, micro/mini only to check state,
+`--clip` for detail, normal before anything positional, and a clip or normal when a small image is unclear.
+`scripts/e2e/agent_shot_bench.mjs` measures it on the Mac (calls, success, image tokens).
 
-The facade is unchanged (no `kAgentInterfaceVersion` bump): everything goes through `Page.captureScreenshot` and its
-`kScreenshot` filter (§4.3), so clip and scale are allowed **only on agent-owned tabs** (they resize the tab's view,
-which would flicker a user's tab). On a user's tab (`read`, or taken over) the CLI takes the plain capture and says so
-(`koan: a tab of the user's is captured whole, at device pixels`, a `note` in JSON); `--clip` there is
-`Koan.notPermitted` before anything is scrolled. Scaling a user's tab without resizing it would need a facade method
-that reads the surface at a target size (`RenderWidgetHostView::CopyFromSurface` with an output size, under the
-lease's capturer): a follow-up, not done here. Agent tabs in the background or behind a covered window are captured
-under the lease (§8) as before: the command is dispatched once the lease lets it run, and upstream's own capturer
-handle keeps frames coming. `koan act ... --screenshot micro|mini|normal` takes one after the batch (after `--until`
-and the snapshot), in the same answer, the line last (`screenshot` in `--json`); `koan shell` runs it like any act.
-`koan skill` carries the rules that keep small images from costing accuracy: read and act from the text snapshot,
-micro/mini only to check state, `--clip` for detail, normal before anything positional, and a clip or normal when a
-small image is unclear. `scripts/e2e/agent_shot_bench.mjs` measures it on the Mac (calls, success, image tokens).
+**One capture path (2026-11-20, user decision; `kAgentInterfaceVersion` 4).** #409 first drew the image through
+`Page.captureScreenshot`'s `clip` and `scale`. Upstream (`PageHandler::CaptureScreenshot`, `EmulationHandler`) turns
+those into device emulation: a viewport override (`DevToolsEmulator::ForceViewport`), a temporary view size and
+device scale, a new layout and raster at that scale, a wait for that frame, then the old emulation restored and the page
+drawn again. The page can see it (`devicePixelRatio`, `resize`, media queries, `srcset` reloads), and a user's tab
+would flicker, so the filter allowed it only on agent tabs and a user's tab got a full device-pixel capture (~4,800
+tokens). Now every `koan screenshot` and `act --screenshot`, on every tab, is **`Koan.captureScaled {targetId,
+longEdge?, scale?, clip?: {x, y, width, height}, format?, quality?}` → `{data, width, height, cssPerPixel, format,
+imageTokens, via: "surface" | "cdp", fallbackReason?, masked?}`** (`koan_agent_capture.*` pure and unit tested,
+`koan_agent_surface_capture.*` in the browser):
+
+* **Copy, don't draw.** `RenderWidgetHostView::CopyFromSurface(src_rect, output_size, …)`, the path tab thumbnails
+  and previews use: a viz `CopyOutputRequest` whose area is the DIP rect × the device scale factor and whose scale
+  ratio gives exactly the output size, so the GPU scales the frame the compositor already drew and only the small
+  bitmap is read back. No emulation, no layout, no raster: the page cannot tell, and a user's tab does not flicker.
+  The PNG (or JPEG/WebP) is encoded on a worker thread (`base::ThreadPool`, `gfx::PNGCodec`), not on the UI thread as
+  upstream's CDP path does.
+* **CSS px → DIP → device px.** The facade asks the page for its viewport (`Page.getLayoutMetrics`, an internal
+  command through the tab's attached session and the lease): `cssVisualViewport.zoom` is the browser zoom (CSS px →
+  DIP) and `.scale` the pinch zoom, so 1 CSS px = zoom × pinch DIPs from the view's top left, and the backend gives the
+  view's DIP size and device scale factor. A clip is cut to the view in whole DIPs, outwards; the image is sized as
+  #409's plan did (`PlanCapture()`): `scale` image px per CSS px at most (1 for micro, mini and normal; 4, "as sharp as
+  the display", for full and clips), never more than the display draws, fitted to `longEdge` (≤ 2576), then to the
+  4,784-token area. A view of no size is `Koan.noSurface`, a clip of no size `Koan.emptyElement`, one with less than
+  a CSS pixel in the view `Koan.offScreen`.
+* **The same filters as a screenshot.** The client's tab (`Koan.unknownTarget` otherwise), `MaySend(…,
+  "Page.captureScreenshot")` (driven, read-only or paused: a read), a session attached to it (`Koan.notAttached`; the
+  reach rules and the site limit were checked at attach), allowed behind an interstitial as every read is, and audited
+  as `Koan.captureScaled` with its size and path. Redaction of a user's tab is about DOM text, not pixels; secrets in
+  an image are the masks' job (below).
+* **Hidden and covered tabs.** The copy runs as a command does (`AgentLeaseManager::RunCommand`, §8), so the lease's
+  capturer makes a hidden or covered agent tab draw. If the tab was not drawing when the capture began (not visible
+  to the user and no capturer held), the copy waits for a fresh frame (`RenderFrameHost::InsertVisualStateCallback`)
+  before it copies, so it never returns the frame from before the tab was hidden; it waits at most 1 s for the frame
+  and a surface, and 1.5 s for the copy.
+* **Fallback, agent tabs only.** With no surface in time, or a copy that failed, an **agent's own** tab is drawn by CDP
+  instead (`Page.captureScreenshot` with #409's clip and scale, through device emulation; nobody looks at that tab),
+  and the answer says `via: "cdp", fallbackReason`. A **user's** tab never: it is `Koan.noSurface` ("retry, or bring
+  its window forward"). A capture with masks never falls back either (CDP cannot paint them).
+* **Masks.** `CdpFacade::CollectCaptureMasks()` is the one post-capture hook: the boxes (viewport CSS px) to paint
+  over the bitmap **before it is encoded**; `MaskPixels()` maps them into the image (padded 2 CSS px, outwards,
+  cut to the image) and the worker paints them opaque. None yet; the secret-field masking of filled card, CVC and
+  IBAN fields (feat/agent-autofill) plugs in there, so its masks cover this path with no decode and re-encode.
+* **CDP clients.** `Page.captureScreenshot` from agent-browser (through koan-relay) is unchanged: a plain viewport
+  capture is already a surface copy upstream (no emulation), and a clip may lie outside the viewport, which only
+  emulation can draw. Serving in-viewport clips through `captureScaled` would change CDP's rounding and exact-scale
+  semantics for clients that compare sizes, so it is a follow-up. `Koan.captureScaled` itself works over the relay.
+
+`scripts/e2e/agent_capture_bench.mjs` measures it on the Mac against #409's CDP clip and scale: wall time per capture
+(median, worst), bytes and tokens at each size, on an agent tab and a taken-over tab, and that the page
+(`pages/agent_capture_watch.html`) saw no resize, `visualViewport` resize, `devicePixelRatio` or media query change.
 
 **Skill file** (ego's integration model: shell commands, no SDK, no remote-debugging setup). The installed entry skill
 is a few lines ("run `koan skill` and follow it"); `koan skill` prints the guide from the installed version so it is
