@@ -53,6 +53,13 @@ using autofill::SuggestionType;
 // How long the renderer and autofill have to offer suggestions, and to fill
 // once a row is accepted.
 constexpr base::TimeDelta kSuggestionWait = base::Seconds(3);
+// Chrome's renderer drops an ask for a field's suggestions that comes within
+// 100 ms of the one before for the same field (AutofillAgent::
+// ShouldThrottleAskForValuesToFill(), crbug.com/40284788): a pick right
+// after a list (one `koan` call is about 11 ms) would get none. Koan's next
+// ask for that field waits this long after the last. Guarded by
+// KoanAgentAutofillBrowserTest (a list, then a pick at once).
+constexpr base::TimeDelta kRendererAskInterval = base::Milliseconds(120);
 constexpr base::TimeDelta kFillWait = base::Seconds(3);
 // A login's fill is not reported to the browser: its frame is read this
 // often, this many times, until its password field holds a value.
@@ -357,14 +364,43 @@ void AgentAutofill::Run(content::RenderFrameHost* root,
     }
   }
   request_ = std::move(pending);
-  request_->timer.Start(FROM_HERE, kSuggestionWait,
+  // Not within the renderer's window after Koan's last ask for this field.
+  const base::TimeTicks now = base::TimeTicks::Now();
+  const base::TimeDelta wait =
+      last_ask_field_ == found->field
+          ? std::max(base::TimeDelta(), last_ask_ + kRendererAskInterval - now)
+          : base::TimeDelta();
+  last_ask_field_ = found->field;
+  last_ask_ = now + wait;
+  request_->timer.Start(FROM_HERE, kSuggestionWait + wait,
                         base::BindOnce(&AgentAutofill::OnNoSuggestions,
                                        weak_factory_.GetWeakPtr()));
-  // As a click on the field asks for them.
+  if (wait.is_positive()) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&AgentAutofill::TriggerSuggestions,
+                       weak_factory_.GetWeakPtr(), found->field),
+        wait);
+    return;
+  }
+  TriggerSuggestions(found->field);
+}
+
+void AgentAutofill::TriggerSuggestions(autofill::FieldGlobalId field) {
+  if (!request_ || request_->taken || request_->field != field) {
+    return;
+  }
+  content::RenderFrameHost* frame = FrameOf(field);
   autofill::AutofillDriver* driver =
-      autofill::ContentAutofillDriver::GetForRenderFrameHost(found->frame);
+      frame ? autofill::ContentAutofillDriver::GetForRenderFrameHost(frame)
+            : nullptr;
+  if (!driver) {
+    // The frame went: OnNoSuggestions() answers when the wait ends.
+    return;
+  }
+  // As a click on the field asks for them.
   driver->RendererShouldTriggerSuggestions(
-      found->field,
+      field,
       autofill::AutofillSuggestionTriggerSource::kFormControlElementClicked);
 }
 
@@ -372,8 +408,8 @@ bool AgentAutofill::TakeSuggestions(
     const autofill::AutofillClient::PopupOpenArgs& open_args,
     base::WeakPtr<autofill::AutofillSuggestionDelegate> delegate) {
   LOG(ERROR) << "KOANDBG Take request=" << !!request_
-             << " picked=" << (request_ && request_->picked)
-             << " same_field=" << (request_ && open_args.field_id == request_->field)
+             << " picked=" << (request_ && request_->picked) << " same_field="
+             << (request_ && open_args.field_id == request_->field)
              << " n=" << open_args.suggestions.size();
   if (!request_ || request_->picked || open_args.field_id != request_->field) {
     return false;
