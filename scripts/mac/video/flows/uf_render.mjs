@@ -11,11 +11,12 @@
 // real click on the pill), and once a wait is over.
 import fs from 'node:fs';
 import path from 'node:path';
-import { AGENT_HOME, CLI, WAKE_REASON, begin, brief, browserCall, clickPill, cover, end, indicator, info,
-         koan, koanAssertions, lastLine, lowPowerOnBattery, openAnchor, pair, parkPointer, rates,
+import { AGENT_HOME, CLI, WAKE_REASON, begin, brief, browserCall, clickPill, cover, end, goToAgentTab, indicator,
+         info, koan, koanAssertions, lastLine, lowPowerOnBattery, openAnchor, pair, parkPointer, rates,
          show, skipFlow, sleep, spawnKoan, step, tabIdOk, viewTree, visibility, waitFor, windowBounds }
     from './uf_lib.mjs';
-import { setWindowState, windowOf } from '../../../e2e/lib/mac.mjs';
+import { minimiseWithButton, unminimise } from '../../../e2e/lib/mac.mjs';
+import { clickAt } from './common.mjs';
 
 const LIVE = 25, THROTTLED = 2;
 const fixtures = await begin('uf_render', 'Agent tabs keep animating while the window is covered or minimised',
@@ -107,10 +108,10 @@ await step('UF-RND-4', 'Minimised: an agent waiting with --until keeps its tab l
   agentB = lastLine(o);
   t.check('koan open: a second chart tab', o.code === 0 && tabIdOk(agentB), brief(o));
   await sleep(1500);
-  // Window > Minimize (Browser.setWindowBounds: the menu's ⌘M may be a Koan
-  // shortcut, as Zen rebinds keys, so it is not pressed here).
-  const { windowId } = await windowOf(anchor.id);
-  await setWindowState(windowId, 'minimized');
+  // A real click on the window's minimise button (CDP's
+  // Browser.setWindowBounds minimized did not minimise it here, cycle 19).
+  const m = await minimiseWithButton({ click: async (x, y) => { await clickAt(x, y); return true; } });
+  t.check('a real click on the window\'s minimise button', m.ok, m.why);
   const min = await waitFor(async () => await visibility(anchor.id) === 'hidden', 8000);
   t.check('the window is minimised (the front tab went hidden)', !!min, await visibility(anchor.id));
   // A wait that never comes true: the CLI holds the tab while it waits.
@@ -120,7 +121,7 @@ await step('UF-RND-4', 'Minimised: an agent waiting with --until keeps its tab l
   t.check(`while the agent waits: the tab renders (> ${LIVE} frames/s)`, w && w.rafPerS > LIVE, JSON.stringify(w));
   t.check('...and the wait ends as it should (Koan.untilTimeout)', r.code !== 0 && /untilTimeout/.test(r.err + r.out), brief(r));
   info(`minimised, waiting: agent tab ${w?.rafPerS} frames/s`);
-  await setWindowState(windowId, 'normal');
+  unminimise();
   await waitFor(async () => await visibility(anchor.id) === 'visible', 8000);
   await show(anchor.id);
 }, { needs: ['real input'] });
@@ -139,8 +140,10 @@ await step('UF-RND-6', 'Stop (a real click on the pill) while a watch runs: ever
   await sleep(2500);
   t.check('a hold is on: pmset has the assertion', (koanAssertions() ?? []).some(x => wanted.test(x)),
           JSON.stringify(koanAssertions()));
-  const shown = await browserCall('Target.activateTarget', { targetId: agentB });
-  t.check('the agent\'s tab is shown', !shown.error, shown.error?.message);
+  // In the agent's Space: the chip's menu, with real clicks.
+  const g = await goToAgentTab('Live chart');
+  t.check('the agent\'s tab is shown: real clicks on the chip and "Go to Live chart (UF agent)"', g.ok,
+          `${g.why}; ${JSON.stringify(g.items)}`);
   await parkPointer();
   const s = await indicator();
   t.check('its pill has Stop', s.buttons.includes('Stop'), JSON.stringify(s.buttons));

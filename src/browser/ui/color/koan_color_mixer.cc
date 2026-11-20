@@ -379,6 +379,8 @@ void AddZenColors(ui::ColorMixer& mixer, const ui::ColorProviderKey& key) {
   mixer[kColorKoanAgentAccent] = {ui::kColorSysPrimary};
   mixer[kColorKoanAgentBorder] =
       ui::SetAlpha(kColorKoanAgentAccent, Alpha(0.6f));
+  mixer[kColorKoanAgentBorderContrast] =
+      ui::SetAlpha(ui::kColorSysOnPrimary, Alpha(0.6f));
   mixer[kColorKoanAgentChip] = {kColorKoanSidebarRowHovered};
   mixer[kColorKoanAgentChipForeground] = {kColorKoanToolboxText};
 

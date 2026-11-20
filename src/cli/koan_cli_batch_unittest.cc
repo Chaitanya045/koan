@@ -217,6 +217,10 @@ TEST(KoanCliBatchTest, TheGateStopsForTheUser) {
   gate.OnEvent(Event(R"({"method":"Koan.userNeededDone","params":{
                          "targetId":"T1","reason":"permission"}})"));
   EXPECT_FALSE(gate.StopReason());
+  // A held focus request: the page waits for nothing, the batch goes on.
+  gate.OnEvent(Event(R"({"method":"Koan.userNeeded","params":{"targetId":"T1",
+                         "reason":"focus"}})"));
+  EXPECT_FALSE(gate.StopReason());
 
   // The tab list is the latest word on a pause (an event may be on its way).
   base::DictValue paused = Dict(R"({"targetId":"T1","state":"paused"})");

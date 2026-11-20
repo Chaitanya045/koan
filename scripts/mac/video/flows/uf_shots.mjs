@@ -65,8 +65,12 @@ async function sizes(t, tab, who) {
 }
 async function clips(t, tab, who, v) {
   const { b } = v;
-  const left = Math.max(0, b.x - 8), top = Math.max(0, b.y - 8);
-  const cw = Math.min(v.w, b.x + b.width + 8) - left, ch = Math.min(v.h, b.y + b.height + 8) - top;
+  // The box with 8 CSS px round it, cut to the view and rounded outwards to
+  // whole DIPs (koan_agent_capture.cc: CopyFromSurface takes whole DIPs;
+  // at 100% zoom a DIP is a CSS px), so up to one more on each side.
+  const left = Math.max(0, Math.floor(b.x - 8)), top = Math.max(0, Math.floor(b.y - 8));
+  const cw = Math.min(v.w, Math.ceil(b.x + b.width + 8)) - left;
+  const ch = Math.min(v.h, Math.ceil(b.y + b.height + 8)) - top;
   const f = path.join(AGENT_HOME, `${who.replace(/\W+/g, '-')}-clip.png`);
   let r = await koan(['screenshot', tab, '--clip', 'loc:role=button[name="Press me"]', '-o', f]);
   t.check(`${who}: --clip by locator is the button's box with 8 px around it, at device pixels`,
@@ -126,6 +130,9 @@ await step('UF-SHT-4', 'The agent takes over the person\'s tab (a real click) an
   mark('capture-user-tab', { stillRect: watchRect }, true);
   const v = await sizes(t, taken, 'taken-over tab');
   if (v) await clips(t, taken, 'taken-over tab', v);
+  // And a moment after the last capture (a late re-layout shows there; the
+  // captures alone can take fewer frames than the check needs).
+  await sleep(1200);
   mark('capture-user-tab-end', { stillRect: watchRect, still: { from: t0, to: Date.now() } });
   const seen = JSON.parse(await evalIn(await pageById(taken), 'JSON.stringify(window.koanSeen)') ?? 'null');
   t.check('the person\'s page saw no resize, no devicePixelRatio change and no media query change',

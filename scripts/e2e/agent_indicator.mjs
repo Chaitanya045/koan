@@ -28,7 +28,7 @@ import path from 'node:path';
 import { browserCall, check, connect, evalIn, finish, pages, setKoanPref, sleep, viewTree,
          waitFor } from './lib/koan.mjs';
 import { AGENT_HOME, CLI, PROFILE, allow, allowWhy, brief, koan } from './lib/agent.mjs';
-import { IS_MAC, alive, calibrate, fatalInLog, makeKey, realClick, realInput, realInputWhyNot,
+import { IS_MAC, alive, calibrate, fatalInLog, goToAgentTab, makeKey, realClick, realInput, realInputWhyNot,
          realKey, selectTabRow, skip, skipped, startServer } from './lib/mac.mjs';
 
 if (!IS_MAC) skip('agent control\'s CLI needs macOS (its holder resolves peers with LOCAL_PEERTOKEN)');
@@ -79,14 +79,22 @@ async function newUserTab(title) {
   await sleep(1500);
   return id;
 }
-// Each tab's title, for show().
+// Each tab's title, for show(); the agent's own tabs (in its Space).
 const titles = new Map();
+const agentTabs = new Set();
 // Shows a tab as the user does, a click on its row in the sidebar (lib/mac.mjs
-// selectTabRow(): CDP's activation of a tab an agent holds is held); where the
-// row isn't there (the sidebar hidden), CDP's activation.
-// Returns how: 'row', or the titles of the rows there were.
+// selectTabRow(): CDP's activation of a tab an agent holds is held); an
+// agent's own tab, in the agent's Space, through the chip's menu ("Go to",
+// real clicks: goToAgentTab()); where neither works, CDP's activation.
+// Returns how: 'row', 'go to', or what was tried.
 async function show(targetId) {
   if (titles.has(targetId) && await selectTabRow(titles.get(targetId))) return 'row';
+  if (agentTabs.has(targetId) && realInput()) {
+    const from = (await pages()).find(p => p.id === plain);
+    const g = from ? await goToAgentTab(titles.get(targetId), from) : { why: 'no plain tab' };
+    if (g.ok) return 'go to';
+    console.log(`  (go to "${titles.get(targetId)}": ${g.why}; ${JSON.stringify(g.items ?? [])})`);
+  }
   await browserCall('Target.activateTarget', { targetId });
   const rows = (await viewTree()).filter(v => v.cls === 'TabTitle').map(v => `${v.props.Text}:${v.shown}`);
   return `no row titled "${titles.get(targetId)}" (rows ${rows.join(', ')}); CDP's activation`;
@@ -173,13 +181,21 @@ const agentTab = r.out.split('\n').at(-1);
 check('koan open: an agent tab', r.code === 0 && /^[0-9A-Fa-f]{8,}/.test(agentTab), brief(r));
 await sleep(1500);
 titles.set(agentTab, 'Agent tab');
-const how = await show(agentTab);
-s = await indicator();
-check('Agent tab shown: the pill says the agent controls this tab',
-      s.pill && /controlling this tab/.test(s.pillText), `${say(s)}; shown by ${how}`);
-check('...with Take over, not Take back',
-      s.pillButtons.includes('Take over') && !s.pillButtons.includes('Take back'), say(s));
-await show(plain);
+agentTabs.add(agentTab);
+if (!realInput()) {
+  // It is in the agent's Space: only the chip's menu (a native menu, real
+  // clicks) brings it forward.
+  skipped('the agent\'s own tab shown', `needs real input (the chip's "Go to"): ${realInputWhyNot()}`);
+} else {
+  const how = await show(agentTab);
+  s = await indicator();
+  check('Agent tab shown (the chip\'s "Go to", real clicks): the pill says the agent controls this tab',
+        how === 'go to' && s.pill && /controlling this tab/.test(s.pillText), `${say(s)}; shown by ${how}`);
+  check('...with Take over, not Take back',
+        s.pillButtons.includes('Take over') && !s.pillButtons.includes('Take back'), say(s));
+  check('...and nothing waits (no count on the chip)', !/waiting/.test(s.chipText), say(s));
+  await show(plain);
+}
 
 // --- Auto-resume (design section 9.2), with real input only.
 // Where a widget is on the screen (UI DevTools: a widget's bounds are its
@@ -236,6 +252,7 @@ if (!realInput()) {
   check('koan open: the form tab', r.code === 0 && /^[0-9A-Fa-f]{8,}/.test(form), brief(r));
   await sleep(1500);
   titles.set(form, 'Form');
+  agentTabs.add(form);
   await show(form);
   const formPage = await pageOf(form);
   await makeKey(formPage);

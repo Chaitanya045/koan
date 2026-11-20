@@ -112,7 +112,9 @@ await step('UF-AGT-5', 'A validation error shows in --interactive; --diff prints
   r = await koan(['act', tab, 'click', next ?? '@0', '--interactive']);
   t.check('Next without a choice: the alert "Choose your experience" is in the interactive snapshot',
           /Choose your experience/.test(r.out), r.out.slice(0, 300));
-  r = await koan(['act', tab, 'fill', city ?? '@0', 'Paris', '--diff']);
+  // The same mode as the last snapshot (--interactive): a diff against a
+  // snapshot of another mode starts a new baseline, by design.
+  r = await koan(['act', tab, 'fill', city ?? '@0', 'Paris', '--interactive', '--diff']);
   const body = r.out.split('\n').filter(l => /^[+~-] /.test(l));
   t.check('--diff after a fill prints only what changed', /^diff since the last snapshot/m.test(r.out) &&
           body.some(l => /^~ textbox "City" = "Paris"/.test(l)) && body.length <= 4, r.out.slice(0, 300));

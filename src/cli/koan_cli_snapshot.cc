@@ -71,6 +71,18 @@ constexpr auto kLandmarkRoles = base::MakeFixedFlatSet<std::string_view>({
     "search",
 });
 
+// What an agent looks at rather than acts on: named, shown with a ref in the
+// normal snapshot, so that `screenshot --clip @N` can take a chart or a photo
+// (not in --interactive, which lists what to act on). "Canvas" and "SvgRoot"
+// are Blink's internal names (no ARIA role).
+constexpr auto kVisualRoles = base::MakeFixedFlatSet<std::string_view>({
+    "Canvas",
+    "figure",
+    "graphics-document",
+    "image",
+    "SvgRoot",
+});
+
 // Roles whose name is their text: text inside them that only repeats it is
 // left out.
 constexpr auto kNamedByContent = base::MakeFixedFlatSet<std::string_view>({
@@ -563,8 +575,8 @@ class Outline {
     const bool landmark = kLandmarkRoles.contains(role);
     const bool wrapper = IsQuietRole(role);
     const bool inline_role = kInlineRoles.contains(role);
-    // Any other role is shown (without a ref) if it has a name: an image, a
-    // table, a tab panel, an alert, a video.
+    // Any other role is shown if it has a name: a table, a tab panel, an
+    // alert, a video (without a ref), an image or a chart (with one).
     const bool shown =
         options_.interactive
             ? action || kInteractiveContext.contains(role)
@@ -591,7 +603,9 @@ class Outline {
       pending_.clear();
     }
     Flush();
-    Line(depth, node, role, name, value, StatesText(node), action || landmark);
+    const bool visual = kVisualRoles.contains(role) && !name.empty();
+    Line(depth, node, role, name, value, StatesText(node),
+         action || landmark || visual);
     last_name_ = collapsed_name;
     *child_depth = depth + 1;
     *end = Step::kBlockEnd;

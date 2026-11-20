@@ -601,9 +601,13 @@ void AddShadcnKoanColors(ui::ColorMixer& mixer,
   mixer[kColorKoanSplitDragImage] = {t[Token::kCard]};
 
   // Agent control: the dot and the page's border in `primary` (the border at
-  // 60%), the sidebar chip a `sidebar-accent` badge.
+  // 60%, with a `primary-foreground` line inside it: dark mode's primary is
+  // near white, and alone it would not show on a white page), the sidebar
+  // chip a `sidebar-accent` badge.
   mixer[kColorKoanAgentAccent] = {t[Token::kPrimary]};
   mixer[kColorKoanAgentBorder] = {t.Alpha(Token::kPrimary, 0.6f)};
+  mixer[kColorKoanAgentBorderContrast] = {
+      t.Alpha(Token::kPrimaryForeground, 0.6f)};
   mixer[kColorKoanAgentChip] = {t[Token::kSidebarAccent]};
   mixer[kColorKoanAgentChipForeground] = {t[Token::kSidebarAccentForeground]};
 

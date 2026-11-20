@@ -261,10 +261,12 @@ enum KoanColorIds : ui::ColorId {
 
   // Agent control's indicator (koan_agent_indicator.cc, koan_sidebar_tabs.cc):
   // the agent's dot (on the chip, the pill and the sidebar's agent tabs), the
-  // border round a page an agent controls, and the sidebar chip's background
-  // and text.
+  // border round a page an agent controls (the accent, and inside it a line
+  // in the colour on the accent, so that it shows on light and dark pages
+  // alike), and the sidebar chip's background and text.
   kColorKoanAgentAccent,
   kColorKoanAgentBorder,
+  kColorKoanAgentBorderContrast,
   kColorKoanAgentChip,
   kColorKoanAgentChipForeground,
 

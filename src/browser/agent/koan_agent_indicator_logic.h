@@ -127,7 +127,8 @@ struct MenuEntry {
   bool operator==(const MenuEntry&) const = default;
 };
 
-// The menu's "Go to" items, for what is not shown in this window: prompts
+// The menu's items, for what is not shown in this window ("Go to <title>
+// (<agent>)" for a tab, the prompt's own text for a prompt): prompts
 // first (oldest first), then paused tabs, then the others; at most one item
 // per tab.
 std::vector<MenuEntry> MenuFor(const std::vector<IndicatorTab>& tabs,

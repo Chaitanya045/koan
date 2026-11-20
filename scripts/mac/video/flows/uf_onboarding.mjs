@@ -27,7 +27,7 @@ await step('UF-ONB-1', 'The person approves `koan pair` with a real click; every
   t.check('a plain pair asks for, and gets, every capability',
           /allowed: space, observe, read, drive, keep-awake$/m.test(r.out), r.out.split('\n').at(-1));
   const seen = approval?.seen;
-  t.check('the dialog shows a switch per capability (at least drive, read, observe, keep-awake)',
+  t.check('the dialog shows a check row per capability (list tabs, look at the tab, control tabs, keep awake)',
           (seen?.toggles ?? 0) >= 4, JSON.stringify(seen));
   await t.shot('paired');
 }, { needs: ['real input'] });
@@ -40,13 +40,26 @@ await step('UF-ONB-2', 'The agent asks `koan status`: it tells the truth', async
 
 await step('UF-ONB-3', 'A stale pairing (Koan forgot it) is cleaned up, never "several paired clients"', async t => {
   const real = fs.realpathSync(PROFILE);
+  // Pinned to this agent as the good one is (koan pair pins it): koan
+  // prefers this agent's own pairings (ChooseClient(), #397), so an
+  // unpinned record would never be tried, nor removed (as in agent_cli).
+  const clients = path.join(AGENT_HOME, '.koan', 'clients');
+  let pinned;
+  for (const id of fs.existsSync(clients) ? fs.readdirSync(clients) : []) {
+    try {
+      const c = JSON.parse(fs.readFileSync(path.join(clients, id, 'client.json'), 'utf8'));
+      if (c.pinned) pinned = c.pinned;
+    } catch {}
+  }
+  t.check('the good pairing is pinned to this agent', !!pinned);
   const stale = home => {
     const id = crypto.randomBytes(16).toString('hex');
     const dir = path.join(home, '.koan', 'clients', id);
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     fs.writeFileSync(path.join(dir, 'key'), crypto.randomBytes(32).toString('base64'), { mode: 0o600 });
     fs.writeFileSync(path.join(dir, 'client.json'), JSON.stringify({ clientId: id, label: 'stale',
-                                                                     userDataDir: real, pairedAt: Date.now() + 3600e3 }),
+                                                                     userDataDir: real, pairedAt: Date.now() + 3600e3,
+                                                                     ...(pinned ? { pinned } : {}) }),
                      { mode: 0o600 });
     return dir;
   };

@@ -757,6 +757,36 @@ TEST(KoanCliSnapshotTest, CompactJoinsTextAndShowsStates) {
   EXPECT_TRUE(std::ranges::contains(compact.refs, 421));
 }
 
+// A named image, canvas, figure or SVG chart gets a ref in the normal
+// snapshot (for `screenshot --clip @N`), never in --interactive; an unnamed
+// one is not shown.
+TEST(KoanCliSnapshotTest, NamedVisualsGetARef) {
+  const base::DictValue tree = Dict(R"({"nodes":[
+    {"nodeId":"1","role":{"value":"RootWebArea"},"name":{"value":"Report"},
+     "childIds":["2","3","4","5","6","7"],"backendDOMNodeId":1},
+    {"nodeId":"2","role":{"value":"image"},
+     "name":{"value":"Sales by quarter"},"backendDOMNodeId":20},
+    {"nodeId":"3","role":{"value":"Canvas"},"name":{"value":"Live chart"},
+     "backendDOMNodeId":30},
+    {"nodeId":"4","role":{"value":"figure"},"name":{"value":"Figure 1"},
+     "backendDOMNodeId":40},
+    {"nodeId":"5","role":{"value":"SvgRoot"},"name":{"value":"Map"},
+     "backendDOMNodeId":50},
+    {"nodeId":"6","role":{"value":"image"},"backendDOMNodeId":60},
+    {"nodeId":"7","role":{"value":"table"},"name":{"value":"Totals"},
+     "backendDOMNodeId":70}
+  ]})");
+  EXPECT_EQ(BuildSnapshot(tree, {}).text,
+            "RootWebArea \"Report\" @1\n"
+            "  image \"Sales by quarter\" @20\n"
+            "  Canvas \"Live chart\" @30\n"
+            "  figure \"Figure 1\" @40\n"
+            "  SvgRoot \"Map\" @50\n"
+            "  table \"Totals\"\n");
+  EXPECT_EQ(BuildSnapshot(tree, {.interactive = true}).text,
+            "RootWebArea \"Report\" @1\n");
+}
+
 TEST(KoanCliSnapshotTest, Text) {
   // Two blocks do not run into each other; two wrappers (divs or spans) are
   // two words, but not before punctuation; inline elements flow on.

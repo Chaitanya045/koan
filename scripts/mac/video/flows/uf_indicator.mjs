@@ -8,11 +8,9 @@
 // ends (the disconnected toast).
 import fs from 'node:fs';
 import { setKoanPref } from '../../../e2e/lib/koan.mjs';
-import { closeNativeMenu, pickNativeMenu, waitNativeMenu } from '../../../e2e/lib/mac.mjs';
-import { CLI, begin, brief, browserCall, clickElement, clickPill, clickView, diffPixels, end, indicator,
-         keyPress, koan, lastLine, newTab, openAnchor, pageById, pair, parkPointer, recalibrate, regionStats,
-         sayIndicator, show, skipFlow, sleep, step, tabEntry, tabIdOk, takeOver, viewRect, viewTree, waitFor }
-    from './uf_lib.mjs';
+import { CLI, begin, brief, clickElement, clickPill, diffPixels, end, goToAgentTab, indicator, keyPress, koan,
+         lastLine, newTab, openAnchor, pageById, pair, parkPointer, recalibrate, regionStats, sayIndicator, show,
+         skipFlow, sleep, step, tabEntry, tabIdOk, takeOver, viewRect, viewTree, waitFor } from './uf_lib.mjs';
 
 const fixtures = await begin('uf_indicator', 'The agent indicator: pill, border, chip, corner dot, toasts', '#398');
 if (!CLI || !fs.existsSync(CLI)) skipFlow(`no koan CLI (KOAN_CLI=${CLI ?? ''})`);
@@ -56,11 +54,15 @@ await step('UF-IND-2', 'The agent takes over the person\'s tab: pill and accent 
   t.check('...the border view is up, the chip stays, no corner dot', !!s.border && !!s.chip && !s.corner, sayIndicator(s));
   const after = await t.shot('pill', { pixels: true });
   if (box && before.frame && after.frame) {
-    // The left and bottom 3 pt inside the page's card: white before, the
-    // accent border after (the pill sits at the top).
-    const strips = [{ x: box.x, y: box.y + 40, w: 3, h: box.h - 80 }, { x: box.x + 40, y: box.y + box.h - 3, w: box.w - 80, h: 3 }];
-    const d = strips.map(r => diffPixels(before, after, r));
-    const share = d.map(x => (x.n ? x.changed / x.n : 0));
+    // The left and bottom 3 pt inside the page's card: the page before, the
+    // border after (the accent and a contrasting line inside it, so a row
+    // of the left strip, or a column of the bottom one, changes wherever
+    // either shows). The bottom strip stops halfway: the pill sits in the
+    // bottom trailing corner.
+    const strips = [{ x: box.x, y: box.y + 40, w: 3, h: box.h - 80, by: 'rows' },
+                    { x: box.x + 40, y: box.y + box.h - 3, w: box.w / 2 - 40, h: 3, by: 'cols' }];
+    const d = strips.map(r => diffPixels(before, after, r, 24, r.by));
+    const share = d.map(x => (x.lines ? x.linesChanged / x.lines : 0));
     t.check('the pixels: the accent border goes round the page (left and bottom edges changed)',
             share.every(x => x > 0.5), `changed share left ${share[0].toFixed(2)}, bottom ${share[1].toFixed(2)}`);
   } else {
@@ -77,29 +79,16 @@ await step('UF-IND-3', 'Another tab: no pill and no border there, the chip inste
 });
 
 await step('UF-IND-4', 'The person opens the chip\'s menu (real click) and goes to the agent\'s tab', async t => {
-  const vs = await viewTree();
-  const chip = vs.find(v => v.cls === 'KoanAgentChipButton' && v.shown && v.w > 0);
-  t.check('the chip is on screen', !!chip);
-  if (!chip) return;
-  const c = await clickView(chip, vs, 300);
-  t.check('a real click on the chip', c.ok, c.why);
-  const menu = await waitNativeMenu(true, undefined, 4000);
-  const items = menu?.items ?? [];
-  t.check('its menu lists "Go to" the tab and "Stop all agents"',
-          items.some(i => /^Go to/.test(i ?? '')) && items.includes('Stop all agents'), JSON.stringify(items));
-  const goTo = items.find(i => /^Go to/.test(i ?? '') && /Your tab/.test(i));
-  if (goTo) {
-    const picked = await pickNativeMenu([goTo]);
-    t.check(`"${goTo}" picked`, picked.ok, picked.detail);
-    await sleep(800);
-    const s = await indicator();
-    t.check('...the taken-over tab is in front, with its pill', s.pill && /controlling this tab/.test(s.pillText),
-            sayIndicator(s));
-    await t.shot('went-to');
-  } else {
-    await closeNativeMenu();
-    t.check('a "Go to" item for "Your tab"', false, JSON.stringify(items));
-  }
+  const g = await goToAgentTab('Your tab');
+  t.check('its menu: "Go to Your tab (UF agent)", a separator, "Stop all agents"',
+          JSON.stringify(g.items) === JSON.stringify(['Go to Your tab (UF agent)', '', 'Stop all agents']),
+          JSON.stringify(g.items));
+  t.check('a real click on the chip, then on "Go to Your tab (UF agent)"', g.ok, g.why);
+  const s = await indicator();
+  t.check('...the taken-over tab is in front, with its pill', s.pill && /controlling this tab/.test(s.pillText),
+          sayIndicator(s));
+  t.check('...nothing waits (the chip has no count)', !/waiting/.test(s.chipText), sayIndicator(s));
+  await t.shot('went-to');
 }, { needs: ['real input'] });
 
 await step('UF-IND-5', 'The agent\'s own tab: a dot on its sidebar row; shown, the pill offers Take over', async t => {
@@ -107,13 +96,16 @@ await step('UF-IND-5', 'The agent\'s own tab: a dot on its sidebar row; shown, t
   agentTab = lastLine(r);
   t.check('koan open: the agent\'s tab', r.code === 0 && tabIdOk(agentTab), brief(r));
   await sleep(1500);
-  const shown = await browserCall('Target.activateTarget', { targetId: agentTab });
-  t.check('it can be shown', !shown.error, shown.error?.message);
+  // In the agent's own Space: the person goes there from the chip's menu.
+  const g = await goToAgentTab('Agent tab');
+  t.check('the chip\'s menu lists "Go to Agent tab (UF agent)"; a real click on it', g.ok,
+          `${g.why}; ${JSON.stringify(g.items)}`);
   await parkPointer();
   const s = await indicator();
   t.check('the pill says the agent controls this tab, with Take over (not Take back)',
           s.pill && /controlling this tab/.test(s.pillText) && s.buttons.includes('Take over') &&
           !s.buttons.includes('Take back'), sayIndicator(s));
+  t.check('...and nothing waits (the chip has no count)', !/waiting/.test(s.chipText), sayIndicator(s));
   const shot = await t.shot('agent-tab', { pixels: true });
   const vs = s.vs;
   const title = vs.find(v => v.cls === 'TabTitle' && v.shown && v.props.Text === 'Agent tab');
@@ -144,7 +136,10 @@ await step('UF-IND-6', 'Compact mode hides the sidebar: the corner dot stands in
   t.check('⌘S (a real key): compact mode, the sidebar hidden, the corner dot on a plain tab',
           !!s.corner && !s.pill, sayIndicator(s));
   await t.shot('corner-dot');
-  await show(taken);
+  // The sidebar is hidden: the corner dot's menu is the chip's.
+  const g = await goToAgentTab('Your tab', 900, 'KoanAgentCornerDot');
+  t.check('a real click on the corner dot, then on "Go to Your tab (UF agent)"', g.ok,
+          `${g.why}; ${JSON.stringify(g.items)}`);
   s = await indicator();
   t.check('on the taken-over tab: the pill, no corner dot', s.pill && !s.corner, sayIndicator(s));
   await show(plain);
@@ -154,7 +149,8 @@ await step('UF-IND-6', 'Compact mode hides the sidebar: the corner dot stands in
 }, { needs: ['real input'] });
 
 await step('UF-IND-7', 'The person uses the taken-over tab: paused, with a toast; Hand back (real click)', async t => {
-  await show(taken);
+  const g = await goToAgentTab('Your tab');
+  t.check('the taken-over tab, from the chip\'s menu (real clicks)', g.ok, `${g.why}; ${JSON.stringify(g.items)}`);
   const p = await pageById(taken);
   await recalibrate(p);
   const c = await clickElement(p, 'document.querySelector("h1")', 300);

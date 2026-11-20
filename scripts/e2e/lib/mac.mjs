@@ -543,6 +543,26 @@ export async function pickNativeMenu(path, pid = KOAN_PID) {
   return { ok: !!closed, detail: closed ? r.clicked : `${r.clicked}: the menu stayed open` };
 }
 
+// A real click on the open native menu's item `title` (or position) at the
+// top level, where a person clicks it (native_menu_ax.js point), and a wait
+// for the menu to close. `click` makes the click (x, y in screen points;
+// realClick by default). {ok, detail, point}.
+export async function clickNativeMenuItem(title, { pid = KOAN_PID, click = realClick } = {}) {
+  const r = nativeMenu('point', [title], pid);
+  if (!r.point) {
+    await closeNativeMenu(pid);
+    return { ok: false, detail: JSON.stringify({ title, ...r }) };
+  }
+  if (!(await click(r.point.x, r.point.y))) {
+    await closeNativeMenu(pid);
+    return { ok: false, detail: `no real click (${realWhyNot || 'the gate refused it'})`, point: r.point };
+  }
+  const closed = await waitNativeMenu(false, pid);
+  if (!closed) await closeNativeMenu(pid);
+  return { ok: !!closed, detail: closed ? `${r.title} (${r.via})` : `${r.title}: the menu stayed open`,
+           point: r.point };
+}
+
 export const CLOSE_WINDOW_ITEM ='menu item "Close Window" of menu 1 of menu bar item "File"';
 // The app menu's Quit item (its title has the app's name).
 export const QUIT_ITEM = '(first menu item of menu 1 of menu bar item 2 whose name starts with "Quit")';
@@ -680,6 +700,61 @@ export const realClick = async (x, y, settle = 600) => {
   return ok;
 };
 
+// A window button of Koan's front browser window (the biggest standard
+// window: the pill and border are child windows), read through
+// Accessibility: {x, y} its centre in screen points, or {error}.
+// `subrole` AXMinimizeButton, AXCloseButton or AXZoomButton.
+export function windowButtonPoint(subrole = 'AXMinimizeButton', pid = KOAN_PID) {
+  if (!IS_MAC || !pid) return { error: 'not macOS, or no Koan pid' };
+  try {
+    const out = execFileSync('osascript', ['-l', 'JavaScript', '-e',
+        `const p = Application('System Events').applicationProcesses.whose({ unixId: ${pid} })[0];
+         const area = w => { try { const [a, b] = w.size(); return a * b; } catch (e) { return 0; } };
+         const ws = p.windows().filter(w => { try { return w.subrole() === 'AXStandardWindow'; } catch (e) { return false; } })
+             .sort((a, b) => area(b) - area(a));
+         let r = { error: 'no standard window' };
+         for (const w of ws) {
+           const b = w.buttons().find(x => { try { return x.subrole() === '${subrole}'; } catch (e) { return false; } });
+           if (!b) { r = { error: 'no ${subrole}' }; continue; }
+           const [x, y] = b.position(); const [bw, bh] = b.size();
+           r = { x: Math.round(x + bw / 2), y: Math.round(y + bh / 2) };
+           break;
+         }
+         JSON.stringify(r)`], { encoding: 'utf8', timeout: 10000 }).trim();
+    return JSON.parse(out);
+  } catch (e) {
+    return { error: String(e.stderr || e.message).trim().split('\n')[0] };
+  }
+}
+// Minimises Koan's window as a person does: a real click on its minimise
+// button (CDP's Browser.setWindowBounds minimized did not minimise it on the
+// Mac bench, cycle 19). `click` makes the click (realClick by default).
+// {ok, why}.
+export async function minimiseWithButton({ pid = KOAN_PID, click = realClick } = {}) {
+  const at = windowButtonPoint('AXMinimizeButton', pid);
+  if (at.error) return { ok: false, why: `the minimise button: ${at.error}` };
+  // The traffic lights show on hover: the pointer there first.
+  await ptr('move', at.x, at.y).catch(() => false);
+  await sleep(300);
+  if (!(await click(at.x, at.y))) return { ok: false, why: `no real click (${realWhyNot || 'the gate refused it'})` };
+  return { ok: true, why: `clicked ${at.x},${at.y}` };
+}
+// Brings minimised Koan windows back (Accessibility's AXMinimized; not
+// input). Whether it could.
+export function unminimise(pid = KOAN_PID) {
+  if (!IS_MAC || !pid) return false;
+  try {
+    execFileSync('osascript', ['-l', 'JavaScript', '-e',
+        `const p = Application('System Events').applicationProcesses.whose({ unixId: ${pid} })[0];
+         for (const w of p.windows()) { try { if (w.attributes.byName('AXMinimized').value())
+             w.attributes.byName('AXMinimized').value = false; } catch (e) {} }`],
+        { timeout: 10000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Where the real pointer is, in screen points from the main screen's top-left
 // (the coordinates of Browser.getWindowForTarget's bounds): {x, y}, read
 // without moving it or counting as input (AppKit's NSEvent.mouseLocation).
@@ -792,6 +867,69 @@ export async function calibrate(page, vs, webview, windowTarget) {
       { expression: 'window.__koanMove', returnByValue: true }))).result?.result?.value;
   if (!m) return null;
   return { x: m.sx - m.cx - webview.ax, y: m.sy - m.cy - webview.ay };
+}
+
+// How a person reaches an agent's tab (an agent's own tabs live in its own
+// Space, design 2026-11-10): a real click on the sidebar's agent chip (or,
+// with the sidebar hidden, the corner dot), then a real click on its menu's
+// "Go to <title> (<agent>...)", which switches to the tab's Space and selects
+// it. CDP can't do it: Koan holds a CDP activation of a tab an agent holds
+// (#232). `page` is a tab of the person's in that window, never an agent's:
+// it is brought to the front (makeKey(), CDP: a user's tab isn't held) to
+// calibrate the real pointer. Needs real input. {ok, why, items}.
+export async function goToAgentTab(title, page, settle = 900) {
+  if (!realInput()) return { ok: false, why: realInputWhyNot(), items: [] };
+  await makeKey(page);
+  const vs = await viewTree();
+  const origin = await calibrate(page, vs);
+  if (!origin) return { ok: false, why: 'could not calibrate the real pointer', items: [] };
+  const chip = vs.find(v => v.cls === 'KoanAgentChipButton' && v.shown && v.w > 0) ??
+               vs.find(v => v.cls === 'KoanAgentCornerDot' && v.shown && v.w > 0);
+  if (!chip) return { ok: false, why: 'no agent chip or corner dot on screen', items: [] };
+  // The corner dot is a widget of its own: its origin from the window's.
+  let at = { x: origin.x + chip.ax + chip.w / 2, y: origin.y + chip.ay + chip.h / 2 };
+  if (chip.cls === 'KoanAgentCornerDot') {
+    const r = await rootOfWidgetOnScreen(chip.wname);
+    if (r) at = { x: r.x + chip.ax + chip.w / 2, y: r.y + chip.ay + chip.h / 2 };
+  }
+  if (!(await realClick(at.x, at.y, 300))) return { ok: false, why: `chip: ${realWhyNot}`, items: [] };
+  const menu = await waitNativeMenu(true, KOAN_PID, 4000);
+  const items = menu?.items ?? [];
+  if (!menu) return { ok: false, why: 'the chip\'s menu did not open', items };
+  const item = items.find(i => (i ?? '').startsWith(`Go to ${title} (`));
+  if (!item) {
+    await closeNativeMenu();
+    return { ok: false, why: `no "Go to ${title} (...)" item`, items };
+  }
+  const picked = await clickNativeMenuItem(item);
+  await sleep(settle);
+  return { ok: picked.ok, why: picked.detail, items, item };
+}
+// A widget's origin on the screen in points, by its name (UI DevTools gives
+// a widget's bounds in screen points), or null.
+async function rootOfWidgetOnScreen(name) {
+  const ui = await connect(`ws://127.0.0.1:${process.env.UI_PORT}/0`);
+  try {
+    await ui.send('DOM.enable');
+    await ui.send('CSS.enable');
+    const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+    let found = null;
+    const walk = n => {
+      const a = n.attributes ?? [];
+      if (!found && n.nodeName === 'Widget' && a[a.indexOf('name') + 1] === name) found = n;
+      for (const c of n.children ?? []) walk(c);
+    };
+    walk(doc);
+    if (!found) return null;
+    const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId: found.nodeId });
+    const p = {};
+    for (const rule of r.result?.matchedCSSRules ?? []) {
+      for (const prop of rule.rule.style.cssProperties) p[prop.name.toLowerCase()] = prop.value;
+    }
+    return { x: +p.x, y: +p.y };
+  } finally {
+    ui.close();
+  }
 }
 
 // --- The window's pixels (for the checks that read headless Ozone's frame

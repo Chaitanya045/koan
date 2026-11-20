@@ -500,7 +500,12 @@ void BatchGate::OnEvent(const Message& event) {
     paused_ = false;
     paused_sticky_.clear();
   } else if (event.method == "Koan.userNeeded") {
-    needs_.insert(why);
+    // A held focus request (window.focus(), an activation) waits for
+    // nothing: the page goes on, and the user may bring the tab forward
+    // (design 9.4). It never stops a batch.
+    if (why != "focus") {
+      needs_.insert(why);
+    }
   } else if (event.method == "Koan.userNeededDone") {
     needs_.erase(why);
   } else if (event.method == "Target.detachedFromTarget" ||
