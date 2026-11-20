@@ -153,9 +153,9 @@ TEST_F(KoanCliSettleTest, ANavigationThatNeverCommitsTimesOut) {
   EXPECT_EQ(settle.Check(At(15000)), SettleState::kTimedOut);
   EXPECT_EQ(NavigationTimeoutText("https://slow.test/", base::Seconds(15)),
             "Koan.timeout: https://slow.test/ did not answer within 15 s (the "
-            "server is slow or down; the tab keeps waiting for it). Take a "
-            "snapshot later, navigate elsewhere, or allow longer with "
-            "--timeout <seconds>");
+            "server is slow or down); Koan stopped loading it, and the tab "
+            "shows what it showed before. Retry, navigate elsewhere, or "
+            "allow longer with --timeout <seconds>");
   // After a click, the click was done: "ok", still loading.
   Settle click(timings, start_, false, kTab, kFrame);
   click.OnEvent(Event("Page.frameStartedLoading", R"({"frameId":"F1"})"),

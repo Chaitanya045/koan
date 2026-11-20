@@ -42,10 +42,13 @@ export async function connect(url, openTimeout = 15000) {
     if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
   };
   await new Promise((resolve, reject) => {
+    // (The calls before this one, which is the last: what left the browser
+    // not answering, e.g. a press that opened a native menu.)
+    const before = lastCalls();
     const fail = why => {
       clearTimeout(timer);
       reject(new Error(`connect(): ${url} ${why} (the target is gone, or the browser ` +
-                       'does not answer)'));
+                       `does not answer; the DevTools calls before: ${before})`));
     };
     const timer = setTimeout(() => {
       fail(`did not open in ${openTimeout} ms`);

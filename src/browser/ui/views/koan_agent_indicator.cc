@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/i18n/rtl.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
@@ -389,8 +390,22 @@ class KoanAgentChipRow : public views::View {
 
   KoanAgentChipButton* chip() { return chip_; }
 
+  // Runs when the row is laid out somewhere else (or gets its first size):
+  // whether the chip can be seen is known only then.
+  void set_on_bounds_changed(base::RepeatingClosure callback) {
+    on_bounds_changed_ = std::move(callback);
+  }
+
+  // views::View:
+  void OnBoundsChanged(const gfx::Rect& previous_bounds) override {
+    if (on_bounds_changed_) {
+      on_bounds_changed_.Run();
+    }
+  }
+
  private:
   raw_ptr<KoanAgentChipButton> chip_ = nullptr;
+  base::RepeatingClosure on_bounds_changed_;
 };
 
 BEGIN_METADATA(KoanAgentChipRow)
@@ -702,6 +717,11 @@ void KoanAgentIndicator::InstallChip() {
   chip->SetCallback(base::BindRepeating(&KoanAgentIndicator::ShowMenu,
                                         weak_factory_.GetWeakPtr(),
                                         base::Unretained(chip)));
+  // Laid out with the column, not the browser view (no
+  // OnBrowserViewLayout()): the corner dot, put up while the new row had no
+  // size yet, goes once it has one.
+  row->set_on_bounds_changed(base::BindRepeating(
+      &KoanAgentIndicator::ScheduleLayoutUpdate, weak_factory_.GetWeakPtr()));
   chip_.SetView(row);
 }
 

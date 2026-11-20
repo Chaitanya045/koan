@@ -336,12 +336,15 @@ check('...with the site\'s icon at its start (Zen\'s identity box), no tune butt
       site?.p.TooltipText === 'Site information' && site.shown && site.x === 4 &&
           site.w === 26 && pillLabel && pillLabel.x > site.x + site.w,
       pillButtons().map(b => `${b.p.TooltipText}@${b.x}`).join(' '));
-// Zen's copy button is transparent until hovered, but keeps its place (Tab
-// and screen readers reach it).
-check('...and the copy button at the end, transparent until hovered',
-      pillButtons().length === 2 && pillButton('Copy URL')?.shown &&
-          pillButton('Copy URL').p.opacity === '0' &&
-          pillButton('Copy URL').x > pillLabel.x,
+// Zen's copy and Extensions buttons (a page action and an identity-box
+// button, zen-omnibox.css) are transparent until the sidebar is hovered, but
+// keep their place (Tab and screen readers reach them); Extensions last
+// (#400).
+check('...and the copy and Extensions buttons at the end, transparent until hovered',
+      pillButtons().length === 3 &&
+          ['Copy URL', 'Extensions'].every(name => pillButton(name)?.shown &&
+              pillButton(name).p.opacity === '0' && pillButton(name).x > pillLabel.x) &&
+          pillButton('Extensions').x > pillButton('Copy URL').x,
       pillButtons().map(b => `${b.p.TooltipText}:${b.shown}:${b.p.opacity}`).join(' '));
 check('The pill is not hovered at rest', pill?.p.Hovered === 'false', pill?.p.Hovered);
 await mouse(pill, 'mouseEntered');
@@ -789,13 +792,20 @@ if (BEHAVIOR !== 'normal') {
     c.close();
     await sleep(1200);
     // A character at a time, finding the omnibox again: the suggestions'
-    // widget opens with the first one and moves the nodes after it.
+    // widget opens with the first one and moves the nodes after it. It opens
+    // a moment later (when the results come): wait for it after the first
+    // one, or a lookup made just before it opened sends the next key to
+    // another node (the Mac cycle 19 typed "kan").
     for (const ch of 'koan') {
       const field = ofSecond(await windowsNow())?.views.find(
           v => v.cls === 'OmniboxViewViews' && v.shown);
       if (!field) break;
       await viewEvent(field, 'DOM.dispatchKeyEvent', { type: 'keyPressed',
           keyCode: ch.codePointAt(0), code: 0, flags: 0, key: ch.codePointAt(0), isChar: true });
+      if (ch === 'k') {
+        await waitFor(async () => find(ofSecond(await windowsNow())?.views ?? [],
+                                       'TopContainerView')?.h > INPUT_ROW, 3000);
+      }
     }
     await waitFor(async () => {
       const w = ofSecond(await windowsNow());

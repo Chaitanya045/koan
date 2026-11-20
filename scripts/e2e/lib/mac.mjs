@@ -21,7 +21,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { ACCEL, ALT, CTRL, IS_MAC, META, SHIFT, browserCall, connect, createSpace as koanCreateSpace,
-         decodePng, onPage, pages, sleep, viewTree, waitFor } from './koan.mjs';
+         decodePng, onPage, pages, sleep, viewMouse, viewTree, waitFor } from './koan.mjs';
 
 export { ACCEL, ALT, CTRL, IS_MAC, META, SHIFT };
 
@@ -307,6 +307,18 @@ export function tabViewTitled(vs, title) {
                         v.ax <= label.ax && v.ay <= label.ay && v.ax + v.w >= label.ax + 1 &&
                         v.ay + v.h >= label.ay + 1)
       .sort((a, b) => a.w * a.h - b.w * b.h)[0];
+}
+// Selects the tab titled `title` as the user does, a click on its row in the
+// sidebar (UI DevTools); whether there was one. A tab an agent holds doesn't
+// come forward through CDP (Target.activateTarget, Page.bringToFront):
+// Koan holds that as the page's own focus request (HoldActivationForAgent()).
+export async function selectTabRow(title) {
+  const row = tabViewTitled(await viewTree(), title);
+  if (!row) return false;
+  for (const type of ['mousePressed', 'mouseReleased']) {
+    await viewMouse(row, type, Math.round(row.w / 2), Math.round(row.h / 2));
+  }
+  return true;
 }
 
 // --- Real input (Mac bench tools; see the header).

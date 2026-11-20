@@ -1,8 +1,18 @@
 diff --git a/components/ui_devtools/views/dom_agent_mac.mm b/components/ui_devtools/views/dom_agent_mac.mm
-index 32b3915a3e00b9b2bb151f8c1f74014caebb51d4..92a665a38b16528e5befd3cafc641b74e9bdde97 100644
+index 32b3915a3e00b9b2bb151f8c1f74014caebb51d4..d81e42914deb08175284f8fd62436ffd20864e13 100644
 --- a/components/ui_devtools/views/dom_agent_mac.mm
 +++ b/components/ui_devtools/views/dom_agent_mac.mm
-@@ -57,6 +57,11 @@ void DOMAgentMac::OnWidgetDestroying(views::Widget* widget) {
+@@ -51,12 +51,20 @@ std::vector<UIElement*> DOMAgentMac::CreateChildrenForRoot() {
+ 
+ void DOMAgentMac::OnWidgetDestroying(views::Widget* widget) {
+   widget->RemoveObserver(this);
+-  roots_.erase(std::ranges::find(roots_, widget), roots_.end());
++  // Koan: only this widget (upstream erased every root after it too, so a
++  // widget closed during a session hid the ones made after it: the toast
++  // that a closing Glance card shows).
++  std::erase(roots_, widget);
+ }
+ 
  void DOMAgentMac::OnNativeWidgetAdded(views::NativeWidgetMac* native_widget) {
    views::Widget* widget = native_widget->GetWidget();
    DCHECK(widget);
