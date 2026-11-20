@@ -373,8 +373,15 @@ const order = () => withView(/^TabView$/, 0, async (s) => {
   return { ts: ts.map(t => t.ay), row };
 });
 await activate(c1);
-await pageKey(c1, 68, ACCEL | SHIFT, 'D');
-await sleep(1500);
+// On macOS a real ⌘⇧D in the key window (a CDP key reaches the shortcuts
+// only there, and the main menu has the key too).
+if (IS_MAC && realInput()) {
+  await makeKey(c1);
+  await realKey('d', 'cs', 1500);
+} else {
+  await pageKey(c1, 68, ACCEL | SHIFT, 'D');
+  await sleep(1500);
+}
 let o = await order();
 check('A pinned tab goes above the folders, loose tabs below',
       o.ts.length === 2 && o.ts[0] < o.row && o.row < o.ts[1], JSON.stringify(o));
@@ -403,7 +410,8 @@ if (!IS_MAC) {
 await sleep(1500);
 r = await rows();
 if (reopened) {
-  check(reopenName, closedOk && r.find(x => x.name === 'Keep')?.count === 1, names(r));
+  check(reopenName, closedOk && r.find(x => x.name === 'Keep')?.count === 1,
+        `closed: ${closedOk ? 'Keep:0' : 'not seen'}; reopened: ${names(r)}`);
 } else {
   skipped(reopenName, `Cmd+Shift+T is a main-menu key on macOS: ${realInputWhyNot() ||
                       'its window did not become key'}`);
