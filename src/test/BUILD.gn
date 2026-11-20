@@ -118,7 +118,6 @@ source_set("browsertests_impl") {
     "//components/bookmarks/test",
     "//components/keyed_service/core",
     "//components/password_manager/core/browser:password_form",
-    "//components/password_manager/core/browser/features:password_features",
     "//components/password_manager/core/browser/password_store:password_store_interface",
     "//components/password_manager/core/browser/password_store:test_support",
     "//components/prefs",

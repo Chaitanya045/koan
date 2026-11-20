@@ -23,7 +23,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/run_until.h"
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/password_manager/factories/profile_password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -40,7 +39,6 @@
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/test_utils/autofill_test_util.h"
 #include "components/keyed_service/core/service_access_type.h"
-#include "components/password_manager/core/browser/features/password_features.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_store/password_store_interface.h"
 #include "components/password_manager/core/browser/password_store/stored_credential.h"
@@ -115,17 +113,6 @@ std::unique_ptr<net::test_server::HttpResponse> ServePage(
 class KoanAgentAutofillBrowserTest : public InProcessBrowserTest,
                                      public agent::AutofillHooksDelegate {
  public:
-  KoanAgentAutofillBrowserTest() {
-    // Chrome fills a page's only saved login on load (a preview, real on
-    // the first gesture), and then offers no suggestions for the field
-    // (AutofillAgent::ShowSuggestions(): a suggested value). With "fill on
-    // account select" it waits for a pick, as it does in an actor's tab
-    // (password_form_filling.cc, kActorTaskOngoing). What Koan should do in
-    // an agent's tab is the PR's open question (c19 triage 2).
-    features_.InitAndEnableFeature(
-        password_manager::features::kFillOnAccountSelect);
-  }
-
   void SetUpOnMainThread() override {
     InProcessBrowserTest::SetUpOnMainThread();
     // HTTPS: Chrome offers no saved card on a page that isn't
@@ -245,7 +232,6 @@ class KoanAgentAutofillBrowserTest : public InProcessBrowserTest,
                                        containers::NewContainerId(false)});
   }
 
-  base::test::ScopedFeatureList features_;
   net::EmbeddedTestServer https_{net::EmbeddedTestServer::TYPE_HTTPS};
   raw_ptr<content::WebContents> page_ = nullptr;
   std::unique_ptr<AgentAutofill> autofill_;
@@ -363,6 +349,11 @@ IN_PROC_BROWSER_TEST_F(KoanAgentAutofillBrowserTest, ACardToVerify) {
 // script (Koan.secretField) and the scrubber knows the value.
 IN_PROC_BROWSER_TEST_F(KoanAgentAutofillBrowserTest, ALoginAndTSec1) {
   SaveLogin();
+  // An agent's tab: Chrome fills nothing there on load (the
+  // content_password_manager_driver.cc hook). In a tab of the user's it
+  // previews the only saved login on load, and then offers no suggestions
+  // for the field (AutofillAgent::ShowSuggestions(): a suggested value).
+  MakeAgentTab();
   Open("/login");
   const int user = NodeOf("user");
   FacadeBackend::AutofillResult listed;
@@ -411,6 +402,7 @@ IN_PROC_BROWSER_TEST_F(KoanAgentAutofillBrowserTest, ALoginAndTSec1) {
 // T-fill-5: a form that sends what is typed to another site gets no login.
 IN_PROC_BROWSER_TEST_F(KoanAgentAutofillBrowserTest, AFormSentElsewhere) {
   SaveLogin();
+  MakeAgentTab();  // As in ALoginAndTSec1.
   Open("/elsewhere");
   const int user = NodeOf("user");
   FacadeBackend::AutofillResult result;
