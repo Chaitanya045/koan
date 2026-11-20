@@ -17,6 +17,7 @@
 # that defines plist_target: get_target_outputs() only sees targets there.
 template("koan_app_version_plist") {
   _input = get_target_outputs(invoker.plist_target)
+
   action(target_name) {
     script = "//koan/version/koan_version.py"
     inputs = [
