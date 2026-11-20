@@ -102,11 +102,20 @@ function sidebarRect(lum, w, h, maxW) {
   if (x0 < 0) return null;
   let x1 = x0;
   while (x1 + 1 < Math.min(w, maxW + BAND) && darkCol(x1 + 1)) x1++;
-  const mid = Math.floor((x0 + x1) / 2);
-  let y0 = Math.floor(h / 2), y1 = y0;
-  while (y0 > 0 && lum[(y0 - 1) * w + mid] < DARK) y0--;
-  while (y1 + 1 < h && lum[(y1 + 1) * w + mid] < DARK) y1++;
-  return { x0, x1, y0, y1 };
+  // Its rows: from the middle up and down while a row is dark in one of
+  // three of its columns, through light gaps shorter than GAP (its own text
+  // and icons).
+  const GAP = 12;
+  const cols = [x0, Math.floor((x0 + x1) / 2), x1];
+  const darkRow = y => cols.some(x => lum[y * w + x] < DARK);
+  const extent = step => {
+    let last = Math.floor(h / 2), gap = 0;
+    for (let y = last; y >= 0 && y < h && gap < GAP; y += step) {
+      if (darkRow(y)) { last = y; gap = 0; } else gap++;
+    }
+    return last;
+  };
+  return { x0, x1, y0: extent(-1), y1: extent(1) };
 }
 
 // One transition's frames: the glitch frames. The pixels watched are in a
@@ -140,8 +149,15 @@ function checkFrames(frames, w, h, m) {
     }
   }
   const row = { frames: frames.length, watched: watch.length + inSidebarCols.length, glitchFrames: 0, worst: null };
-  for (const f of frames.slice(1, -1)) {
-    const s = sidebarRect(f.lum, w, h, sidebarW);
+  // A run narrower than 8 points is the sidebar only while it moves (the
+  // first or last sliver of a slide): one that keeps its width from frame
+  // to frame is a dark column left at the edge, the glitch.
+  const rects = frames.map(f => sidebarRect(f.lum, w, h, sidebarW));
+  const width = r => (r ? r.x1 - r.x0 + 1 : 0);
+  for (const [i, f] of frames.entries()) {
+    if (i === 0 || i === frames.length - 1) continue;
+    let s = rects[i];
+    if (s && width(s) < 8 && width(rects[i - 1]) === width(s) && width(rects[i + 1]) === width(s)) s = null;
     const covered = p => {
       if (!s) return false;
       const x = p % w, y = (p - x) / w;
