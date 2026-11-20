@@ -57,9 +57,9 @@ if [[ -n "${KOAN_PREFS:-}" ]]; then
   sed "s|{profile}|$prof|g" "$KOAN_PREFS" >"$prof/Default/Preferences"
 fi
 extensions="$ROOT/scripts/e2e/extensions/test_helper${KOAN_EXTRA_EXTENSIONS:+,$KOAN_EXTRA_EXTENSIONS}"
-# shellcheck disable=SC2054  # "1280,820" is one value
 updates=(--disable-component-update)
 [[ "${KOAN_COMPONENT_UPDATE:-}" == 1 ]] && updates=()
+# shellcheck disable=SC2054  # "1280,820" is one value
 args=("$exe" --user-data-dir="$prof" --no-first-run --no-default-browser-check
   ${updates[@]+"${updates[@]}"} --use-mock-keychain
   --window-position="$POS" --window-size="$SIZE"
