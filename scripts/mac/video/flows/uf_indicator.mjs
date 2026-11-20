@@ -158,8 +158,11 @@ await step('UF-IND-7', 'The person uses the taken-over tab: paused, with a toast
   const s = await indicator(900);
   t.check('a toast: "UF agent paused: you used its tab"', s.toasts.some(x => /UF agent paused: you used its tab/.test(x)),
           sayIndicator(s));
+  // Auto-resume is on (#408): "paused: continues when you stop using this
+  // tab", with Keep paused; off, "paused: you used this tab".
   t.check('the pill says it is paused because you used the tab, with Hand back',
-          /paused: you used this tab/.test(s.pillText) && s.buttons.includes('Hand back'), sayIndicator(s));
+          /paused: (you used this tab|continues when you stop using this tab)/.test(s.pillText) &&
+          s.buttons.includes('Hand back'), sayIndicator(s));
   await t.shot('paused');
   const e = await tabEntry(taken);
   t.check('koan tabs: the tab is paused (user-input)', e?.state === 'paused', JSON.stringify(e));

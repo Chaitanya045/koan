@@ -45,7 +45,8 @@ import path from 'node:path';
 import { AGENT_HOME, CLI, PROFILE, allow, allowWhy, brief, koan, spawnKoan } from './lib/agent.mjs';
 import { browserCall, check, decodePng, evalIn, finish, front, pages, sleep, viewTree, waitFor }
     from './lib/koan.mjs';
-import { IS_MAC, KOAN_PID, alive, fatalInLog, goToAgentTab, minimiseWithButton, realInput, realInputWhyNot,
+import { IS_MAC, KOAN_PID, alive, benchCannotMinimise, fatalInLog, goToAgentTab, minimiseWithButton, realInput,
+         realInputWhyNot,
          rootMouse, rootOf, skip, skipped, startServer, unminimise, windowOf } from './lib/mac.mjs';
 
 if (!IS_MAC) skip('the agent CLI needs macOS (its holder resolves peers with LOCAL_PEERTOKEN)');
@@ -541,7 +542,9 @@ if (!realInput() || windowId === undefined) {
   // the Mac, cycle 19).
   const m = await minimiseWithButton();
   const minimised = m.ok && await waitFor(async () => await visibility(frontPage) === 'hidden', 8000);
-  check('Minimised window (a real click on its minimise button): Koan\'s window is minimised (its shown tab ' +
+  const cannot = !minimised && benchCannotMinimise();
+  if (cannot) skipped('Minimised window', cannot);
+  else check('Minimised window (a real click on its minimise button): Koan\'s window is minimised (its shown tab ' +
         'went hidden)', !!minimised, `${m.why}; the front tab is ${await visibility(frontPage)}`);
   // By code a background tab under a capturer has its own compositor
   // (BrowserCompositorMac with no parent layer), so minimising the window

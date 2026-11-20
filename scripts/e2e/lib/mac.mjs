@@ -739,6 +739,31 @@ export async function minimiseWithButton({ pid = KOAN_PID, click = realClick } =
   if (!(await click(at.x, at.y))) return { ok: false, why: `no real click (${realWhyNot || 'the gate refused it'})` };
   return { ok: true, why: `clicked ${at.x},${at.y}` };
 }
+// Whether this Mac session can minimise any window now
+// (scripts/mac/tools/can_minimise.m, built into a temporary directory if the
+// bench has none): '' if it can, else why not. Asked once.
+let canMinimiseWhy = null;
+export function benchCannotMinimise() {
+  if (canMinimiseWhy !== null) return canMinimiseWhy;
+  if (!IS_MAC) return (canMinimiseWhy = 'not macOS');
+  try {
+    let tool = TOOLS && `${TOOLS}/can_minimise`;
+    if (!tool || !fs.existsSync(tool)) {
+      tool = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'koan-canmin-')), 'can_minimise');
+      execFileSync('clang', ['-fobjc-arc', '-framework', 'Cocoa', '-o', tool,
+                             new URL('../../mac/tools/can_minimise.m', import.meta.url).pathname],
+                   { stdio: 'ignore', timeout: 120000 });
+    }
+    execFileSync(tool, [], { encoding: 'utf8', timeout: 15000 });
+    canMinimiseWhy = '';
+  } catch (e) {
+    canMinimiseWhy = /minimised=0/.test(String(e.stdout ?? ''))
+        ? 'this Mac session minimises no window now (a plain AppKit window of its own did not either: ' +
+          'the session is locked, as it is while the person is away); run it unlocked and idle'
+        : `can_minimise failed: ${String(e.message).split('\n')[0]}`;
+  }
+  return canMinimiseWhy;
+}
 // Brings minimised Koan windows back (Accessibility's AXMinimized; not
 // input). Whether it could.
 export function unminimise(pid = KOAN_PID) {

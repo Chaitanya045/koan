@@ -189,6 +189,9 @@ await step('UF-RES-9', 'Settings > Agent Control: "Continues after" 2 s, then au
       s.selectedIndex = ${JSON.stringify(secs?.options?.map(o => +o.value) ?? [])}.indexOf(2); s.dispatchEvent(new Event('change')); })()`);
   const two = await waitFor(async () => (await settingsCall(settings, 'koanGetSettings'))?.prefs?.['koan.agent_control.auto_resume_seconds'] === 2, 3000);
   t.check('set to 2 s', !!two);
+  // A fresh page: RES-8 left the focus in the card field, and a click out
+  // of it is still held as secret-field (the PR's open question).
+  await koan(['act', form, 'navigate', fixtures.url('/secret')]);
   await front();
   await use('h1', 'b');
   const at = Date.now();
