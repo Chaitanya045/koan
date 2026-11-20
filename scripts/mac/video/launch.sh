@@ -61,7 +61,7 @@ extensions="$ROOT/scripts/e2e/extensions/test_helper${KOAN_EXTRA_EXTENSIONS:+,$K
 updates=(--disable-component-update)
 [[ "${KOAN_COMPONENT_UPDATE:-}" == 1 ]] && updates=()
 args=("$exe" --user-data-dir="$prof" --no-first-run --no-default-browser-check
-  "${updates[@]}" --use-mock-keychain
+  ${updates[@]+"${updates[@]}"} --use-mock-keychain
   --window-position="$POS" --window-size="$SIZE"
   --enable-logging=stderr --enable-ui-devtools="$UI_PORT" --remote-debugging-port="$CDP_PORT"
   --load-extension="$extensions"
