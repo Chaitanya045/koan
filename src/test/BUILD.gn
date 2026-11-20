@@ -23,6 +23,7 @@ test("koan_unittests") {
     "//koan/browser/updates/koan_update_logic_unittest.cc",
     "//koan/browser/window_sync/koan_window_sync_model_unittest.cc",
     "//koan/common/koan_glance_trigger_unittest.cc",
+    "//koan/version/koan_version_unittest.cc",
   ]
   deps = [
     "//base",
@@ -32,6 +33,7 @@ test("koan_unittests") {
     "//components/prefs",
     "//components/prefs:test_support",
     "//components/sync_preferences:test_support",
+    "//components/version_info",
     "//crypto",
     "//koan/browser:copy_urls",
     "//koan/browser:features",
@@ -46,6 +48,7 @@ test("koan_unittests") {
     "//koan/browser/updates:update_logic",
     "//koan/browser/window_sync:model",
     "//koan/common:glance_trigger",
+    "//koan/version",
     "//sql",
     "//testing/gmock",
     "//testing/gtest",

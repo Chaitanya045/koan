@@ -1,0 +1,375 @@
+# The macOS (Apple Silicon) build chain, shared by the nightly (macos.yml)
+# and releases (release.yml): fetch Chromium and apply Koan, then up to 16
+# chained build jobs (macos-build.yml), each building for ~5 h and handing
+# out/Koan on to the next; the job that finishes makes the .dmg, which stays
+# an artifact of the run under the name in the "dmg" output. See
+# .agent/notes/macos-ci.md.
+#
+# The caller decides whether to build, publishes the .dmg, and grants the
+# jobs' permissions (contents: read; actions: write for the cleanup).
+name: macOS build chain
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Branch, tag or commit to build
+        required: true
+        type: string
+      release:
+        description: Name the .dmg Koan-<version>-arm64.dmg (no commit)
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      EVS_ACCOUNT_NAME:
+        required: false
+      EVS_PASSWD:
+        required: false
+    outputs:
+      sha:
+        description: The Koan commit built
+        value: ${{ jobs.fetch.outputs.sha }}
+      chromium:
+        description: Its Chromium version (CHROMIUM_VERSION, line 1)
+        value: ${{ jobs.fetch.outputs.chromium }}
+      dmg:
+        description: The disk image's artifact name
+        value: ${{ jobs.check.outputs.dmg }}
+
+permissions: {}
+
+jobs:
+  fetch:
+    name: Fetch Chromium and apply Koan
+    runs-on: xcode-27
+    timeout-minutes: 300
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.ref.outputs.sha }}
+      chromium: ${{ steps.ref.outputs.chromium }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Resolve the commit
+        id: ref
+        run: |
+          sha=$(git rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "chromium=$(sed -n 1p CHROMIUM_VERSION)" >> "$GITHUB_OUTPUT"
+          echo "Building Koan $sha on Chromium $(paste -sd' ' CHROMIUM_VERSION)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Prepare the runner
+        run: scripts/ci/mac_runner_setup.sh
+
+      - name: Fetch Chromium, apply patches and branding, gn gen
+        run: scripts/ci/mac_fetch.sh
+
+      # Packaging only runs at the end of a run, a day or more later: check
+      # codesign and hdiutil on a dummy app now.
+      - name: Check the packaging
+        run: |
+          app="$RUNNER_TEMP/dummy/Koan.app"
+          mkdir -p "$app/Contents/MacOS"
+          cp /usr/bin/true "$app/Contents/MacOS/Koan"
+          plutil -create xml1 "$app/Contents/Info.plist"
+          plutil -insert CFBundleExecutable -string Koan "$app/Contents/Info.plist"
+          plutil -insert CFBundleIdentifier -string dev.koan.Koan.ci-check "$app/Contents/Info.plist"
+          plutil -insert CFBundlePackageType -string APPL "$app/Contents/Info.plist"
+          KOAN_CI_APP="$app" scripts/ci/mac_package.sh "$RUNNER_TEMP/dummy/dmg"
+          rm -rf "$RUNNER_TEMP/dummy"
+
+      - name: Pack the source
+        run: |
+          scripts/ci/mac_archive.sh pack-source "$RUNNER_TEMP/koan-mac-source.tar.zst"
+          df -h /
+
+      - name: Upload the source
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ runner.temp }}/koan-mac-source.tar.zst
+          archive: false
+          overwrite: true
+          retention-days: 3
+          if-no-files-found: error
+
+  build-01:
+    needs: [fetch]
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 1
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
+
+  build-02:
+    needs: [fetch, build-01]
+    if: needs.build-01.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 2
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
+
+  build-03:
+    needs: [fetch, build-02]
+    if: needs.build-02.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 3
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
+
+  build-04:
+    needs: [fetch, build-03]
+    if: needs.build-03.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 4
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
+
+  build-05:
+    needs: [fetch, build-04]
+    if: needs.build-04.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 5
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
+
+  build-06:
+    needs: [fetch, build-05]
+    if: needs.build-05.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 6
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
+
+  build-07:
+    needs: [fetch, build-06]
+    if: needs.build-06.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 7
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
+
+  build-08:
+    needs: [fetch, build-07]
+    if: needs.build-07.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 8
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
+
+  build-09:
+    needs: [fetch, build-08]
+    if: needs.build-08.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 9
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
+
+  build-10:
+    needs: [fetch, build-09]
+    if: needs.build-09.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 10
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
+
+  build-11:
+    needs: [fetch, build-10]
+    if: needs.build-10.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 11
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
+
+  build-12:
+    needs: [fetch, build-11]
+    if: needs.build-11.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 12
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
+
+  build-13:
+    needs: [fetch, build-12]
+    if: needs.build-12.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 13
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
+
+  build-14:
+    needs: [fetch, build-13]
+    if: needs.build-13.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 14
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
+
+  build-15:
+    needs: [fetch, build-14]
+    if: needs.build-14.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 15
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
+
+  build-16:
+    needs: [fetch, build-15]
+    if: needs.build-15.outputs.status == 'running'
+    uses: ./.github/workflows/macos-build.yml
+    permissions:
+      contents: read
+    with:
+      slice: 16
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+    secrets:
+      EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+      EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
+
+  # Fails the run when a build job failed or the last one ran out of time
+  # unfinished. Skipped with the chain (fork PRs, unchanged nightlies).
+  check:
+    name: Build finished
+    needs: [fetch, build-01, build-02, build-03, build-04, build-05, build-06, build-07, build-08, build-09, build-10, build-11, build-12, build-13, build-14, build-15, build-16]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      dmg: ${{ steps.check.outputs.dmg }}
+    steps:
+      - name: Check
+        id: check
+        env:
+          FAILED: ${{ contains(needs.*.result, 'failure') || needs.fetch.result != 'success' }}
+          FINISHED: ${{ contains(needs.*.outputs.status, 'finished') }}
+          DMG: ${{ join(needs.*.outputs.dmg, '') }}
+        run: |
+          if [[ $FAILED == true ]]; then
+            echo "a build job failed; re-run the failed jobs to carry on" >&2
+            exit 1
+          fi
+          if [[ $FINISHED != true ]]; then
+            echo "not finished after 16 build jobs; add jobs to macos-chain.yml" >&2
+            exit 1
+          fi
+          echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
+
+  # A run that finished doesn't need its source and out/Koan archives any
+  # more (a failed one keeps them, for "Re-run failed jobs", until they
+  # expire: source 3 days, out 2). The .dmg and the logs stay.
+  cleanup:
+    name: Delete build archives
+    needs: [check]
+    if: ${{ !cancelled() && needs.check.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN: ${{ github.run_id }}
+    steps:
+      - name: Delete
+        run: |
+          gh api --paginate "repos/$GH_REPO/actions/runs/$RUN/artifacts" \
+            --jq '.artifacts[] | select(.name | test("^koan-mac-(source|out-)")) | "\(.id) \(.name)"' |
+            while read -r id name; do
+              echo "deleting $name"
+              gh api -X DELETE "repos/$GH_REPO/actions/artifacts/$id"
+            done

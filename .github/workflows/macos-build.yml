@@ -1,4 +1,4 @@
-# One build job of the macOS chain in macos.yml: unpacks the source archive
+# One build job of the macOS chain in macos-chain.yml: unpacks the source archive
 # and the previous job's out/Koan, builds until about an hour before
 # GitHub's 6 h job limit, then packs out/Koan for the next job. The job
 # that finishes the build makes the .dmg instead.
@@ -19,6 +19,11 @@ on:
         description: The Koan commit being built
         required: true
         type: string
+      release:
+        description: Name the .dmg Koan-<version>-arm64.dmg (release.yml)
+        required: false
+        default: false
+        type: boolean
     secrets:
       # castLabs EVS login for Widevine's VMP signature (docs/USAGE.md, "DRM
       # video"). Optional: without them the app is built without VMP.
@@ -126,6 +131,7 @@ jobs:
           # Nightly and manual builds only: a PR's code never sees the login.
           EVS_ACCOUNT_NAME: ${{ github.event_name != 'pull_request' && secrets.EVS_ACCOUNT_NAME || '' }}
           EVS_PASSWD: ${{ github.event_name != 'pull_request' && secrets.EVS_PASSWD || '' }}
+          KOAN_RELEASE: ${{ inputs.release && '1' || '0' }}
         run: scripts/ci/mac_package.sh "$ARTIFACTS/dmg"
 
       - name: Upload the disk image

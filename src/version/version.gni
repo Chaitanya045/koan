@@ -1,0 +1,42 @@
+# Copyright 2026 The Koan Authors
+# Use of this source code is governed by the MIT license that can be
+# found in the LICENSE file.
+
+# Puts Koan's version (VERSION, koan_version.py) into the Mac app's
+# Info.plist: CFBundleShortVersionString, CFBundleVersion and KoanVersion.
+# Chromium's tweak_info_plist() sets both keys from chrome/VERSION; this runs
+# on its output, so only the outer app changes. The framework and the helper
+# apps keep Chromium's version (the framework's Versions/<version> path, the
+# crash reporter's "ver" and app shims rely on it).
+#
+#   koan_app_version_plist("koan_app_plist") {
+#     plist_target = ":chrome_app_plist"  # a tweak_info_plist() in this file
+#   }
+#
+# Use the new target as the bundle's info_plist_target. Invoke it in the file
+# that defines plist_target: get_target_outputs() only sees targets there.
+template("koan_app_version_plist") {
+  _input = get_target_outputs(invoker.plist_target)
+
+  action(target_name) {
+    script = "//koan/version/koan_version.py"
+    inputs = [
+      _input[0],
+      "//chrome/VERSION",
+    ]
+    outputs = [ "$target_gen_dir/${target_name}.plist" ]
+    depfile = "$target_gen_dir/${target_name}.d"
+    deps = [ invoker.plist_target ]
+    args = [
+      "plist",
+      "--input",
+      rebase_path(_input[0], root_build_dir),
+      "--output",
+      rebase_path(outputs[0], root_build_dir),
+      "--depfile",
+      rebase_path(depfile, root_build_dir),
+      "--chromium-version-file",
+      rebase_path("//chrome/VERSION", root_build_dir),
+    ]
+  }
+}

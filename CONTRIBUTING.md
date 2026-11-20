@@ -427,9 +427,11 @@ them. Keep platform code in them behind `BUILDFLAG(IS_MAC)` too.
 ## Releases and Chromium updates
 
 - `develop` is the default branch and is always kept releasable. Releases
-  are tagged from it (the first was `v0.0.1-alpha.1`), and the `nightly`
-  pre-release is rebuilt from it every night. How a release is made, the
-  channels and the version scheme: [docs/RELEASING.md](docs/RELEASING.md).
+  are tagged from it as `v<VERSION>` (the first was `v0.0.1-alpha.1`) and
+  built and published by GitHub Actions; the `nightly` pre-release is rebuilt
+  from it every night. Channels, versions, cadence and the steps:
+  [docs/RELEASING.md](docs/RELEASING.md); every release's notes are in
+  [docs/releases/](docs/releases/), listed in [CHANGELOG.md](CHANGELOG.md).
 - Moving to a new Chromium version is a dedicated pull request that updates
   `CHROMIUM_VERSION` (always a release tag), refreshes every patch, and
   re-audits the hooks, as [docs/REBASE.md](docs/REBASE.md) describes.

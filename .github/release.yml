@@ -1,0 +1,32 @@
+# Categories of the notes GitHub generates for a release (release.yml's
+# publish job adds them below docs/releases/<version>.md). A pull request
+# goes into the first category whose label it has. Labels: `gh label list`;
+# docs/RELEASING.md, "Labels".
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+      - duplicate
+      - invalid
+      - wontfix
+      - repo
+      - tracker
+    authors:
+      - dependabot
+  categories:
+    - title: Features
+      labels: [enhancement, feature]
+    - title: Fixes
+      labels: [bug, user-test]
+    - title: Agents
+      labels: [agents]
+    - title: Performance
+      labels: [performance]
+    - title: UI
+      labels: [ui, zen-parity, accessibility]
+    - title: Build and CI
+      labels: [build, ci, release, macos, chromium-update]
+    - title: Docs
+      labels: [docs, documentation]
+    - title: Other changes
+      labels: ["*"]
