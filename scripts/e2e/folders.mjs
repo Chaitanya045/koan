@@ -278,7 +278,13 @@ check('...removes the folder and closes its tab (and only it)',
 const spaceTwo = 'Two';
 await createSpace(await visiblePage(), spaceTwo);
 await sleep(1500);
+// A Space whose only tab is Koan's empty tab has no row to right-click (Zen's
+// empty tab isn't listed): a page first, then a folder of it.
 async function folderOfOnlyTab() {
+  if (!(await visibleTabs()).length) {
+    await browserCdp('Target.createTarget', { url: 'https://example.com/?only', background: false });
+    await sleep(1500);
+  }
   await moveToFolder(ts => ts[0], 'kKoanTabNewFolderItem');
   await pressKey(/^KoanFolderNameField$/, VK.ESCAPE);
   await sleep(800);
@@ -287,9 +293,12 @@ await folderOfOnlyTab();
 await folderMenu('New Folder', 'kKoanFolderDeleteItem');
 await sleep(1500);
 labels = (await spaceButtons()).map(l => l.name);
-check('Deleting the folder holding all of a Space\'s tabs keeps the Space',
-      !!spaceTwo && labels.includes(spaceTwo) && (await visibleTabs()).length === 1,
-      `${JSON.stringify(labels)}, ${(await visibleTabs()).length} tab(s)`);
+// The Space keeps a fresh tab: Koan's empty tab (Zen's), which has no row.
+const emptyTabShown = async () => (await visiblePage().catch(() => null))?.url?.startsWith('chrome://newtab');
+check('Deleting the folder holding all of a Space\'s tabs keeps the Space, on its empty tab',
+      !!spaceTwo && labels.includes(spaceTwo) && (await visibleTabs()).length === 0 && await emptyTabShown(),
+      `${JSON.stringify(labels)}, ${(await visibleTabs()).length} row(s), shown ` +
+      `${(await visiblePage().catch(() => null))?.url}`);
 await folderOfOnlyTab();
 await folderMenu('New Folder', 'kKoanFolderChangeSpaceItem');
 // The menu lists the Spaces in the bottom bar's order.
