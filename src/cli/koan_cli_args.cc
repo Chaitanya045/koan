@@ -37,6 +37,7 @@ const std::map<std::string_view, CommandKind>& Commands() {
       {"hand-back", CommandKind::kRelease},
       {"end", CommandKind::kEnd},
       {"watch", CommandKind::kWatch},
+      {"wait", CommandKind::kWait},
       {"skill", CommandKind::kSkill},
       {"__hold", CommandKind::kHold},
       {"relay", CommandKind::kRelayEnv},
@@ -55,6 +56,25 @@ bool IsName(std::string_view name) {
 }
 
 }  // namespace
+
+std::optional<int> ParseWaitDuration(std::string_view text) {
+  int scale = 1;
+  if (text.ends_with('s')) {
+    text.remove_suffix(1);
+  } else if (text.ends_with('m')) {
+    text.remove_suffix(1);
+    scale = 60;
+  } else if (text.ends_with('h')) {
+    text.remove_suffix(1);
+    scale = 3600;
+  }
+  int value = 0;
+  if (text.empty() || !base::StringToInt(text, &value) || value < 1 ||
+      value > 3600 / scale) {
+    return std::nullopt;
+  }
+  return value * scale;
+}
 
 std::optional<int> ParseRef(std::string_view ref) {
   int value = 0;
@@ -87,6 +107,8 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
   std::vector<std::string> positional;
   bool act_option = false;
   bool snapshot_option = false;
+  bool timeout_given = false;
+  std::string timeout_text;
   for (size_t i = 0; i < args.size(); ++i) {
     const std::string& arg = args[i];
     // After `act <tab>`, the steps: each takes its words by count, so a
@@ -182,12 +204,16 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
       act_option = true;
       continue;
     }
-    if (std::optional<bool> got = value_of("--timeout", &value)) {
-      if (!*got || !base::StringToInt(value, &command.timeout_seconds) ||
-          command.timeout_seconds < 1 || command.timeout_seconds > 600) {
-        return Error("--timeout needs a number of seconds (1 to 600)");
+    if (std::optional<bool> got = value_of("--timeout", &timeout_text)) {
+      // Read once the command is known: act's is seconds, wait's a duration.
+      if (!*got) {
+        timeout_text.clear();
       }
-      act_option = true;
+      timeout_given = true;
+      continue;
+    }
+    if (arg == "--resumed") {
+      command.resumed = true;
       continue;
     }
     if (std::optional<bool> got = value_of("--until", &value)) {
@@ -255,6 +281,24 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
   }
   command.kind = it->second;
   const std::vector<std::string> rest(positional.begin() + 1, positional.end());
+  if (timeout_given && command.kind == CommandKind::kWait) {
+    std::optional<int> seconds = ParseWaitDuration(timeout_text);
+    if (!seconds) {
+      return Error(
+          "--timeout needs a duration from 1s to 1h (90s, 10m, 1h, or "
+          "seconds)");
+    }
+    command.wait_seconds = *seconds;
+  } else if (timeout_given) {
+    if (!base::StringToInt(timeout_text, &command.timeout_seconds) ||
+        command.timeout_seconds < 1 || command.timeout_seconds > 600) {
+      return Error("--timeout needs a number of seconds (1 to 600)");
+    }
+    act_option = true;
+  }
+  if (command.resumed && command.kind != CommandKind::kWait) {
+    return Error("--resumed is koan wait's");
+  }
   auto expect = [&](size_t min, size_t max) {
     return rest.size() >= min && rest.size() <= max;
   };
@@ -350,6 +394,12 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
       }
       command.tab = rest.empty() ? "" : rest[0];
       break;
+    case CommandKind::kWait:
+      if (!expect(1, 1) || !command.resumed) {
+        return Error("usage: koan wait <tab> --resumed [--timeout 10m]");
+      }
+      command.tab = rest[0];
+      break;
     case CommandKind::kTakeOver:
       if (!expect(0, 1)) {
         return Error("usage: koan take-over [tab]");
@@ -391,9 +441,11 @@ Runs the steps in order over one connection. After each one, waits until
 the page has settled (a navigation it started committed and loaded, the
 network and the DOM quiet for 250 ms, at most 3 s), then runs the next.
 Before each step it checks the tab: if the user has taken it (Koan.paused)
-or the page waits for them (Koan.userNeeded), it stops there. It stops at
-the first step that fails. One line per step ("2/4 fill @13: ok"); a
-batch that stopped says where and why, and which steps did not run.
+or the page waits for them (Koan.userNeeded), it stops there; after a
+Koan.paused, `koan wait <tab> --resumed` waits for the tab to come back.
+It stops at the first step that fails. One line per step ("2/4 fill @13:
+ok"); a batch that stopped says where and why, and which steps did not
+run.
 
 Steps (at most 50):
   click <target>
@@ -493,6 +545,19 @@ their throwaway containers are cleared.)HELP"},
 Streams this agent's events as JSON lines until stopped. With a tab, keeps
 that tab rendering (animations, timers, a screencast) while it is watched,
 even when Koan's window is covered.)HELP"},
+      {"wait", R"HELP(koan wait <tab> --resumed [--timeout 10m]
+
+Waits for a tab the user paused (Koan.paused, reason user-input) to come
+back: when they stop using it, Koan gives it back by itself (Koan.resumed,
+user-idle), or they press Hand back. Then prints a fresh interactive
+snapshot of the page as the user left it: go on from that, not from the
+plan you had. Keeps nothing awake while it waits.
+
+Exits 1 with the reason if the tab will not come back by itself: the user
+is handling it (Take over, Keep paused, a password or card field, a
+question the page asks: tell the user and wait for them), the agent was
+stopped, the tab closed, or --timeout (a duration: 90s, 10m, 1h; default
+10m) passed. Exits 0 at once, with the snapshot, if the tab is not paused.)HELP"},
       {"skill", R"HELP(koan skill
 
 Prints the guide for agents.)HELP"},
@@ -535,6 +600,8 @@ std::string UsageText() {
                          close and its throwaway container is cleared
   koan watch [tab]       events as JSON lines (userNeeded, paused, ...);
                          with a tab, keeps it rendering while watched
+  koan wait <tab> --resumed [--timeout 10m]
+                         wait for a paused tab to come back, then snapshot
   koan agent-browser <args...>
                          run agent-browser against Koan (its own relay,
                          approved once in Koan as koan-relay)

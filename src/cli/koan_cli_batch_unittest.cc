@@ -229,6 +229,135 @@ TEST(KoanCliBatchTest, TheGateStopsForTheUser) {
   EXPECT_EQ(gate.StopReason()->rfind("Koan.tabGone", 0), 0u);
 }
 
+// Auto-resume (design 9.2): a pause that may end by itself says to wait for
+// it; one that waits for Hand back says the user is handling the tab.
+TEST(KoanCliBatchTest, ThePauseSaysWhatToDo) {
+  const std::string waits = PausedLine("T1", "user-input", "");
+  EXPECT_EQ(waits.rfind("Koan.paused: ", 0), 0u);
+  EXPECT_NE(waits.find("koan wait T1 --resumed"), std::string::npos);
+  EXPECT_NE(waits.find("snapshot"), std::string::npos);
+  for (const std::string& held :
+       {PausedLine("T1", "user-input", "secret-field"),
+        PausedLine("T1", "user", "take-over"), PausedLine("T1", "user", "")}) {
+    EXPECT_EQ(held.rfind("Koan.paused: ", 0), 0u);
+    EXPECT_NE(held.find("handling this tab"), std::string::npos) << held;
+    EXPECT_NE(held.find("Tell the user"), std::string::npos) << held;
+  }
+  EXPECT_NE(PausedLine("T1", "user-input", "secret-field").find("secret-field"),
+            std::string::npos);
+
+  BatchGate gate("T1");
+  gate.OnEvent(Event(R"({"method":"Koan.paused","params":{"targetId":"T1",
+                         "reason":"user-input"}})"));
+  EXPECT_NE(gate.StopReason()->find("koan wait T1 --resumed"),
+            std::string::npos);
+  // The pause became sticky (Koan.paused again, with why).
+  gate.OnEvent(Event(R"({"method":"Koan.paused","params":{"targetId":"T1",
+                         "reason":"user-input","sticky":"keep-paused"}})"));
+  EXPECT_NE(gate.StopReason()->find("keep-paused"), std::string::npos);
+  EXPECT_EQ(gate.StopReason()->find("koan wait"), std::string::npos);
+  gate.OnEvent(Event(R"({"method":"Koan.resumed","params":{"targetId":"T1",
+                         "reason":"handed-back"}})"));
+  EXPECT_FALSE(gate.StopReason());
+
+  // Koan.listTabs' pause says the same.
+  base::DictValue listed = Dict(R"({"targetId":"T1","state":"paused",
+      "pause":{"pauseReason":"user-input","sticky":"secret-field"}})");
+  gate.OnTab(&listed);
+  EXPECT_NE(gate.StopReason()->find("secret-field"), std::string::npos);
+  listed = Dict(R"({"targetId":"T1","state":"paused",
+      "pause":{"pauseReason":"user-input","resumesAt":1.0}})");
+  gate.OnTab(&listed);
+  EXPECT_NE(gate.StopReason()->find("koan wait T1 --resumed"),
+            std::string::npos);
+}
+
+// koan wait <tab> --resumed: when it returns, and what it says.
+TEST(KoanCliBatchTest, WaitingForAResume) {
+  const base::DictValue paused = Dict(R"({"targetId":"T1","state":"paused",
+      "pause":{"pauseReason":"user-input","resumesAt":1.0}})");
+  {
+    ResumeWaiter waiter("T1");
+    waiter.OnTab(&paused);
+    EXPECT_FALSE(waiter.done());
+    // Another tab's resume, a pause again without a hold: still waiting.
+    waiter.OnEvent(Event(R"({"method":"Koan.resumed","params":{
+                            "targetId":"T2","reason":"user-idle"}})"));
+    waiter.OnEvent(Event(R"({"method":"Koan.paused","params":{
+                            "targetId":"T1","reason":"user-input"}})"));
+    EXPECT_FALSE(waiter.done());
+    waiter.OnEvent(Event(R"({"method":"Koan.resumed","params":{
+        "targetId":"T1","reason":"user-idle","pausedMs":6500,
+        "url":"https://a.test/b","navigated":false,"changed":true}})"));
+    EXPECT_EQ(waiter.outcome(), ResumeWaiter::Outcome::kResumed);
+    EXPECT_TRUE(waiter.ok());
+    EXPECT_EQ(waiter.Line("T1", 600),
+              "resumed: user-idle after 6 s; the page changed "
+              "(https://a.test/b)");
+    EXPECT_EQ(*waiter.resumed().FindString("reason"), "user-idle");
+    // Done is done.
+    waiter.OnTimeout();
+    EXPECT_EQ(waiter.outcome(), ResumeWaiter::Outcome::kResumed);
+  }
+  {
+    // Not paused: nothing to wait for, the snapshot at once.
+    ResumeWaiter waiter("T1");
+    const base::DictValue driven =
+        Dict(R"({"targetId":"T1","state":"driven"})");
+    waiter.OnTab(&driven);
+    EXPECT_EQ(waiter.outcome(), ResumeWaiter::Outcome::kNotPaused);
+    EXPECT_TRUE(waiter.ok());
+  }
+  struct Case {
+    const char* what;
+    ResumeWaiter::Outcome outcome;
+    const char* says;
+  };
+  const Case cases[] = {
+      {R"({"method":"Koan.paused","params":{"targetId":"T1",
+           "reason":"user-input","sticky":"secret-field"}})",
+       ResumeWaiter::Outcome::kSticky, "handling this tab (secret-field)"},
+      {R"({"method":"Koan.released","params":{"targetId":"T1",
+           "reason":"user"}})",
+       ResumeWaiter::Outcome::kTakenBack, "Koan.released"},
+      {R"({"method":"Target.targetDestroyed","params":{"targetId":"T1"}})",
+       ResumeWaiter::Outcome::kTabGone, "Koan.tabGone"},
+      {"close", ResumeWaiter::Outcome::kStopped, "Koan.notConnected"},
+      {"timeout", ResumeWaiter::Outcome::kTimedOut, "after 90 s"},
+  };
+  for (const Case& c : cases) {
+    ResumeWaiter waiter("T1");
+    waiter.OnTab(&paused);
+    if (std::string_view(c.what) == "close") {
+      waiter.OnClosed();
+    } else if (std::string_view(c.what) == "timeout") {
+      waiter.OnTimeout();
+    } else {
+      waiter.OnEvent(Event(c.what));
+    }
+    EXPECT_EQ(waiter.outcome(), c.outcome) << c.what;
+    EXPECT_FALSE(waiter.ok());
+    EXPECT_NE(waiter.Line("T1", 90).find(c.says), std::string::npos)
+        << waiter.Line("T1", 90);
+  }
+  // Sticky from the start (Take over, or Keep paused before the wait).
+  for (const char* tab :
+       {R"({"targetId":"T1","state":"paused",
+            "pause":{"pauseReason":"user","sticky":"take-over"}})",
+        R"({"targetId":"T1","state":"paused",
+            "pause":{"pauseReason":"user-input","sticky":"keep-paused"}})",
+        // A browser that does not say: its pauses wait for Hand back.
+        R"({"targetId":"T1","state":"paused"})"}) {
+    ResumeWaiter waiter("T1");
+    const base::DictValue entry = Dict(tab);
+    waiter.OnTab(&entry);
+    EXPECT_EQ(waiter.outcome(), ResumeWaiter::Outcome::kSticky) << tab;
+  }
+  ResumeWaiter gone("T1");
+  gone.OnTab(nullptr);
+  EXPECT_EQ(gone.outcome(), ResumeWaiter::Outcome::kTabGone);
+}
+
 TEST(KoanCliBatchTest, WhatWaitedBeforeTheBatch) {
   base::ListValue held;
   held.Append(R"({"method":"Koan.userNeeded","params":{"targetId":"T1",

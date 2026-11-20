@@ -38,8 +38,10 @@ inline constexpr size_t kMaxPayload = 32 * 1024 * 1024;
 // [koan:notice] when the running browser's differs from its own (an old
 // ~/.local/bin/koan, another Koan.app). Raise it when either starts to
 // expect something new of the other. 2: koan act batches, snapshot
-// --interactive, --scope, --diff and locators.
-inline constexpr int kAgentInterfaceVersion = 2;
+// --interactive, --scope, --diff and locators. 3: auto-resume (Koan.resumed
+// {reason: "user-idle", pausedMs, url, title, navigated, changed}, Koan.paused
+// and Koan.listTabs "sticky" and "resumesAt", koan wait --resumed).
+inline constexpr int kAgentInterfaceVersion = 3;
 
 // A peer that has not authenticated gets this many frames, in total, before the
 // decoder fails: pairing and authentication need two or three.

@@ -126,6 +126,16 @@ bool ElementMeets(const Until& until, const base::Value* returned, bool gone);
 
 // --- When a batch must stop --------------------------------------------------
 
+// What to tell an agent whose tab the user paused (Koan.paused {reason,
+// sticky}; design section 9.2, auto-resume): a pause from the user's input
+// that may end by itself says to run `koan wait <tab> --resumed` and go on
+// from the snapshot it prints; one that waits for Hand back (Take over, Keep
+// paused, a password field, the page asking: `sticky`) says the user is
+// handling the tab. `tab` is the tab as the agent names it.
+std::string PausedLine(std::string_view tab,
+                       std::string_view reason,
+                       std::string_view sticky);
+
 // Whether the user has the tab or the page waits for them, from what the
 // browser said: the tab's state in Koan.listTabs ("paused"), the client's
 // Koan.* events (paused, resumed, userNeeded, userNeededDone, the tab
@@ -154,8 +164,66 @@ class BatchGate {
   const std::string target_;
   bool paused_ = false;
   std::string paused_reason_;
+  // Why the pause waits for Hand back, if it does (Koan.paused "sticky").
+  std::string paused_sticky_;
   bool gone_ = false;
   std::set<std::string> needs_;
+};
+
+// --- koan wait <tab> --resumed ---------------------------------------------
+
+// What `koan wait <tab> --resumed` makes of what the browser says, until the
+// tab comes back to the agent (Koan.resumed: the user stopped using it, or
+// handed it back) or will not by itself: a pause the user is handling
+// (sticky: Take over, Keep paused, a password field, the page asking), the
+// user taking the tab back, the tab closing, the connection ending (Stop all
+// agents, a revocation), or the timeout.
+class ResumeWaiter {
+ public:
+  enum class Outcome {
+    kWaiting,
+    kResumed,
+    // Not paused when asked: nothing to wait for.
+    kNotPaused,
+    kSticky,
+    kTakenBack,
+    kTabGone,
+    kStopped,
+    kTimedOut,
+  };
+
+  explicit ResumeWaiter(std::string target);
+  ResumeWaiter(const ResumeWaiter&) = delete;
+  ResumeWaiter& operator=(const ResumeWaiter&) = delete;
+  ~ResumeWaiter();
+
+  // The tab's entry in Koan.listTabs when the wait starts (nullptr: not
+  // listed).
+  void OnTab(const base::DictValue* tab);
+  void OnEvent(const Message& event);
+  void OnClosed();
+  void OnTimeout();
+
+  Outcome outcome() const { return outcome_; }
+  bool done() const { return outcome_ != Outcome::kWaiting; }
+  // Exit 0 (and the snapshot) for these.
+  bool ok() const {
+    return outcome_ == Outcome::kResumed || outcome_ == Outcome::kNotPaused;
+  }
+  // Koan.resumed's params, once resumed.
+  const base::DictValue& resumed() const { return resumed_; }
+  // The line koan prints: "resumed: user-idle after 6 s; the page changed"
+  // for kResumed, the error and what to do for the rest. `tab` is the tab as
+  // the agent named it; `timeout` the wait's.
+  std::string Line(std::string_view tab, int timeout_seconds) const;
+
+ private:
+  void Paused(std::string reason, std::string sticky);
+
+  const std::string target_;
+  Outcome outcome_ = Outcome::kWaiting;
+  std::string why_;
+  base::DictValue resumed_;
 };
 
 // --- What it prints ----------------------------------------------------------

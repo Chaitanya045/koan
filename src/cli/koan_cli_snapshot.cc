@@ -964,6 +964,8 @@ std::string_view RefVerdictName(RefVerdict verdict) {
       return "otherDocument";
     case RefVerdict::kUnknown:
       return "unknown";
+    case RefVerdict::kResumed:
+      return "resumed";
   }
   return "unknown";
 }
@@ -971,7 +973,7 @@ std::string_view RefVerdictName(RefVerdict verdict) {
 std::optional<RefVerdict> RefVerdictFromName(std::string_view name) {
   for (RefVerdict verdict :
        {RefVerdict::kOk, RefVerdict::kNoSnapshot, RefVerdict::kOtherDocument,
-        RefVerdict::kUnknown}) {
+        RefVerdict::kUnknown, RefVerdict::kResumed}) {
     if (RefVerdictName(verdict) == name) {
       return verdict;
     }
@@ -993,9 +995,10 @@ void RefBook::Remember(const std::string& target,
     it = pages_.emplace(target, Page()).first;
   }
   Page& page = it->second;
-  if (page.document != document) {
+  if (page.document != document || page.resumed) {
     page.document = document;
     page.refs.clear();
+    page.resumed = false;
   }
   for (int ref : refs) {
     if (page.refs.size() >= kMaxRefsPerPage) {
@@ -1012,6 +1015,9 @@ RefVerdict RefBook::Check(const std::string& target,
   if (it == pages_.end()) {
     return RefVerdict::kNoSnapshot;
   }
+  if (it->second.resumed) {
+    return RefVerdict::kResumed;
+  }
   if (document.empty() || it->second.document != document) {
     return RefVerdict::kOtherDocument;
   }
@@ -1020,6 +1026,14 @@ RefVerdict RefBook::Check(const std::string& target,
 
 void RefBook::Forget(const std::string& target) {
   pages_.erase(target);
+}
+
+void RefBook::Resumed(const std::string& target) {
+  auto it = pages_.find(target);
+  if (it != pages_.end()) {
+    it->second.refs.clear();
+    it->second.resumed = true;
+  }
 }
 
 std::string RefRefusal(RefVerdict verdict,
@@ -1041,6 +1055,11 @@ std::string RefRefusal(RefVerdict verdict,
     case RefVerdict::kUnknown:
       return "Koan.staleRef: " + std::string(ref) +
              " is not in any snapshot of this page; " + again;
+    case RefVerdict::kResumed:
+      return "Koan.staleRef: " + std::string(ref) +
+             " is from before the user used this tab (they may have "
+             "changed the page); " +
+             again;
     case RefVerdict::kOk:
       break;
   }

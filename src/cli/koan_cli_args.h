@@ -35,6 +35,9 @@ enum class CommandKind {
   kEnd,
   // Streams events as JSON lines.
   kWatch,
+  // wait <tab> --resumed: blocks until the user gives a paused tab back
+  // (Koan.resumed), then prints a fresh snapshot.
+  kWait,
   // Prints the agent guide.
   kSkill,
   // Internal: the process that holds the connection for a task's life.
@@ -110,6 +113,11 @@ struct Command {
   // wait, in seconds.
   int timeout_seconds = 15;
 
+  // wait: --resumed (what it waits for; the only condition so far), and
+  // --timeout as a duration ("90s", "10m", "1h", or seconds), 1 s to 1 h.
+  bool resumed = false;
+  int wait_seconds = 600;
+
   // shell: --stop-on-error, stop at the first command that fails.
   bool stop_on_error = false;
 
@@ -132,6 +140,10 @@ struct ParseResult {
 
 // `args` is argv without the program name.
 ParseResult ParseArgs(const std::vector<std::string>& args);
+
+// `koan wait --timeout`: "90", "90s", "10m" or "1h" -> seconds, 1 s to 1 h;
+// nullopt for anything else.
+std::optional<int> ParseWaitDuration(std::string_view text);
 
 // "@123" -> 123; nullopt for anything else.
 std::optional<int> ParseRef(std::string_view ref);

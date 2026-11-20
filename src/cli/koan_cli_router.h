@@ -74,6 +74,9 @@ class Router {
   // The latest events, oldest first (JSON).
   const std::deque<std::string>& events() const { return events_; }
   bool has_pending() const { return !pending_.empty(); }
+  // The tabs a Koan.resumed came for since the last call (the holder's refs
+  // of them go stale: the user had the tab).
+  std::vector<std::string> TakeResumed();
 
  private:
   struct Pending {
@@ -93,6 +96,7 @@ class Router {
   // Connection -> the session it follows.
   std::map<ConnectionId, std::string> followers_;
   std::deque<std::string> events_;
+  std::vector<std::string> resumed_;
 };
 
 }  // namespace koan::cli

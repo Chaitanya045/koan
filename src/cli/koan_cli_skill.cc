@@ -71,8 +71,9 @@ the way in, and it is the one the user approved.
    `press Enter`, `scroll 600`, `navigate <url>`. Up to 50 steps.
    Each step prints one line (`2/4 fill @13: ok`). The batch stops at the
    first step that fails, and before any step if the user has taken the
-   tab (Koan.paused) or the page waits for them (Koan.userNeeded): it says
-   where it stopped, why, and which steps did not run. `--until
+   tab (Koan.paused: then `koan wait <tab> --resumed`, below) or the page
+   waits for them (Koan.userNeeded): it says where it stopped, why, and
+   which steps did not run. `--until
    url~/step-2` (or `text~Saved`, `@12~Saved`, `"@31 gone"`) waits after
    the last step until that holds (Koan.untilTimeout if not within
    `--timeout`, 15 s). `--snapshot` prints the snapshot after it;
@@ -133,8 +134,15 @@ If koan says Koan asks the user to approve it again (it was started by
 another program than the one that paired), tell the user to look in Koan,
 and wait; or run koan from the agent that paired.
 
-If a command fails with Koan.paused, the user is using that tab: stop and
-wait for them to hand it back. If `koan status` or `koan watch` shows
+If a command or a batch stops with Koan.paused, the user is using that tab.
+With reason user-input, run `koan wait <tab> --resumed`: Koan gives the tab
+back by itself once they stop using it (or they press Hand back), and the
+command prints a fresh snapshot of the page as they left it. Continue from
+that snapshot, not from your old plan: they may have filled fields,
+navigated or finished a step, and your old refs are stale. If it says the
+user is handling the tab (Take over, Keep paused, a password or card field,
+a question the page asks), it will not come back by itself: tell the user
+what you need, and wait; never retry around it. If `koan status` or `koan watch` shows
 Koan.userNeeded (a dialog, a sign-in, a print, an app link, a file or
 device picker, screen sharing, a passkey, a security warning), the page is
 waiting for the user: tell them what it asks, and wait. Do not try to get

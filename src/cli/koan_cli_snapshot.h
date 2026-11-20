@@ -132,6 +132,9 @@ enum class RefVerdict {
   kOtherDocument,
   // Not a node of any snapshot of this document.
   kUnknown,
+  // From before the user had the tab (it was paused and has resumed since,
+  // design section 9.2): they may have changed the page.
+  kResumed,
 };
 
 std::string_view RefVerdictName(RefVerdict verdict);
@@ -159,11 +162,15 @@ class RefBook {
                    const std::string& document,
                    int ref) const;
   void Forget(const std::string& target);
+  // The tab came back from a pause (Koan.resumed): every ref of it is stale
+  // (kResumed) until its next snapshot.
+  void Resumed(const std::string& target);
 
  private:
   struct Page {
     std::string document;
     std::set<int> refs;
+    bool resumed = false;
   };
   std::map<std::string, Page> pages_;
 };
