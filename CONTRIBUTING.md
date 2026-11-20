@@ -47,9 +47,11 @@ is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ### Requirements
 
-- Linux x86-64, on X11 or Wayland. Koan is developed on an Arch-based
-  distribution; any distribution that can build Chromium should work.
-  For macOS, see [macOS](#macos) below.
+- Koan ships for macOS on Apple Silicon only, and the app is built on a
+  Mac (see [macOS](#macos) below). Day-to-day development, the static checks
+  and the off-screen e2e tests run on Linux x86-64 (X11 or Wayland): Koan
+  is developed on an Arch-based distribution, and any distribution that can
+  build Chromium should work. There are no Linux releases.
 - 16 GB of RAM (more is better), and 100 GB or more of free disk space.
 - The tools Chromium's
   [Linux build instructions](https://chromium.googlesource.com/chromium/src/+/main/docs/linux/build_instructions.md)
@@ -77,10 +79,8 @@ instead.
 Just want Koan on your Mac? Follow [docs/BUILDING-MAC.md](docs/BUILDING-MAC.md):
 clone, run `scripts/build.sh`, done. This section is the maintainer's setup.
 
-Koan is coming to macOS on Apple Silicon
-([#51](https://github.com/Chaitanya045/koan/issues/51)). It builds from
-source with the same scripts, but the Mac build is new, so expect rough
-edges. You need:
+Koan's product is the macOS app for Apple Silicon. It builds from source
+with the same scripts as on Linux. You need:
 
 - An Apple Silicon Mac with the full **Xcode** (not only the Command Line
   Tools). The scripts use `DEVELOPER_DIR`, not `xcode-select`.
@@ -160,11 +160,11 @@ What still lands outside the folder:
   lookup cache). The scripts point Apple's tools at the folder's home
   (`CFFIXED_USER_HOME`), but not every tool honours it.
 
-The app is unsigned and meant for local use. Each rebuild changes its ad-hoc
-signature, so macOS asks again for access to the keychain item.
-`install_desktop.sh` and the off-screen test tools (`scripts/e2e/`,
-`shot_ui.sh`, ...) use Linux's headless Ozone platform, so test behaviour on
-Linux.
+A local build is meant for your own use. Without the signing identity
+above, each rebuild changes its ad-hoc signature, so macOS asks again for
+access to the keychain item. The off-screen test tools (`scripts/e2e/`,
+`shot_ui.sh`, ...) use Linux's headless Ozone platform, so they run on the
+Linux development machine; the Mac has its own harness in `scripts/mac/`.
 
 ### macOS nightly build
 
@@ -427,7 +427,9 @@ them. Keep platform code in them behind `BUILDFLAG(IS_MAC)` too.
 ## Releases and Chromium updates
 
 - `develop` is the default branch and is always kept releasable. Releases
-  are tagged from it as `vX.Y.Z`.
+  are tagged from it (the first was `v0.0.1-alpha.1`), and the `nightly`
+  pre-release is rebuilt from it every night. How a release is made, the
+  channels and the version scheme: [docs/RELEASING.md](docs/RELEASING.md).
 - Moving to a new Chromium version is a dedicated pull request that updates
   `CHROMIUM_VERSION` (always a release tag), refreshes every patch, and
   re-audits the hooks, as [docs/REBASE.md](docs/REBASE.md) describes.

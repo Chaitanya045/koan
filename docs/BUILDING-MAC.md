@@ -1,8 +1,11 @@
 # Building Koan on your Mac
 
-Koan has no download yet, so you build it yourself, and one command does all
-of it. It takes a long time the first time (mostly waiting), and after that
-an update is the same command again.
+To just use Koan, download the latest release from the
+[Releases page](https://github.com/Chaitanya045/koan/releases/latest)
+instead ([installing it](USAGE.md#installing-the-macos-build)). This page is
+for building it yourself, which one command does. It takes a long time the
+first time (mostly waiting), and after that an update is the same command
+again.
 
 ```sh
 git clone https://github.com/Chaitanya045/koan.git ~/src/koan

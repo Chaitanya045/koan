@@ -76,7 +76,7 @@ _Last updated: 2026-11-02_
 - Phase 1 step 2: vertical tabs default = `IsSidebarEnabled()` (patch
   `tab_strip_prefs.cc` + `ui/tabs/BUILD.gn` dep). Verified on a fresh profile
   via chrome://prefs-internals and UI screenshots
-  (`.agent/notes/screenshots/step2-*.png`); `--disable-features=KoanSidebar` gives
+  ([`.agent/notes/screenshots/step2-*.png`](https://github.com/Chaitanya045/koan/tree/c6593d31481c0f789c0574d7a4d2376f98a40644/.agent/notes/screenshots)); `--disable-features=KoanSidebar` gives
   horizontal tabs.
 
 - Phase 1 step 3: `koan::OnBrowserViewCreated/Destroying` hooks at the end
@@ -90,7 +90,7 @@ _Last updated: 2026-11-02_
 - Phase 1 step 4a (Zen surfaces): Koan colour mixer (toolbar = frame colour,
   no content/sidebar separators) and the content card (MultiContentsView
   insets the single contents by 8px right/bottom, 8px radius on the active
-  contents only, separators hidden). Screenshots: `.agent/notes/screenshots/step4-*`.
+  contents only, separators hidden). Screenshots: [`.agent/notes/screenshots/step4-*`](https://github.com/Chaitanya045/koan/tree/c6593d31481c0f789c0574d7a4d2376f98a40644/.agent/notes/screenshots).
   Light, dark (`--force-dark-mode`) and flag-off all checked.
 
 - Phase 1 steps 5-7 (compact mode), first cut: `KoanCompactModeController`
@@ -103,7 +103,7 @@ _Last updated: 2026-11-02_
   FocusManager accelerator (no upstream patch); pref
   `koan.compact_mode.enabled` (registered from tab_strip_prefs.cc). Verified
   off-screen: hidden state, sidebar reveal, toolbar reveal
-  (`.agent/notes/screenshots/step5-*`).
+  ([`.agent/notes/screenshots/step5-*`](https://github.com/Chaitanya045/koan/tree/c6593d31481c0f789c0574d7a4d2376f98a40644/.agent/notes/screenshots)).
 - Google API keys infobar suppressed (`koan::kShowGoogleApiKeysInfoBar`).
 
 - Phase 2: workspaces (focus mode), switcher, Ctrl+Alt+Left/Right/N, new
@@ -132,7 +132,7 @@ _Last updated: 2026-11-02_
   URL bar all correct; WM_CLASS "Koan"; dark theme follows the system. It
   showed the frame's caption buttons paint ABOVE the client view, so Koan's
   own window controls were removed; instead the card leaves the caption
-  strip free when the toolbar is hidden (`.agent/notes/screenshots/desktop-*`).
+  strip free when the toolbar is hidden ([`.agent/notes/screenshots/desktop-*`](https://github.com/Chaitanya045/koan/tree/c6593d31481c0f789c0574d7a4d2376f98a40644/.agent/notes/screenshots)).
 
 - Phase 1-3 code review by GLM (`.agent/notes/reviews/phase1-3-review.md`): no
   blockers; both should-fix items and the menu nit fixed (3650450). Accepted

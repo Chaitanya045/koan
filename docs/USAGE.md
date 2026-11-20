@@ -1,81 +1,54 @@
 # Using Koan
 
-Koan is Chromium with Zen's way of working: tabs in a sidebar, the page as a
-floating card, workspaces, Glance and compact mode. Everything web-facing is
-plain Chromium (rendering, DevTools, extensions, `chrome://` pages).
+Koan is a macOS browser (Apple Silicon) built on Chromium with Zen's way of
+working: tabs in a sidebar, the page as a floating card, Spaces, Glance and
+compact mode, plus [agents](#agent-control) that work in tabs of their own.
+Everything web-facing is plain Chromium (rendering, DevTools, extensions,
+`chrome://` pages). To install it, see
+[Installing the macOS build](#installing-the-macos-build).
 
 ## Shortcuts
 
-Koan uses Zen's default shortcuts (Zen shortcuts version 21). Where
-Zen deliberately rebinds a key that Chrome uses, Koan follows Zen; the
-"Chrome had" column says what moved. Everything not listed behaves as in
-Chrome.
+Koan uses Zen's default shortcuts (Zen shortcuts version 21), in their macOS
+form: Zen's "accel" is ⌘ on a Mac, and Zen's Firefox-based macOS differences
+are followed. Where Zen deliberately rebinds a key that Chrome uses, Koan
+follows Zen; the last column says what the key did in Chrome. Everything not
+listed behaves as in Chrome.
 
 | Action | Keys | Chrome had |
 |---|---|---|
-| Toggle compact mode | Ctrl+S | Save page (now Ctrl+Alt+Shift+S) |
-| Show the sidebar in compact mode | Ctrl+Alt+S (⌘⌥S) | Stays out until pressed again |
-| Next / previous Space | Ctrl+Alt+Right / Ctrl+Alt+Left (⌘⌥→ / ⌘⌥←) | macOS: next / previous tab (still Ctrl+Tab) |
-| Space 1 to 10 | macOS: Ctrl+1 … Ctrl+9, Ctrl+0 (no keys elsewhere, as in Zen; set them in Settings) | |
-| Split view: side by side | Ctrl+Alt+V (⌘⌥V) | |
-| Split view: stacked | Ctrl+Alt+H (⌘⌥H) | macOS: Hide Others |
-| Split view: grid (two panes in Chromium: side by side) | Ctrl+Alt+G (⌘⌥G) | |
-| Unsplit | Ctrl+Alt+U (⌘⌥U) | macOS: View Source (still in the View menu) |
-| New split with an empty tab | Ctrl+Shift+* (⌘⇧*) | |
-| New tab (opens the URL bar; the tab opens with what you pick) | Ctrl+T (⌘T) | New-tab page |
-| Copy the page's URL (every selected tab's, one per line) | Ctrl+Shift+C (⌘⇧C) | Inspect element (now Ctrl+Shift+L) |
-| Copy the page's URL as Markdown | Ctrl+Shift+Alt+C | |
-| Pin / unpin tab (pinned to its Space) | Ctrl+Shift+D | Bookmark all tabs |
-| Close tab; a pinned tab or Essential instead goes back to its pinned URL, unloads and switches away | Ctrl+W, Ctrl+F4 (⌘W) | |
-| Close all unpinned tabs (in the Space; keeps the selected one; Ctrl+Shift+T reopens the last closed tab, one per press) | Ctrl+Shift+K | |
-| Expand Glance to a tab | Ctrl+O (⌘O) while Glance is open | Open file (still on Linux; unbound on macOS, as in Zen) |
-| Glance a link | Alt+click (⌥+click; trigger method in Koan's settings) | (Alt+click downloaded the link) |
-| Close Glance | Esc (twice while typing in the page), or click the dimmed page | |
-| Save page | Ctrl+Alt+Shift+S | |
-| Open / close the Library | Alt+Shift+L (⌥⇧L) | |
-| Library: History | Ctrl+H or Ctrl+Shift+H (⌘⇧H or ⌘Y) | History page (Ctrl+H; macOS ⌘Y) |
-| Inspect element | Ctrl+Shift+L | |
-| New Blank Window (no Spaces, not synced) | Ctrl+Shift+N | New incognito window |
-| New private window | Ctrl+Shift+P | Print using system dialog |
-| Mute site | Ctrl+M | |
-| Bookmarks | Ctrl+B | |
-| Library: Downloads | Ctrl+Shift+Y (⌘J) | macOS: Downloads page (⌘⇧J, now ⌘J) |
-| Reading mode | Ctrl+Alt+R | |
-| Edit the address | Ctrl+L, or click the URL pill | |
-| **Koan only:** switch single / multiple toolbars | Ctrl+Alt+B | |
-| **Koan only:** create a Space | Ctrl+Alt+N | |
-| Koan settings (Zen's "Open Preferences") | Ctrl+, | |
-
-Change any of them in Settings > Keyboard Shortcuts (below).
-
-### On macOS
-
-Zen's "accel" is ⌘ on a Mac, so the keys above that say Ctrl are ⌘ there
-(the Space and Mute shortcuts excepted), shown in Zen's notation: `⌘ ⇧ C`.
-Zen's Firefox-based macOS differences are followed:
-
-| Action | Keys | What it takes |
-|---|---|---|
 | Toggle compact mode | ⌘S | Save Page (now ⌘⌥⇧S, also in File) |
 | Show the sidebar in compact mode | ⌘⌥S | |
-| Next / previous Space | ⌘⌥→ / ⌘⌥← | Chrome's tab switching (still ⌃Tab, ⌃⇧Tab, ⇧⌘[ and ⇧⌘]) |
+| Next / previous Space | ⌘⌥→ / ⌘⌥← | Tab switching (still ⌃Tab, ⌃⇧Tab, ⇧⌘[ and ⇧⌘]) |
 | Space 1 to 10 | ⌃1 … ⌃9, ⌃0 | macOS's Switch to Desktop 1-4, if you turned those on in System Settings |
-| Split view | ⌘⌥V / ⌘⌥H / ⌘⌥G / ⌘⌥U, ⌘⇧* | ⌘⌥H is Hide Others, ⌘⌥U View Source |
-| New tab (opens the URL bar) | ⌘T | |
-| Copy the page's URL (as Markdown); with several tabs selected, every selected tab's, one per line | ⌘⇧C (⌘⇧⌥C) | Inspect element (now ⌘⌥L; ⌘⌥C still works) |
-| Pin / unpin tab; close all unpinned tabs | ⌘⇧D; ⌘⇧K | Bookmark All Tabs |
-| New window; New Blank Window | ⌘N (Chrome's); ⌘⇧N | New Incognito Window (now ⌘⇧P) |
+| Split view: side by side / stacked / grid (two panes in Chromium: side by side) | ⌘⌥V / ⌘⌥H / ⌘⌥G | ⌘⌥H: Hide Others |
+| Unsplit | ⌘⌥U | View Source (now ⌘U) |
+| New split with an empty tab | ⌘⇧* | |
+| New tab (opens the URL bar; the tab opens with what you pick) | ⌘T | New-tab page |
+| Edit the address | ⌘L, or click the URL pill | |
+| Copy the page's URL (every selected tab's, one per line); as Markdown | ⌘⇧C; ⌘⇧⌥C | Inspect element (now ⌘⌥L; ⌘⌥C still works) |
+| Pin / unpin tab (pinned to its Space) | ⌘⇧D | Bookmark All Tabs |
+| Close tab; a pinned tab or Essential instead goes back to its pinned URL, unloads and switches away | ⌘W | |
+| Close all unpinned tabs (in the Space; keeps the selected one; ⌘⇧T reopens the last closed tab, one per press) | ⌘⇧K | |
+| Glance a link | ⌥-click (trigger method in Koan's settings) | (⌥-click downloaded the link) |
+| Expand Glance to a tab | ⌘O while Glance is open | Open File (unbound, as in Zen) |
+| Close Glance | Esc (twice while typing in the page), or click the dimmed page | |
+| Save page | ⌘⌥⇧S | |
+| Open / close the Library | ⌥⇧L | |
+| Library: History; Downloads | ⌘Y or ⌘⇧H; ⌘J (Firefox's) | History page; Downloads page (⌘⇧J) |
+| New window; New Blank Window (no Spaces, not synced) | ⌘N (Chrome's); ⌘⇧N | New Incognito Window (now ⌘⇧P) |
 | New private window | ⌘⇧P | |
 | Inspect element | ⌘⌥L, ⌘⇧L | Downloads (⌘⌥L), collapse of the vertical tab strip (⌘⇧L); ⌘⌥C still works |
-| Downloads | ⌘J (Firefox's) | Chrome's ⌘⇧J |
 | Mute site | ⌃M (Control, as in Firefox) | |
 | View Source; Bookmark Manager | ⌘U; ⇧⌘O (Firefox's, which Zen keeps) | ⌘⌥U (Unsplit's now); ⌘⌥B |
 | Stop loading | ⌘. and the stop button, not Esc (Zen leaves Esc unbound) | Esc |
 | Bookmarks sidebar | ⌘B | |
 | Reading mode | ⌘⌥R | |
-| Library | ⌥⇧L | |
-| Settings (Koan's panes and Chromium's, one page) | ⌘, | Preferences… (hidden; it opened the same page) |
-| **Koan only:** single / multiple toolbars; create a Space | ⌃⌥B; ⌃⌥N | |
+| Settings (Koan's panes and Chromium's, one page; Zen's "Open Preferences") | ⌘, | Preferences… (hidden; it opened the same page) |
+| **Koan only:** switch single / multiple toolbars | ⌃⌥B | |
+| **Koan only:** create a Space | ⌃⌥N | |
+
+Change any of them in Settings > Keyboard Shortcuts (below).
 
 Koan's shortcut takes the key where it is the same as Chrome's menu key, and
 the menu bar says so: the Chrome item that Koan took the key from shows no
@@ -116,8 +89,49 @@ on Koan's Dock icon brings that window back, with its Spaces and tabs, as in
 Zen. This follows Settings > On startup: with "Continue where you left off" (the
 default) the window comes back; otherwise you get a new window.
 
-When a page uses a key itself (for example Ctrl+S in an online editor), the
+When a page uses a key itself (for example ⌘S in an online editor), the
 page gets it first, as in every browser.
+
+### Linux development builds
+
+Koan is developed, and its off-screen e2e tests run, on Linux. There is no
+Linux release, but the development build there uses Zen's non-Mac keys:
+Ctrl where the Mac uses ⌘, and a few keys of their own:
+
+| Action | Keys | Chrome had |
+|---|---|---|
+| Toggle compact mode | Ctrl+S | Save page (now Ctrl+Alt+Shift+S) |
+| Show the sidebar in compact mode | Ctrl+Alt+S | Stays out until pressed again |
+| Next / previous Space | Ctrl+Alt+Right / Ctrl+Alt+Left | |
+| Space 1 to 10 | None by default, as in Zen (set them in Settings) | |
+| Split view: side by side | Ctrl+Alt+V | |
+| Split view: stacked | Ctrl+Alt+H | |
+| Split view: grid (two panes in Chromium: side by side) | Ctrl+Alt+G | |
+| Unsplit | Ctrl+Alt+U | |
+| New split with an empty tab | Ctrl+Shift+* | |
+| New tab (opens the URL bar; the tab opens with what you pick) | Ctrl+T | New-tab page |
+| Copy the page's URL (every selected tab's, one per line) | Ctrl+Shift+C | Inspect element (now Ctrl+Shift+L) |
+| Copy the page's URL as Markdown | Ctrl+Shift+Alt+C | |
+| Pin / unpin tab (pinned to its Space) | Ctrl+Shift+D | Bookmark all tabs |
+| Close tab; a pinned tab or Essential instead goes back to its pinned URL, unloads and switches away | Ctrl+W, Ctrl+F4 | |
+| Close all unpinned tabs (in the Space; keeps the selected one; Ctrl+Shift+T reopens the last closed tab, one per press) | Ctrl+Shift+K | |
+| Expand Glance to a tab | Ctrl+O while Glance is open | Open file (still, outside Glance) |
+| Glance a link | Alt+click (trigger method in Koan's settings) | (Alt+click downloaded the link) |
+| Close Glance | Esc (twice while typing in the page), or click the dimmed page | |
+| Save page | Ctrl+Alt+Shift+S | |
+| Open / close the Library | Alt+Shift+L | |
+| Library: History | Ctrl+H or Ctrl+Shift+H | History page (Ctrl+H) |
+| Inspect element | Ctrl+Shift+L | |
+| New Blank Window (no Spaces, not synced) | Ctrl+Shift+N | New incognito window |
+| New private window | Ctrl+Shift+P | Print using system dialog |
+| Mute site | Ctrl+M | |
+| Bookmarks | Ctrl+B | |
+| Library: Downloads | Ctrl+Shift+Y | |
+| Reading mode | Ctrl+Alt+R | |
+| Edit the address | Ctrl+L, or click the URL pill | |
+| **Koan only:** switch single / multiple toolbars | Ctrl+Alt+B | |
+| **Koan only:** create a Space | Ctrl+Alt+N | |
+| Koan settings (Zen's "Open Preferences") | Ctrl+, | |
 
 ## Layout
 
@@ -133,7 +147,7 @@ their access to the site).
 
 ![Single toolbar](screenshots/desktop-single-toolbar.png)
 
-Click the pill or press Ctrl+L to edit the address (see [URL bar](#url-bar)).
+Click the pill or press ⌘L to edit the address (see [URL bar](#url-bar)).
 
 As in Zen, nothing sits above the page but a thin margin: move the pointer
 to the top edge of the window to show the window buttons (close, ...); the
@@ -142,7 +156,7 @@ are on the sidebar's side of the window (e.g. GNOME's buttons with tabs on
 the right, or a "close,minimize,maximize:" button layout with tabs on the
 left), they stay in the sidebar's top row instead, as in Zen.
 
-Ctrl+Alt+B switches to the multiple-toolbars layout (a toolbar above the
+⌃⌥B switches to the multiple-toolbars layout (a toolbar above the
 page, as in Chrome) and back. The layout applies to all windows and
 persists.
 
@@ -180,7 +194,7 @@ toolbar in, and the lights with it.
 at the top edge the menu bar comes down with AppKit's title bar strip (about
 32 pt, with the traffic lights), compact mode on or off; no bookmarks bar.
 With single toolbar the sidebar's top row has the sidebar toggle and back /
-forward / reload; Ctrl+L or the pill edits the address over the page. With
+forward / reload; ⌘L or the pill edits the address over the page. With
 "Sidebar and Top Toolbar" the toolbar stays above the page, next to the
 sidebar, as in a window. Compact mode works as in a window too, also when
 you change it in fullscreen: "Hide Tab bar" keeps the toolbar and reveals the
@@ -202,10 +216,10 @@ the toolbar shows in fullscreen as in a window.)
 
 Like Zen's, the URL bar is a card centred over the window (two thirds of
 its width, at most 750 px, larger text, a soft shadow over the page) with
-the suggestions under it. **Ctrl+L and Ctrl+T (⌘L, ⌘T)** open it at once,
+the suggestions under it. **⌘L and ⌘T** open it at once,
 with no animation; **clicking the pill** edits the address in the pill, which
 grows over the page as you type and never floats (Behavior "Normal" does that
-for the keyboard too). The box is empty after Ctrl+T, and an empty box lists
+for the keyboard too). The box is empty after ⌘T, and an empty box lists
 your open tabs (most recent first, each with **Switch to Tab**; Enter
 switches to it) and then your most visited sites, all from the browser itself
 with no request to a search engine. As you type, a site that is already
@@ -217,23 +231,23 @@ switching to another window and back leaves it as it was. In compact mode,
 with the sidebar hidden, it floats right away, also when you click the pill
 of the peeked sidebar.
 
-| Editing in the pill | Floating once you type | Ctrl+T |
+| Editing in the pill | Floating once you type | ⌘T |
 |---|---|---|
-| ![In the pill](screenshots/urlbar-in-pill.png) | ![Floating](screenshots/urlbar-floating.png) | ![Ctrl+T](screenshots/urlbar-new-tab.png) |
+| ![In the pill](screenshots/urlbar-in-pill.png) | ![Floating](screenshots/urlbar-floating.png) | ![⌘T](screenshots/urlbar-new-tab.png) |
 
-**Ctrl+T** (⌘T; also the sidebar's **+ New Tab** and the menus' New Tab)
+**⌘T** (also the sidebar's **+ New Tab** and the menus' New Tab)
 opens the URL bar, empty, instead of a new-tab page: the tab opens only
 when you open something from it, in a new tab next to the current one.
 (With Chromium's horizontal tabs, the tab strip's **+** still opens a
-new-tab page.) Esc, a click outside or Ctrl+T again closes it without
-creating anything; what you had typed comes back if you press Ctrl+T again
+new-tab page.) Esc, a click outside or ⌘T again closes it without
+creating anything; what you had typed comes back if you press ⌘T again
 within 45 seconds.
 
 Hover the pill (or Tab to it) for the **copy** button: it copies the page's
 URL, without tracking parameters (utm_*, fbclid ...: Firefox's list, as in
 Zen), and says so ("Copied current URL!", with a Share button on macOS), as
-do Ctrl+Shift+C and
-Ctrl+Shift+Alt+C (Markdown link; ⌘⇧C and ⌘⇧⌥C on macOS). The site's icon at the start of the
+do ⌘⇧C and
+⌘⇧⌥C (Markdown link). The site's icon at the start of the
 pill opens the site's panel: Zen's row of Share (macOS's share sheet),
 Screenshot, Reader Mode and Bookmark buttons on top, then security,
 permissions, cookies and site settings;
@@ -255,7 +269,7 @@ every window follows; not in Incognito).
 |---|---|
 | ![Normal](screenshots/urlbar-normal.png) | ![Copied current URL!](screenshots/urlbar-toast.png) |
 
-Settings, in Koan's settings (Ctrl+,) under Look and Feel > URL Bar
+Settings, in Koan's settings (⌘,) under Look and Feel > URL Bar
 (profile prefs, Zen's names in brackets):
 
 | Setting | Pref | Default |
@@ -265,7 +279,7 @@ Settings, in Koan's settings (Ctrl+,) under Look and Feel > URL Bar
 | Show the copy URL button | `koan.urlbar.show_copy_url` (`zen.urlbar.single-toolbar-show-copy-url`) | on |
 
 In the multiple-toolbars layout the address is edited in the toolbar, as
-in Chrome; Ctrl+T still opens it instead of a new-tab page, and Esc closes
+in Chrome; ⌘T still opens it instead of a new-tab page, and Esc closes
 it in one press.
 
 ## Closing the last tab
@@ -276,7 +290,7 @@ that is never listed (the sidebar shows just **+ New Tab**, the URL pill is
 empty) and never navigates: what you open from the URL bar (⌘T, ⌘L) opens in
 a **new** tab; close that tab and the empty tab is back. (An empty tab that is
 navigated in place anyway, from a bookmark or the Library, becomes an ordinary
-tab.) Ctrl+Tab, ⌘1-9, tab search and extensions (`chrome.tabs.query`) skip
+tab.) ⌘Tab, ⌘1-9, tab search and extensions (`chrome.tabs.query`) skip
 it, as in Zen. Only a **close** keeps the window: moving
 the last tab to another window (a drag, "Move to another window") closes it, as
 in Zen. **⌘W on the empty tab closes the window.** With Essentials, closing the
@@ -291,7 +305,7 @@ its own tabs, and a new tab page you open later is an ordinary tab.
 ## New tab page
 
 A new tab page (`chrome://newtab`: a new window, the tab strip's **+** with
-horizontal tabs, typing `chrome://newtab`, or **Ctrl+T** with the setting
+horizontal tabs, typing `chrome://newtab`, or **⌘T** with the setting
 above off) is an empty page in the window's look, like Zen's empty tab, a card on the
 window: shadcn's `card` (#18181b on the #09090b window in the dark shadcn look,
 white in the light one), and in the default Zen look Chromium's
@@ -299,12 +313,12 @@ theme colour for the page (Zen's empty tab shows its window gradient or glass
 there: not matched yet). It follows the window: a change of look or theme loads
 it again with the new colour. No Google logo, search box or shortcut tiles, and nothing to load, so it
 shows at once. It is `chrome://koan-newtab`, a page with no content and no
-script. Ctrl+T (⌘T) still opens the URL bar instead of a tab. A new window that
+script. ⌘T still opens the URL bar instead of a tab. A new window that
 starts on the empty page opens the New Tab bar at once (Zen's
 `zen.urlbar.open-on-startup`), except the first-run welcome and a restored
 session.
 
-Koan's settings (Ctrl+,), Look and Feel > New tab page > New tabs, choose
+Koan's settings (⌘,), Look and Feel > New tab page > New tabs, choose
 between **Blank page** (Koan's, the default; pref `koan.newtab.page`) and
 **Chromium's new tab page** (with a search engine other than Google's, that is
 the engine's own remote new tab page, which Chromium loads from the web). A new
@@ -323,7 +337,7 @@ the next time, and typing its whole name ("toggle compact mode") makes Enter
 run it; actions you keep passing over drop below the search suggestions.
 Typing the start of an address still opens the site.
 
-To see every action, press Tab in an empty URL bar (Ctrl+L, Backspace,
+To see every action, press Tab in an empty URL bar (⌘L, Backspace,
 Tab) or type `>`; Tab again leaves. Typing filters the list, and once you
 have typed two letters Enter runs the first match.
 
@@ -366,8 +380,8 @@ context menu of selected text also opens in Glance.
 While the pointer is over the sidebar, **↓ Clear** appears at the end of
 the line: it closes the Space's unpinned tabs except the selected one and
 any playing sound (if those are all there is, it closes them too), the
-same as Ctrl+Shift+K. The Space stays: an emptied one shows its empty
-tab, a blank page with no row (nothing is left in its list), and a toast reminds you that Ctrl+Shift+T reopens them, the last closed
+same as ⌘⇧K. The Space stays: an emptied one shows its empty
+tab, a blank page with no row (nothing is left in its list), and a toast reminds you that ⌘⇧T reopens them, the last closed
 tab first, one per press.
 
 Drag the sidebar's edge to resize it (163 to 500 px, as in Zen). At the
@@ -384,7 +398,7 @@ touchpad or the mouse wheel, and the current Space always scrolls into view.
 Right-clicking an empty part of the sidebar opens Zen's toolbar menu:
 **Compact Mode** (below) and **Tabs on the right**. Dragging the sidebar's
 edge resizes it; dragging it closed hides it in compact mode, as in Zen
-("Sidebar hidden! Use Ctrl+S to bring the sidebar back", shown once). If
+("Sidebar hidden! Use ⌘S to bring the sidebar back", shown once). If
 compact mode was set to hide just the toolbar, the drag makes it hide both.
 
 ## Pinned tabs and Essentials
@@ -403,7 +417,7 @@ As in Zen there are two kinds of pinned tab:
 
 - **Pinned tabs** belong to their Space and sit in its pinned section,
   between the Space header and the line above **+ New Tab**; unpinned, a
-  tab moves below New Tab. Pin a tab with Ctrl+Shift+D or "Pin" in its
+  tab moves below New Tab. Pin a tab with ⌘⇧D or "Pin" in its
   context menu. While a pinned tab is loaded, pointing at it shows a dash
   ("Unload and switch to tab") where other tabs have their close button.
   Or drag a tab across the line: dropped above it (on the line, among the
@@ -427,14 +441,14 @@ As in Zen there are two kinds of pinned tab:
 
 Both remember the URL they were pinned on, the **pinned URL**. When a pinned
 tab goes elsewhere, a slash appears after its icon: hover it to see the
-pinned page's icon and "Back to pinned url", click to go back (Ctrl+click
+pinned page's icon and "Back to pinned url", click to go back (⌘-click
 first moves the current page to a new tab). The context menu also has
 "Reset Pinned Tab", "Replace with Current URL" and "Edit Pinned URL…"
 ("…Essential…" for Essentials).
 
 ![A pinned tab away from its pinned URL, and its reset button hovered](screenshots/pinned-tab-reset.png)
 
-Closing a pinned tab or an Essential (Ctrl+W, its close button, a middle
+Closing a pinned tab or an Essential (⌘W, its close button, a middle
 click) doesn't close it: like Zen, it goes back to its pinned URL, is
 unloaded to free memory and the next tab is selected. A pinned tab that is
 already unloaded closes from its close button. Settings > Tab Management >
@@ -445,8 +459,8 @@ and Close Other Tabs, Close Tabs Below and Back in a tab with no history
 leave them open. Drag a pinned tab below the line to unpin it (it forgets
 its pinned URL, as in Zen), or a tab above the line to pin it on its
 current page; dragging within either part only reorders. Moving a tab with
-Ctrl+Shift+PageUp / PageDown never pins or unpins it. With several pinned tabs selected,
-Ctrl+W does the same to each of them and closes none of the others.
+⌃⇧Page Up / Page Down never pins or unpins it. With several pinned tabs selected,
+⌘W does the same to each of them and closes none of the others.
 
 Any tab's context menu has "Change Label…" (edit the name in place; Enter
 keeps it, Esc cancels, an empty name goes back to the page title, and "Tab
@@ -476,7 +490,7 @@ A Space is a set of tabs shown on its own, like Zen's Spaces. The window
 always shows one: a new window starts in a Space named "Space", every tab
 belongs to a Space, and new tabs open in the active one.
 
-- **Create** a Space with **+ > Create Space** (or Ctrl+Alt+N): the sidebar
+- **Create** a Space with **+ > Create Space** (or ⌃⌥N): the sidebar
   shows Zen's Create-a-Space form (a collapsed sidebar expands over the
   page until you're done). Click the dashed box to pick an emoji
   (search by keyword; the picker closes once you pick), type a name, Theme… to pick its theme (see Space themes), then
@@ -489,13 +503,12 @@ belongs to a Space, and new tabs open in the active one.
   Enter or the menu key opens its menu, F2 renames the Space.
 - **Theme…** (right-click the header) opens Zen's theme picker for
   the Space (see Space themes below).
-- **Switch**: click a Space in the bottom bar, Ctrl+Alt+Left/Right (⌘⌥
-  on macOS; they wrap around unless you turn that off in Settings > Tab
-  Management > Workspaces), on macOS Ctrl+1…0 for Space 1 to 10, swipe
+- **Switch**: click a Space in the bottom bar, ⌘⌥← / ⌘⌥→ (they wrap around unless you turn that off in Settings > Tab
+  Management > Workspaces), ⌃1…⌃0 for Space 1 to 10, swipe
   horizontally with two fingers over the sidebar (on a Mac, as in Zen, the Space moves against your
   fingers: moving them right goes to the next Space, and lifting them
   after enough travel, or a quick flick, switches Space), or turn the mouse wheel
-  there (horizontally, or vertically while holding Ctrl; the key and
+  there (horizontally, or vertically while holding ⌃; the key and
   natural scrolling, which turns the wheel and the swipe round, are in
   Settings > Tab Management > Workspaces); the right-click
   menu of the header also lists the Spaces. The old Space slides out and
@@ -508,8 +521,8 @@ belongs to a Space, and new tabs open in the active one.
   From the last Space, swiping on (fingers moving right) brings in a round
   **+** badge whose ring fills as you go; once the ring fills the badge
   (the trackpad ticks), lifting your fingers opens the Create-a-Space
-  form. With one Space, both. These swipes don't wrap around; Ctrl+Alt+
-  Left/Right and the wheel still do. Off with
+  form. With one Space, both. These swipes don't wrap around; ⌘⌥← / ⌘⌥→
+  and the wheel still do. Off with
   `koan.workspaces.swipe_actions.edge_actions` (Zen's about:config
   `zen.workspaces.swipe-actions.edge-actions`), as in Zen there is no
   setting for it. Going straight to a tab of another Space (the
@@ -559,7 +572,7 @@ belongs to a Space, and new tabs open in the active one.
   and others Memory Saver keeps) stay loaded; a toast says how many.
 - **Delete Space** (same menu) closes the Space's tabs after asking. The
   last Space can't be deleted.
-  It is gone for good: reopening one of its tabs (Ctrl+Shift+T, History)
+  It is gone for good: reopening one of its tabs (⌘⇧T, History)
   puts the tab in the Space you're in.
 - Closing a Space's last tab leaves the Space with a new tab, where Zen
   shows an empty Space.
@@ -718,9 +731,9 @@ Reset to default).
 
 ## Compact mode
 
-Ctrl+S hides the sidebar; the page fills the window with a thin margin.
-Move the pointer to the left edge (or press Ctrl+Alt+S) to slide the
-sidebar out, with its navigation buttons and URL pill. Ctrl+L and Ctrl+T
+⌘S hides the sidebar; the page fills the window with a thin margin.
+Move the pointer to the left edge (or press ⌘⌥S) to slide the
+sidebar out, with its navigation buttons and URL pill. ⌘L and ⌘T
 open the floating URL bar. The setting applies to all windows and persists.
 The sidebar slides in over the page; the page doesn't move or reflow.
 
@@ -729,23 +742,23 @@ sidebar's menu under **Compact Mode**: **Hide sidebar** (the default, as in
 Zen), **Hide toolbar** or **Hide both**. A hidden toolbar slides down when
 the pointer reaches the top edge, with the window buttons.
 
-The same choices are in Settings (Ctrl+,) > Look and Feel > Show in
+The same choices are in Settings (⌘,) > Look and Feel > Show in
 compact view, with Zen's "Briefly make the toolbar popup when switching or
 opening new tabs in compact mode" (off by default): the hidden sidebar then
 pops up for a moment whenever you switch tabs.
 
 ## Glance
 
-Alt+click a link (or Alt+Enter on a focused link) to preview it in a card
+⌥-click a link (or ⌥↩ on a focused link) to preview it in a card
 over the page, as in Zen. The card grows out of the click and shrinks back
 into it when it closes; the page behind fades into the window background.
-**Open Link in Glance** in the link context menu does the same. An Alt+click
+**Open Link in Glance** in the link context menu does the same. An ⌥-click
 on a link in the Glance page shows that link in the card. Shift+click opens
 a new window, as in Zen and Firefox. Same-site links with a `download`
 attribute still download.
 
 Beside the card: close (Esc, or a click on the faded page), **Expand
-Glance** to a tab (Ctrl+O; ⌘O on macOS) and **Split Glance** with the
+Glance** to a tab (⌘O) and **Split Glance** with the
 current tab. As in Zen, while you type in the Glance page the first Esc
 only turns the close button red ("Press Esc again to close"); a second Esc
 within 3 seconds closes. A page that asks before you leave it ("Leave
@@ -753,19 +766,19 @@ site?") gets to ask.
 
 While the card is open, the browser's page commands act on the Glance page,
 not the tab under it, from the keyboard, the menu bar or the toolbar, as in
-Zen: Close Tab (Ctrl+W; ⌘W) closes the card; Reload, Back and Forward, Stop
+Zen: Close Tab (⌘W) closes the card; Reload, Back and Forward, Stop
 and zoom act on the Glance page (the Back, Forward and Stop buttons follow
-it); Focus Location (Ctrl+L; ⌘L) opens the URL bar in the sidebar with the
+it); Focus Location (⌘L) opens the URL bar in the sidebar with the
 Glance page's address, and what you open from it loads in the Glance; Copy
-Current URL (Ctrl+Shift+C; ⌘⇧C) copies the Glance page's address. Find
-(Ctrl+F; ⌘F) is off in a Glance for now, and so is reloading a page that
+Current URL (⌘⇧C) copies the Glance page's address. Find
+(⌘F) is off in a Glance for now, and so is reloading a page that
 came from a form. Bookmark, Print, Save Page, DevTools and View Source still
 act on the tab under the card.
 
 On macOS, as in Zen (whose default trigger is `alt` on every platform):
 Alt is the Option key, so ⌥+click opens Glance, Meta is ⌘, and the split
 view shortcuts are ⌘⌥V / ⌘⌥H / ⌘⌥G / ⌘⌥U, which take over View Source
-(⌘⌥U) and Hide Others (⌘⌥H) from the keyboard. Ctrl+click is a right-click
+(⌘⌥U) and Hide Others (⌘⌥H) from the keyboard. ⌃-click is a right-click
 on macOS, so it isn't offered as a trigger there. On macOS the card
 appears and goes without growing and shrinking (not verified on a Mac
 yet).
@@ -776,7 +789,7 @@ and **Trigger method**: Ctrl + Click, Alt + Click (the default), Shift +
 Click or Meta (Command) + Click. Both apply at once, in the pages already
 open too, as in Zen. With another trigger
 method, a click Glance can't open (not a web link, an app window) does
-what that modifier does without Glance (Ctrl: a background tab; Shift: a
+what that modifier does without Glance (⌘: a background tab; Shift: a
 window). The "Koan Glance" flag in `chrome://flags` removes Glance
 altogether.
 
@@ -899,7 +912,7 @@ only Chromium's own high-contrast paths still apply.
 ## Settings
 
 Settings is one page, `chrome://settings`, as Zen's are Firefox's
-about:preferences with Zen's panes added. Ctrl+, (⌘, on macOS), the ⋮ menu's
+about:preferences with Zen's panes added. ⌘,, the ⋮ menu's
 Settings and every link to a Chromium setting open it. Koan's panes come first
 in its menu (`chrome://settings/koan/looks`, `/koan/tabs`, `/koan/shortcuts`,
 `/koan/agents`), laid out like Zen's preferences, and Chromium's sections
@@ -910,7 +923,7 @@ keep Chromium's own. The rows Zen hides in Firefox aren't shown either: the
 AI section, Appearance's Theme row and Show home button (while the URL bar
 replaces the new tab page), and the browser sign-in switch. A
 link to one of Chromium's sections (`chrome://settings/privacy`, page info's
-Site settings) opens that section in the same page, and Ctrl+, in a settings
+Site settings) opens that section in the same page, and ⌘, in a settings
 tab goes back to Look and Feel there. The old address `chrome://koan-settings`
 (and `chrome://koan-settings/<pane>`) still opens Koan's panes.
 
@@ -928,24 +941,23 @@ highlighted; "No results" only when neither has any.
     neighbour (on);
   - **Back** in a tab with no history (one opened from a link in another
     tab) closes it and returns to that tab (on; never for pinned tabs);
-  - **Ctrl+Tab** (and Ctrl+Page Up/Down) cycles within the Essentials or
+  - **⌃Tab** (and ⌃Page Up/Down) cycles within the Essentials or
     within the other tabs, whichever you are on (off), and can skip tabs
     that haven't loaded yet (off). If "Cycle through the most recently used
-    tabs with Ctrl+Tab" is on in Chromium's settings (Appearance), Ctrl+Tab
-    follows that instead, as the page notes; Ctrl+Page Up/Down still follow
+    tabs with ⌘Tab" is on in Chromium's settings (Appearance), ⌃Tab
+    follows that instead, as the page notes; ⌃Page Up/Down still follow
     Koan's settings.
 - **Keyboard Shortcuts**: Zen's shortcut editor. Click a shortcut, type
   the new keys and press **Esc** (or **Enter**) to save them; **Backspace** clears the
   shortcut, **Tab** leaves it unchanged. A key another shortcut already
-  uses is refused ("Conflicts with ..."), and so are Ctrl+Tab and
-  Ctrl+Page Up/Down, which switch tabs. A key needs Ctrl, Alt or Win
-  (⌃, ⌥ or ⌘ on macOS, where the keys macOS keeps for itself are refused too;
-  or is a function key). **Reset to Default** restores Zen's keys.
+  uses is refused ("Conflicts with ..."), and so are ⌃Tab and
+  ⌃Page Up/Down, which switch tabs. A key needs ⌘, ⌃ or ⌥ (the keys
+  macOS keeps for itself are refused too), or is a function key. **Reset to Default** restores Zen's keys.
   Shortcuts for features switched off in `chrome://flags` aren't listed.
 
 Changes apply at once to every window, private windows included (they
 share the regular profile's settings), and the page follows changes made
-elsewhere (e.g. Ctrl+S or Ctrl+Alt+B). From a private window, Ctrl+, opens
+elsewhere (e.g. ⌘S or ⌃⌥B). From a private window, ⌘, opens
 the page in a regular one, like Chromium's settings.
 
 **Look.** In the shadcn style Koan's panes take the look's tokens and font,
@@ -993,12 +1005,12 @@ Koan is set up to stay light (details in `PERFORMANCE.md`):
 
 ## Library
 
-Zen's Library: press Alt+Shift+L or click the Library button (the box with
+Zen's Library: press ⌥⇧L or click the Library button (the box with
 sparkles, at the start of the sidebar's bottom bar, before the Space
 buttons). It slides in over the sidebar
 with three sections down its side, and opens on the one you used last:
 
-- **Downloads** (Ctrl+Shift+Y): every download, newest first, with its size,
+- **Downloads** (⌘J): every download, newest first, with its size,
   site and date (hover a row for where it came from). Search, or filter by
   file type (images, video, audio, documents, archives, apps) and date.
   Hover or focus a row for cancel / retry / show in folder and **⋯** (open,
@@ -1019,10 +1031,10 @@ with three sections down its side, and opens on the one you used last:
   for the only Space). **+** after the last card, like Create Space, closes
   the Library and opens the Create-a-Space form. Click a tab to go there.
   The Library widens to fit the cards.
-- **History** (Ctrl+H): the last 120 days by day. Search, or **Filter**:
+- **History** (⌘Y or ⌘⇧H): the last 120 days by day. Search, or **Filter**:
   when (today since midnight, this week, this month), sort (by date, site, most visited,
   last visited) and what to look through (history or the tabs closed
-  recently). Click a page to open it in a new tab; Ctrl+click or
+  recently). Click a page to open it in a new tab; ⌘-click or
   middle-click opens it in the background and keeps the Library open.
   Hover a row for its visit time and the forget / reopen buttons;
   right-click for "Forget About This Site" (its history, cookies, site data
@@ -1036,7 +1048,7 @@ Esc, the back arrow at the bottom of the side column, the same shortcut
 again, opening a tab, or (on a Mac) a two-finger swipe back over it closes
 the Library; swiping past the first Space opens it (see Spaces). Incognito
 windows have no
-Library: there Ctrl+H shows Chrome's notice that history isn't saved, as
+Library: there ⌘Y shows Chrome's notice that history isn't saved, as
 in Chrome, and the Downloads key opens `chrome://downloads`.
 With "Reduce motion" set in the system, it opens and closes without
 sliding.
@@ -1246,8 +1258,12 @@ from …" folder on it.
 
 ## Updates
 
-Koan has no binary releases: you build it from your clone, and updating is
-`git pull && scripts/build.sh` ([BUILDING-MAC.md](BUILDING-MAC.md#updating)).
+Koan has no automatic updater yet. To update a release, download the newest
+one from the [Releases page](https://github.com/Chaitanya045/koan/releases)
+and drag it over the old one in Applications (see
+[Installing the macOS build](#installing-the-macos-build)). A build from
+your own clone updates with `git pull && scripts/build.sh`
+([BUILDING-MAC.md](BUILDING-MAC.md#updating)).
 
 - **Update Complete!** After you start a build whose Chromium version or Koan
   commit differs from the last one you started, the sidebar shows Zen's
@@ -1350,10 +1366,15 @@ browser by relaunching it. See [SECURITY.md](../SECURITY.md#remote-debugging).
 
 ## Installing the macOS build
 
-A test build for Apple Silicon Macs (macOS 13 or later) is made every night
-from `develop`:
+Koan runs on Macs with Apple Silicon (M1 and later), macOS 13 or later.
+Intel Macs aren't supported.
 
-- **Nightly pre-release:** the `nightly` release on the
+- **Alpha releases** (start here): the newest is at the top of the
+  [Releases page](https://github.com/Chaitanya045/koan/releases/latest),
+  `Koan-<version>-arm64.dmg` and its `.sha256`. How releases are made and
+  what an alpha promises: [RELEASING.md](RELEASING.md).
+- **Nightly pre-release:** a test build made every night from `develop`,
+  the `nightly` release on the
   [Releases page](https://github.com/Chaitanya045/koan/releases/tag/nightly),
   `Koan-<version>-<commit>-arm64.dmg` and its `.sha256`. Each new nightly
   replaces it.
@@ -1651,11 +1672,3 @@ connection to Koan over a private loopback address. After that it works like
 `koan`: the agent's own tabs only, and every rule of agent control. `koan relay
 stop` ends it; so do Stop and revoking it in Settings.
 
-## Install in the app menu
-
-```sh
-scripts/install_desktop.sh               # adds Koan + icon for this user
-scripts/install_desktop.sh --uninstall
-```
-
-Koan keeps its profile in `~/.config/koan`, separate from Chromium's.

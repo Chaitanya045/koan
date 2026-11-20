@@ -123,13 +123,13 @@ Koan's UI is native Views, so the questions are: does it paint, lay out or
 wake up when nothing changes, and do its animations run on the compositor.
 
 - **No polling timers.** The compact-mode toolbar, the window-button strip
-  (single toolbar) and a sidebar opened with Ctrl+Alt+S used to check the
+  (single toolbar) and a sidebar opened with ⌘⌥S used to check the
   pointer every 100 ms for as long as they were out, including while the
   pointer rested on them. They now watch pointer events while they are out
   and hide 400 ms after the pointer leaves, with a one-shot timer. (Only
   while a menu from the revealed toolbar is open does Koan look again every
   400 ms, because closing a menu sends the window no event.) Measured for a
-  Ctrl+Alt+S peek that hides by itself: 1 Koan task in 6 s (the one-shot
+  ⌘⌥S peek that hides by itself: 1 Koan task in 6 s (the one-shot
   hide timer); the 100 ms timer meant about 34 for the same peek (3 s grace
   plus the 400 ms delay; computed from the old code, not measured). The idle rows below
   don't measure this: the old timers also stopped once everything was
@@ -141,7 +141,7 @@ wake up when nothing changes, and do its animations run on the compositor.
   repainted on every URL, title and load change (the location bar 40 times
   in 10 s on a page that changes its title 4 times a second). Its layer is
   now hidden while it is out of the window, so the compositor skips it; the
-  views stay visible, so Ctrl+L still focuses the omnibox.
+  views stay visible, so ⌘L still focuses the omnibox.
 - **Compositor animations only.** Every Koan animation is a layer opacity
   or transform animation run by the compositor: the compact toolbar slide,
   the floating URL bar fade, the window buttons' fade, Glance's scale and
@@ -173,7 +173,7 @@ and after hiding the slid-away toolbar's layer:
 | Idle 10 s, compact mode | 0 → 0 | 0 | No Koan task ran. |
 | Active tab changes its title 4×/s, 10 s | 200 → 164 | ~1900 | The hidden location bar painted 40 times; now 0. The rest are the tab (title) in the sidebar. |
 | 5 page loads | 154 → 117 | ~2900 | The hidden toolbar, reload and avatar buttons repainted on each load; now 0. |
-| Peek the compact sidebar (Ctrl+Alt+S) until it hides | 321 | ~1900 | Upstream's width animation (see above). |
+| Peek the compact sidebar (⌘⌥S) until it hides | 321 | ~1900 | Upstream's width animation (see above). |
 
 Browser CPU for these varied between runs by 2× on the shared machine, so
 it isn't reported; the paint counts repeated within a few paints across

@@ -6,7 +6,9 @@ Captured 2026-11-03 from a real **Zen 1.24b** (`Zen.app`, build ID
 below is **measured** (DOM geometry from the running app, or pixels from
 native-resolution screenshots) or **read from Zen's source** (`omni.ja`,
 same version); each number says which. Screenshots are in
-[screenshots/zen-mac/](screenshots/zen-mac/) (downscaled; Zen's UI only).
+[screenshots/zen-mac/](https://github.com/Chaitanya045/koan/tree/c6593d31481c0f789c0574d7a4d2376f98a40644/.agent/notes/screenshots/zen-mac) (downscaled; Zen's UI only;
+removed from the tree on 2026-11-20, so the file names below refer to that
+permalink).
 The WebUI plan for the welcome is in [zen-onboarding-port.md](zen-onboarding-port.md).
 
 Units: **pt** = CSS px on this Mac (devicePixelRatio 2). "Koan now" compares
