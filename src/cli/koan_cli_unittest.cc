@@ -558,7 +558,9 @@ TEST(KoanCliClientTest, PairedClientsAndForgettingOne) {
   ASSERT_EQ(clients.size(), 2u);
   EXPECT_EQ(clients[0].client_id, a);
   EXPECT_FALSE(clients[0].paired_at.is_null());
-  EXPECT_EQ(clients[1].paired_at, dated.paired_at);
+  // client.json keeps the time in milliseconds.
+  EXPECT_EQ(clients[1].paired_at.InMillisecondsSinceUnixEpoch(),
+            dated.paired_at.InMillisecondsSinceUnixEpoch());
 
   EXPECT_TRUE(ForgetClient(koan_home, b));
   EXPECT_FALSE(base::PathExists(ClientDir(koan_home, b)));

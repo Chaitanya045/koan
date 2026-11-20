@@ -18,8 +18,8 @@ Koan is the user's own web browser. With `koan`, you open and work in tabs
 of your own in it, and, when the user agrees, in a tab of theirs. Your tabs
 are in a Space of your own, and they use the browser as the user does: the
 user's logins, extensions, saved passwords and site permissions (unless the
-user turned some of that off in Koan: Settings > Agent Control > What agents
-can use). Every command is `koan ...`.
+user turned some of that off in Koan: Settings > Agent Control >
+What agents can use). Every command is `koan ...`.
 
 Never use AppleScript ("Allow JavaScript from Apple Events"), a remote
 debugging port, or another browser to get at the user's pages: `koan` is
