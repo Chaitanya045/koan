@@ -1178,6 +1178,7 @@ TEST_F(KoanAgentFacadeTest, KeepAlivesAreLimited) {
   Send(35, "Koan.keepAlive",
        base::DictValue().Set("targetId", "T1").Set("seconds", 10));
   EXPECT_TRUE(Answer(35)->FindDict("result"));
+}
 
 // Auto-resume (design 9.2): Koan.paused says whether the pause waits for
 // Hand back or when it resumes by itself, Koan.listTabs too, and
