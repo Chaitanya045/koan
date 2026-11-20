@@ -68,17 +68,47 @@ class RebrandMessagesTest(unittest.TestCase):
 
 class IconTest(unittest.TestCase):
 
-  def test_enso_path_stays_in_box(self):
+  def test_mark_path_stays_in_box(self):
     for size, offset in ((24, 0), (960, -960)):
       with self.subTest(size=size):
         numbers = [
             float(n)
-            for n in re.findall(r'-?\d+\.\d+', branding.enso_path(size, offset))
+            for n in re.findall(r'-?\d+\.\d+', branding.mark_path(size, offset))
         ]
         # Radii appear as numbers too; every number must fit the viewBox.
         for n in numbers:
           self.assertGreaterEqual(n, offset - 1e-6)
           self.assertLessEqual(n, size + 1e-6)
+
+  def test_mark_path_is_centred(self):
+    for size, offset in ((24, 0), (960, -960)):
+      with self.subTest(size=size):
+        points = [(float(x), float(y)) for x, y in re.findall(
+            r'[ML](-?\d+\.\d+) (-?\d+\.\d+)', branding.mark_path(
+                size, offset))]
+        xs = [x for x, _ in points]
+        ys = [y - offset for _, y in points]
+        # Arc caps bulge past their end points, so allow one cap radius.
+        cap = branding.MARK_STEM[2] * size / 100
+        self.assertAlmostEqual((min(xs) + max(xs)) / 2, size / 2, delta=cap)
+        self.assertAlmostEqual((min(ys) + max(ys)) / 2, size / 2, delta=cap)
+
+  def test_mark_subpaths_wind_the_same_way(self):
+    # Nonzero fill draws the union only if every subpath is clockwise.
+    for sub in branding.mark_path(100).split('Z')[:-1]:
+      points = [(float(x), float(y))
+                for x, y in re.findall(r'(-?\d+\.\d+) (-?\d+\.\d+)', sub)]
+      points = [p for i, p in enumerate(points) if i == 0 or p != points[i - 1]]
+      area = sum(x1 * y2 - x2 * y1 for (x1, y1), (x2, y2) in zip(
+          points, points[1:] + points[:1]))
+      with self.subTest(start=sub.strip()[:20]):
+        self.assertGreater(area, 0)  # clockwise on screen (y down)
+
+  def test_mark_matches_logo(self):
+    # The cr icon and the SVGs draw the same pebble.
+    svg = (ROOT / 'branding' / 'logo.svg').read_text()
+    x, y = branding.pebble_points()[0]
+    self.assertIn(f'M{x:.2f} {y:.2f} L', svg)
 
   def test_replaces_both_icon_variants(self):
     text = ('<g id="chrome-product">\n        <path d="OLD1"></path>\n'
@@ -87,8 +117,8 @@ class IconTest(unittest.TestCase):
     out = branding.rebrand_cr_icons(text)
     self.assertNotIn('OLD1', out)
     self.assertNotIn('OLD2', out)
-    self.assertIn(branding.enso_path(24), out)
-    self.assertIn(branding.enso_path(960, -960), out)
+    self.assertIn(branding.mark_path(24), out)
+    self.assertIn(branding.mark_path(960, -960), out)
 
   def test_other_icons_untouched(self):
     text = '<g id="close">\n  <path d="KEEP"></path>'
@@ -100,6 +130,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 # What scripts/apply_branding.sh renders (and, on macOS, builds).
 RENDERED = {
     'logo_16.png', 'logo_22_mono.png', 'logo_24.png', 'logo_32.png',
+    'logo_small_16.png', 'logo_small_32.png', 'logo_small_64.png',
     'logo_48.png', 'logo_64.png', 'logo_128.png', 'logo_256.png',
     'logo_512.png', 'wordmark_22.png', 'wordmark_22_white.png',
     'wordmark_44.png', 'wordmark_44_white.png'
@@ -130,6 +161,15 @@ class ManifestTest(unittest.TestCase):
                      'mac/Assets.car')
     self.assertFalse([rel for rel in mac if '/linux/' in rel])
     self.assertNotIn('logo_32.xpm', mac.values())
+
+  def test_small_product_logos_use_logo_small(self):
+    # IDR_PRODUCT_LOGO_16/32 at 1x and 2x: the crisp small tile.
+    for scale, sizes in (('100', (16, 32)), ('200', (32, 64))):
+      for name, px in zip(('16', '32'), sizes):
+        rel = (f'chrome/app/theme/default_{scale}_percent/chromium/'
+               f'product_logo_{name}.png')
+        with self.subTest(rel=rel):
+          self.assertEqual(branding.LOGOS[rel], f'logo_small_{px}.png')
 
   def test_shared_logos_on_both_platforms(self):
     for platform in branding.PLATFORMS:
@@ -189,7 +229,13 @@ class MacIconTest(unittest.TestCase):
     svg = (ROOT / 'branding' / 'logo.svg').read_text()
     x, y, size = branding.LOGO_BODY
     self.assertIn(branding.LOGO_VIEW_BOX, svg)
-    self.assertIn(f'<rect x="{x}" y="{y}" width="{size}" height="{size}"', svg)
+    body = re.search(r'<path id="body" d="([^"]+)"', svg).group(1)
+    numbers = [float(n) for n in re.findall(r'-?\d+\.?\d*', body)]
+    xs, ys = numbers[0::2], numbers[1::2]
+    self.assertAlmostEqual(min(xs), x, places=1)
+    self.assertAlmostEqual(min(ys), y, places=1)
+    self.assertAlmostEqual(max(xs), x + size, places=1)
+    self.assertAlmostEqual(max(ys), y + size, places=1)
 
   def test_icon_svg_puts_body_on_apple_grid(self):
     svg = (ROOT / 'branding' / 'logo.svg').read_text()
@@ -223,6 +269,34 @@ class MacIconTest(unittest.TestCase):
     for image in images:
       with self.subTest(image=image):
         self.assertTrue((branding.MAC_APP_ICON / 'Assets' / image).is_file())
+
+
+class BrandingSvgTest(unittest.TestCase):
+  """branding/*.svg: the formats apply_branding.sh relies on."""
+
+  def test_wordmark_placeholders(self):
+    svg = (ROOT / 'branding' / 'wordmark.svg').read_text()
+    width, height = branding.WORDMARK_SIZE
+    self.assertIn(f'viewBox="0 0 {width} {height}"', svg)
+    self.assertIn('fill="COLOR"', svg)
+    self.assertIn('fill="STONE"', svg)
+
+  def test_mono_is_one_black_path(self):
+    svg = (ROOT / 'branding' / 'logo_mono.svg').read_text()
+    self.assertIn('viewBox="0 0 22 22"', svg)
+    self.assertEqual(svg.count('<path'), 1)
+    self.assertIn('fill="#000"', svg)
+
+  def test_icon_composer_layers_and_appearances(self):
+    doc = json.loads((branding.MAC_APP_ICON / 'icon.json').read_text())
+    layers = [layer for group in doc['groups'] for layer in group['layers']]
+    self.assertEqual(sorted(layer['name'] for layer in layers),
+                     ['ink', 'stone'])
+    for fills in [doc['fill-specializations']] + [
+        layer['fill-specializations'] for layer in layers
+    ]:
+      appearances = sorted(f.get('appearance', '') for f in fills)
+      self.assertEqual(appearances, ['', 'dark', 'tinted'])
 
 
 class ActoolTest(unittest.TestCase):
@@ -331,11 +405,12 @@ class MacRendersTest(unittest.TestCase):
 
   def test_expected_sizes(self):
     self.assertEqual(branding.expected_png_size('logo_22_mono.png'), (22, 22))
+    self.assertEqual(branding.expected_png_size('logo_small_64.png'), (64, 64))
     self.assertEqual(branding.expected_png_size('appicon_1024.png'),
                      (1024, 1024))
-    self.assertEqual(branding.expected_png_size('wordmark_22.png'), (97, 22))
+    self.assertEqual(branding.expected_png_size('wordmark_22.png'), (43, 22))
     self.assertEqual(branding.expected_png_size('wordmark_44_white.png'),
-                     (194, 44))
+                     (86, 44))
     self.assertIsNone(branding.expected_png_size('other.png'))
 
   def test_wrong_size_fails(self):

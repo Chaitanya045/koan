@@ -212,7 +212,7 @@ How it works and what was measured: [.agent/notes/macos-ci.md](.agent/notes/maco
 |---|---|
 | `src/` | All of Koan's code, built as GN `//koan` (symlinked as `chromium/src/koan`) |
 | `patches/` | Hook patches for Chromium: one `<upstream path>.patch` per changed upstream file |
-| `branding/` | Logo sources (SVG) and the macOS app icon (`mac/AppIcon.icon`). `scripts/apply_branding.sh` renders them into Chromium |
+| `branding/` | Logo sources (SVG) and the macOS app icon (`mac/AppIcon.icon`). `scripts/apply_branding.sh` renders them into Chromium; the logo rules are in docs/BRANDING.md |
 | `build/` | GN arguments: `koan.gn` (development), `koan-release.gn` (release), `koan-mac.gn` (macOS) |
 | `scripts/` | Bootstrap, build, patch and branding tools, and test helpers |
 | `scripts/e2e/` | End-to-end tests that drive a real Koan build off-screen |

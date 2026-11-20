@@ -57,13 +57,18 @@ cd "$ROOT/branding"
 for s in 16 22 24 32 48 64 128 256 512; do
   render logo.svg "$s" "$s" "$ART/logo_$s.png"
 done
+for s in 16 32 64; do
+  render logo_small.svg "$s" "$s" "$ART/logo_small_$s.png"
+done
 render logo_mono.svg 22 22 "$ART/logo_22_mono.png"
-for variant in dark:#3c3c43 white:#ffffff; do
-  name=${variant%%:*}; color=${variant#*:}
+# name:text colour:stone colour (the dark ochre on dark backgrounds).
+for variant in dark:#3c3c43:#b7862f white:#ffffff:#d8a64a; do
+  IFS=: read -r name color stone <<<"$variant"
   suffix=$([[ $name == white ]] && echo _white || true)
-  sed "s/COLOR/$color/" wordmark.svg > "$TMP/wordmark.svg"
-  render "$TMP/wordmark.svg" 97 22 "$ART/wordmark_22$suffix.png"
-  render "$TMP/wordmark.svg" 194 44 "$ART/wordmark_44$suffix.png"
+  sed "s/COLOR/$color/g; s/STONE/$stone/g" wordmark.svg > "$TMP/wordmark.svg"
+  # Height only: the width follows the view box (branding.py WORDMARK_SIZE).
+  rsvg-convert -h 22 "$TMP/wordmark.svg" -o "$ART/wordmark_22$suffix.png"
+  rsvg-convert -h 44 "$TMP/wordmark.svg" -o "$ART/wordmark_44$suffix.png"
 done
 
 # The macOS app icon bitmaps, on Apple's icon grid.
