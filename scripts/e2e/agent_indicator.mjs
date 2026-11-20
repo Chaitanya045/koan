@@ -84,10 +84,12 @@ const titles = new Map();
 // Shows a tab as the user does, a click on its row in the sidebar (lib/mac.mjs
 // selectTabRow(): CDP's activation of a tab an agent holds is held); where the
 // row isn't there (the sidebar hidden), CDP's activation.
+// Returns how: 'row', or the titles of the rows there were.
 async function show(targetId) {
-  if (!titles.has(targetId) || !(await selectTabRow(titles.get(targetId)))) {
-    await browserCall('Target.activateTarget', { targetId });
-  }
+  if (titles.has(targetId) && await selectTabRow(titles.get(targetId))) return 'row';
+  await browserCall('Target.activateTarget', { targetId });
+  const rows = (await viewTree()).filter(v => v.cls === 'TabTitle').map(v => `${v.props.Text}:${v.shown}`);
+  return `no row titled "${titles.get(targetId)}" (rows ${rows.join(', ')}); CDP's activation`;
 }
 
 // --- Pair, then connect (koan's holder keeps the connection between
@@ -171,10 +173,10 @@ const agentTab = r.out.split('\n').at(-1);
 check('koan open: an agent tab', r.code === 0 && /^[0-9A-Fa-f]{8,}/.test(agentTab), brief(r));
 await sleep(1500);
 titles.set(agentTab, 'Agent tab');
-await show(agentTab);
+const how = await show(agentTab);
 s = await indicator();
 check('Agent tab shown: the pill says the agent controls this tab',
-      s.pill && /controlling this tab/.test(s.pillText), say(s));
+      s.pill && /controlling this tab/.test(s.pillText), `${say(s)}; shown by ${how}`);
 check('...with Take over, not Take back',
       s.pillButtons.includes('Take over') && !s.pillButtons.includes('Take back'), say(s));
 await show(plain);

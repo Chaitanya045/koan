@@ -209,14 +209,29 @@ check('koan status: paired: yes (Koan knows the pairing)', /^paired: yes$/m.test
 
 // --- Stale pairings: a record Koan has never heard of (as after its profile
 // was replaced), newer than the good one so that it would be the default.
+// Pinned to this agent as the good one is (koan pair pins it): koan prefers
+// this agent's own pairings (ChooseClient(), #397), so an unpinned record
+// would never be tried, nor removed.
 const PROFILE_REAL = fs.realpathSync(PROFILE);
+function pinOfGoodPairing() {
+  const clients = path.join(AGENT_HOME, '.koan', 'clients');
+  for (const id of fs.existsSync(clients) ? fs.readdirSync(clients) : []) {
+    try {
+      const c = JSON.parse(fs.readFileSync(path.join(clients, id, 'client.json'), 'utf8'));
+      if (c.pinned && c.label !== 'stale') return c.pinned;
+    } catch {}
+  }
+  return undefined;
+}
 function stalePairing(home) {
+  const pinned = pinOfGoodPairing();
   const id = crypto.randomBytes(16).toString('hex');
   const dir = path.join(home, '.koan', 'clients', id);
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   fs.writeFileSync(path.join(dir, 'key'), crypto.randomBytes(32).toString('base64'), { mode: 0o600 });
   fs.writeFileSync(path.join(dir, 'client.json'), JSON.stringify({
-    clientId: id, label: 'stale', userDataDir: PROFILE_REAL, pairedAt: Date.now() + 3600e3 }),
+    clientId: id, label: 'stale', userDataDir: PROFILE_REAL, pairedAt: Date.now() + 3600e3,
+    ...(pinned ? { pinned } : {}) }),
     { mode: 0o600 });
   return dir;
 }

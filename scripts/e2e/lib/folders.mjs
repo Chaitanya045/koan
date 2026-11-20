@@ -79,7 +79,15 @@ export async function click(s, n, button = 'left') {
   const p = await props(s, n);
   const at = { x: Math.round(x + Math.min(p.Width / 2, 20)), y: Math.round(y + p.Height / 2) };
   const event = type => ({ nodeId: root.nodeId, event: { type, ...at, button, wheelDirection: 'none' } });
-  if (button === 'right' && NATIVE_MENUS) return openNativeMenu(event, at);
+  if (button === 'right' && NATIVE_MENUS) {
+    // UI DevTools takes one client at a time (UiDevToolsServer ignores a
+    // second one, which then times out): the caller's session goes first,
+    // and openNativeMenu() opens its own (the caller's later close is a
+    // no-op).
+    s.c.close();
+    await sleep(300);
+    return openNativeMenu(event, at);
+  }
   for (const type of ['mousePressed', 'mouseReleased']) {
     await s.c.send('DOM.dispatchMouseEvent', event(type));
   }
