@@ -120,8 +120,10 @@ function sidebarRect(lum, w, h, maxW) {
 
 // One transition's frames: the glitch frames. The pixels watched are in a
 // band at the top, the left and the bottom, away from the pointer's path:
-// - outside the sidebar's columns (as wide as it is at most), those light
-//   both before the action and once it has ended, in every frame;
+// - outside the sidebar's columns, those light both before the action and
+//   once it has ended, in every frame (the docked layout's card corner is
+//   dark at one end, and not watched; its last 6 columns are watched as
+//   these: dark at both ends with the sidebar out);
 // - in its columns, where it slides, those light before or after (where no
 //   sidebar is at one end), in each frame where the sidebar does not cover
 //   them then (its measured rect, 2 points round it for its antialiased
@@ -133,6 +135,7 @@ function sidebarRect(lum, w, h, maxW) {
 function checkFrames(frames, w, h, m) {
   const pre = frames[0].lum, settled = frames.at(-1).lum;
   const sidebarW = m.sidebarW ?? 0;
+  const sidebarRight = Math.max(0, sidebarW - 6);
   const path = m.pointer?.map(([px, py]) => [px - m.rect.x, py - m.rect.y]);
   const watch = [], inSidebarCols = [];
   for (let y = 0; y < h; y++) {
@@ -141,7 +144,7 @@ function checkFrames(frames, w, h, m) {
       if (!rowBand && x >= BAND) continue;
       if (path && distToSegment(x, y, path[0], path[1]) < POINTER_PAD) continue;
       const p = y * w + x;
-      if (x >= sidebarW + BAND) {
+      if (x >= sidebarRight) {
         if (pre[p] > LIGHT && settled[p] > LIGHT) watch.push(p);
       } else if (pre[p] > LIGHT || settled[p] > LIGHT) {
         inSidebarCols.push(p);
@@ -172,7 +175,9 @@ function checkFrames(frames, w, h, m) {
       x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
       bands.add(y < BAND ? 'top' : y >= h - BAND ? 'bottom' : 'left');
     };
-    watch.forEach(count);
+    // (Outside its columns too: the peek's spring overshoots its resting
+    // edge by a point or two.)
+    for (const p of watch) if (!covered(p)) count(p);
     for (const p of inSidebarCols) if (!covered(p)) count(p);
     if (n < MIN_PX) continue;
     row.glitchFrames++;
