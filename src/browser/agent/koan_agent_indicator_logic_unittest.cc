@@ -243,11 +243,11 @@ TEST(KoanAgentIndicatorLogicTest, MenuGoesToWhatIsNotShown) {
   // Then paused tabs, then the others; the shown tab is left out.
   EXPECT_EQ(entries[1], (MenuEntry{.label = u"Go to Page (Claude Code, paused)",
                                    .target_id = "p"}));
-  EXPECT_EQ(entries[2],
-            (MenuEntry{.label = u"Go to Mail (Claude Code)", .target_id = "b"}));
+  EXPECT_EQ(entries[2], (MenuEntry{.label = u"Go to Mail (Claude Code)",
+                                   .target_id = "b"}));
   // A tab of another window is listed (`shown` there doesn't hide it here).
-  EXPECT_EQ(entries[3],
-            (MenuEntry{.label = u"Go to Untitled (Claude Code)", .target_id = "c"}));
+  EXPECT_EQ(entries[3], (MenuEntry{.label = u"Go to Untitled (Claude Code)",
+                                   .target_id = "c"}));
 }
 
 TEST(KoanAgentIndicatorLogicTest, EventToasts) {
