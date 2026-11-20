@@ -638,6 +638,11 @@ if (!realInput() || !agentShots) {
   check('Navigate: a server that never answers is Koan.timeout after --timeout, not "no answer"',
         nav.code !== 0 && /Koan\.timeout/.test(nav.err) && !/no answer/.test(nav.err) &&
         nav.ms >= 3000 && nav.ms < 8000, `${nav.ms} ms; ${brief(nav)}`);
+  // Koan stopped that navigation: the tab answers again at once (Chromium
+  // holds a navigating tab's renderer commands until it commits or fails).
+  const after = await timed(['snapshot', ft]);
+  check('...and the tab answers right after it (the navigation was stopped)',
+        after.code === 0 && after.ms < 5000, `${after.ms} ms; ${brief(after)}`);
 
   // A Material-style dropdown in a portal.
   r = await koan(['act', ft, 'navigate', at('/mui'), '--snapshot']);

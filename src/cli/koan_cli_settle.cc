@@ -316,9 +316,9 @@ std::string SettledLine(const Settle& settle,
 std::string NavigationTimeoutText(std::string_view url, base::TimeDelta wait) {
   return "Koan.timeout: " + std::string(url) + " did not answer within " +
          Seconds(wait) +
-         " s (the server is slow or down; the tab keeps waiting for it). "
-         "Take a snapshot later, navigate elsewhere, or allow longer with "
-         "--timeout <seconds>";
+         " s (the server is slow or down); Koan stopped loading it, and the "
+         "tab shows what it showed before. Retry, navigate elsewhere, or "
+         "allow longer with --timeout <seconds>";
 }
 
 }  // namespace koan::cli

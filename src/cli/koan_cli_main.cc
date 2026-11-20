@@ -1535,6 +1535,9 @@ bool CheckChosen(Link& link,
   return dict->FindBool("has").value_or(false);
 }
 
+// How long cleanup and a stop wait for their answers.
+constexpr base::TimeDelta kCleanupWait = base::Seconds(2);
+
 // While an action runs and its page settles: the tab's Page and Network
 // events come to this koan (Hold.follow); afterwards they stop. With a
 // holder that does not know Hold.follow, no events come, and the settle
@@ -1553,14 +1556,17 @@ class SettleWatch {
   SettleWatch(const SettleWatch&) = delete;
   SettleWatch& operator=(const SettleWatch&) = delete;
   ~SettleWatch() {
+    // A moment at most: while the tab navigates Chromium holds its
+    // renderer's commands (these two among them) until the navigation
+    // commits or fails.
     if (network_) {
-      link_->Call("Network.disable", base::DictValue(), session_);
+      link_->Call("Network.disable", base::DictValue(), session_, kCleanupWait);
     }
     if (page_) {
-      link_->Call("Page.disable", base::DictValue(), session_);
+      link_->Call("Page.disable", base::DictValue(), session_, kCleanupWait);
     }
     if (followed_) {
-      link_->Call("Hold.follow", base::DictValue());
+      link_->Call("Hold.follow", base::DictValue(), {}, kCleanupWait);
     }
   }
 
@@ -1575,6 +1581,15 @@ class SettleWatch {
   bool page_ = false;
   bool network_ = false;
 };
+
+// Stops the tab's navigation (Page.stopLoading, which the browser answers
+// at once). Chromium answers Page.navigate only when the navigation commits
+// or fails, and holds the tab's renderer commands until then: a navigation
+// to a server that never answers would keep the tab (and its lease) from the
+// agent for good.
+void StopNavigation(Link& link, const std::string& session) {
+  link.Call("Page.stopLoading", base::DictValue(), session, kCleanupWait);
+}
 
 // Reads the tab's events into `settle` and probes the DOM as it asks
 // (koan_cli_settle.h), until the page settles, or, with `answer_id`, until
@@ -1685,6 +1700,7 @@ Acted DoAction(Link& link,
              : SettleState::kBlocked;
       if (!answer) {
         if (state == SettleState::kTimedOut) {
+          StopNavigation(link, session);
           return Failed(
               NavigationTimeoutText(command.text, timings.navigation_timeout));
         }
