@@ -151,11 +151,18 @@ await step('UF-AGT-7', 'koan shell: many commands over one connection, faster pe
   let t0 = Date.now();
   for (let i = 0; i < N; i++) await koan(['snapshot', tab, '--interactive']);
   const separate = (Date.now() - t0) / N;
+  // The same N commands in one shell (the time includes starting koan and
+  // connecting once, as each separate call's does).
+  t0 = Date.now();
+  const same = await koan(['shell'], { input: `${Array.from({ length: N }, () => `snapshot ${tab} --interactive`)
+      .join('\n')}\n` });
+  const together = (Date.now() - t0) / N;
+  t.check(`the same ${N} snapshots in one shell all answer`,
+          (same.out.match(/^--- exit 0$/gm) ?? []).length === N, same.out.slice(0, 200));
+  // A mixed shell: a plain line, a comment, a JSON line and the snapshots.
   const lines = [`koan tabs`, `# a note`, JSON.stringify({ id: 'j1', args: ['act', tab, 'press', 'Tab'] }),
                  ...Array.from({ length: N }, () => `snapshot ${tab} --interactive`)];
-  t0 = Date.now();
   const r = await koan(['shell'], { input: lines.join('\n') + '\n' });
-  const together = (Date.now() - t0) / (N + 2);
   const exits = r.out.match(/^--- exit \d+$/gm) ?? [];
   t.check(`every plain line answered "--- exit 0" (${N + 1})`, exits.length === N + 1 && exits.every(e => e === '--- exit 0'),
           `${exits.length}: ${r.out.slice(0, 200)}`);
