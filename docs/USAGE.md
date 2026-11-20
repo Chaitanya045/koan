@@ -1575,7 +1575,10 @@ A login is filled only on its own site, into a form that sends it there
 loads and no silent sign-in, so every password in them is one you or the
 agent picked. Turning off Saved passwords or Addresses and cards in What
 agents can use stops it (Koan.autofillOff). Every fill is in the activity
-log with the field's kind and the row's label, never a value.
+log with the field's kind and the row's label, never a value. Filling a card
+is not paying: an agent stops before the last Pay, Place order or Confirm
+button, tells you the amount and the card or account the page shows, and
+hands you the tab to click it yourself.
 
 `koan snapshot` prints the page as a compact outline: controls, links,
 landmarks and headings with `@refs`, each block's text on one line, and

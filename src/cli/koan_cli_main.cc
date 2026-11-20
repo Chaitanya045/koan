@@ -31,6 +31,7 @@
 
 #include "base/base64.h"
 #include "base/command_line.h"
+#include "base/compiler_specific.h"
 #include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -2128,7 +2129,28 @@ struct Shot {
   int width = 0;
   int height = 0;
   double css_per_pixel = 1;
+  // The card fields Koan filled that are painted over (design section 4.5).
+  int masked = 0;
 };
+
+// How a screenshot prints: ShotLine() or ShotJson(), and whether the card
+// fields Koan filled are hidden in it.
+std::string ShotText(const Shot& shot) {
+  std::string line =
+      ShotLine(shot.path, shot.width, shot.height, shot.css_per_pixel);
+  if (shot.masked > 0) {
+    line += "; the card fields Koan filled are hidden in it";
+  }
+  return line;
+}
+base::DictValue ShotDict(const Shot& shot) {
+  base::DictValue json =
+      ShotJson(shot.path, shot.width, shot.height, shot.css_per_pixel);
+  if (shot.masked > 0) {
+    json.Set("masked", shot.masked);
+  }
+  return json;
+}
 
 // The element --clip names, as koan act finds it (FindNode()), scrolled into
 // view: its box in viewport CSS pixels, of no size if it has none. nullopt
@@ -2235,11 +2257,7 @@ std::optional<Shot> TakeScreenshot(Link& link,
     shot.width = size->first;
     shot.height = size->second;
   }
-  // The card fields Koan filled are painted over (design section 4.5).
-  if (taken->FindInt("masked").value_or(0) > 0) {
-    shot.note = (shot.note.empty() ? "" : shot.note + "; ") +
-                "the card fields Koan filled are hidden in it";
-  }
+  shot.masked = taken->FindInt("masked").value_or(0);
   return shot;
 }
 
@@ -2427,8 +2445,7 @@ int Act(Link& link,
       json.Set("snapshot", *snapshot);
     }
     if (shot) {
-      json.Set("screenshot", ShotJson(shot->path, shot->width, shot->height,
-                                      shot->css_per_pixel));
+      json.Set("screenshot", ShotDict(*shot));
     }
     json.Set("ok", all_done);
     PrintJson(json);
@@ -2469,9 +2486,7 @@ int Act(Link& link,
     printf("%s", snapshot->c_str());
   }
   if (shot) {
-    printf("%s\n",
-           ShotLine(shot->path, shot->width, shot->height, shot->css_per_pixel)
-               .c_str());
+    printf("%s\n", ShotText(*shot).c_str());
   }
   fflush(stdout);
   return code != kOk ? code : snapshot_code != kOk ? snapshot_code : shot_code;
@@ -2711,10 +2726,10 @@ int Autofill(Link& link,
   if (!node) {
     return exit_code;
   }
-  std::optional<base::DictValue> result =
-      Expect(link.Call("Koan.autofill", AutofillParams(*node, /*list=*/true, ""),
-                       session, kAutofillWait),
-             &exit_code);
+  std::optional<base::DictValue> result = Expect(
+      link.Call("Koan.autofill", AutofillParams(*node, /*list=*/true, ""),
+                session, kAutofillWait),
+      &exit_code);
   if (!result) {
     return exit_code;
   }
@@ -2879,13 +2894,10 @@ int RunOnHolder(Link& link, const Command& command) {
           return exit_code;
         }
         if (command.json) {
-          PrintJson(ShotJson(shot->path, shot->width, shot->height,
-                             shot->css_per_pixel));
+          PrintJson(ShotDict(*shot));
           return kOk;
         }
-        printf("%s\n", ShotLine(shot->path, shot->width, shot->height,
-                                shot->css_per_pixel)
-                           .c_str());
+        printf("%s\n", ShotText(*shot).c_str());
         return kOk;
       }
       return Act(link, command, *target, *session);
@@ -3136,8 +3148,9 @@ int Shell(const Command& shell) {
   // A command's output and its errors in the order they were written.
   setvbuf(stdout, nullptr, _IOLBF, 0);
   while ((got = getline(&buffer, &size, stdin)) >= 0) {
-    const ShellLine line =
-        ParseShellLine(std::string_view(buffer, static_cast<size_t>(got)));
+    // SAFETY: getline() wrote `got` bytes (and a NUL) at `buffer`.
+    const ShellLine line = ParseShellLine(
+        UNSAFE_BUFFERS(std::string_view(buffer, static_cast<size_t>(got))));
     if (line.empty) {
       continue;
     }

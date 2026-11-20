@@ -13,21 +13,22 @@
 #include <string_view>
 
 #include "base/check.h"
+#include "base/containers/span.h"
 #include "base/json/json_reader.h"
+#include "base/strings/string_view_util.h"
 #include "koan/browser/agent/koan_agent_secrets.h"
+#include "testing/libfuzzer/libfuzzer_base_wrappers.h"
 
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-  if (size < 2) {
+DEFINE_LLVM_FUZZER_TEST_ONE_INPUT_SPAN(base::span<const uint8_t> data) {
+  if (data.size() < 2) {
     return 0;
   }
-  const size_t secret_size = data[0] % 24;
-  if (size < 1 + secret_size) {
+  const size_t secret_size = data.front() % 24;
+  if (data.size() < 1 + secret_size) {
     return 0;
   }
-  const std::string secret(reinterpret_cast<const char*>(data + 1),
-                           secret_size);
-  std::string text(reinterpret_cast<const char*>(data + 1 + secret_size),
-                   size - 1 - secret_size);
+  const std::string secret(base::as_string_view(data.subspan(1u, secret_size)));
+  std::string text(base::as_string_view(data.subspan(1u + secret_size)));
   // A secret with a bracket could make a new occurrence out of the mark.
   if (secret.find_first_of("[]") != std::string::npos) {
     return 0;

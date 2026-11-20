@@ -4,11 +4,13 @@
 
 #include "koan/browser/agent/koan_agent_facade.h"
 
+#include <array>
 #include <map>
 #include <memory>
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/containers/span.h"
@@ -1695,6 +1697,114 @@ TEST_F(KoanAgentFacadeTest, CaptureScaledFallsBackToCdpOnlyOnAgentTabs) {
   std::move(backend_.copies[1].done).Run(std::move(none));
   EXPECT_EQ(ErrorCode(2), "Koan.noSurface");
   EXPECT_EQ(backend_.sent.size(), sent_before);
+}
+
+TEST_F(KoanAgentFacadeTest, CaptureScaledPaintsOverTheCardFieldsKoanFilled) {
+  // A user's tab with a card Koan filled: one field in the page, one in a
+  // payment frame in another process (its <iframe> is boxed).
+  registry_.GrantUserTab("U1", "alice", TabState::kDriven);
+  ASSERT_FALSE(AttachTo("U1").empty());
+  backend_.facts.card_filled = true;
+  backend_.card_fields.nodes = {41};
+  backend_.card_fields.frames = {"FRAME1"};
+  Send(1, "Koan.captureScaled",
+       Parse(R"({"targetId": "U1", "longEdge": 640, "scale": 1,
+                 "clip": {"x": 0, "y": 0, "width": 720, "height": 450}})"));
+  AnswerLast(Parse(kLayoutMetrics));
+  ASSERT_EQ(*backend_.sent.back().command.FindString("method"),
+            "DOM.getFrameOwner");
+  AnswerLast(Parse(R"({"backendNodeId": 50})"));
+  const size_t sent = backend_.sent.size();
+  ASSERT_GE(sent, 2u);
+  // Field 41 at (90, 45) 180x18; the frame at (360, 225) 90x45; CSS px.
+  const std::array<std::string_view, 2> quads = {
+      R"({"quads": [[90, 45, 270, 45, 270, 63, 90, 63]]})",
+      R"({"quads": [[360, 225, 450, 225, 450, 270, 360, 270]]})"};
+  for (size_t i = 0; i < 2; ++i) {
+    const base::DictValue& command = backend_.sent[sent - 2 + i].command;
+    ASSERT_EQ(*command.FindString("method"), "DOM.getContentQuads");
+    base::DictValue answer;
+    answer.Set("id", *command.FindInt("id"));
+    answer.Set("result", Parse(quads[i]));
+    facade_.OnTabMessage("U1", *base::WriteJson(answer));
+  }
+  // The clip's 720x450 CSS px at 640 px: 1 image px = 1.125 CSS px, and
+  // 2 CSS px of padding, rounded outwards.
+  ASSERT_EQ(backend_.copies.size(), 1u);
+  FakeBackend::Copy& copy = backend_.copies[0];
+  ASSERT_EQ(copy.job.masks.size(), 2u);
+  EXPECT_EQ(copy.job.masks[0], (CaptureRect{78, 38, 164, 20}));
+  EXPECT_EQ(copy.job.masks[1], (CaptureRect{318, 198, 84, 44}));
+  SurfaceCaptureResult copied;
+  copied.status = SurfaceStatus::kOk;
+  copied.encoded = {1, 2, 3};
+  copied.width = 640;
+  copied.height = 400;
+  std::move(copy.done).Run(std::move(copied));
+  EXPECT_EQ(Answer(1)->FindIntByDottedPath("result.masked"), 2);
+  // Painted in the bitmap: nothing decoded and encoded again.
+  EXPECT_TRUE(backend_.masks.empty());
+  for (const FakeBackend::Sent& command : backend_.sent) {
+    EXPECT_NE(*command.command.FindString("method"), "Page.captureScreenshot");
+  }
+}
+
+TEST_F(KoanAgentFacadeTest, CaptureScaledIsRefusedWhenAFieldCannotBeFound) {
+  ASSERT_FALSE(AttachTo("T1").empty());
+  backend_.facts.card_filled = true;
+  backend_.card_fields.frames = {"FRAME1"};
+  Send(1, "Koan.captureScaled", Parse(R"({"targetId": "T1"})"));
+  AnswerLast(Parse(kLayoutMetrics));
+  base::DictValue error;
+  error.Set("id", *backend_.sent.back().command.FindInt("id"));
+  error.Set("error", base::DictValue().Set("code", -32000).Set("message", "x"));
+  facade_.OnTabMessage("T1", *base::WriteJson(error));
+  EXPECT_EQ(ErrorCode(1), "Koan.secretField");
+  EXPECT_TRUE(backend_.copies.empty());
+}
+
+TEST_F(KoanAgentFacadeTest, CaptureScaledMasksTheCdpFallback) {
+  // An agent's own tab with no surface and a card filled: CDP draws it as
+  // PNG, and it is painted over and encoded as asked.
+  ASSERT_FALSE(AttachTo("T1").empty());
+  backend_.facts.card_filled = true;
+  backend_.card_fields.nodes = {41};
+  Send(1, "Koan.captureScaled",
+       Parse(R"({"targetId": "T1", "longEdge": 640, "scale": 1,
+                 "format": "jpeg", "quality": 60})"));
+  AnswerLast(Parse(kLayoutMetrics));
+  AnswerLast(Parse(R"({"quads": [[90, 45, 270, 45, 270, 63, 90, 63]]})"));
+  ASSERT_EQ(backend_.copies.size(), 1u);
+  ASSERT_EQ(backend_.copies[0].job.masks.size(), 1u);
+  SurfaceCaptureResult failed;
+  failed.status = SurfaceStatus::kNoSurface;
+  std::move(backend_.copies[0].done).Run(std::move(failed));
+  const base::DictValue& fallback = backend_.sent.back().command;
+  ASSERT_EQ(*fallback.FindString("method"), "Page.captureScreenshot");
+  EXPECT_EQ(*fallback.FindStringByDottedPath("params.format"), "png");
+  EXPECT_FALSE(fallback.FindByDottedPath("params.quality"));
+  AnswerLast(Parse(R"({"data": "iVBORw0K"})"));
+  ASSERT_EQ(backend_.masks.size(), 1u);
+  EXPECT_EQ(backend_.masked_format, "jpeg");
+  ASSERT_EQ(backend_.masks[0].boxes.size(), 1u);
+  EXPECT_DOUBLE_EQ(backend_.masks[0].boxes[0].x, 90);
+  EXPECT_DOUBLE_EQ(backend_.masks[0].css_width, 1440);
+  EXPECT_EQ(*Answer(1)->FindStringByDottedPath("result.data"),
+            "masked:iVBORw0K");
+  EXPECT_EQ(*Answer(1)->FindStringByDottedPath("result.via"), "cdp");
+  EXPECT_EQ(Answer(1)->FindIntByDottedPath("result.masked"), 1);
+
+  // Not hidden: no image at all.
+  backend_.refuse_mask = true;
+  Send(2, "Koan.captureScaled", Parse(R"({"targetId": "T1"})"));
+  AnswerLast(Parse(kLayoutMetrics));
+  AnswerLast(Parse(R"({"quads": [[90, 45, 270, 45, 270, 63, 90, 63]]})"));
+  ASSERT_EQ(backend_.copies.size(), 2u);
+  SurfaceCaptureResult none;
+  none.status = SurfaceStatus::kNoSurface;
+  std::move(backend_.copies[1].done).Run(std::move(none));
+  AnswerLast(Parse(R"({"data": "iVBORw0K"})"));
+  EXPECT_EQ(ErrorCode(2), "Koan.secretField");
 }
 
 TEST_F(KoanAgentFacadeTest, CaptureScaledEndsWithTheSession) {

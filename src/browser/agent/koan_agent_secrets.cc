@@ -26,7 +26,7 @@ std::string JsonEscaped(std::string_view text) {
 // As JavaScript's JSON.stringify writes a string, without the quotes: only
 // quotes, backslashes and control characters are escaped, with lower-case hex.
 std::string JsStringified(std::string_view text) {
-  static constexpr char kHex[] = "0123456789abcdef";
+  static constexpr std::string_view kHex = "0123456789abcdef";
   std::string out;
   out.reserve(text.size());
   for (char c : text) {
@@ -69,7 +69,8 @@ std::string JsStringified(std::string_view text) {
 // encodeURIComponent() (`form`: false) or application/x-www-form-urlencoded
 // (`form`: true, a space is "+"), with upper- or lower-case hex.
 std::string UrlEncoded(std::string_view text, bool form, bool upper) {
-  const char* hex = upper ? "0123456789ABCDEF" : "0123456789abcdef";
+  const std::string_view hex =
+      upper ? std::string_view("0123456789ABCDEF") : "0123456789abcdef";
   std::string out;
   for (char c : text) {
     const auto byte = static_cast<unsigned char>(c);

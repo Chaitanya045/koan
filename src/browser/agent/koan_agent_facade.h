@@ -20,6 +20,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
+#include "base/types/expected.h"
 #include "base/values.h"
 #include "koan/browser/agent/koan_agent_audit.h"
 #include "koan/browser/agent/koan_agent_autofill_logic.h"
@@ -361,13 +362,18 @@ class CdpFacade {
   void OnCaptureAnswer(uint64_t capture_id,
                        const std::string& method,
                        base::DictValue* result);
-  // The hook for masking (secret fields Koan filled): the boxes, in viewport
-  // CSS pixels, that are painted over the capture before it is encoded. None
-  // yet: runs `done` at once with none.
-  using CaptureMasksCallback =
-      base::OnceCallback<void(std::vector<ViewportRect> boxes)>;
+  // The masks (design section 4.5): the boxes, in viewport CSS pixels, of the
+  // card-number, CVC and IBAN fields Koan filled in the tab, painted over the
+  // capture before it is encoded (MaskPixels() maps them into the image:
+  // the clip, the zoom, the device scale and the image's scale). None if no
+  // card is filled; Koan.secretField if one's box cannot be located, so the
+  // capture is refused.
+  using CaptureMasksCallback = base::OnceCallback<void(
+      base::expected<std::vector<ViewportRect>, CaptureError> boxes)>;
   void CollectCaptureMasks(TabSession& session, CaptureMasksCallback done);
-  void CopyCapture(uint64_t capture_id, std::vector<ViewportRect> boxes);
+  void CopyCapture(
+      uint64_t capture_id,
+      base::expected<std::vector<ViewportRect>, CaptureError> boxes);
   void OnSurfaceCopied(uint64_t capture_id, SurfaceCaptureResult result);
   void FinishCapture(uint64_t capture_id,
                      std::optional<CaptureAnswer> answer,
@@ -390,17 +396,31 @@ class CdpFacade {
                     std::string_view method,
                     base::DictValue& params,
                     bool answer);
-  // Page.captureScreenshot of a tab with a card field Koan filled: the
-  // fields are measured, the screenshot taken as PNG, and its boxes painted
-  // over before the client sees it.
+  // Where the card fields Koan filled in the session's tab are, in viewport
+  // CSS px (DOM.getContentQuads; a field in another process: its frame's
+  // <iframe>, DOM.getFrameOwner). A field with no box is not on the screen
+  // and is left out; a frame whose owner cannot be found is an error (why,
+  // for the agent), and nothing may be captured.
+  using FieldBoxesCallback = base::OnceCallback<void(
+      base::expected<std::vector<CssRect>, std::string> boxes)>;
+  struct FieldMeasure;
+  void MeasureCardFields(TabSession& session, FieldBoxesCallback done);
+  void OnMeasureOwner(uint64_t measure_id, const base::DictValue* result);
+  void MeasureFieldQuads(uint64_t measure_id);
+  void OnMeasureQuads(uint64_t measure_id, const base::DictValue* result);
+  void FinishMeasure(uint64_t measure_id,
+                     base::expected<std::vector<CssRect>, std::string> boxes);
+  // A relay client's raw Page.captureScreenshot of a tab with a card field
+  // Koan filled: the fields are measured, the screenshot taken as PNG, and
+  // its boxes painted over (decoded and encoded again) before the client
+  // sees it. Koan.captureScaled paints in the bitmap instead.
   struct ScreenshotJob;
   void StartMaskedScreenshot(const AgentMessage& message,
                              TabSession& session,
                              std::string summary);
   void OnJobMetrics(uint64_t job_id, const base::DictValue* result);
-  void OnJobOwner(uint64_t job_id, const base::DictValue* result);
-  void MeasureJobFields(uint64_t job_id);
-  void OnJobQuads(uint64_t job_id, const base::DictValue* result);
+  void OnJobBoxes(uint64_t job_id,
+                  base::expected<std::vector<CssRect>, std::string> boxes);
   void CaptureForJob(uint64_t job_id);
   void FinishJob(uint64_t job_id, base::DictValue* result);
   void FailJob(uint64_t job_id, std::string_view why);
@@ -522,6 +542,8 @@ class CdpFacade {
   uint64_t next_capture_ = 1;
   std::map<uint64_t, std::unique_ptr<ScreenshotJob>> screenshot_jobs_;
   uint64_t next_job_ = 1;
+  std::map<uint64_t, std::unique_ptr<FieldMeasure>> measures_;
+  uint64_t next_measure_ = 1;
   bool discover_targets_ = false;
   bool auto_attach_ = false;
 

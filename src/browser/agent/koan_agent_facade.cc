@@ -143,10 +143,6 @@ constexpr size_t kMaxChildSessions = 64;
 constexpr size_t kMaxKeepAlives = 16;
 constexpr int kMaxKeepAliveSeconds = 600;
 
-// How far past a masked box the paint goes, in CSS pixels (a focus ring, a
-// border the box leaves out).
-constexpr double kCaptureMaskPadding = 2;
-
 // The child targets an agent may have: frames and the page's own workers.
 // Shared and service workers outlive the tab and serve the user's other tabs
 // of the site, so they are not the tab's to hand over.
@@ -186,6 +182,9 @@ struct CdpFacade::Capture {
   PageViewport viewport;
   SurfaceGeometry surface;
   CapturePlan plan;
+  // The filled card fields' boxes (viewport CSS px), and how many of them
+  // land in the image.
+  std::vector<ViewportRect> boxes;
   int masked = 0;
   bool fresh_frame = false;
   // Set once the copy failed and CDP draws it instead.
@@ -203,11 +202,18 @@ struct CdpFacade::ScreenshotJob {
   base::TimeTicks start;
   // Page.captureScreenshot's params as the client sent them.
   base::DictValue params;
-  std::vector<int> nodes;
-  std::vector<std::string> frames;
   base::DictValue metrics;
   std::vector<CssRect> boxes;
+};
+
+// The card fields Koan filled in a tab, while they are measured.
+struct CdpFacade::FieldMeasure {
+  std::string session_id;
+  std::vector<int> nodes;
+  std::vector<std::string> frames;
+  std::vector<CssRect> boxes;
   size_t waiting = 0;
+  FieldBoxesCallback done;
 };
 
 CdpFacade::CdpFacade(uint64_t connection_id,
@@ -1114,7 +1120,8 @@ void CdpFacade::CaptureScaled(const AgentMessage& message) {
   capture.fresh_frame = !before || !before->drawing;
   // The viewport the clip is in, as the page has it now.
   if (!Forward(std::nullopt, *session, "Page.getLayoutMetrics", "",
-               base::DictValue(), capture_id)) {
+               base::DictValue(), InternalAnswer(), /*mask_job=*/0,
+               capture_id)) {
     FinishCapture(capture_id, std::nullopt,
                   CaptureError{"Koan.unavailable", "could not ask the page"});
   }
@@ -1137,6 +1144,30 @@ void CdpFacade::OnCaptureAnswer(uint64_t capture_id,
     }
     CaptureAnswer answer;
     answer.data = *data;
+    if (capture.masked > 0) {
+      const ViewportRect& shows = capture.plan.shows;
+      std::vector<CssRect> boxes;
+      for (const ViewportRect& box : capture.boxes) {
+        boxes.push_back({box.x, box.y, box.width, box.height});
+      }
+      std::optional<std::string> masked = backend_->MaskScreenshot(
+          *data,
+          MaskFor(boxes, CssRect(),
+                  {shows.x, shows.y, shows.width, shows.height}),
+          ImageFormatName(capture.request.format),
+          capture.request.format == ImageFormat::kPng
+              ? std::nullopt
+              : std::make_optional(capture.request.quality));
+      if (!masked) {
+        FinishCapture(capture_id, std::nullopt,
+                      CaptureError{"Koan.secretField",
+                                   "the card fields Koan filled could not be "
+                                   "hidden in the screenshot; try again"});
+        return;
+      }
+      answer.data = std::move(*masked);
+      answer.masked = capture.masked;
+    }
     answer.width = capture.plan.image_width;
     answer.height = capture.plan.image_height;
     answer.css_per_pixel = capture.plan.css_per_pixel;
@@ -1183,16 +1214,52 @@ void CdpFacade::OnCaptureAnswer(uint64_t capture_id,
 
 void CdpFacade::CollectCaptureMasks(TabSession& session,
                                     CaptureMasksCallback done) {
-  std::move(done).Run({});
+  if (!backend_->SecretsIn(session.target_id, std::string()).card_filled) {
+    std::move(done).Run(std::vector<ViewportRect>());
+    return;
+  }
+  MeasureCardFields(
+      session,
+      base::BindOnce(
+          [](CaptureMasksCallback done,
+             base::expected<std::vector<CssRect>, std::string> boxes) {
+            if (!boxes.has_value()) {
+              std::move(done).Run(base::unexpected(CaptureError{
+                  "Koan.secretField",
+                  base::StrCat({"a card number Koan filled is on this page "
+                                "and ",
+                                boxes.error(),
+                                ", so the screenshot was not taken; take it "
+                                "after the form is sent"})}));
+              return;
+            }
+            std::vector<ViewportRect> rects;
+            for (const CssRect& box : *boxes) {
+              rects.push_back({box.x, box.y, box.width, box.height});
+            }
+            std::move(done).Run(std::move(rects));
+          },
+          std::move(done)));
 }
 
-void CdpFacade::CopyCapture(uint64_t capture_id,
-                            std::vector<ViewportRect> boxes) {
+void CdpFacade::CopyCapture(
+    uint64_t capture_id,
+    base::expected<std::vector<ViewportRect>, CaptureError> boxes) {
   auto it = captures_.find(capture_id);
   if (it == captures_.end()) {
     return;
   }
+  if (!boxes.has_value()) {
+    FinishCapture(capture_id, std::nullopt, std::move(boxes.error()));
+    return;
+  }
   Capture& capture = it->second;
+  if (!SessionFor(capture.session_id)) {
+    FinishCapture(capture_id, std::nullopt,
+                  CaptureError{"Koan.targetClosed", "the tab went away"});
+    return;
+  }
+  capture.boxes = std::move(*boxes);
   SurfaceCaptureJob job;
   job.source = capture.plan.source;
   job.whole = capture.plan.whole;
@@ -1201,8 +1268,8 @@ void CdpFacade::CopyCapture(uint64_t capture_id,
   job.format = capture.request.format;
   job.quality = capture.request.quality;
   job.fresh_frame = capture.fresh_frame;
-  job.masks = MaskPixels(capture.plan, boxes, kCaptureMaskPadding);
-  // The answer says how many were painted; a fallback could not paint them.
+  job.masks = MaskPixels(capture.plan, capture.boxes, kMaskPadding);
+  // The answer says how many were painted.
   capture.masked = static_cast<int>(job.masks.size());
   backend_->CopySurface(capture.target_id, std::move(job),
                         base::BindOnce(&CdpFacade::OnSurfaceCopied,
@@ -1233,19 +1300,23 @@ void CdpFacade::OnSurfaceCopied(uint64_t capture_id,
   const TargetEntry* entry = registry_->Find(capture.target_id);
   TabSession* session = SessionFor(capture.session_id);
   const bool agent_owned = entry && entry->agent_owned;
-  // CDP cannot paint the masks: a capture that needs them is not drawn
-  // another way.
   if (ChooseFallback(result.status, agent_owned) != CaptureFallback::kCdp ||
-      !session || capture.masked > 0) {
+      !session) {
     FinishCapture(capture_id, std::nullopt, SurfaceError(result.status));
     return;
   }
   // An agent's own tab, which nobody looks at: CDP draws it again under
-  // device emulation, at the same size.
+  // device emulation, at the same size. With masks it is drawn as PNG and
+  // painted over and encoded again here (MaskScreenshot()).
   capture.fallback = result.status;
+  base::DictValue params = CdpCaptureParams(capture.viewport, capture.surface,
+                                            capture.plan, capture.request);
+  if (capture.masked > 0) {
+    params.Set("format", ImageFormatName(ImageFormat::kPng));
+    params.Remove("quality");
+  }
   if (!Forward(std::nullopt, *session, "Page.captureScreenshot", "",
-               CdpCaptureParams(capture.viewport, capture.surface, capture.plan,
-                                capture.request),
+               std::move(params), InternalAnswer(), /*mask_job=*/0,
                capture_id)) {
     FinishCapture(capture_id, std::nullopt, SurfaceError(result.status));
   }
@@ -1872,7 +1943,7 @@ void CdpFacade::Send(base::DictValue message, bool binary) {
   }
   // Image and PDF data (base64) is not scanned: it is large, and what it
   // shows is masked or refused instead.
-  static constexpr char kBinaryPlaceholder[] = "\x01koan-binary\x01";
+  static constexpr std::string_view kBinaryPlaceholder = "\x01koan-binary\x01";
   std::string binary_data;
   base::DictValue* holder = nullptr;
   if (binary) {
@@ -1894,12 +1965,12 @@ void CdpFacade::Send(base::DictValue message, bool binary) {
   }
   secrets->Scrub(*json);
   if (holder) {
-    static constexpr char kQuotedPlaceholder[] =
+    static constexpr std::string_view kQuotedPlaceholder =
         "\"\\u0001koan-binary\\u0001\"";
     const size_t at = json->find(kQuotedPlaceholder);
     if (at != std::string::npos) {
       // base64 needs no JSON escape.
-      json->replace(at, sizeof(kQuotedPlaceholder) - 1,
+      json->replace(at, kQuotedPlaceholder.size(),
                     base::StrCat({"\"", binary_data, "\""}));
     }
   }
@@ -2126,10 +2197,6 @@ void CdpFacade::StartMaskedScreenshot(const AgentMessage& message,
   job->summary = std::move(summary);
   job->start = tick_clock_->NowTicks();
   job->params = message.params.Clone();
-  const FacadeBackend::CardFields fields =
-      backend_->CardFieldsOf(session.target_id);
-  job->nodes = fields.nodes;
-  job->frames = fields.frames;
   const uint64_t id = next_job_++;
   screenshot_jobs_[id] = std::move(job);
   SendInternal(
@@ -2149,80 +2216,135 @@ void CdpFacade::OnJobMetrics(uint64_t job_id, const base::DictValue* result) {
     return;
   }
   job.metrics = result->Clone();
-  if (job.frames.empty()) {
-    MeasureJobFields(job_id);
+  MeasureCardFields(*session,
+                    base::BindOnce(&CdpFacade::OnJobBoxes,
+                                   weak_factory_.GetWeakPtr(), job_id));
+}
+
+void CdpFacade::OnJobBoxes(
+    uint64_t job_id,
+    base::expected<std::vector<CssRect>, std::string> boxes) {
+  auto it = screenshot_jobs_.find(job_id);
+  if (it == screenshot_jobs_.end()) {
+    return;
+  }
+  if (!boxes.has_value()) {
+    FailJob(job_id, boxes.error());
+    return;
+  }
+  it->second->boxes = std::move(*boxes);
+  CaptureForJob(job_id);
+}
+
+void CdpFacade::MeasureCardFields(TabSession& session,
+                                  FieldBoxesCallback done) {
+  auto measure = std::make_unique<FieldMeasure>();
+  measure->session_id = session.session_id;
+  const FacadeBackend::CardFields fields =
+      backend_->CardFieldsOf(session.target_id);
+  measure->nodes = fields.nodes;
+  measure->frames = fields.frames;
+  measure->done = std::move(done);
+  const uint64_t id = next_measure_++;
+  FieldMeasure& started = *measure;
+  measures_[id] = std::move(measure);
+  if (started.frames.empty()) {
+    MeasureFieldQuads(id);
     return;
   }
   // A frame in another process is painted over whole: its box is that of
   // its <iframe> in this page.
-  job.waiting = job.frames.size();
-  const std::vector<std::string> frames = job.frames;
+  started.waiting = started.frames.size();
+  const std::vector<std::string> frames = started.frames;
   for (const std::string& frame : frames) {
-    SendInternal(*session, "DOM.getFrameOwner",
+    SendInternal(session, "DOM.getFrameOwner",
                  base::DictValue().Set("frameId", frame),
-                 base::BindOnce(&CdpFacade::OnJobOwner,
-                                weak_factory_.GetWeakPtr(), job_id));
+                 base::BindOnce(&CdpFacade::OnMeasureOwner,
+                                weak_factory_.GetWeakPtr(), id));
   }
 }
 
-void CdpFacade::OnJobOwner(uint64_t job_id, const base::DictValue* result) {
-  auto it = screenshot_jobs_.find(job_id);
-  if (it == screenshot_jobs_.end()) {
+void CdpFacade::OnMeasureOwner(uint64_t measure_id,
+                               const base::DictValue* result) {
+  auto it = measures_.find(measure_id);
+  if (it == measures_.end()) {
     return;
   }
-  ScreenshotJob& job = *it->second;
+  FieldMeasure& measure = *it->second;
   const std::optional<int> owner =
       result ? result->FindInt("backendNodeId") : std::nullopt;
   if (!owner) {
-    FailJob(job_id, "the frame with the card fields could not be found");
+    FinishMeasure(
+        measure_id,
+        base::unexpected("the frame with the card fields could not be found"));
     return;
   }
-  job.nodes.push_back(*owner);
-  if (--job.waiting == 0) {
-    MeasureJobFields(job_id);
+  measure.nodes.push_back(*owner);
+  if (--measure.waiting == 0) {
+    MeasureFieldQuads(measure_id);
   }
 }
 
-void CdpFacade::MeasureJobFields(uint64_t job_id) {
-  auto it = screenshot_jobs_.find(job_id);
-  if (it == screenshot_jobs_.end()) {
+void CdpFacade::MeasureFieldQuads(uint64_t measure_id) {
+  auto it = measures_.find(measure_id);
+  if (it == measures_.end()) {
     return;
   }
-  ScreenshotJob& job = *it->second;
-  TabSession* session = SessionFor(job.session_id);
+  FieldMeasure& measure = *it->second;
+  TabSession* session = SessionFor(measure.session_id);
   if (!session) {
-    FailJob(job_id, "the tab went away");
+    FinishMeasure(measure_id, base::unexpected("the tab went away"));
     return;
   }
-  if (job.nodes.empty()) {
-    CaptureForJob(job_id);
+  if (measure.nodes.empty()) {
+    FinishMeasure(measure_id, std::vector<CssRect>());
     return;
   }
-  job.waiting = job.nodes.size();
-  const std::vector<int> nodes = job.nodes;
+  measure.waiting = measure.nodes.size();
+  const std::vector<int> nodes = measure.nodes;
   for (int node : nodes) {
     SendInternal(*session, "DOM.getContentQuads",
                  base::DictValue().Set("backendNodeId", node),
-                 base::BindOnce(&CdpFacade::OnJobQuads,
-                                weak_factory_.GetWeakPtr(), job_id));
+                 base::BindOnce(&CdpFacade::OnMeasureQuads,
+                                weak_factory_.GetWeakPtr(), measure_id));
   }
 }
 
-void CdpFacade::OnJobQuads(uint64_t job_id, const base::DictValue* result) {
-  auto it = screenshot_jobs_.find(job_id);
-  if (it == screenshot_jobs_.end()) {
+void CdpFacade::OnMeasureQuads(uint64_t measure_id,
+                               const base::DictValue* result) {
+  auto it = measures_.find(measure_id);
+  if (it == measures_.end()) {
     return;
   }
-  ScreenshotJob& job = *it->second;
+  FieldMeasure& measure = *it->second;
+  // The session ended (its commands are answered with nothing): the boxes
+  // are not known.
+  if (!SessionFor(measure.session_id)) {
+    FinishMeasure(measure_id, base::unexpected("the tab went away"));
+    return;
+  }
   // A field with no box is not on the screen: nothing to paint over.
   if (result) {
     if (std::optional<CssRect> box = BoxFromQuads(*result)) {
-      job.boxes.push_back(*box);
+      measure.boxes.push_back(*box);
     }
   }
-  if (--job.waiting == 0) {
-    CaptureForJob(job_id);
+  if (--measure.waiting == 0) {
+    std::vector<CssRect> boxes = std::move(measure.boxes);
+    FinishMeasure(measure_id, std::move(boxes));
   }
+}
+
+void CdpFacade::FinishMeasure(
+    uint64_t measure_id,
+    base::expected<std::vector<CssRect>, std::string> boxes) {
+  auto it = measures_.find(measure_id);
+  if (it == measures_.end()) {
+    return;
+  }
+  FieldBoxesCallback done = std::move(it->second->done);
+  measures_.erase(it);
+  std::move(done).Run(std::move(boxes));
 }
 
 void CdpFacade::CaptureForJob(uint64_t job_id) {

@@ -593,6 +593,7 @@ fuzzer_test("koan_agent_secrets_fuzzer") {
   deps = [
     ":secrets",
     "//base",
+    "//testing/libfuzzer:libfuzzer_base_wrappers",
   ]
 }
 

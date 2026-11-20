@@ -407,10 +407,13 @@ browser:
    other fields, Enter and Tab still go. The lock goes when the frame navigates, or when an edit autofill sees leaves
    none of the values Koan filled in the frame (read in its Chrome-only world). The CLI's `fill` of another field types
    without reading the field then.
-3. **Screenshots** of a tab with a card number, CVC or IBAN Koan filled are taken as PNG after the fields are measured
-   (`Page.getLayoutMetrics`, `DOM.getContentQuads` per field, `DOM.getFrameOwner` for a field in another process, whose
-   whole frame is boxed), the boxes (2 CSS px of margin, `MaskRects()`) painted with a solid fill, and the image encoded
-   in the format asked for (`koanMasked` in the answer). A field that cannot be found refuses the screenshot. While one
+3. **Screenshots** of a tab with a card number, CVC or IBAN Koan filled hide those fields. The fields are measured
+   (`MeasureCardFields()`: `DOM.getContentQuads` per field, `DOM.getFrameOwner` for a field in another process, whose
+   whole frame is boxed) and painted with a solid fill, 2 CSS px of margin. `Koan.captureScaled` (every `koan
+   screenshot` and `act --screenshot`) paints them in the bitmap before it is encoded (`CollectCaptureMasks()`,
+   section 12, `masked` in the answer). A relay client's raw `Page.captureScreenshot`, and captureScaled's CDP
+   fallback, are taken as PNG, painted over (`MaskRects()`) and encoded again in the format asked for (`koanMasked` in
+   a raw answer). A field that cannot be located refuses the screenshot. While one
    is filled, `Page.printToPDF` and `Page.startScreencast` are refused and a running screencast's frames are
    acknowledged and dropped. Password fields show dots already.
 4. **The egress scrubber**, the backstop (`SecretScrubber`, `koan_agent_secrets.h`): the client's values, in memory for
@@ -779,8 +782,11 @@ autofill, and never receives a secret (section 4.5, "Secrets Koan filled").
   and locators); `--pick` runs as act's one `autofill` step (`autofill @ref <pick>` in a batch), with BatchGate's
   checks; it works in `koan shell`. The guide (`koan skill`) says to use it for addresses, cards and logins instead of
   typing, that the agent never sees a secret and should not try, that verification and MFA are the user's (wait on
-  Koan.userNeeded), and that the final Pay or Confirm click follows the payment rule of section 9.4 unchanged.
-  `kAgentInterfaceVersion` 4.
+  Koan.userNeeded), and that the final Pay, Place order or Confirm click is not the agent's: after filling, it stops
+  before that click, tells the user what is ready (the amount and the card or account as the page shows them) and
+  hands the tab over (`koan release` for a user's tab; its own tab is left open), as section 9.4 hands sign-in and
+  payment surfaces to the user (maintainer, 2026-11-21, until the user decides "ask before paying"; it may become a
+  setting). A guide rule, not enforced in the browser. `kAgentInterfaceVersion` 5.
 
 ### 7.1 How a container works (E§1-E§6)
 
@@ -1517,11 +1523,16 @@ imageTokens, via: "surface" | "cdp", fallbackReason?, masked?}`** (`koan_agent_c
 * **Fallback, agent tabs only.** With no surface in time, or a copy that failed, an **agent's own** tab is drawn by CDP
   instead (`Page.captureScreenshot` with #409's clip and scale, through device emulation; nobody looks at that tab),
   and the answer says `via: "cdp", fallbackReason`. A **user's** tab never: it is `Koan.noSurface` ("retry, or bring
-  its window forward"). A capture with masks never falls back either (CDP cannot paint them).
+  its window forward"). With masks, the CDP image is taken as PNG and painted over and encoded again
+  (`FacadeBackend::MaskScreenshot()`, as for a relay client's screenshot below), or refused (Koan.secretField).
 * **Masks.** `CdpFacade::CollectCaptureMasks()` is the one post-capture hook: the boxes (viewport CSS px) to paint
   over the bitmap **before it is encoded**; `MaskPixels()` maps them into the image (padded 2 CSS px, outwards,
-  cut to the image) and the worker paints them opaque. None yet; the secret-field masking of filled card, CVC and
-  IBAN fields (feat/agent-autofill) plugs in there, so its masks cover this path with no decode and re-encode.
+  cut to the image: the clip's offset, the zoom and pinch, the device scale and the image's scale all come from the
+  `CapturePlan`, unit tested) and the worker paints them opaque. It returns the filled card-number, CVC and IBAN
+  fields of section 4.5 (`MeasureCardFields()`: `DOM.getContentQuads`, and `DOM.getFrameOwner` for a field in
+  another process), so every `koan screenshot` size, `--clip` and `act --screenshot` is masked with no decode and
+  re-encode (`masked` in the answer); a filled field whose box cannot be located refuses the capture
+  (Koan.secretField). `kAgentInterfaceVersion` 5 with Koan.autofill.
 * **CDP clients.** `Page.captureScreenshot` from agent-browser (through koan-relay) is unchanged: a plain viewport
   capture is already a surface copy upstream (no emulation), and a clip may lie outside the viewport, which only
   emulation can draw. Serving in-viewport clips through `captureScaled` would change CDP's rounding and exact-scale
