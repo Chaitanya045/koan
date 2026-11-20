@@ -15,7 +15,8 @@
 // - at the end the leak detector has said nothing.
 //
 //   scripts/e2e/run.sh vertical_tabs_teardown
-import { ACCEL } from './lib/koan.mjs';
+import { ACCEL, visiblePage } from './lib/koan.mjs';
+import { makeKey } from './lib/mac.mjs';
 import { ALT, CTRL, browserCall, check, finish, key, mouseOn, pages, sleep, views, waitFor }
     from './lib/koan.mjs';
 import { VK, alive, checkKoanSidebar, leakLogged, press, railShown, region } from './lib/vertical_tabs.mjs';
@@ -91,18 +92,30 @@ checkKoanSidebar('The first window after the closes', {}, await views());
 
 // Test 22: fullscreen with compact mode off and on.
 if (await isMac()) {
+  // Cmd+S as a CDP key reaches Koan's shortcuts on macOS only in the key
+  // window, and AppKit's fullscreen exit can leave the window not key (with
+  // synthetic input compact mode never came on: the sidebar was 230 wide).
+  const toggleCompact = async () => {
+    await makeKey(await visiblePage());
+    await press(VK.S, ACCEL, 's', 1500);
+  };
   for (const compact of [false, true]) {
-    if (compact) await press(VK.S, ACCEL, 's', 1500);
+    if (compact) {
+      await toggleCompact();
+      const width = region(await views())?.w;
+      check('Compact mode is on before fullscreen (no sidebar width)', width === 0, `${width}`);
+    }
     await goFullscreen(true);
     let vs = await views();
     check(`Fullscreen (compact ${compact}): no rail`, !railShown(vs));
     check(`Fullscreen (compact ${compact}): no mode-switch toast`,
           !vs.some(v => v.shown && /Toast/.test(v.cls) && v.cls !== 'KoanToastView'));
     await goFullscreen(false);
+    await waitFor(async () => (region(await views())?.w === 0) === compact, 3000);
     vs = await views();
     checkKoanSidebar(`After fullscreen (compact ${compact})`, { hidden: compact }, vs);
   }
-  await press(VK.S, ACCEL, 's', 1500);
+  await toggleCompact();
 } else {
   console.log('note: native fullscreen is macOS only; test 22 skipped here');
 }

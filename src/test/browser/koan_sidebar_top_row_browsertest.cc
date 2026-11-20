@@ -55,10 +55,9 @@ T* FindView(views::View* root) {
 std::string Describe(const views::View* view) {
   std::string out;
   for (; view; view = view->parent()) {
-    base::StrAppend(&out, {out.empty() ? "" : " < ",
-                           std::string(view->GetClassName()), " ",
-                           view->ConvertRectToWidget(view->GetLocalBounds())
-                               .ToString()});
+    base::StrAppend(
+        &out, {out.empty() ? "" : " < ", std::string(view->GetClassName()), " ",
+               view->ConvertRectToWidget(view->GetLocalBounds()).ToString()});
   }
   return out.empty() ? "(none)" : out;
 }
@@ -104,8 +103,12 @@ class KoanSidebarTopRowBrowserTest : public InProcessBrowserTest {
 }  // namespace
 
 // Each of back, forward and reload is client area at its centre, and the
-// view a click there goes to is the button.
+// view a click there goes to is the button. On a page: on the empty tab
+// Koan's URL bar floats, and its backdrop rightly takes a click anywhere
+// (it closes the bar).
 IN_PROC_BROWSER_TEST_F(KoanSidebarTopRowBrowserTest, NavButtonsAreClientArea) {
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), GURL("chrome://version/")));
   KoanSidebarNavButtons* row = WaitForView<KoanSidebarNavButtons>();
   ASSERT_TRUE(row);
   ASSERT_EQ(row->children().size(), 3u);
@@ -121,8 +124,8 @@ IN_PROC_BROWSER_TEST_F(KoanSidebarTopRowBrowserTest, NavButtonsAreClientArea) {
         widget()->GetRootView()->GetEventHandlerForPoint(centre);
     EXPECT_TRUE(target && button->Contains(target))
         << button->GetViewAccessibility().GetCachedName() << " at "
-        << centre.ToString() << ": " << Describe(button) << "; the event went to "
-        << Describe(target);
+        << centre.ToString() << ": " << Describe(button)
+        << "; the event went to " << Describe(target);
   }
 }
 

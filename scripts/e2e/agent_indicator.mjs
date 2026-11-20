@@ -29,7 +29,7 @@ import { browserCall, check, connect, evalIn, finish, pages, setKoanPref, sleep,
          waitFor } from './lib/koan.mjs';
 import { AGENT_HOME, CLI, PROFILE, allow, allowWhy, brief, koan } from './lib/agent.mjs';
 import { IS_MAC, alive, calibrate, fatalInLog, makeKey, realClick, realInput, realInputWhyNot,
-         realKey, skip, skipped, startServer } from './lib/mac.mjs';
+         realKey, selectTabRow, skip, skipped, startServer } from './lib/mac.mjs';
 
 if (!IS_MAC) skip('agent control\'s CLI needs macOS (its holder resolves peers with LOCAL_PEERTOKEN)');
 if (!CLI || !fs.existsSync(CLI)) skip(`no koan CLI (KOAN_CLI=${CLI ?? ''})`);
@@ -75,11 +75,19 @@ const say = s => JSON.stringify({ ...s, toasts: undefined });
 async function newUserTab(title) {
   const id = (await browserCall('Target.createTarget', { url: server.url(`/p?t=${encodeURIComponent(title)}`) }))
       .result?.targetId;
+  titles.set(id, title);
   await sleep(1500);
   return id;
 }
+// Each tab's title, for show().
+const titles = new Map();
+// Shows a tab as the user does, a click on its row in the sidebar (lib/mac.mjs
+// selectTabRow(): CDP's activation of a tab an agent holds is held); where the
+// row isn't there (the sidebar hidden), CDP's activation.
 async function show(targetId) {
-  await browserCall('Target.activateTarget', { targetId });
+  if (!titles.has(targetId) || !(await selectTabRow(titles.get(targetId)))) {
+    await browserCall('Target.activateTarget', { targetId });
+  }
 }
 
 // --- Pair, then connect (koan's holder keeps the connection between
@@ -100,7 +108,8 @@ if (r.code !== 0) {
 
 const plain = await newUserTab('Plain tab');
 await show(plain);
-await koan(['status']);
+// A command that connects (koan status only reads: "connection: none").
+await koan(['tabs']);
 let s = await indicator(2500);
 check('Connected, on a tab no agent holds: the sidebar chip names the agent',
       s.chip && /koan suite/.test(s.chipText), say(s));
@@ -161,16 +170,13 @@ r = await koan(['open', server.url('/p?t=Agent%20tab')]);
 const agentTab = r.out.split('\n').at(-1);
 check('koan open: an agent tab', r.code === 0 && /^[0-9A-Fa-f]{8,}/.test(agentTab), brief(r));
 await sleep(1500);
-const activated = await browserCall('Target.activateTarget', { targetId: agentTab });
+titles.set(agentTab, 'Agent tab');
+await show(agentTab);
 s = await indicator();
-if (activated.error) {
-  skipped('the agent tab\'s pill', `Target.activateTarget: ${activated.error.message}`);
-} else {
-  check('Agent tab shown: the pill says the agent controls this tab',
-        s.pill && /controlling this tab/.test(s.pillText), say(s));
-  check('...with Take over, not Take back',
-        s.pillButtons.includes('Take over') && !s.pillButtons.includes('Take back'), say(s));
-}
+check('Agent tab shown: the pill says the agent controls this tab',
+      s.pill && /controlling this tab/.test(s.pillText), say(s));
+check('...with Take over, not Take back',
+      s.pillButtons.includes('Take over') && !s.pillButtons.includes('Take back'), say(s));
 await show(plain);
 
 // --- Auto-resume (design section 9.2), with real input only.
@@ -227,7 +233,8 @@ if (!realInput()) {
   const form = r.out.split('\n').at(-1);
   check('koan open: the form tab', r.code === 0 && /^[0-9A-Fa-f]{8,}/.test(form), brief(r));
   await sleep(1500);
-  await browserCall('Target.activateTarget', { targetId: form });
+  titles.set(form, 'Form');
+  await show(form);
   const formPage = await pageOf(form);
   await makeKey(formPage);
   const origin = await calibrate(formPage, await viewTree());

@@ -46,7 +46,7 @@ import { AGENT_HOME, CLI, PROFILE, allow, allowWhy, brief, koan, spawnKoan } fro
 import { browserCall, check, decodePng, evalIn, finish, front, pages, sleep, viewTree, waitFor }
     from './lib/koan.mjs';
 import { IS_MAC, KOAN_PID, alive, fatalInLog, realInput, realInputWhyNot, rootMouse, rootOf,
-         setWindowState, skip, skipped, startServer, windowOf } from './lib/mac.mjs';
+         selectTabRow, setWindowState, skip, skipped, startServer, windowOf } from './lib/mac.mjs';
 
 if (!IS_MAC) skip('the agent CLI needs macOS (its holder resolves peers with LOCAL_PEERTOKEN)');
 if (!CLI || !fs.existsSync(CLI)) skip(`no koan CLI (KOAN_CLI=${CLI ?? ''})`);
@@ -620,7 +620,11 @@ if (!realInput() || windowId === undefined) {
   await sleep(2500);
   check('Stop: before it, Koan holds its assertion for the screencast and the watch',
         (koanAssertions() ?? []).length > 0, `assertions: ${JSON.stringify(koanAssertions())}`);
-  await front(agentA);
+  // Shown as the user does (CDP's bringToFront of a tab an agent holds is
+  // held): its row, under a title of its own.
+  await evalIn(agentA, "document.title = 'Lease A'");
+  await sleep(500);
+  if (!(await selectTabRow('Lease A'))) await front(agentA);
   // The pill's widgets are made as the tab shows; read the tree once settled.
   await sleep(1500);
   const vs = await viewTree();

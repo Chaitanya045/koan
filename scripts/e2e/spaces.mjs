@@ -663,27 +663,24 @@ s = await sidebar();
 check('...and No keeps it, with its tabs', s.buttons.length === 3 &&
       s.header?.name === 'Clicked' && s.tabs === clickedTabs,
       JSON.stringify({ spaces: s.buttons.map(b => b.name), tabs: `${clickedTabs} -> ${s.tabs}` }));
-// G4: "New tab in group" is Koan's new tab (the URL bar), which opens no tab
-// by itself. The URL bar takes the focus only in the key window on macOS,
-// else Koan opens a tab after all (KoanUrlBarController::OpenForNewTab()),
-// and the window may not be key after the question's sheet: made key first,
-// as for ⌘T. (Until cycle 17 the question stayed open, and the key did
-// nothing.) Esc goes to the URL bar: on macOS a CDP key reaches the page
-// only.
+// G4: "New tab in group" is Koan's new tab, as Cmd+T (RunGroupCommand()
+// runs IDC_NEW_TAB), never upstream's group editor. This profile turns
+// replace-newtab off (prefs/spaces.json), so that is one ordinary tab in the
+// Space, as "A new tab opens in the active Space" above; the URL bar's path
+// (the pref on) is settings_effects_visual's and urlbar's. On macOS a CDP key
+// reaches the shortcuts in the key window only, and the window may not be
+// key after the question's sheet: made key first.
 const tabsBefore = s.tabs;
 const keyed = IS_MAC ? await makeKey(await visiblePage()) : true;
 await key(KEY.C, GROUP, 'C');
-if (IS_MAC) {
-  await keyToWidget('BrowserView', VK.ESCAPE);
-  await sleep(500);
-} else {
-  await key(VK.ESCAPE);
-}
+await sleep(500);
 s = await sidebar();
 {
-  const ok = s.tabs === tabsBefore && noEditor(s.vs);
-  check('G4: New tab in group opens Koan\'s new tab, not an NTP tab', ok,
-        `${tabsBefore} -> ${s.tabs}${ok ? '' : `; the window ${keyed ? 'was' : 'was not'} key` +
+  const ok = s.tabs === tabsBefore + 1 && s.header?.name === 'Clicked' &&
+             s.buttons.length === 3 && noEditor(s.vs);
+  check('G4: New tab in group opens one tab in the Space, not the group editor', ok,
+        `${tabsBefore} -> ${s.tabs}, Space ${s.header?.name}${ok ? '' :
+            `; the window ${keyed ? 'was' : 'was not'} key` +
             (IS_MAC ? ` (${await keyWindowReport()})` : '')}`);
 }
 

@@ -115,8 +115,12 @@ async function run(mode) {
     let chart;
     if (mode === 'micro') {
       await call(['screenshot', report, '--size', 'micro', '-o', file()]);
-      const ref = snap.out.split('\n').find(l => /"Sales by quarter"/.test(l))?.match(/@(\d+)\s*$/)?.[0];
-      chart = ref && await call(['screenshot', report, '--clip', ref, '-o', file()]);
+      // By a locator: the snapshot shows a named image without a ref (only
+      // actions and landmarks get one), as `image "Sales by quarter"`.
+      const line = snap.out.split('\n').find(l => /"Sales by quarter"/.test(l));
+      const role = line?.trim().split(/\s+/)[0] ?? 'image';
+      chart = await call(['screenshot', report, '--clip', `loc:role=${role}[name="Sales by quarter"]`,
+                          '-o', file()]);
     } else {
       chart = await call(['screenshot', report, '--size', mode, '-o', file()]);
     }
