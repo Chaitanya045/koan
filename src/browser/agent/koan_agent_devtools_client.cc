@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/task/sequenced_task_runner.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/web_contents.h"
@@ -41,7 +42,7 @@ AgentDevToolsClient::AgentDevToolsClient(content::WebContents* contents,
       on_closed_(std::move(on_closed)) {}
 
 AgentDevToolsClient::~AgentDevToolsClient() {
-  EndCommands();
+  EndAll();
   if (host_) {
     host_->DetachClient(this);
   }
@@ -104,11 +105,34 @@ void AgentDevToolsClient::Answered() {
   }
 }
 
-void AgentDevToolsClient::EndCommands() {
+void AgentDevToolsClient::Hold() {
+  if (!host_ || !contents_) {
+    return;
+  }
+  ++holds_;
+  // Over the cap the hold waits like a command; the screencast's own command
+  // waits with it, so nothing has to run when it is granted.
+  AgentLeaseManager::Get().BeginHold(contents_.get(), base::DoNothing());
+}
+
+void AgentDevToolsClient::Release() {
+  if (holds_ == 0) {
+    return;
+  }
+  --holds_;
+  if (contents_) {
+    AgentLeaseManager::Get().EndHold(contents_.get());
+  }
+}
+
+void AgentDevToolsClient::EndAll() {
   for (; in_flight_ > 0; --in_flight_) {
     if (contents_) {
       AgentLeaseManager::Get().EndCommand(contents_.get());
     }
+  }
+  while (holds_ > 0) {
+    Release();
   }
 }
 
@@ -129,7 +153,7 @@ void AgentDevToolsClient::AgentHostClosed(
   }
   // Content has detached this client already; do not detach again.
   host_ = nullptr;
-  EndCommands();
+  EndAll();
   // Not from inside content's call: the owner destroys this client.
   if (on_closed_) {
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(

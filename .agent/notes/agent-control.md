@@ -902,16 +902,29 @@ hold-off, the cap (halved on battery in Low Power Mode), and the user's own back
 prints a table of rAF/s, timers/s and renderer CPU. `scripts/mac/steps/agent_lease.md` covers another Desktop, a
 locked screen, display sleep, ⌘H and Low Power Mode by hand. The audit against 158 behind it, with gaps that remain:
 
-* **Display sleep:** the window-less tab's compositor runs from the display's `CVDisplayLink`
-  (`external_begin_frame_source_mac.cc`), which stops when the display sleeps. The lease takes no display-sleep
-  assertion (`stay_awake` is off, by decision), so rAF is expected to stop then. Follow-up: the opt-in `keep-awake`
-  capability passes `stay_awake=true` while a command is in flight.
-* **Holds are not wired up:** nothing calls `AgentLeaseManager::BeginHold()`, `KeepAlive()` or `SetLiveAlways()`.
-  `Page.startScreencast` takes no capturer of its own (B§3), so an agent-browser screencast or recording of an agent
-  tab stalls 3 s after the last command. Follow-up: the facade tells the backend when a `Page.startScreencast`
-  succeeds and when `Page.stopScreencast` is sent or the session ends. `AgentDevToolsClient` then holds the lease
-  (`BeginHold`/`EndHold`, ended in its destructor and in `AgentHostClosed`). Then add `Koan.keepAlive` to the policy
-  table.
+* **Display sleep (done, 2026-11-20):** the window-less tab's compositor runs from the display's `CVDisplayLink`
+  (`external_begin_frame_source_mac.cc`), which stops when the display sleeps. While an agent is at work in a leased
+  tab (a command in flight, a screencast, a keep-alive: `LeaseScheduler::IsActive()`), `AgentLeaseManager` takes one
+  process-wide assertion through the device service's `WakeLock` (Chromium's `PowerSaveBlocker`, as video playback;
+  `PowerSaveBlocker` itself is GN-visible to a few upstream targets only, so `//koan` uses the mojo interface), reason
+  `"Koan: an agent is working"`: `kPreventDisplaySleep` when a client at work has `keep-awake`, otherwise
+  `kPreventAppSuspension` (macOS NoIdleSleep, the T-power-1 blocker), and on battery in Low Power Mode
+  `kPreventAppSuspension` only, whatever the capability (the display drops at once on entry). Released 3 s after the
+  work ends (`WakePolicy`, pure, `koan_agent_wake_policy.h`), at once when no tab is leased (no agent connected). Lid
+  closed: left to macOS (neither assertion prevents clamshell sleep). `stay_awake` on the capturer stays off: the
+  assertion is per process, not per capturer. The chip's tooltip adds "keeping the display awake" while the display
+  assertion is held.
+* **Holds (done, 2026-11-20):** a screencast (`Page.startScreencast` until `Page.stopScreencast`, a failed start, the
+  session's end or the connection's) holds the lease: the facade calls `FacadeBackend::HoldTab()`, the tab's
+  `AgentDevToolsClient` counts it (`Hold()`/`Release()`) and ends whatever is left in its destructor and in
+  `AgentHostClosed()`. `Koan.keepAlive {targetId, seconds}` (0-600; ≤ 60 on battery in Low Power Mode, else
+  `Koan.lowPower` plus the event) answers `{holdId}`; `{holdId, seconds}` renews, `seconds: 0` ends; each request is a
+  keep-alive of its own in the scheduler (keyed, so two waits do not end each other's), at most 16 per connection,
+  ended with the connection and dropped with the lease (tab closed or detached, the client gone or revoked, Stop,
+  Agent ready off). The `koan` CLI takes one (30 s, renewed every 10 s, so a killed CLI's lapses within 30 s) for
+  `--until` (`WaitUntil()`) and for `koan watch <tab>`. Holds over the cap queue as commands do.
+  **`live: always`** is not wired: the client record has no such setting yet, and adding one needs the settings row
+  and storage; `AgentLeaseManager::SetLiveAlways()` stays ready for it.
 * **Freezing votes:** Koan's patch drops `kPinnedTab` for `FreezingType::kVoting`, so a freezing vote (upstream casts
   one for a collapsed tab group, `browser_tab_strip_controller.cc`) would freeze an agent tab between commands. Koan's
   Spaces never collapse their groups (a DCHECK in `koan_workspaces.cc` says so), so nothing reaches this today. While
@@ -1180,7 +1193,8 @@ koan tabs [--space agent|all]    list tabs the client may see (id, label, title,
 koan open <url> [--task T]       open a background tab in the agent Space; prints the tab id
 koan screenshot <tab> [-o f]     plain viewport capture
 koan task start|end [name]       name/end the agent Space
-koan watch                       stream events (tab/URL/title, pause, userNeeded, release) as JSON lines
+koan watch [tab]                 stream events (tab/URL/title, pause, userNeeded, release) as JSON lines;
+                                 with a tab, keep it rendering while watched (Koan.keepAlive, §8)
 koan take-over [tab]             ask to drive the user's current tab (the user approves)
 koan hand-back [tab]             release the tab; a moved tab goes home
 koan agent-browser <args…>       relay + exec agent-browser against Koan (session-scoped relay)

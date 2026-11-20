@@ -271,6 +271,9 @@ AgentControlService::AgentControlService(PrefService* local_state)
       AuditLogDirectory(user_data_dir),
       base::BindRepeating(&AgentControlService::NotifyObservers,
                           base::Unretained(this)));
+  // The chip's tooltip says when the display is kept awake for an agent.
+  AgentLeaseManager::Get().SetWakeChangedCallback(base::BindRepeating(
+      &AgentControlService::NotifyObservers, weak_factory_.GetWeakPtr()));
   registrar_.Init(local_state_);
   for (const char* pref :
        {prefs::kAgentControlEnabled, prefs::kAgentControlMaxPromptsPerMinute,
@@ -284,7 +287,9 @@ AgentControlService::AgentControlService(PrefService* local_state)
   Update();
 }
 
-AgentControlService::~AgentControlService() = default;
+AgentControlService::~AgentControlService() {
+  AgentLeaseManager::Get().SetWakeChangedCallback({});
+}
 
 void AgentControlService::AddObserver(Observer* observer) {
   observers_.AddObserver(observer);
@@ -329,6 +334,10 @@ void AgentControlService::StopAllAgents() {
   host_.AsyncCall(&GatewayHost::ForgetAll)
       .WithArgs(user_data_dir, on && !user_data_dir.empty(),
                 LimitsFrom(*local_state_));
+}
+
+bool AgentControlService::keeping_display_awake() const {
+  return AgentLeaseManager::Get().keeping_display_awake();
 }
 
 std::vector<ControlledTab> AgentControlService::controlled_tabs() const {
@@ -377,6 +386,7 @@ void AgentControlService::Shutdown() {
   registrar_.RemoveAll();
   forwarder_.reset();
   AgentLeaseManager::Get().DetachAll();
+  AgentLeaseManager::Get().SetWakeChangedCallback({});
   // Destroys the host, and with it the gateway, on the IO thread; the socket
   // file goes with it.
   host_.Reset();

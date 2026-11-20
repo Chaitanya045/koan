@@ -306,7 +306,6 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
     case CommandKind::kStatus:
     case CommandKind::kTabs:
     case CommandKind::kEnd:
-    case CommandKind::kWatch:
     case CommandKind::kSkill:
     case CommandKind::kShell:
       if (!expect(0, 0)) {
@@ -344,6 +343,12 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
         return Error("usage: koan " + positional[0] + " <tab>");
       }
       command.tab = rest[0];
+      break;
+    case CommandKind::kWatch:
+      if (!expect(0, 1)) {
+        return Error("usage: koan watch [tab]");
+      }
+      command.tab = rest.empty() ? "" : rest[0];
       break;
     case CommandKind::kTakeOver:
       if (!expect(0, 1)) {
@@ -483,9 +488,11 @@ Gives a tab of the user's back.)HELP"},
 
 Ends one task, or every task and the connection: their tabs close and
 their throwaway containers are cleared.)HELP"},
-      {"watch", R"HELP(koan watch
+      {"watch", R"HELP(koan watch [tab]
 
-Streams this agent's events as JSON lines until stopped.)HELP"},
+Streams this agent's events as JSON lines until stopped. With a tab, keeps
+that tab rendering (animations, timers, a screencast) while it is watched,
+even when Koan's window is covered.)HELP"},
       {"skill", R"HELP(koan skill
 
 Prints the guide for agents.)HELP"},
@@ -526,7 +533,8 @@ std::string UsageText() {
   koan release <tab>     give a tab of yours back
   koan end [--task T]    end one task, or (no --task) every task: its tabs
                          close and its throwaway container is cleared
-  koan watch             events as JSON lines (userNeeded, paused, ...)
+  koan watch [tab]       events as JSON lines (userNeeded, paused, ...);
+                         with a tab, keeps it rendering while watched
   koan agent-browser <args...>
                          run agent-browser against Koan (its own relay,
                          approved once in Koan as koan-relay)

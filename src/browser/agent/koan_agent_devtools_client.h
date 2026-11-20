@@ -29,7 +29,9 @@ class WebContents;
 // It only carries bytes: the facade has judged a command before Send(), and
 // judges every message it hands on. Commands run through the tab's keep-alive
 // lease (AgentLeaseManager::RunCommand), so a hidden tab renders while the
-// agent acts. UI thread.
+// agent acts, and so does a screencast the facade says is open (Hold()). What
+// the client holds on the lease is counted and ended when it goes or content
+// detaches it, so nothing outlives the agent's session on the tab. UI thread.
 namespace koan::agent {
 
 class AgentDevToolsClient final : public content::DevToolsAgentHostClient {
@@ -58,6 +60,11 @@ class AgentDevToolsClient final : public content::DevToolsAgentHostClient {
             base::OnceClosure on_dropped);
   // A command sent with Send() was answered.
   void Answered();
+  // The facade's screencast holds (Page.startScreencast until
+  // Page.stopScreencast): the lease keeps the tab rendering between commands.
+  // Counted; Release() past zero does nothing.
+  void Hold();
+  void Release();
 
   // content::DevToolsAgentHostClient:
   void DispatchProtocolMessage(content::DevToolsAgentHost* agent_host,
@@ -76,14 +83,17 @@ class AgentDevToolsClient final : public content::DevToolsAgentHostClient {
   void Dispatch(std::string json,
                 base::OnceCallback<bool()> may_dispatch,
                 base::OnceClosure on_dropped);
-  void EndCommands();
+  // Ends every command and hold this client has on the lease.
+  void EndAll();
 
   base::WeakPtr<content::WebContents> contents_;
   scoped_refptr<content::DevToolsAgentHost> host_;
   MessageCallback on_message_;
   base::OnceClosure on_closed_;
-  // Commands begun on the lease and not answered: ended if the client goes.
+  // Commands begun on the lease and not answered, and holds not released:
+  // ended if the client goes.
   int in_flight_ = 0;
+  int holds_ = 0;
   base::WeakPtrFactory<AgentDevToolsClient> weak_factory_{this};
 };
 

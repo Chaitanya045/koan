@@ -24,9 +24,10 @@
 //  - while a command is in flight on the tab, and for kHoldOff after the last
 //    one (an LLM turn is seconds; holding the compositor through it burns power
 //    for nothing);
-//  - while something holds it open (a wait, a screencast, a recording);
-//  - until a Koan.keepAlive runs out (at most 10 minutes; 60 s on battery in
-//    Low Power Mode);
+//  - while something holds it open (a screencast, a recording), counted;
+//  - until each Koan.keepAlive (a wait, `koan watch <tab>`) runs out or is
+//    ended, each under a key of its own (at most 10 minutes; 60 s on battery
+//    in Low Power Mode);
 //  - for as long as the tab is attached, with `live: always` (refused on
 //    battery in Low Power Mode, and a held one is downgraded on entry).
 // At most EffectiveLeaseLimit() tabs hold one at a time. A tab over the limit
@@ -82,15 +83,18 @@ class LeaseScheduler {
   // The command finished: the hold-off starts.
   void EndCommand(const std::string& tab, base::TimeTicks now);
 
-  // Something keeps the capturer open (a wait, a screencast, a recording);
-  // like a command, it may be queued.
+  // Something keeps the capturer open (a screencast, a recording); like a
+  // command, it may be queued. Counted: each BeginHold() needs its EndHold().
   bool BeginHold(const std::string& tab, Changes& changes);
   void EndHold(const std::string& tab, base::TimeTicks now);
 
-  // Koan.keepAlive {seconds}: in (0, 600], or (0, 60] on battery in Low Power
-  // Mode. Returns the refusal, or nullopt with the tab's capturer held (or
-  // queued) until `now + seconds`.
+  // Koan.keepAlive {seconds}: the keep-alive `key` (one per request, so that
+  // two waits on a tab do not end each other's) holds the tab's capturer, or
+  // queues it, until `now + duration`; asked again, it is renewed to that.
+  // At most 10 minutes. Refused above 60 s on battery in Low Power Mode. A
+  // `duration` of zero or less ends the key (the hold-off follows).
   std::optional<LowPowerRefusal> KeepAlive(const std::string& tab,
+                                           const std::string& key,
                                            base::TimeDelta duration,
                                            base::TimeTicks now,
                                            Changes& changes);
@@ -106,6 +110,10 @@ class LeaseScheduler {
   Changes Detach(const std::string& tab);
 
   bool IsCapturing(const std::string& tab) const;
+  // Whether the tab holds its capturer because an agent is at work in it now
+  // (a command in flight, a hold, a keep-alive), not merely for the hold-off
+  // or `live: always`. What the power assertion follows (wake_policy.h).
+  bool IsActive(const std::string& tab, base::TimeTicks now) const;
   bool IsQueued(const std::string& tab) const;
   size_t capturing_count() const;
 
@@ -117,9 +125,11 @@ class LeaseScheduler {
     int holds = 0;
     bool live_always = false;
     base::TimeTicks release_after;
-    base::TimeTicks keep_alive_until;
+    // Each keep-alive's end, by its key.
+    std::map<std::string, base::TimeTicks> keep_alives;
   };
 
+  static bool KeptAlive(const Tab& tab, base::TimeTicks now);
   bool Wants(const Tab& tab, base::TimeTicks now) const;
   // Grants the tab now if there is room, otherwise queues it.
   bool Want(const std::string& id, Tab& tab, Changes& changes);

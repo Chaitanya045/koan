@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -23,6 +24,9 @@
 #include "content/public/browser/web_contents_user_data.h"
 #include "koan/browser/agent/koan_agent_lease_scheduler.h"
 #include "koan/browser/agent/koan_agent_tab_hooks.h"
+#include "koan/browser/agent/koan_agent_wake_policy.h"
+#include "mojo/public/cpp/bindings/remote.h"
+#include "services/device/public/mojom/wake_lock.mojom.h"
 
 class PrefService;
 
@@ -44,6 +48,10 @@ class PrefService;
 // Held while LeaseScheduler says so (the capturer hold-off, the cap):
 //  - a visible WebContents::IncrementCapturerCount(): the tab renders, rAF and
 //    CSS animations run, timers are not throttled, screenshots work.
+// And, for the whole browser, while an agent is at work in a leased tab
+// (koan_agent_wake_policy.h): a power assertion, "Koan: an agent is working",
+// that keeps idle sleep away, and the display awake for a client with the
+// `keep-awake` capability (never on battery in Low Power Mode).
 namespace koan::agent {
 
 class AgentTabLease : public content::WebContentsUserData<AgentTabLease>,
@@ -122,16 +130,33 @@ class AgentLeaseManager : public TabHooksDelegate,
   // reaches it (it waits, never fails). Pair it with EndCommand().
   void RunCommand(content::WebContents* contents, base::OnceClosure command);
   void EndCommand(content::WebContents* contents);
-  // Holds the capturer open (a wait, a screencast) until EndHold().
+  // Holds the capturer open (a screencast) until EndHold(). Counted; a hold
+  // over the cap waits as a command does (`ready` runs once it holds it).
+  // Detach() drops every hold.
   void BeginHold(content::WebContents* contents, base::OnceClosure ready);
   void EndHold(content::WebContents* contents);
-  // Koan.keepAlive and `live: always`; nullopt, or why it was refused.
+  // Koan.keepAlive under `key` (LeaseScheduler::KeepAlive(); a `duration` of
+  // zero ends it) and `live: always`; nullopt, or why it was refused.
   std::optional<LeaseScheduler::LowPowerRefusal> KeepAlive(
       content::WebContents* contents,
+      const std::string& key,
       base::TimeDelta duration);
   std::optional<LeaseScheduler::LowPowerRefusal> SetLiveAlways(
       content::WebContents* contents,
       bool live);
+
+  // Whether the client has the `keep-awake` capability, as its latest
+  // message says (the user can change it in settings while it is connected).
+  // Forgotten once the client's last connection goes.
+  void SetKeepAwake(const std::string& client_id, bool keep_awake);
+  void ForgetClient(const std::string& client_id);
+
+  // Whether Koan keeps the display awake for an agent now (the indicator's
+  // chip says so), and who to tell when that changes.
+  bool keeping_display_awake() const {
+    return wake_held_ == WakeBlock::kDisplaySleep;
+  }
+  void SetWakeChangedCallback(base::RepeatingClosure callback);
 
   size_t lease_count() const { return leases_.size(); }
 
@@ -166,6 +191,8 @@ class AgentLeaseManager : public TabHooksDelegate,
   void OnLimitsChanged();
   PowerState CurrentPower() const;
   void StartOrStopTicking();
+  // Takes, changes or releases the power assertion as WakePolicy says.
+  void UpdateWake();
 
   // Attached tabs by lease id. Not owned (each is its tab's user data).
   std::map<std::string, raw_ptr<AgentTabLease>> leases_;
@@ -175,6 +202,12 @@ class AgentLeaseManager : public TabHooksDelegate,
   bool on_battery_ = false;
   uint64_t next_id_ = 1;
   OpenedTabHandler opened_tab_handler_;
+  // Clients with the `keep-awake` capability.
+  std::set<std::string> keep_awake_;
+  WakePolicy wake_policy_;
+  WakeBlock wake_held_ = WakeBlock::kNone;
+  mojo::Remote<device::mojom::WakeLock> wake_lock_;
+  base::RepeatingClosure on_wake_changed_;
 };
 
 // Whether macOS's Low Power Mode is on (NSProcessInfo; false elsewhere).

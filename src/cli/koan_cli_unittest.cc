@@ -22,6 +22,7 @@
 #include "koan/cli/koan_cli_args.h"
 #include "koan/cli/koan_cli_client.h"
 #include "koan/cli/koan_cli_io.h"
+#include "koan/cli/koan_cli_keepalive.h"
 #include "koan/cli/koan_cli_protocol.h"
 #include "koan/cli/koan_cli_router.h"
 #include "koan/cli/koan_cli_skill.h"
@@ -67,6 +68,9 @@ TEST(KoanCliArgsTest, CommandsAndTheirArguments) {
   EXPECT_EQ(shot.tab, "abcd");
   EXPECT_EQ(shot.output, "x.png");
   EXPECT_EQ(Parse({"take-over"}).tab, "");
+  EXPECT_EQ(Parse({"watch"}).tab, "");
+  EXPECT_EQ(Parse({"watch", "abcd"}).tab, "abcd");
+  EXPECT_EQ(ErrorOf({"watch", "abcd", "efgh"}), "usage: koan watch [tab]");
   EXPECT_EQ(Parse({"hand-back", "abcd"}).kind, CommandKind::kRelease);
 
   Command pair =
@@ -312,6 +316,43 @@ TEST_F(KoanCliFramingTest, ARefusalIsTheAnswer) {
   EXPECT_FALSE(answer->id);
   EXPECT_EQ(answer->error_code, "Hold.refused");
   EXPECT_EQ(Describe(answer), "Hold.refused: not the paired agent");
+}
+
+// A wait on a tab keeps it alive (Koan.keepAlive) and ends that when it is
+// over; a keep-alive the browser refused is not ended.
+TEST_F(KoanCliFramingTest, AWaitKeepsTheTabAlive) {
+  ASSERT_TRUE(b_->Write(R"({"id":1,"result":{"holdId":"7.1","seconds":30}})"));
+  ASSERT_TRUE(b_->Write(R"({"id":2,"result":{}})"));
+  ASSERT_TRUE(b_->Write(
+      R"({"id":3,"error":{"code":-32000,"message":"no","data":"Koan.lowPower"}})"));
+  Link link(std::move(a_));
+  {
+    TabKeepAlive keep_alive(link, "TAB1");
+    EXPECT_TRUE(keep_alive.held());
+    EXPECT_GT(keep_alive.next_renewal(), base::TimeTicks::Now());
+    // Not due yet: nothing is sent.
+    keep_alive.RenewIfDue();
+  }
+  {
+    TabKeepAlive refused(link, "TAB1");
+    EXPECT_FALSE(refused.held());
+  }
+  auto request = [&] {
+    std::optional<std::string> frame = b_->Read(base::Seconds(5));
+    return frame ? Dict(*frame) : base::DictValue();
+  };
+  const base::DictValue asked = request();
+  EXPECT_EQ(*asked.FindString("method"), "Koan.keepAlive");
+  EXPECT_EQ(*asked.FindStringByDottedPath("params.targetId"), "TAB1");
+  EXPECT_EQ(asked.FindIntByDottedPath("params.seconds"), 30);
+  const base::DictValue ended = request();
+  EXPECT_EQ(*ended.FindStringByDottedPath("params.holdId"), "7.1");
+  EXPECT_EQ(ended.FindIntByDottedPath("params.seconds"), 0);
+  EXPECT_FALSE(ended.FindStringByDottedPath("params.targetId"));
+  const base::DictValue again = request();
+  EXPECT_EQ(*again.FindStringByDottedPath("params.targetId"), "TAB1");
+  // The refused one sent no end.
+  EXPECT_FALSE(b_->Read(base::Milliseconds(50)));
 }
 
 // --- Protocol ----------------------------------------------------------------

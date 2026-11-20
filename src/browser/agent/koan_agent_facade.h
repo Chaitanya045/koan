@@ -46,7 +46,16 @@
 //
 // The browser-level methods are the facade's own: Target.* over the tabs in
 // the client's scope (nothing else is ever listed or attachable),
-// Browser.getVersion, and Koan.listTabs, Koan.openTab and Koan.closeTab.
+// Browser.getVersion, and Koan.listTabs, Koan.openTab, Koan.closeTab and
+// Koan.keepAlive.
+//
+// Keeping a tab rendering between commands (design section 8): a screencast
+// (Page.startScreencast until Page.stopScreencast or the session's end) holds
+// the tab's lease, and so does Koan.keepAlive {targetId, seconds} (0 to 600;
+// answers {holdId}; {holdId, seconds} renews it, seconds 0 ends it), which the
+// `koan` CLI takes while it waits on a tab. A keep-alive lapses by itself, so
+// one whose client died without ending it costs at most its seconds, and
+// every one of the connection's ends with it.
 //
 // One facade per connection, on the UI thread; not thread-safe.
 namespace koan::agent {
@@ -83,6 +92,23 @@ class FacadeBackend {
                          std::string json) = 0;
   // The tab answered a command sent with SendToTab().
   virtual void CommandAnswered(const std::string& target_id) = 0;
+  // A screencast of the attached tab opened (`hold`) or closed: while one is
+  // open the tab's keep-alive lease keeps it rendering between commands.
+  // Counted: every hold is released once, by Page.stopScreencast, a failed
+  // Page.startScreencast, the session's end or the connection's. DetachTab()
+  // releases whatever is left.
+  virtual void HoldTab(const std::string& target_id, bool hold) = 0;
+  // Koan.keepAlive: keeps the tab rendering for `duration` under `key`, or
+  // ends that keep-alive (a zero `duration`). Returns nullopt, or the limits
+  // that refused it (on battery in Low Power Mode).
+  struct LowPowerLimits {
+    int max_leases = 1;
+    int max_keep_alive_seconds = 60;
+  };
+  virtual std::optional<LowPowerLimits> KeepTabAlive(
+      const std::string& target_id,
+      const std::string& key,
+      base::TimeDelta duration) = 0;
   // Opens a background tab for the client in `task` (Koan.openTab,
   // Target.createTarget) and adds it to the registry. `url` passed
   // IsAllowedNavigationUrl() and the registry had room. `saved_container` is
@@ -217,6 +243,9 @@ class CdpFacade {
   void TakeOver(const AgentMessage& message);
   void Release(const AgentMessage& message);
   void Resume(const AgentMessage& message);
+  void KeepAlive(const AgentMessage& message);
+  // The session's screencast closed (or never opened): its hold goes.
+  void EndScreencastHold(TabSession& session);
   // Whether answers and events from the tab are redacted (a user tab the
   // agent may only read).
   bool Redacts(const std::string& target_id) const;
@@ -308,6 +337,14 @@ class CdpFacade {
   // Tabs whose interstitial the client was told about (Koan.userNeeded), so
   // that it is told once per interstitial.
   std::set<std::string, std::less<>> interstitial_tabs_;
+  // The connection's keep-alives (Koan.keepAlive) by hold id: the tab and
+  // when it lapses.
+  struct KeepAliveHold {
+    std::string target_id;
+    base::TimeTicks until;
+  };
+  std::map<std::string, KeepAliveHold, std::less<>> keep_alives_;
+  uint64_t next_hold_ = 1;
   bool discover_targets_ = false;
   bool auto_attach_ = false;
 

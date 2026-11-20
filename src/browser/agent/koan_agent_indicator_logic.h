@@ -101,9 +101,12 @@ struct IndicatorContent {
 
 // The indicator for one window: `tabs` are every tab an agent holds (with
 // `in_window` and `shown` for this window), `prompts` every held prompt.
+// `keeping_display_awake`: Koan holds the display-sleep assertion for an agent
+// at work (design section 8); the chip's tooltip says so.
 IndicatorContent IndicatorFor(const std::vector<IndicatorClient>& clients,
                               const std::vector<IndicatorTab>& tabs,
-                              const std::vector<IndicatorPrompt>& prompts);
+                              const std::vector<IndicatorPrompt>& prompts,
+                              bool keeping_display_awake = false);
 
 // One item of the chip's menu: go to a tab an agent holds, or to the tab of
 // a page's prompt. "Stop all agents" follows them.

@@ -1499,6 +1499,17 @@ revoked it, it went unused for 30 days, or Koan's profile was replaced.
 the agent that runs it, so `--client` is only for several agents that pair
 from the same program.
 
+An agent's tab keeps rendering (animations, timers, screenshots) while the
+agent works in it, even with Koan's window covered or the tab in the
+background: while a command runs and for 3 s after, while it waits with
+`koan act ... --until`, while `koan watch <tab>` runs, and while an
+agent-browser screencast of it is open. In between it is a normal background
+tab. While an agent is at work, Koan keeps the Mac from idle sleep and, for an
+agent allowed to keep the display awake, the display on too ("Koan: an agent
+is working" in `pmset -g assertions`; the agent chip's tooltip says "keeping
+the display awake"). On battery with Low Power Mode on the display is never
+kept awake. Closing the lid still sleeps the Mac.
+
 **Set up agents on this Mac** (Settings > Agent Control) lets the coding
 agents on your Mac find Koan without being told, as ego lite does. One
 click links `~/.local/bin/koan` to the `koan` in this app and writes a small
