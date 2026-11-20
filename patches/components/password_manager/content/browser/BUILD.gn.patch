@@ -1,0 +1,11 @@
+diff --git a/components/password_manager/content/browser/BUILD.gn b/components/password_manager/content/browser/BUILD.gn
+--- a/components/password_manager/content/browser/BUILD.gn
++++ b/components/password_manager/content/browser/BUILD.gn
+@@ -44,6 +44,7 @@
+     "//components/user_prefs",
+     "//content/public/browser",
+     "//content/public/common",
++    "//koan/browser/containers:partition",
+     "//mojo/public/cpp/system",
+     "//net",
+   ]

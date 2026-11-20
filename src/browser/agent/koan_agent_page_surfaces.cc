@@ -495,6 +495,22 @@ void AgentPageSurfaces::HoldActivation(content::WebContents* contents) {
        {base::DoNothing(), base::DoNothing()});
 }
 
+uint64_t AgentPageSurfaces::HoldAutofillVerify(content::WebContents* contents,
+                                               std::string detail,
+                                               base::OnceClosure fill,
+                                               base::OnceClosure dismissed) {
+  // Open brings the tab forward and waits until it is visible
+  // (NeedsUserInFront()), so Chrome's Touch ID sheet or CVC dialog comes up
+  // over the tab, not over the user's work.
+  return Hold(contents, PageSurface::kAutofillVerify, std::move(detail),
+              {std::move(fill), std::move(dismissed)});
+}
+
+void AgentPageSurfaces::ForgetAutofillVerify(uint64_t id) {
+  opening_.erase(id);
+  Forget(id);
+}
+
 bool AgentPageSurfaces::MayHoldPickers(content::WebContents* contents) {
   return !koan::containers::IsAgentFrame(contents->GetPrimaryMainFrame());
 }

@@ -22,7 +22,9 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "koan/browser/agent/koan_agent_audit.h"
+#include "koan/browser/agent/koan_agent_autofill_logic.h"
 #include "koan/browser/agent/koan_agent_capture.h"
+#include "koan/browser/agent/koan_agent_screenshot_mask.h"
 #include "koan/browser/agent/koan_agent_session.h"
 #include "url/gurl.h"
 
@@ -49,7 +51,8 @@
 // The browser-level methods are the facade's own: Target.* over the tabs in
 // the client's scope (nothing else is ever listed or attachable),
 // Browser.getVersion, and Koan.listTabs, Koan.openTab, Koan.closeTab,
-// Koan.keepAlive and Koan.captureScaled.
+// Koan.keepAlive, Koan.captureScaled and Koan.autofill (sent with a tab's or
+// a frame's sessionId).
 //
 // Screenshots (section 12, "One capture path"): Koan.captureScaled {targetId,
 // longEdge?, scale?, clip?, format?, quality?} copies the frame the tab's
@@ -63,6 +66,15 @@
 // Page.captureScreenshot with clip and scale (device emulation); a user's
 // tab never does.
 //
+// The secrets Koan fills for an agent (design section 4.5, "Secrets Koan
+// filled"; `koan autofill`): in a frame where one is filled, script and value
+// reads are refused (Koan.secretField) and typing into the filled field too;
+// secret fields read as filled or empty in DOM and accessibility answers on
+// every tab; a screenshot paints over filled card fields (CollectCaptureMasks()
+// for Koan.captureScaled, a re-encode for a relay's Page.captureScreenshot),
+// and print and screencast wait; and every message to the client passes the
+// scrubber (FacadeBackend::Secrets()) as JSON, screenshot data aside.
+//
 // Keeping a tab rendering between commands (design section 8): a screencast
 // (Page.startScreencast until Page.stopScreencast or the session's end) holds
 // the tab's lease, and so does Koan.keepAlive {targetId, seconds} (0 to 600;
@@ -74,6 +86,7 @@
 // One facade per connection, on the UI thread; not thread-safe.
 namespace koan::agent {
 
+class SecretScrubber;
 class TargetRegistry;
 
 // What the browser says about a tab in the registry.
@@ -176,6 +189,66 @@ class FacadeBackend {
   // `reason` is "interstitial", ...
   virtual void UserNeeded(const std::string& target_id,
                           std::string_view reason) = 0;
+
+  // The secret fields a session's commands reach (design section 4.5).
+  // `frame_id` is the frame target of a child session, empty for the tab's
+  // own: the frames are those of its renderer process, whose script can
+  // reach one another.
+  struct SecretFacts {
+    // A secret that autofill or the password manager filled is in one of
+    // those frames: script and value reads are refused.
+    bool locked = false;
+    // The focused field holds such a secret: typing into it is refused.
+    bool focused_locked = false;
+    // A card number, CVC or IBAN Koan filled is anywhere in the tab.
+    bool card_filled = false;
+    // The backend DOM node ids, in that process, of the fields whose value
+    // is a secret (RedactSecretFields()).
+    std::set<int> fields;
+  };
+  virtual SecretFacts SecretsIn(const std::string& target_id,
+                                const std::string& frame_id);
+  // The filled card fields a screenshot of the tab paints over: nodes its
+  // own session reaches, and frames (frame target ids) in other processes,
+  // whose whole box is painted over.
+  struct CardFields {
+    std::vector<int> nodes;
+    std::vector<std::string> frames;
+  };
+  virtual CardFields CardFieldsOf(const std::string& target_id);
+  // Paints `mask` over `png` (base64) and encodes it again as `format`
+  // ("png", "jpeg" or "webp", at `quality`) in base64; nullopt if it could
+  // not.
+  virtual std::optional<std::string> MaskScreenshot(const std::string& png,
+                                                    const ScreenshotMask& mask,
+                                                    std::string_view format,
+                                                    std::optional<int> quality);
+  // Koan.autofill on the field `node` (a backend DOM node id in the
+  // session's process): lists Chrome's suggestions for it, or fills the one
+  // picked through Chrome's own fill (koan_agent_autofill.h). The facade
+  // checked the tab is the client's, driven and not behind an interstitial.
+  struct AutofillRequest {
+    int node = 0;
+    bool list = false;
+    AutofillPick pick;
+  };
+  struct AutofillResult {
+    // Empty on success.
+    std::string error_code;
+    std::string error_message;
+    base::DictValue result;
+    // The audit summary: the field's kind and the row's label, never a
+    // value.
+    std::string summary;
+  };
+  using AutofillCallback = base::OnceCallback<void(AutofillResult)>;
+  virtual void Autofill(const std::string& target_id,
+                        const std::string& frame_id,
+                        const AutofillRequest& request,
+                        AutofillCallback done);
+  // The values Koan filled for the client's tabs, which nothing sent to it
+  // may carry; null if none.
+  virtual const SecretScrubber* Secrets();
 };
 
 class CdpFacade {
@@ -299,6 +372,37 @@ class CdpFacade {
   void FinishCapture(uint64_t capture_id,
                      std::optional<CaptureAnswer> answer,
                      std::optional<CaptureError> error);
+  void Autofill(const AgentMessage& message);
+  void OnAutofilled(int client_message_id,
+                    std::string session_id,
+                    std::string target_id,
+                    base::TimeTicks start,
+                    FacadeBackend::AutofillResult result);
+  // Why `method` may not run in `session` while a secret Koan filled is in
+  // its page, or nullopt.
+  std::optional<std::string_view> SecretRefusal(const TabSession& session,
+                                                std::string_view method,
+                                                const base::DictValue& params);
+  // The frame target id the backend knows a session by (empty: the tab's).
+  static std::string FrameIdOf(const TabSession& session);
+  // Hides the secret fields in a DOM or Accessibility answer or event.
+  void RedactFields(const TabSession& session,
+                    std::string_view method,
+                    base::DictValue& params);
+  // Page.captureScreenshot of a tab with a card field Koan filled: the
+  // fields are measured, the screenshot taken as PNG, and its boxes painted
+  // over before the client sees it.
+  struct ScreenshotJob;
+  void StartMaskedScreenshot(const AgentMessage& message,
+                             TabSession& session,
+                             std::string summary);
+  void OnJobMetrics(uint64_t job_id, const base::DictValue* result);
+  void OnJobOwner(uint64_t job_id, const base::DictValue* result);
+  void MeasureJobFields(uint64_t job_id);
+  void OnJobQuads(uint64_t job_id, const base::DictValue* result);
+  void CaptureForJob(uint64_t job_id);
+  void FinishJob(uint64_t job_id, base::DictValue* result);
+  void FailJob(uint64_t job_id, std::string_view why);
   // The session's screencast closed (or never opened): its hold goes.
   void EndScreencastHold(TabSession& session);
   // Whether answers and events from the tab are redacted (a user tab the
@@ -331,12 +435,17 @@ class CdpFacade {
                const std::string& method,
                std::string summary,
                base::DictValue params,
+               base::OnceCallback<void(const base::DictValue*)> on_answer = {},
+               uint64_t mask_job = 0,
                uint64_t capture_id = 0);
   // Sends a command of the facade's own to the tab (its answer is not given to
-  // the client).
+  // the client). `on_answer`, if any, gets the result (null: an error, or
+  // the session ended).
+  using InternalAnswer = base::OnceCallback<void(const base::DictValue*)>;
   void SendInternal(TabSession& session,
                     std::string method,
-                    base::DictValue params);
+                    base::DictValue params,
+                    InternalAnswer on_answer = InternalAnswer());
 
   // Child targets (design section 4.4, T-cdp-3): a Target.* event of the tab
   // or of a child. Returns false if it is not one (it is then an ordinary
@@ -356,17 +465,23 @@ class CdpFacade {
   std::optional<base::DictValue> TargetInfo(const std::string& target_id);
   bool InScope(std::string_view target_id) const;
 
+  // `binary`: the result's `data` is an image or a PDF, which the scrubber
+  // passes over.
   void Reply(int id,
              const std::optional<std::string>& session_id,
-             base::DictValue result);
+             base::DictValue result,
+             bool binary = false);
   void ReplyError(int id,
                   const std::optional<std::string>& session_id,
                   std::string_view code,
                   std::string_view message);
   void SendEvent(std::string_view method,
                  base::DictValue params,
-                 const std::optional<std::string>& session_id);
-  void Send(const base::DictValue& message);
+                 const std::optional<std::string>& session_id,
+                 bool binary = false);
+  // Serializes `message`, scrubs it of the client's secrets and sends it.
+  // `binary`: its result's or params' `data` is left out of the scrub.
+  void Send(base::DictValue message, bool binary = false);
 
   // Audits a message that was answered at once (denied, a no-op, a facade
   // method), or a forwarded command when its answer comes.
@@ -404,6 +519,8 @@ class CdpFacade {
   // Koan.captureScaled requests in progress, by an id of the facade's own.
   std::map<uint64_t, Capture> captures_;
   uint64_t next_capture_ = 1;
+  std::map<uint64_t, std::unique_ptr<ScreenshotJob>> screenshot_jobs_;
+  uint64_t next_job_ = 1;
   bool discover_targets_ = false;
   bool auto_attach_ = false;
 

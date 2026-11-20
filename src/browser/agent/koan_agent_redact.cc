@@ -6,9 +6,11 @@
 
 #include <algorithm>
 #include <array>
+#include <map>
 #include <optional>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "base/strings/string_util.h"
 
 namespace koan::agent {
@@ -23,11 +25,42 @@ constexpr auto kRawTextElements = std::to_array<std::string_view>(
     {"script", "style", "textarea", "title", "xmp", "iframe", "noembed",
      "noframes", "noscript", "plaintext"});
 
-bool IsSecretType(std::string_view type) {
+bool IsSecretType(std::string_view type, bool hidden = true) {
   const std::string_view trimmed =
       base::TrimString(type, base::kWhitespaceASCII, base::TRIM_ALL);
-  return base::EqualsCaseInsensitiveASCII(trimmed, "hidden") ||
+  return (hidden && base::EqualsCaseInsensitiveASCII(trimmed, "hidden")) ||
          base::EqualsCaseInsensitiveASCII(trimmed, "password");
+}
+
+// What RedactNodes() hides: hidden inputs' values too, and the nodes whose
+// value is a secret whatever their type.
+struct NodeRedaction {
+  bool hidden = true;
+  raw_ptr<const std::set<int>> fields = nullptr;
+};
+
+// Empties every `value` of a flat [name, value, ...] list if `secret`, or
+// if its first `type` is a secret type.
+void RedactAttributes(base::ListValue& attributes, bool hidden, bool secret) {
+  if (!secret) {
+    for (size_t i = 0; i + 1 < attributes.size(); i += 2) {
+      const std::string* name = attributes[i].GetIfString();
+      const std::string* value = attributes[i + 1].GetIfString();
+      if (name && value && base::EqualsCaseInsensitiveASCII(*name, "type")) {
+        secret = IsSecretType(*value, hidden);
+        break;
+      }
+    }
+  }
+  if (!secret) {
+    return;
+  }
+  for (size_t i = 0; i + 1 < attributes.size(); i += 2) {
+    const std::string* name = attributes[i].GetIfString();
+    if (name && base::EqualsCaseInsensitiveASCII(*name, "value")) {
+      attributes[i + 1] = base::Value("");
+    }
+  }
 }
 
 bool IsHtmlSpace(char c) {
@@ -59,19 +92,25 @@ size_t FindCaseInsensitive(std::string_view haystack,
   return std::string_view::npos;
 }
 
-void RedactNodes(base::DictValue& dict, int depth);
+void RedactNodes(base::DictValue& dict,
+                 int depth,
+                 const NodeRedaction& redaction);
 
-void RedactNodesIn(base::Value& value, int depth) {
+void RedactNodesIn(base::Value& value,
+                   int depth,
+                   const NodeRedaction& redaction) {
   if (value.is_dict()) {
-    RedactNodes(value.GetDict(), depth);
+    RedactNodes(value.GetDict(), depth, redaction);
   } else if (value.is_list()) {
     for (base::Value& item : value.GetList()) {
-      RedactNodesIn(item, depth + 1);
+      RedactNodesIn(item, depth + 1, redaction);
     }
   }
 }
 
-void RedactNodes(base::DictValue& dict, int depth) {
+void RedactNodes(base::DictValue& dict,
+                 int depth,
+                 const NodeRedaction& redaction) {
   const std::string* name = dict.FindString("nodeName");
   base::ListValue* attributes = dict.FindList("attributes");
   if (depth > kMaxNodeDepth) {
@@ -80,17 +119,86 @@ void RedactNodes(base::DictValue& dict, int depth) {
     }
     return;
   }
-  if (name && attributes && base::EqualsCaseInsensitiveASCII(*name, "input")) {
-    RedactSecretInputsInAttributes(*attributes);
+  if (name && attributes) {
+    const std::optional<int> node = dict.FindInt("backendNodeId");
+    const bool secret_node =
+        redaction.fields && node && redaction.fields->contains(*node);
+    if (secret_node || base::EqualsCaseInsensitiveASCII(*name, "input")) {
+      RedactAttributes(*attributes, redaction.hidden, secret_node);
+    }
   }
   for (auto [key, value] : dict) {
-    RedactNodesIn(value, depth + 1);
+    RedactNodesIn(value, depth + 1, redaction);
+  }
+}
+
+// Accessibility nodes (CDP AXNode): a secret field's value is shown as
+// filled or empty, and nothing inside it says more.
+void SetAXText(base::DictValue& node, std::string_view key, std::string text) {
+  base::DictValue value;
+  value.Set("type", "string");
+  value.Set("value", std::move(text));
+  node.Set(key, std::move(value));
+}
+
+void RedactAXNodes(base::ListValue& nodes, const std::set<int>& fields) {
+  if (fields.empty()) {
+    return;
+  }
+  std::map<std::string, base::DictValue*, std::less<>> by_id;
+  std::vector<base::DictValue*> secret;
+  for (base::Value& item : nodes) {
+    base::DictValue* node = item.GetIfDict();
+    if (!node) {
+      continue;
+    }
+    if (const std::string* id = node->FindString("nodeId")) {
+      by_id[*id] = node;
+    }
+    const std::optional<int> backend = node->FindInt("backendDOMNodeId");
+    if (backend && fields.contains(*backend)) {
+      secret.push_back(node);
+    }
+  }
+  std::set<const base::DictValue*> inner;
+  std::vector<base::DictValue*> pending;
+  for (base::DictValue* node : secret) {
+    const std::string* value = node->FindStringByDottedPath("value.value");
+    SetAXText(*node, "value",
+              value && !value->empty() ? kSecretFilled : kSecretEmpty);
+    pending.push_back(node);
+  }
+  while (!pending.empty()) {
+    base::DictValue* node = pending.back();
+    pending.pop_back();
+    const base::ListValue* children = node->FindList("childIds");
+    if (!children) {
+      continue;
+    }
+    for (const base::Value& child : *children) {
+      const std::string* id = child.GetIfString();
+      auto it = id ? by_id.find(*id) : by_id.end();
+      if (it == by_id.end() || !inner.insert(it->second).second) {
+        continue;
+      }
+      if (it->second->FindDict("name")) {
+        SetAXText(*it->second, "name", "");
+      }
+      if (it->second->FindDict("value")) {
+        SetAXText(*it->second, "value", "");
+      }
+      pending.push_back(it->second);
+    }
   }
 }
 
 }  // namespace
 
 std::string RedactSecretInputsInHtml(std::string_view html) {
+  return RedactInputsInHtml(html, /*hidden=*/true);
+}
+
+std::string RedactInputsInHtml(std::string_view html, bool hidden) {
   const size_t n = html.size();
   std::string out;
   out.reserve(n);
@@ -188,9 +296,10 @@ std::string RedactSecretInputsInHtml(std::string_view html) {
         if (base::EqualsCaseInsensitiveASCII(attribute.name, "type")) {
           secret =
               secret || (attribute.has_value &&
-                         IsSecretType(html.substr(
-                             attribute.value_begin,
-                             attribute.value_end - attribute.value_begin)));
+                         IsSecretType(html.substr(attribute.value_begin,
+                                                  attribute.value_end -
+                                                      attribute.value_begin),
+                                      hidden));
           break;  // the first one counts, as in HTML
         }
       }
@@ -223,24 +332,7 @@ std::string RedactSecretInputsInHtml(std::string_view html) {
 }
 
 void RedactSecretInputsInAttributes(base::ListValue& attributes) {
-  std::optional<bool> secret;
-  for (size_t i = 0; i + 1 < attributes.size(); i += 2) {
-    const std::string* name = attributes[i].GetIfString();
-    const std::string* value = attributes[i + 1].GetIfString();
-    if (name && value && base::EqualsCaseInsensitiveASCII(*name, "type")) {
-      secret = IsSecretType(*value);
-      break;
-    }
-  }
-  if (!secret.value_or(false)) {
-    return;
-  }
-  for (size_t i = 0; i + 1 < attributes.size(); i += 2) {
-    const std::string* name = attributes[i].GetIfString();
-    if (name && base::EqualsCaseInsensitiveASCII(*name, "value")) {
-      attributes[i + 1] = base::Value("");
-    }
-  }
+  RedactAttributes(attributes, /*hidden=*/true, /*secret=*/false);
 }
 
 void RedactSecretInputs(std::string_view method, base::DictValue& params) {
@@ -266,7 +358,54 @@ void RedactSecretInputs(std::string_view method, base::DictValue& params) {
     }
     return;
   }
-  RedactNodes(params, 0);
+  RedactNodes(params, 0, NodeRedaction());
+}
+
+void RedactSecretFields(std::string_view method,
+                        base::DictValue& params,
+                        const std::set<int>& fields,
+                        bool hidden) {
+  if (method.starts_with("Accessibility.")) {
+    if (base::ListValue* nodes = params.FindList("nodes")) {
+      RedactAXNodes(*nodes, fields);
+    }
+    for (std::string_view key : {"node", "root"}) {
+      if (base::Value* node = params.Find(key); node && node->is_dict()) {
+        base::ListValue one;
+        one.Append(std::move(*node));
+        RedactAXNodes(one, fields);
+        params.Set(key, std::move(one.front()));
+      }
+    }
+    return;
+  }
+  if (!method.starts_with("DOM.")) {
+    return;
+  }
+  if (method == "DOM.getOuterHTML" || method == "DOM.attributeModified") {
+    // Neither names the nodes by their backend id: by the input's type (on
+    // a readable tab, every `value` change of an attribute too). A field's
+    // `value` attribute is not what autofill filled, which the facade's
+    // scrubber still catches if the page copies it there.
+    if (hidden) {
+      RedactSecretInputs(method, params);
+    } else if (method == "DOM.getOuterHTML") {
+      if (const std::string* html = params.FindString("outerHTML")) {
+        params.Set("outerHTML", RedactInputsInHtml(*html, /*hidden=*/false));
+      }
+    }
+    return;
+  }
+  if (method == "DOM.getAttributes") {
+    if (base::ListValue* attributes = params.FindList("attributes")) {
+      RedactAttributes(*attributes, hidden, /*secret=*/false);
+    }
+    return;
+  }
+  NodeRedaction redaction;
+  redaction.hidden = hidden;
+  redaction.fields = &fields;
+  RedactNodes(params, 0, redaction);
 }
 
 }  // namespace koan::agent

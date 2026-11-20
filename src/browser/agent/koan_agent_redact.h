@@ -5,6 +5,7 @@
 #ifndef KOAN_BROWSER_AGENT_KOAN_AGENT_REDACT_H_
 #define KOAN_BROWSER_AGENT_KOAN_AGENT_REDACT_H_
 
+#include <set>
 #include <string>
 #include <string_view>
 
@@ -40,9 +41,36 @@ void RedactSecretInputs(std::string_view method, base::DictValue& params);
 // text elements (script, style, ...) are not tags. A tag cut off by the end of
 // the string is treated as secret.
 std::string RedactSecretInputsInHtml(std::string_view html);
+// The same, for password inputs only (`hidden`: false) or for both.
+std::string RedactInputsInHtml(std::string_view html, bool hidden);
 
 // The attribute list part: a flat [name, value, ...] list.
 void RedactSecretInputsInAttributes(base::ListValue& attributes);
+
+// The secret fields of a tab the agent drives (its own, or a user's tab it
+// was given; design section 4.5, "Secrets Koan filled"), which every answer
+// and event hides too: the agent may see that such a field is filled, never
+// its value. `fields` are the backend DOM node ids, in the renderer process of
+// the session the message comes from, of the fields whose value is a secret:
+// password fields and the fields autofill classifies as a card number, a CVC
+// or an IBAN (IsSecretField(), koan_agent_secret_fields.h).
+//  - DOM answers and events: the `value` attribute of every password input
+//    (hidden inputs too with `hidden`, as RedactSecretInputs() does), and of
+//    every Node object of a field in `fields`, is emptied;
+//  - Accessibility answers and events (getFullAXTree, getPartialAXTree,
+//    queryAXTree, getChildAXNodes, getRootAXNode, getAXNodeAndAncestors,
+//    nodesUpdated, loadComplete): the value of a node of a field in
+//    `fields` becomes kSecretFilled or kSecretEmpty, and the name and value
+//    of every node inside it are emptied. (Blink already shows a password
+//    field's value as dots.)
+inline constexpr char kSecretFilled[] =
+    "\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2 (filled)";
+inline constexpr char kSecretEmpty[] =
+    "\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2 (empty)";
+void RedactSecretFields(std::string_view method,
+                        base::DictValue& params,
+                        const std::set<int>& fields,
+                        bool hidden);
 
 }  // namespace koan::agent
 

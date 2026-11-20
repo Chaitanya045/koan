@@ -133,6 +133,15 @@ TEST_F(KoanAgentPromptsTest, ReasonsAndText) {
   EXPECT_EQ(ReasonFor(PageSurface::kDeviceChooser), "device-chooser");
   EXPECT_EQ(ReasonFor(PageSurface::kScreenShare), "screen-share");
   EXPECT_EQ(ReasonFor(PageSurface::kPasskey), "passkey");
+  EXPECT_EQ(ReasonFor(PageSurface::kAutofillVerify), "autofill-verify");
+  EXPECT_TRUE(NeedsUserInFront(PageSurface::kAutofillVerify));
+  EXPECT_EQ(PromptTextFor(PageSurface::kAutofillVerify, "shop.test",
+                          "card:Claude Code"),
+            u"Claude Code needs you to verify a card");
+  EXPECT_EQ(PromptTextFor(PageSurface::kAutofillVerify, "", "login:Codex"),
+            u"Codex needs you to verify a login");
+  EXPECT_EQ(PromptTextFor(PageSurface::kAutofillVerify, "", ""),
+            u"An agent needs you to verify a card");
   EXPECT_EQ(PromptTextFor(PageSurface::kExternalProtocol, "a.test", "mailto"),
             u"a.test wants to open a mailto: link");
   EXPECT_EQ(PromptTextFor(PageSurface::kPrint, "", ""),

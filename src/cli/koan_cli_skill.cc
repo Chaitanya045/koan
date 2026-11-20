@@ -68,7 +68,8 @@ the way in, and it is the one the user approved.
    custom one such as a Material or react-select dropdown: it opens it,
    clicks the option, and checks; it fails naming the options there are;
    use it for every dropdown: `koan act <tab> choose @56 "Option text"`),
-   `press Enter`, `scroll 600`, `navigate <url>`. Up to 50 steps.
+   `press Enter`, `scroll 600`, `navigate <url>`, `autofill @12 2` (below).
+   Up to 50 steps.
    Each step prints one line (`2/4 fill @13: ok`). The batch stops at the
    first step that fails, and before any step if the user has taken the
    tab (Koan.paused: then `koan wait <tab> --resumed`, below) or the page
@@ -151,6 +152,34 @@ the way in, and it is the one the user approved.
    A PNG either way: JPEG or WebP save bytes, not tokens. Every size and
    --clip work the same on a tab of the user's: Koan copies what it already
    drew, so their tab does not flicker.
+   Addresses, cards and logins: never type what the user saved. Use their
+   autofill, as they would: `koan autofill <tab> @12 --list` prints what
+   Chrome offers for that field, numbered, as labels: 'Home · 12 Main St,
+   …', 'Visa ••••4242 · exp 08/29', 'ada@example.com (saved password)';
+   `koan autofill <tab> @12 --pick 2` (or `--pick "Visa"`) fills the form
+   with it through Chrome's own autofill. In a batch: `koan act <tab>
+   autofill @12 2 click @31`. Koan.noSuggestions: nothing is saved for
+   it; Koan.autofillOff: the user does not let agents use it (do not ask
+   them to type it for you); Koan.offSite: the login is not for this
+   site, or the form sends it elsewhere; stop and tell the user.
+   You never see a password, a card number, a CVC or an IBAN, and that is
+   expected: a filled one reads '•••• (filled)' in snapshots, script in its
+   page waits (Koan.secretField) until the page moves on, screenshots hide
+   card fields, and any copy of one reads "[secret]". Do not try to read
+   them or to get around this; click Sign in or Continue as usual.
+   When Chrome asks the user first (Touch ID, the device password, the
+   card's CVC) or the site asks for a code or a passkey, it is the user's:
+   the pick answers "Koan.userNeeded: ... verify this card" and Koan asks
+   them; wait for Koan.userNeededDone (`koan watch <tab>`), then snapshot.
+   Filling a card is not paying, and paying is not yours: never click
+   the last Pay, Place order, Buy or Confirm button, even when the user
+   asked you to buy. Fill the form, then stop before that click, tell the
+   user what is ready (the amount and the card or account as the page
+   shows them, e.g. "EUR 42.10 with Visa ••••4242") and hand the tab
+   over: `koan release <tab>` if it is theirs, or tell them which of your
+   tabs it is and leave it open (no `koan end`) until they are done. The
+   user makes that click, and anything the page or the bank asks next.
+   (Koan may later let the user allow it in Settings; until then, never.)
 5. A tab of the user's (to work on a page they have open, signed in): tell
    the user to bring that tab to the front in Koan, then run
    `koan take-over`. Koan asks them; once they allow it, you get the tab

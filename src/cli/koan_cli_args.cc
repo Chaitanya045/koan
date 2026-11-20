@@ -31,6 +31,7 @@ const std::map<std::string_view, CommandKind>& Commands() {
       {"snapshot", CommandKind::kSnapshot},
       {"screenshot", CommandKind::kScreenshot},
       {"act", CommandKind::kAct},
+      {"autofill", CommandKind::kAutofill},
       {"take-over", CommandKind::kTakeOver},
       {"release", CommandKind::kRelease},
       // The design's name for release (section 12).
@@ -247,6 +248,16 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
       command.resumed = true;
       continue;
     }
+    if (arg == "--list") {
+      command.autofill_list = true;
+      continue;
+    }
+    if (std::optional<bool> got = value_of("--pick", &command.pick)) {
+      if (!*got || command.pick.empty()) {
+        return Error("--pick needs a suggestion's number or label");
+      }
+      continue;
+    }
     if (std::optional<bool> got = value_of("--until", &value)) {
       std::string error;
       if (!*got) {
@@ -329,6 +340,10 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
   }
   if (command.resumed && command.kind != CommandKind::kWait) {
     return Error("--resumed is koan wait's");
+  }
+  if ((command.autofill_list || !command.pick.empty()) &&
+      command.kind != CommandKind::kAutofill) {
+    return Error("--list and --pick are koan autofill's");
   }
   auto expect = [&](size_t min, size_t max) {
     return rest.size() >= min && rest.size() <= max;
@@ -429,6 +444,21 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
       }
       command.tab = rest[0];
       break;
+    case CommandKind::kAutofill: {
+      std::string ignored;
+      if (!expect(2, 2) ||
+          !(ParseRef(rest[1]) ||
+            (rest[1].starts_with("loc:") && ParseLocator(rest[1], &ignored))) ||
+          (command.autofill_list && !command.pick.empty())) {
+        return Error(
+            "usage: koan autofill <tab> @field [--list | --pick N | --pick "
+            "\"label\"]");
+      }
+      command.tab = rest[0];
+      command.ref = rest[1];
+      command.autofill_list = command.pick.empty();
+      break;
+    }
     case CommandKind::kWatch:
       if (!expect(0, 1)) {
         return Error("usage: koan watch [tab]");
@@ -497,6 +527,9 @@ Steps (at most 50):
                                one character
   scroll <pixels>              down (negative: up)
   navigate <url>               http, https or about:blank
+  autofill <target> <pick>     one of Chrome's autofill suggestions for the
+                               field, by number or label (koan help
+                               autofill)
 <target> is @ref, from a snapshot of the page as it is now (a ref from
 before a navigation fails: Koan.staleRef), or a locator,
 loc:role=<role>[name="<name>"], which must name exactly one element (it
@@ -565,6 +598,32 @@ Reads commands from stdin, one a line, as a shell splits them (a leading
 "args": [...]}), and runs them over one connection. Each answer ends with
 a line "--- exit N"; a JSON line gets one JSON line {"id", "exit", "out",
 "err"}. --stop-on-error stops at the first command that fails.)HELP"},
+      {"autofill", R"HELP(koan autofill <tab> @field [--list]
+koan autofill <tab> @field --pick N | --pick "label"
+
+Uses the user's saved addresses, cards and logins the way the user does,
+through Chrome's own autofill. --list (the default) prints the suggestions
+Chrome would show for the field, numbered, as labels only ("Home · 12 Main
+St, …", "Visa ••••4242 · exp 08/29", "ada@example.com (saved password)").
+--pick fills the form with one, by its number or its label (or a part of it
+that only one label has), exactly as the user's click on that row would.
+
+You never see a password, a card number, a CVC or an IBAN: a filled one
+reads "•••• (filled)" in snapshots, and script in its page waits
+(Koan.secretField) until the page moves on. That is expected; do not try to
+read it. Click and submit as usual.
+
+When Chrome asks the user first (Touch ID, the device password or the
+card's CVC), the answer is "needs the user: verify the card" and the user is
+asked in Koan (Koan.userNeeded autofill-verify); wait for
+Koan.userNeededDone, then take a snapshot.
+
+@field is a ref from a snapshot (a text field of a form) or a locator.
+Fails with Koan.autofillOff (the user does not let agents use them),
+Koan.noSuggestions, Koan.noSuchSuggestion, Koan.offSite (a login for another
+site, or a form that sends it elsewhere), Koan.paused, Koan.notPermitted (a
+tab you may only read) or Koan.interstitial.
+)HELP"},
       {"screenshot",
        R"HELP(koan screenshot <tab> [--size S] [--clip C] [-o file.png]
 
@@ -669,10 +728,15 @@ std::string UsageText() {
            [--screenshot micro|mini|normal]
                          steps: click @ref | fill @ref <text> | select @ref
                          <option> | choose @ref <option> | press <key> |
-                         scroll <pixels> | navigate <url>, in order, each
+                         scroll <pixels> | navigate <url> | autofill @ref
+                         <pick>, in order, each
                          once the page settled; stops at the first failure
                          and when the user takes the tab. A locator
                          (loc:role=button[name="Next"]) works for @ref
+  koan autofill <tab> @field [--list | --pick N | --pick "label"]
+                         Chrome's autofill suggestions for a field (labels
+                         only), or fill the one picked as the user would;
+                         secrets stay hidden (a filled one reads as dots)
   koan help <command>    a command's exact form and options
   koan take-over [tab]   ask to control a tab of yours (you approve in Koan)
   koan release <tab>     give a tab of yours back

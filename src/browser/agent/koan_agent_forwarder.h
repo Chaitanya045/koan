@@ -24,6 +24,7 @@
 #include "base/timer/timer.h"
 #include "koan/browser/agent/koan_agent_audit.h"
 #include "koan/browser/agent/koan_agent_auto_resume.h"
+#include "koan/browser/agent/koan_agent_autofill_hooks.h"
 #include "koan/browser/agent/koan_agent_facade.h"
 #include "koan/browser/agent/koan_agent_prompts.h"
 #include "koan/browser/agent/koan_agent_registry.h"
@@ -32,8 +33,9 @@
 class GURL;
 
 namespace content {
+class RenderFrameHost;
 class WebContents;
-}
+}  // namespace content
 
 // The browser side of CDP forwarding (.agent/notes/agent-control.md sections
 // 2, 4 and 7), on the UI thread: a CdpFacade per authenticated connection, the
@@ -47,7 +49,9 @@ class WebContents;
 // the user's it was not given.
 namespace koan::agent {
 
+class AgentAutofill;
 class PauseWatch;
+class SecretScrubber;
 
 // A tab an agent holds, as the indicator shows it (design section 6.2): its
 // own tab, or a user tab it was given.
@@ -72,7 +76,7 @@ struct ControlledTab {
 // registrable domain (net::SchemefulSite) of an http(s) URL; empty otherwise.
 std::string SiteFor(const GURL& url);
 
-class AgentForwarder {
+class AgentForwarder : public AutofillHooksDelegate {
  public:
   // Sends one JSON message to a connection (posted to the gateway).
   using SendCallback =
@@ -85,7 +89,7 @@ class AgentForwarder {
                  base::RepeatingClosure on_changed);
   AgentForwarder(const AgentForwarder&) = delete;
   AgentForwarder& operator=(const AgentForwarder&) = delete;
-  ~AgentForwarder();
+  ~AgentForwarder() override;
 
   void OnClientConnected(uint64_t connection_id,
                          const std::string& client_id,
@@ -112,6 +116,13 @@ class AgentForwarder {
   void KeepPaused(const std::string& target_id);
   // Every tab an agent holds.
   std::vector<ControlledTab> ControlledTabs() const;
+
+  // AutofillHooksDelegate (`koan autofill`):
+  bool TakeSuggestions(
+      content::WebContents* contents,
+      const autofill::AutofillClient::PopupOpenArgs& open_args,
+      base::WeakPtr<autofill::AutofillSuggestionDelegate> delegate) override;
+  bool RefusesCrossDomainFill(content::WebContents* contents) override;
 
  private:
   class Connection;
@@ -186,6 +197,18 @@ class AgentForwarder {
   // one it was paused for.
   bool SyncPause(const std::string& target_id, std::string_view reason);
   PauseWatch* PauseWatchFor(std::string_view target_id) const;
+  AgentAutofill* AutofillFor(std::string_view target_id) const;
+  AgentAutofill* AutofillFor(content::WebContents* contents) const;
+  // The frame a facade session is for: the tab's main frame, or the frame
+  // target `frame_id` of a child session; null if gone.
+  content::RenderFrameHost* FrameFor(std::string_view target_id,
+                                     std::string_view frame_id) const;
+  // A secret Koan filled in a tab (`koan autofill`): its client's scrubber
+  // takes it. The scrubber is made again from the client's other tabs when a
+  // tab leaves (a value lives as long as its tab).
+  void OnSecretFilled(const std::string& target_id, const std::string& value);
+  void RebuildScrubber(const std::string& client_id);
+  const SecretScrubber* ScrubberFor(std::string_view client_id) const;
   void OnTabNavigated(const std::string& target_id, const GURL& url);
 
   void ForEachFacadeOf(std::string_view client_id,
@@ -223,6 +246,9 @@ class AgentForwarder {
       take_overs_;
   uint64_t next_take_over_id_ = 1;
   std::set<std::string, std::less<>> resume_asked_;
+  // Each client's secrets (OnSecretFilled()).
+  std::map<std::string, std::unique_ptr<SecretScrubber>, std::less<>>
+      scrubbers_;
   base::SequenceBound<AuditLog> audit_;
   base::WeakPtrFactory<AgentForwarder> weak_factory_{this};
 };

@@ -34,6 +34,8 @@ std::string_view ReasonFor(PageSurface surface) {
       return "screen-share";
     case PageSurface::kPasskey:
       return "passkey";
+    case PageSurface::kAutofillVerify:
+      return "autofill-verify";
   }
   return "";
 }
@@ -44,6 +46,7 @@ bool NeedsUserInFront(PageSurface surface) {
     case PageSurface::kDeviceChooser:
     case PageSurface::kScreenShare:
     case PageSurface::kPasskey:
+    case PageSurface::kAutofillVerify:
       return true;
     case PageSurface::kBeforeUnload:
     case PageSurface::kJavaScriptDialog:
@@ -85,6 +88,17 @@ std::u16string PromptTextFor(PageSurface surface,
       return base::StrCat({page, u" wants to share your screen"});
     case PageSurface::kPasskey:
       return base::StrCat({page, u" wants you to use a passkey"});
+    case PageSurface::kAutofillVerify: {
+      // `detail` is "card:<agent>" or "login:<agent>".
+      const size_t colon = detail.find(':');
+      const std::string_view what =
+          colon == std::string_view::npos ? "card" : detail.substr(0, colon);
+      const std::string_view agent =
+          colon == std::string_view::npos ? "" : detail.substr(colon + 1);
+      return base::StrCat(
+          {agent.empty() ? u"An agent" : base::UTF8ToUTF16(agent),
+           u" needs you to verify a ", what == "login" ? u"login" : u"card"});
+    }
   }
   return page;
 }

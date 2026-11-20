@@ -8,8 +8,10 @@
 #include <utility>
 #include <vector>
 
+#include "base/base64.h"
 #include "base/functional/bind.h"
 #include "base/rand_util.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/time/default_tick_clock.h"
@@ -29,12 +31,15 @@
 #include "content/public/browser/render_widget_host_observer.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "koan/browser/agent/koan_agent_autofill.h"
 #include "koan/browser/agent/koan_agent_devtools_client.h"
 #include "koan/browser/agent/koan_agent_facade.h"
 #include "koan/browser/agent/koan_agent_lease.h"
 #include "koan/browser/agent/koan_agent_page_surfaces.h"
 #include "koan/browser/agent/koan_agent_pause_watch.h"
 #include "koan/browser/agent/koan_agent_reach_content.h"
+#include "koan/browser/agent/koan_agent_screenshot_mask.h"
+#include "koan/browser/agent/koan_agent_secrets.h"
 #include "koan/browser/agent/koan_agent_service.h"
 #include "koan/browser/agent/koan_agent_surface_capture.h"
 #include "koan/browser/agent/koan_agent_tab_hooks.h"
@@ -43,6 +48,13 @@
 #include "koan/browser/koan_prefs.h"
 #include "net/base/schemeful_site.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkColor.h"
+#include "third_party/skia/include/core/SkPaint.h"
+#include "ui/gfx/codec/jpeg_codec.h"
+#include "ui/gfx/codec/png_codec.h"
+#include "ui/gfx/codec/webp_codec.h"
 #include "url/origin.h"
 
 namespace koan::agent {
@@ -86,6 +98,47 @@ AutoResumeSettings AutoResumeSettingsNow() {
           : nullptr);
 }
 
+// Design section 4.5: paints the mask's boxes over a screenshot (base64 PNG)
+// with a solid fill, and encodes it as `format`.
+std::optional<std::string> PaintMask(const std::string& png_base64,
+                                     const ScreenshotMask& mask,
+                                     std::string_view format,
+                                     std::optional<int> quality) {
+  std::string png;
+  if (!base::Base64Decode(png_base64, &png)) {
+    return std::nullopt;
+  }
+  SkBitmap bitmap = gfx::PNGCodec::Decode(base::as_byte_span(png));
+  if (bitmap.isNull()) {
+    return std::nullopt;
+  }
+  {
+    SkCanvas canvas(bitmap);
+    SkPaint paint;
+    // Image data, not UI: a plain dark fill reads as "hidden" on any page.
+    paint.setColor(SkColorSetRGB(0x3c, 0x3c, 0x3c));
+    for (const PixelRect& rect :
+         MaskRects(mask, bitmap.width(), bitmap.height())) {
+      canvas.drawIRect(
+          SkIRect::MakeXYWH(rect.x, rect.y, rect.width, rect.height), paint);
+    }
+  }
+  const int level = std::clamp(quality.value_or(80), 0, 100);
+  std::optional<std::vector<uint8_t>> encoded;
+  if (format == "jpeg") {
+    encoded = gfx::JPEGCodec::Encode(bitmap, level);
+  } else if (format == "webp") {
+    encoded = gfx::WebpCodec::Encode(bitmap, level);
+  } else {
+    encoded = gfx::PNGCodec::EncodeBGRASkBitmap(bitmap,
+                                                /*discard_transparency=*/false);
+  }
+  if (!encoded) {
+    return std::nullopt;
+  }
+  return base::Base64Encode(*encoded);
+}
+
 }  // namespace
 
 std::string SiteFor(const GURL& url) {
@@ -115,7 +168,11 @@ class AgentForwarder::TabWatcher final
                                          target_id_),
                      base::BindRepeating(&AgentForwarder::OnSecretFieldFocused,
                                          base::Unretained(forwarder),
-                                         target_id_)) {
+                                         target_id_)),
+        autofill_(contents,
+                  base::BindRepeating(&AgentForwarder::OnSecretFilled,
+                                      base::Unretained(forwarder),
+                                      target_id_)) {
     // A wheel scroll is not a "user interaction" upstream, and an observer on
     // the root widget alone would miss a cross-origin frame's (a payment
     // widget's), so every frame's widget is watched for it.
@@ -183,6 +240,7 @@ class AgentForwarder::TabWatcher final
   }
 
   PauseWatch& pause_watch() { return pause_watch_; }
+  AgentAutofill& autofill() { return autofill_; }
 
  private:
   void Watch(content::RenderFrameHost* frame) {
@@ -198,6 +256,8 @@ class AgentForwarder::TabWatcher final
   std::set<raw_ptr<content::RenderWidgetHost>> widgets_;
   // The tab's pause, if any, and what auto-resume needs to know about it.
   PauseWatch pause_watch_;
+  // `koan autofill`, and the secrets Koan filled in the tab.
+  AgentAutofill autofill_;
 };
 
 // One authenticated connection: its facade, and the DevTools client the facade
@@ -422,6 +482,52 @@ class AgentForwarder::Connection final : public FacadeBackend {
     forwarder_->Audit(std::move(record));
   }
 
+  SecretFacts SecretsIn(const std::string& target_id,
+                        const std::string& frame_id) override {
+    AgentAutofill* autofill = forwarder_->AutofillFor(target_id);
+    content::RenderFrameHost* frame =
+        autofill ? forwarder_->FrameFor(target_id, frame_id) : nullptr;
+    return frame ? autofill->SecretsIn(frame) : SecretFacts();
+  }
+
+  CardFields CardFieldsOf(const std::string& target_id) override {
+    AgentAutofill* autofill = forwarder_->AutofillFor(target_id);
+    return autofill ? autofill->CardFields() : CardFields();
+  }
+
+  std::optional<std::string> MaskScreenshot(
+      const std::string& png,
+      const ScreenshotMask& mask,
+      std::string_view format,
+      std::optional<int> quality) override {
+    return PaintMask(png, mask, format, quality);
+  }
+
+  void Autofill(const std::string& target_id,
+                const std::string& frame_id,
+                const AutofillRequest& request,
+                AutofillCallback done) override {
+    AgentAutofill* autofill = forwarder_->AutofillFor(target_id);
+    content::RenderFrameHost* frame =
+        autofill ? forwarder_->FrameFor(target_id, frame_id) : nullptr;
+    if (!frame) {
+      AutofillResult result;
+      result.error_code = "Koan.targetClosed";
+      result.error_message = "the tab or frame went away";
+      std::move(done).Run(std::move(result));
+      return;
+    }
+    auto label = forwarder_->labels_.find(client_id_);
+    autofill->Run(
+        frame, request,
+        label == forwarder_->labels_.end() ? std::string() : label->second,
+        std::move(done));
+  }
+
+  const SecretScrubber* Secrets() override {
+    return forwarder_->ScrubberFor(client_id_);
+  }
+
  private:
   bool MayDispatch(int command_id) { return facade_->MayDispatch(command_id); }
   void OnDropped(int command_id) { facade_->OnCommandDropped(command_id); }
@@ -496,9 +602,11 @@ AgentForwarder::AgentForwarder(SendCallback send,
                           weak_factory_.GetWeakPtr()),
       base::BindRepeating(&AgentForwarder::NotifyChanged,
                           weak_factory_.GetWeakPtr()));
+  SetAutofillHooksDelegate(this);
 }
 
 AgentForwarder::~AgentForwarder() {
+  SetAutofillHooksDelegate(nullptr);
   AgentLeaseManager::Get().SetOpenedTabHandler({});
   // The app is quitting: throwaway containers are in memory and go with it.
   Reset(/*end_tasks=*/false);
@@ -699,6 +807,10 @@ void AgentForwarder::RemoveTab(const std::string& target_id, bool destroyed) {
   std::unique_ptr<TabWatcher> watcher = std::move(it->second);
   tabs_.erase(it);
   resume_asked_.erase(target_id);
+  // The secrets Koan filled in it go with it.
+  if (!watcher->autofill().secret_values().empty()) {
+    RebuildScrubber(client_id);
+  }
   NotifyChanged();
   // A tab being destroyed ends its own lease.
   if (content::WebContents* contents = watcher->web_contents();
@@ -1121,6 +1233,93 @@ bool AgentForwarder::SyncPause(const std::string& target_id,
 PauseWatch* AgentForwarder::PauseWatchFor(std::string_view target_id) const {
   auto it = tabs_.find(target_id);
   return it == tabs_.end() ? nullptr : &it->second->pause_watch();
+}
+
+AgentAutofill* AgentForwarder::AutofillFor(std::string_view target_id) const {
+  auto it = tabs_.find(target_id);
+  return it == tabs_.end() ? nullptr : &it->second->autofill();
+}
+
+AgentAutofill* AgentForwarder::AutofillFor(
+    content::WebContents* contents) const {
+  // Never a DevTools host made for a tab of the user's: the registry's tabs
+  // are few.
+  for (const auto& [id, watcher] : tabs_) {
+    if (watcher->web_contents() == contents) {
+      return &watcher->autofill();
+    }
+  }
+  return nullptr;
+}
+
+content::RenderFrameHost* AgentForwarder::FrameFor(
+    std::string_view target_id,
+    std::string_view frame_id) const {
+  content::WebContents* contents = ContentsFor(target_id);
+  if (!contents) {
+    return nullptr;
+  }
+  if (frame_id.empty()) {
+    return contents->GetPrimaryMainFrame();
+  }
+  content::RenderFrameHost* found = nullptr;
+  contents->ForEachRenderFrameHost([&](content::RenderFrameHost* frame) {
+    if (!found && base::EqualsCaseInsensitiveASCII(
+                      frame->GetDevToolsFrameToken().ToString(), frame_id)) {
+      found = frame;
+    }
+  });
+  return found;
+}
+
+void AgentForwarder::OnSecretFilled(const std::string& target_id,
+                                    const std::string& value) {
+  const TargetEntry* entry = registry_.Find(target_id);
+  if (!entry) {
+    return;
+  }
+  std::unique_ptr<SecretScrubber>& scrubber = scrubbers_[entry->client_id];
+  if (!scrubber) {
+    scrubber = std::make_unique<SecretScrubber>();
+  }
+  scrubber->Add(value);
+}
+
+void AgentForwarder::RebuildScrubber(const std::string& client_id) {
+  auto scrubber = std::make_unique<SecretScrubber>();
+  for (const auto& [id, watcher] : tabs_) {
+    const TargetEntry* entry = registry_.Find(id);
+    if (!entry || entry->client_id != client_id) {
+      continue;
+    }
+    for (const std::string& value : watcher->autofill().secret_values()) {
+      scrubber->Add(value);
+    }
+  }
+  if (scrubber->empty()) {
+    scrubbers_.erase(client_id);
+  } else {
+    scrubbers_[client_id] = std::move(scrubber);
+  }
+}
+
+const SecretScrubber* AgentForwarder::ScrubberFor(
+    std::string_view client_id) const {
+  auto it = scrubbers_.find(client_id);
+  return it == scrubbers_.end() ? nullptr : it->second.get();
+}
+
+bool AgentForwarder::TakeSuggestions(
+    content::WebContents* contents,
+    const autofill::AutofillClient::PopupOpenArgs& open_args,
+    base::WeakPtr<autofill::AutofillSuggestionDelegate> delegate) {
+  AgentAutofill* autofill = AutofillFor(contents);
+  return autofill && autofill->TakeSuggestions(open_args, std::move(delegate));
+}
+
+bool AgentForwarder::RefusesCrossDomainFill(content::WebContents* contents) {
+  AgentAutofill* autofill = AutofillFor(contents);
+  return autofill && autofill->RefusesCrossDomainFill();
 }
 
 void AgentForwarder::TakeOver(const std::string& target_id) {

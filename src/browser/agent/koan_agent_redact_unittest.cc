@@ -92,5 +92,88 @@ TEST(KoanAgentRedactTest, AttributeListsAndNodes) {
   EXPECT_EQ(*html.FindString("outerHTML"), "<input type=hidden value=x>");
 }
 
+TEST(KoanAgentRedactTest, SecretFieldsReadAsFilledOrEmptyInTheAXTree) {
+  // A card number field (backend node 41) Koan filled, a CVC field (42) left
+  // empty, and an email field (43).
+  base::DictValue tree = *base::JSONReader::ReadDict(
+      R"({"nodes": [
+        {"nodeId": "1", "role": {"value": "RootWebArea"},
+         "childIds": ["2", "4", "6"]},
+        {"nodeId": "2", "role": {"value": "textbox"},
+         "name": {"type": "computedString", "value": "Card number"},
+         "value": {"type": "string", "value": "4242 4242 4242 4242"},
+         "backendDOMNodeId": 41, "childIds": ["3"]},
+        {"nodeId": "3", "role": {"value": "StaticText"},
+         "name": {"type": "computedString", "value": "4242 4242 4242 4242"}},
+        {"nodeId": "4", "role": {"value": "textbox"},
+         "name": {"type": "computedString", "value": "CVC"},
+         "value": {"type": "string", "value": ""}, "backendDOMNodeId": 42},
+        {"nodeId": "6", "role": {"value": "textbox"},
+         "name": {"type": "computedString", "value": "Email"},
+         "value": {"type": "string", "value": "ada@example.com"},
+         "backendDOMNodeId": 43}]})",
+      base::JSON_PARSE_RFC);
+  RedactSecretFields("Accessibility.getFullAXTree", tree, {41, 42},
+                     /*hidden=*/false);
+  const base::ListValue& nodes = *tree.FindList("nodes");
+  EXPECT_EQ(*nodes[1].GetDict().FindStringByDottedPath("value.value"),
+            kSecretFilled);
+  // Its label stays: the agent sees which field it is.
+  EXPECT_EQ(*nodes[1].GetDict().FindStringByDottedPath("name.value"),
+            "Card number");
+  EXPECT_EQ(*nodes[2].GetDict().FindStringByDottedPath("name.value"), "");
+  EXPECT_EQ(*nodes[3].GetDict().FindStringByDottedPath("value.value"),
+            kSecretEmpty);
+  EXPECT_EQ(*nodes[4].GetDict().FindStringByDottedPath("value.value"),
+            "ada@example.com");
+  EXPECT_EQ(base::WriteJson(tree)->find("4242"), std::string::npos);
+
+  // One node (getRootAXNode, loadComplete).
+  base::DictValue root = *base::JSONReader::ReadDict(
+      R"({"node": {"nodeId": "2", "backendDOMNodeId": 41,
+                   "value": {"type": "string", "value": "x"}}})",
+      base::JSON_PARSE_RFC);
+  RedactSecretFields("Accessibility.getRootAXNode", root, {41}, false);
+  EXPECT_EQ(*root.FindStringByDottedPath("node.value.value"), kSecretFilled);
+}
+
+TEST(KoanAgentRedactTest, ADrivenTabHidesPasswordsAndSecretFields) {
+  base::DictValue document = *base::JSONReader::ReadDict(
+      R"({"root": {"nodeName": "#document", "children": [
+           {"nodeName": "INPUT", "backendNodeId": 5,
+            "attributes": ["type", "password", "value", "p4ss"]},
+           {"nodeName": "INPUT", "backendNodeId": 6,
+            "attributes": ["type", "hidden", "value", "csrf"]},
+           {"nodeName": "INPUT", "backendNodeId": 7,
+            "attributes": ["type", "text", "value", "4111"]},
+           {"nodeName": "INPUT", "backendNodeId": 8,
+            "attributes": ["type", "text", "value", "Ada"]}]}})",
+      base::JSON_PARSE_RFC);
+  RedactSecretFields("DOM.getDocument", document, {7}, /*hidden=*/false);
+  const std::string json = *base::WriteJson(document);
+  EXPECT_EQ(json.find("p4ss"), std::string::npos);
+  EXPECT_EQ(json.find("4111"), std::string::npos);
+  // The agent's own tab keeps its hidden inputs and its other fields.
+  EXPECT_NE(json.find("csrf"), std::string::npos);
+  EXPECT_NE(json.find("Ada"), std::string::npos);
+
+  base::DictValue html;
+  html.Set("outerHTML",
+           R"(<input type=password value=p4ss><input type=hidden value=t>)");
+  RedactSecretFields("DOM.getOuterHTML", html, {}, false);
+  EXPECT_EQ(*html.FindString("outerHTML"),
+            "<input type=password value=><input type=hidden value=t>");
+  // A readable tab hides hidden inputs too.
+  RedactSecretFields("DOM.getOuterHTML", html, {}, /*hidden=*/true);
+  EXPECT_EQ(*html.FindString("outerHTML"),
+            "<input type=password value=><input type=hidden value=>");
+
+  base::DictValue attributes = *base::JSONReader::ReadDict(
+      R"({"attributes": ["type", "password", "value", "p4ss"]})",
+      base::JSON_PARSE_RFC);
+  RedactSecretFields("DOM.getAttributes", attributes, {}, false);
+  EXPECT_EQ(base::WriteJson(attributes)->find("p4ss"), std::string::npos);
+}
+
 }  // namespace
 }  // namespace koan::agent
