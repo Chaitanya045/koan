@@ -43,12 +43,14 @@ await step('UF-ONB-3', 'A stale pairing (Koan forgot it) is cleaned up, never "s
   // Pinned to this agent as the good one is (koan pair pins it): koan
   // prefers this agent's own pairings (ChooseClient(), #397), so an
   // unpinned record would never be tried, nor removed (as in agent_cli).
+  // And for the profile as the good one names it (`koan` compares the
+  // path as Koan gave it: the bench's ~/Work, not realpath's ~/work).
   const clients = path.join(AGENT_HOME, '.koan', 'clients');
-  let pinned;
+  let pinned, profileDir = real;
   for (const id of fs.existsSync(clients) ? fs.readdirSync(clients) : []) {
     try {
       const c = JSON.parse(fs.readFileSync(path.join(clients, id, 'client.json'), 'utf8'));
-      if (c.pinned) pinned = c.pinned;
+      if (c.pinned) [pinned, profileDir] = [c.pinned, c.userDataDir ?? real];
     } catch {}
   }
   t.check('the good pairing is pinned to this agent', !!pinned);
@@ -58,7 +60,7 @@ await step('UF-ONB-3', 'A stale pairing (Koan forgot it) is cleaned up, never "s
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     fs.writeFileSync(path.join(dir, 'key'), crypto.randomBytes(32).toString('base64'), { mode: 0o600 });
     fs.writeFileSync(path.join(dir, 'client.json'), JSON.stringify({ clientId: id, label: 'stale',
-                                                                     userDataDir: real, pairedAt: Date.now() + 3600e3,
+                                                                     userDataDir: profileDir, pairedAt: Date.now() + 3600e3,
                                                                      ...(pinned ? { pinned } : {}) }),
                      { mode: 0o600 });
     return dir;

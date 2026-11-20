@@ -10,7 +10,7 @@
 // (run_flows.sh --build-app) is the app whose signature is checked, by
 // default KOAN_APP, the app running. A dev build (out/Koan) is ad hoc signed:
 // the signature steps SKIP on it, saying so.
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { begin, end, evalIn, info, openAnchor, pageById, skipFlow, sleep, step, waitFor } from './uf_lib.mjs';
@@ -21,13 +21,10 @@ const APP = process.env.KOAN_BUILD_APP || process.env.KOAN_APP;
 if (!APP || !fs.existsSync(path.join(APP, 'Contents/Info.plist'))) {
   skipFlow(`no app (KOAN_BUILD_APP=${process.env.KOAN_BUILD_APP ?? ''}, KOAN_APP=${process.env.KOAN_APP ?? ''})`);
 }
+// stdout and stderr both (codesign -d writes what it shows to stderr).
 const run = (cmd, args) => {
-  try {
-    const out = execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000 });
-    return { code: 0, out };
-  } catch (e) {
-    return { code: e.status ?? -1, out: `${e.stdout ?? ''}${e.stderr ?? ''}` };
-  }
+  const r = spawnSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000 });
+  return { code: r.status ?? -1, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
 };
 const find = (dir, test, depth = 8) => {
   const hits = [];
@@ -98,10 +95,14 @@ await step('UF-BLD-4', 'The running app says what it is (chrome://version)', asy
   // and the component updater fetches the CDM into the profile.
   const comp = await openAnchor('chrome://components/');
   const c = await waitFor(() => pageById(comp.id), 5000);
+  // The page's text, shadow roots included (its list is a web component's).
+  const DEEP_TEXT = `(() => { const out = []; const walk = n => { if (n.shadowRoot) walk(n.shadowRoot);
+      for (const c of n.childNodes) { if (c.nodeType === 3) out.push(c.textContent); else walk(c); } };
+      walk(document.body); return out.join(' ').replace(/\\s+/g, ' '); })()`;
   const listed = c && await waitFor(async () => /Widevine Content Decryption Module/.test(
-      await evalIn(c, 'document.body.innerText') ?? '') || null, 6000);
+      await evalIn(c, DEEP_TEXT) ?? '') || null, 8000);
   t.check('chrome://components lists the Widevine Content Decryption Module', !!listed,
-          c ? String(await evalIn(c, 'document.body.innerText')).slice(0, 200) : 'no page');
+          c ? String(await evalIn(c, DEEP_TEXT)).slice(0, 300) : 'no page');
   await browserCall('Target.activateTarget', { targetId: anchor.id }).catch(() => {});
 });
 
