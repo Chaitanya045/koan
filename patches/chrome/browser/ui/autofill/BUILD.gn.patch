@@ -1,10 +1,11 @@
 diff --git a/chrome/browser/ui/autofill/BUILD.gn b/chrome/browser/ui/autofill/BUILD.gn
 --- a/chrome/browser/ui/autofill/BUILD.gn
 +++ b/chrome/browser/ui/autofill/BUILD.gn
-@@ -237,6 +237,7 @@
+@@ -237,6 +237,8 @@
      "//components/unified_consent",
      "//components/variations/service",
      "//components/vector_icons",
++    "//koan/browser/agent:autofill_hooks",
 +    "//koan/browser/containers:partition",
    ]
  

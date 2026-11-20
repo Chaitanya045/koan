@@ -266,3 +266,39 @@
   with emulation and the answer says so, and a user's tab gets
   `Koan.noSurface`, never emulation. Masks for secret fields paint over the
   bitmap before it is encoded, in the same path.
+- **Agents use the user's autofill, and never read the secrets** (user,
+  2026-11-20: "I want agents to use my browser exactly the way I do. That
+  means agents should be able to use my autofills but should not read those
+  values (mainly for passwords)."). `koan autofill <tab> @field --list`
+  shows the suggestions Chrome would offer, as the dropdown's labels only
+  (never a password, a full card number, a CVC or an IBAN); `--pick N|label`
+  (and act's `autofill @ref <pick>` step) fills through Chrome's own autofill
+  and password manager, as the user's click on the row would. What Chrome
+  asks the user first (Touch ID, the device password, a card's CVC) becomes
+  Koan.userNeeded {reason: "autofill-verify"}, "<agent> needs you to verify a
+  card", and the agent waits. Logins fill only for this site's own form
+  (Koan.offSite). The agent never receives a secret: secret fields read
+  "•••• (filled)" in DOM and accessibility answers on every tab; a frame
+  holding one Koan filled refuses script and value reads (Koan.secretField)
+  until it navigates or the field is cleared, while clicks, keys elsewhere
+  and submit still work; screenshots paint over filled card fields; and an
+  egress scrubber replaces each value Koan filled (in memory, for the tab's
+  life) in every message to the agent, in its JSON, URL-encoded and base64
+  forms. Agent tabs get no fill on load and no silent sign-in, so every
+  password filled is one Koan knows. Screenshots: `Koan.captureScaled` (every
+  `koan screenshot` size, `--clip`, `act --screenshot`) paints over the
+  filled card-number, CVC and IBAN fields in the bitmap before encoding
+  (`CdpFacade::CollectCaptureMasks()`); a relay client's raw
+  `Page.captureScreenshot` and the CDP fallback are masked by decoding and
+  re-encoding the PNG. A capture is refused (Koan.secretField) when a filled
+  field's box cannot be located.
+- **The final payment click is the user's** (maintainer, 2026-11-21, until
+  the user decides "ask before paying"): after filling a payment form the
+  agent never clicks the last Pay, Place order, Buy or Confirm button, even
+  when the user asked it to buy. It stops before that click, tells the user
+  what is ready (the amount and the card or account as the page shows them)
+  and hands the tab over (`koan release` for a tab of the user's; its own
+  tab is left open for them), as section 9.4 hands sign-in and payment
+  surfaces to the user. Written as a rule in the `koan skill` guide, not
+  enforced in the browser yet; it can become a setting ("let agents pay")
+  later.

@@ -4,12 +4,15 @@
 
 #include "koan/browser/agent/koan_agent_facade.h"
 
+#include <algorithm>
+#include <deque>
 #include <limits>
 #include <utility>
 #include <vector>
 
 #include "base/base64.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/strings/strcat.h"
@@ -23,6 +26,7 @@
 #include "koan/browser/agent/koan_agent_reach.h"
 #include "koan/browser/agent/koan_agent_redact.h"
 #include "koan/browser/agent/koan_agent_registry.h"
+#include "koan/browser/agent/koan_agent_secrets.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 #include "url/url_constants.h"
@@ -76,6 +80,52 @@ base::DictValue PauseFields(const TargetEntry::Pause& pause) {
 
 FacadeBackend::~FacadeBackend() = default;
 
+FacadeBackend::SecretFacts FacadeBackend::SecretsIn(
+    const std::string& target_id,
+    const std::string& frame_id) {
+  return SecretFacts();
+}
+
+bool FacadeBackend::SecretsCurrent(const std::string& target_id,
+                                   const std::string& frame_id) {
+  return true;
+}
+
+void FacadeBackend::RefreshSecrets(const std::string& target_id,
+                                   const std::string& frame_id,
+                                   base::OnceClosure done) {
+  std::move(done).Run();
+}
+
+void FacadeBackend::SecretsMayHaveChanged(const std::string& target_id) {}
+
+FacadeBackend::CardFields FacadeBackend::CardFieldsOf(
+    const std::string& target_id) {
+  return CardFields();
+}
+
+std::optional<std::string> FacadeBackend::MaskScreenshot(
+    const std::string& png,
+    const ScreenshotMask& mask,
+    std::string_view format,
+    std::optional<int> quality) {
+  return std::nullopt;
+}
+
+void FacadeBackend::Autofill(const std::string& target_id,
+                             const std::string& frame_id,
+                             const AutofillRequest& request,
+                             AutofillCallback done) {
+  AutofillResult result;
+  result.error_code = "Koan.unavailable";
+  result.error_message = "autofill is not in this build";
+  std::move(done).Run(std::move(result));
+}
+
+const SecretScrubber* FacadeBackend::Secrets() {
+  return nullptr;
+}
+
 // One attached tab: the session id the client uses for it, and what the
 // filters keep for it.
 struct CdpFacade::TabSession {
@@ -95,6 +145,10 @@ struct CdpFacade::TabSession {
   std::string child_type;
   // Page.startScreencast was sent and not stopped: the tab's lease is held.
   bool screencast = false;
+  // Commands that wait for the tab's secret fields to be read (a script
+  // read, and every command after it), in order; and whether that read runs.
+  std::deque<AgentMessage> held;
+  bool refreshing = false;
   bool is_child() const { return !child_session.empty(); }
 };
 
@@ -108,9 +162,8 @@ constexpr size_t kMaxChildSessions = 64;
 constexpr size_t kMaxKeepAlives = 16;
 constexpr int kMaxKeepAliveSeconds = 600;
 
-// How far past a masked box the paint goes, in CSS pixels (a focus ring, a
-// border the box leaves out).
-constexpr double kCaptureMaskPadding = 2;
+// Commands a session may have waiting for its tab's secret fields to be read.
+constexpr size_t kMaxHeldCommands = 256;
 
 // The child targets an agent may have: frames and the page's own workers.
 // Shared and service workers outlive the tab and serve the user's other tabs
@@ -131,6 +184,10 @@ struct CdpFacade::Pending {
   std::string summary;
   // For IO.close: the stream it closes.
   std::string stream;
+  // A facade command whose answer the facade waits for.
+  InternalAnswer on_answer;
+  // A screenshot whose card fields are painted over (ScreenshotJob).
+  uint64_t mask_job = 0;
   base::TimeTicks start;
   // A step of a Koan.captureScaled (captures_), answered there.
   uint64_t capture_id = 0;
@@ -147,11 +204,38 @@ struct CdpFacade::Capture {
   PageViewport viewport;
   SurfaceGeometry surface;
   CapturePlan plan;
+  // The filled card fields' boxes (viewport CSS px), and how many of them
+  // land in the image.
+  std::vector<ViewportRect> boxes;
   int masked = 0;
   bool fresh_frame = false;
   // Set once the copy failed and CDP draws it instead.
   std::optional<SurfaceStatus> fallback;
   base::TimeTicks start;
+};
+
+// A screenshot of a tab with a card field Koan filled, while its fields are
+// measured (design section 4.5).
+struct CdpFacade::ScreenshotJob {
+  int client_message_id = 0;
+  std::string session_id;
+  std::string target_id;
+  std::string summary;
+  base::TimeTicks start;
+  // Page.captureScreenshot's params as the client sent them.
+  base::DictValue params;
+  base::DictValue metrics;
+  std::vector<CssRect> boxes;
+};
+
+// The card fields Koan filled in a tab, while they are measured.
+struct CdpFacade::FieldMeasure {
+  std::string session_id;
+  std::vector<int> nodes;
+  std::vector<std::string> frames;
+  std::vector<CssRect> boxes;
+  size_t waiting = 0;
+  FieldBoxesCallback done;
 };
 
 CdpFacade::CdpFacade(uint64_t connection_id,
@@ -228,7 +312,7 @@ void CdpFacade::OnClientMessage(AgentMessage message) {
     HandleBrowserMethod(message);
     return;
   }
-  HandleSessionMethod(message, *session);
+  DispatchSessionMethod(std::move(message), *session);
 }
 
 void CdpFacade::HandleBrowserMethod(AgentMessage& message) {
@@ -322,6 +406,12 @@ void CdpFacade::HandleSessionMethod(AgentMessage& message,
     return;
   }
 
+  if (std::optional<std::string_view> refusal =
+          SecretRefusal(session, method, message.params)) {
+    deny("Koan.secretField", *refusal);
+    return;
+  }
+
   FilterContext context;
   context.tab_is_agent_owned = entry->agent_owned;
   context.streams = &session.streams;
@@ -347,6 +437,11 @@ void CdpFacade::HandleSessionMethod(AgentMessage& message,
   }
   if (method == "Page.createIsolatedWorld") {
     session.contexts.OnIsolatedWorldRequested();
+  }
+  if (method == "Page.captureScreenshot" && !session.is_child() &&
+      backend_->SecretsIn(session.target_id, std::string()).card_filled) {
+    StartMaskedScreenshot(message, session, summary);
+    return;
   }
   if (!Forward(message.id, session, method, summary,
                std::move(message.params))) {
@@ -375,8 +470,12 @@ bool CdpFacade::Forward(std::optional<int> client_message_id,
                         const std::string& method,
                         std::string summary,
                         base::DictValue params,
+                        InternalAnswer on_answer,
+                        uint64_t mask_job,
                         uint64_t capture_id) {
   Pending pending;
+  pending.on_answer = std::move(on_answer);
+  pending.mask_job = mask_job;
   pending.client_message_id = client_message_id;
   pending.capture_id = capture_id;
   pending.session_id = session.session_id;
@@ -484,6 +583,8 @@ void CdpFacade::HandleKoanMethod(AgentMessage& message) {
     KeepAlive(message);
   } else if (message.method == "Koan.captureScaled") {
     CaptureScaled(message);  // audited when it is answered
+  } else if (message.method == "Koan.autofill") {
+    Autofill(message);
   } else {
     AuditCommand(message.method, "", "", AuditOutcome::kDenied,
                  base::TimeDelta());
@@ -1041,7 +1142,8 @@ void CdpFacade::CaptureScaled(const AgentMessage& message) {
   capture.fresh_frame = !before || !before->drawing;
   // The viewport the clip is in, as the page has it now.
   if (!Forward(std::nullopt, *session, "Page.getLayoutMetrics", "",
-               base::DictValue(), capture_id)) {
+               base::DictValue(), InternalAnswer(), /*mask_job=*/0,
+               capture_id)) {
     FinishCapture(capture_id, std::nullopt,
                   CaptureError{"Koan.unavailable", "could not ask the page"});
   }
@@ -1064,6 +1166,30 @@ void CdpFacade::OnCaptureAnswer(uint64_t capture_id,
     }
     CaptureAnswer answer;
     answer.data = *data;
+    if (capture.masked > 0) {
+      const ViewportRect& shows = capture.plan.shows;
+      std::vector<CssRect> boxes;
+      for (const ViewportRect& box : capture.boxes) {
+        boxes.push_back({box.x, box.y, box.width, box.height});
+      }
+      std::optional<std::string> masked = backend_->MaskScreenshot(
+          *data,
+          MaskFor(boxes, CssRect(),
+                  {shows.x, shows.y, shows.width, shows.height}),
+          ImageFormatName(capture.request.format),
+          capture.request.format == ImageFormat::kPng
+              ? std::nullopt
+              : std::make_optional(capture.request.quality));
+      if (!masked) {
+        FinishCapture(capture_id, std::nullopt,
+                      CaptureError{"Koan.secretField",
+                                   "the card fields Koan filled could not be "
+                                   "hidden in the screenshot; try again"});
+        return;
+      }
+      answer.data = std::move(*masked);
+      answer.masked = capture.masked;
+    }
     answer.width = capture.plan.image_width;
     answer.height = capture.plan.image_height;
     answer.css_per_pixel = capture.plan.css_per_pixel;
@@ -1110,16 +1236,52 @@ void CdpFacade::OnCaptureAnswer(uint64_t capture_id,
 
 void CdpFacade::CollectCaptureMasks(TabSession& session,
                                     CaptureMasksCallback done) {
-  std::move(done).Run({});
+  if (!backend_->SecretsIn(session.target_id, std::string()).card_filled) {
+    std::move(done).Run(std::vector<ViewportRect>());
+    return;
+  }
+  MeasureCardFields(
+      session,
+      base::BindOnce(
+          [](CaptureMasksCallback done,
+             base::expected<std::vector<CssRect>, std::string> boxes) {
+            if (!boxes.has_value()) {
+              std::move(done).Run(base::unexpected(CaptureError{
+                  "Koan.secretField",
+                  base::StrCat({"a card number Koan filled is on this page "
+                                "and ",
+                                boxes.error(),
+                                ", so the screenshot was not taken; take it "
+                                "after the form is sent"})}));
+              return;
+            }
+            std::vector<ViewportRect> rects;
+            for (const CssRect& box : *boxes) {
+              rects.push_back({box.x, box.y, box.width, box.height});
+            }
+            std::move(done).Run(std::move(rects));
+          },
+          std::move(done)));
 }
 
-void CdpFacade::CopyCapture(uint64_t capture_id,
-                            std::vector<ViewportRect> boxes) {
+void CdpFacade::CopyCapture(
+    uint64_t capture_id,
+    base::expected<std::vector<ViewportRect>, CaptureError> boxes) {
   auto it = captures_.find(capture_id);
   if (it == captures_.end()) {
     return;
   }
+  if (!boxes.has_value()) {
+    FinishCapture(capture_id, std::nullopt, std::move(boxes.error()));
+    return;
+  }
   Capture& capture = it->second;
+  if (!SessionFor(capture.session_id)) {
+    FinishCapture(capture_id, std::nullopt,
+                  CaptureError{"Koan.targetClosed", "the tab went away"});
+    return;
+  }
+  capture.boxes = std::move(*boxes);
   SurfaceCaptureJob job;
   job.source = capture.plan.source;
   job.whole = capture.plan.whole;
@@ -1128,8 +1290,8 @@ void CdpFacade::CopyCapture(uint64_t capture_id,
   job.format = capture.request.format;
   job.quality = capture.request.quality;
   job.fresh_frame = capture.fresh_frame;
-  job.masks = MaskPixels(capture.plan, boxes, kCaptureMaskPadding);
-  // The answer says how many were painted; a fallback could not paint them.
+  job.masks = MaskPixels(capture.plan, capture.boxes, kMaskPadding);
+  // The answer says how many were painted.
   capture.masked = static_cast<int>(job.masks.size());
   backend_->CopySurface(capture.target_id, std::move(job),
                         base::BindOnce(&CdpFacade::OnSurfaceCopied,
@@ -1160,19 +1322,23 @@ void CdpFacade::OnSurfaceCopied(uint64_t capture_id,
   const TargetEntry* entry = registry_->Find(capture.target_id);
   TabSession* session = SessionFor(capture.session_id);
   const bool agent_owned = entry && entry->agent_owned;
-  // CDP cannot paint the masks: a capture that needs them is not drawn
-  // another way.
   if (ChooseFallback(result.status, agent_owned) != CaptureFallback::kCdp ||
-      !session || capture.masked > 0) {
+      !session) {
     FinishCapture(capture_id, std::nullopt, SurfaceError(result.status));
     return;
   }
   // An agent's own tab, which nobody looks at: CDP draws it again under
-  // device emulation, at the same size.
+  // device emulation, at the same size. With masks it is drawn as PNG and
+  // painted over and encoded again here (MaskScreenshot()).
   capture.fallback = result.status;
+  base::DictValue params = CdpCaptureParams(capture.viewport, capture.surface,
+                                            capture.plan, capture.request);
+  if (capture.masked > 0) {
+    params.Set("format", ImageFormatName(ImageFormat::kPng));
+    params.Remove("quality");
+  }
   if (!Forward(std::nullopt, *session, "Page.captureScreenshot", "",
-               CdpCaptureParams(capture.viewport, capture.surface, capture.plan,
-                                capture.request),
+               std::move(params), InternalAnswer(), /*mask_job=*/0,
                capture_id)) {
     FinishCapture(capture_id, std::nullopt, SurfaceError(result.status));
   }
@@ -1290,6 +1456,9 @@ void CdpFacade::OnCommandDropped(int command_id) {
   if (!pending.client_message_id) {
     return;
   }
+  if (pending.method.starts_with("Input.")) {
+    OnInputDone(pending.target_id);
+  }
   if (pending.method == "Page.createIsolatedWorld") {
     if (TabSession* session = SessionFor(pending.session_id)) {
       session->contexts.OnIsolatedWorldAnswered(std::nullopt);
@@ -1342,7 +1511,9 @@ void CdpFacade::EndSession(const std::string& session_id, bool tell_client) {
   }
   // Its screencast stops with it.
   EndScreencastHold(*session);
-  // Commands in flight are answered: the tab will not.
+  // Commands in flight are answered: the tab will not. The facade's own
+  // that wait for an answer get none, once this is done.
+  std::vector<InternalAnswer> unanswered;
   for (auto pending = pending_.begin(); pending != pending_.end();) {
     if (pending->second.session_id != session_id) {
       ++pending;
@@ -1351,6 +1522,12 @@ void CdpFacade::EndSession(const std::string& session_id, bool tell_client) {
     if (pending->second.capture_id) {
       FinishCapture(pending->second.capture_id, std::nullopt,
                     CaptureError{"Koan.targetClosed", "the tab went away"});
+    }
+    if (pending->second.on_answer) {
+      unanswered.push_back(std::move(pending->second.on_answer));
+    }
+    if (pending->second.mask_job) {
+      screenshot_jobs_.erase(pending->second.mask_job);
     }
     if (pending->second.client_message_id) {
       AuditCommand(pending->second.method, pending->second.target_id,
@@ -1368,7 +1545,21 @@ void CdpFacade::EndSession(const std::string& session_id, bool tell_client) {
     }
     pending = pending_.erase(pending);
   }
+  for (InternalAnswer& answer : unanswered) {
+    std::move(answer).Run(nullptr);
+  }
+  // Commands that waited for the fields to be read are answered too.
+  for (const AgentMessage& held : session->held) {
+    AuditCommand(held.method, session->target_id, std::string(),
+                 AuditOutcome::kError, base::TimeDelta());
+    ReplyError(held.id, held.session_id, "Koan.targetClosed",
+               session->is_child() ? "the frame or worker went away"
+                                   : "the tab went away");
+  }
+  session->held.clear();
   if (session->is_child()) {
+    // The tab's other sessions may have waited for its Input commands.
+    OnInputDone(session->target_id);
     if (tell_client) {
       base::DictValue params;
       params.Set("sessionId", session_id);
@@ -1457,7 +1648,14 @@ void CdpFacade::OnTabMessage(const std::string& target_id,
     session = child_session;
   }
   if (message->contains("id")) {
+    const std::optional<int> id = message->FindInt("id");
+    auto pending = id ? pending_.find(*id) : pending_.end();
+    const bool input = pending != pending_.end() &&
+                       pending->second.method.starts_with("Input.");
     HandleTabAnswer(*session, std::move(*message));
+    if (input) {
+      OnInputDone(target_id);
+    }
   } else if (!HandleChildTargetEvent(*session, *message)) {
     HandleTabEvent(*session, std::move(*message));
   }
@@ -1626,6 +1824,13 @@ void CdpFacade::HandleTabAnswer(TabSession& session, base::DictValue answer) {
     return;
   }
   if (!pending.client_message_id) {
+    if (pending.on_answer) {
+      std::move(pending.on_answer).Run(result);
+    }
+    return;
+  }
+  if (pending.mask_job) {
+    FinishJob(pending.mask_job, result);
     return;
   }
   const base::TimeDelta duration = tick_clock_->NowTicks() - pending.start;
@@ -1638,10 +1843,10 @@ void CdpFacade::HandleTabAnswer(TabSession& session, base::DictValue answer) {
   } else if (result) {
     AuditCommand(pending.method, pending.target_id, pending.summary,
                  AuditOutcome::kOk, duration);
-    if (Redacts(session.target_id)) {
-      RedactSecretInputs(pending.method, *result);
-    }
-    Reply(*pending.client_message_id, session_id, std::move(*result));
+    RedactFields(session, pending.method, *result, /*answer=*/true);
+    Reply(*pending.client_message_id, session_id, std::move(*result),
+          /*binary=*/pending.method == "Page.captureScreenshot" ||
+              pending.method == "Page.printToPDF");
   } else {
     AuditCommand(pending.method, pending.target_id, pending.summary,
                  AuditOutcome::kError, duration);
@@ -1661,7 +1866,7 @@ void CdpFacade::HandleTabAnswer(TabSession& session, base::DictValue answer) {
     } else {
       reply.Set("result", base::DictValue());
     }
-    Send(reply);
+    Send(std::move(reply));
   }
   // The events the world's answer released come after the answer, in order.
   for (ContextEvent& event : released) {
@@ -1679,8 +1884,16 @@ void CdpFacade::HandleTabEvent(TabSession& session, base::DictValue event) {
   if (base::DictValue* given = event.FindDict("params")) {
     params = std::move(*given);
   }
-  if (Redacts(session.target_id)) {
-    RedactSecretInputs(name, params);
+  RedactFields(session, name, params, /*answer=*/false);
+  // A screencast shows the page as it is: while a card field Koan filled is
+  // on it, its frames are acknowledged here and not passed on.
+  if (name == "Page.screencastFrame" &&
+      backend_->SecretsIn(session.target_id, std::string()).card_filled) {
+    if (std::optional<int> frame = params.FindInt("sessionId")) {
+      SendInternal(session, "Page.screencastFrameAck",
+                   base::DictValue().Set("sessionId", *frame));
+    }
+    return;
   }
   switch (FilterEvent(name, params)) {
     case EventVerdict::kDeliver:
@@ -1701,25 +1914,36 @@ void CdpFacade::HandleTabEvent(TabSession& session, base::DictValue event) {
 void CdpFacade::DeliverEvent(const TabSession& session,
                              std::string method,
                              base::DictValue params) {
-  SendEvent(method, std::move(params), session.session_id);
+  const bool binary = method == "Page.screencastFrame";
+  SendEvent(method, std::move(params), session.session_id, binary);
 }
 
 void CdpFacade::SendInternal(TabSession& session,
                              std::string method,
-                             base::DictValue params) {
-  Forward(std::nullopt, session, method, std::string(), std::move(params));
+                             base::DictValue params,
+                             InternalAnswer on_answer) {
+  if (!on_answer) {
+    Forward(std::nullopt, session, method, std::string(), std::move(params));
+    return;
+  }
+  auto [answer, failed] = base::SplitOnceCallback(std::move(on_answer));
+  if (!Forward(std::nullopt, session, method, std::string(), std::move(params),
+               std::move(answer))) {
+    std::move(failed).Run(nullptr);
+  }
 }
 
 void CdpFacade::Reply(int id,
                       const std::optional<std::string>& session_id,
-                      base::DictValue result) {
+                      base::DictValue result,
+                      bool binary) {
   base::DictValue message;
   message.Set("id", id);
   message.Set("result", std::move(result));
   if (session_id) {
     message.Set("sessionId", *session_id);
   }
-  Send(message);
+  Send(std::move(message), binary);
 }
 
 void CdpFacade::ReplyError(int id,
@@ -1736,25 +1960,64 @@ void CdpFacade::ReplyError(int id,
   if (session_id) {
     message.Set("sessionId", *session_id);
   }
-  Send(message);
+  Send(std::move(message));
 }
 
 void CdpFacade::SendEvent(std::string_view method,
                           base::DictValue params,
-                          const std::optional<std::string>& session_id) {
+                          const std::optional<std::string>& session_id,
+                          bool binary) {
   base::DictValue message;
   message.Set("method", method);
   message.Set("params", std::move(params));
   if (session_id) {
     message.Set("sessionId", *session_id);
   }
-  Send(message);
+  Send(std::move(message), binary);
 }
 
-void CdpFacade::Send(const base::DictValue& message) {
-  if (std::optional<std::string> json = base::WriteJson(message)) {
-    send_.Run(std::move(*json));
+void CdpFacade::Send(base::DictValue message, bool binary) {
+  const SecretScrubber* secrets = backend_->Secrets();
+  if (!secrets || secrets->empty()) {
+    if (std::optional<std::string> json = base::WriteJson(message)) {
+      send_.Run(std::move(*json));
+    }
+    return;
   }
+  // Image and PDF data (base64) is not scanned: it is large, and what it
+  // shows is masked or refused instead.
+  static constexpr std::string_view kBinaryPlaceholder = "\x01koan-binary\x01";
+  std::string binary_data;
+  base::DictValue* holder = nullptr;
+  if (binary) {
+    holder = message.FindDict("result");
+    if (!holder) {
+      holder = message.FindDict("params");
+    }
+    std::string* data = holder ? holder->FindString("data") : nullptr;
+    if (data) {
+      binary_data = std::move(*data);
+      holder->Set("data", kBinaryPlaceholder);
+    } else {
+      holder = nullptr;
+    }
+  }
+  std::optional<std::string> json = base::WriteJson(message);
+  if (!json) {
+    return;
+  }
+  secrets->Scrub(*json);
+  if (holder) {
+    static constexpr std::string_view kQuotedPlaceholder =
+        "\"\\u0001koan-binary\\u0001\"";
+    const size_t at = json->find(kQuotedPlaceholder);
+    if (at != std::string::npos) {
+      // base64 needs no JSON escape.
+      json->replace(at, kQuotedPlaceholder.size(),
+                    base::StrCat({"\"", binary_data, "\""}));
+    }
+  }
+  send_.Run(std::move(*json));
 }
 
 void CdpFacade::AuditCommand(std::string_view method,
@@ -1777,6 +2040,538 @@ void CdpFacade::AuditCommand(std::string_view method,
   record.outcome = outcome;
   record.duration = duration;
   backend_->Audit(std::move(record));
+}
+
+// --- Secrets Koan filled (design section 4.5) ------------------------------
+
+namespace {
+
+// What script can read a page through.
+bool IsScriptRead(std::string_view method) {
+  return method == "Runtime.evaluate" || method == "Runtime.callFunctionOn" ||
+         method == "Runtime.getProperties" || method == "Runtime.awaitPromise";
+}
+
+// Input that would change the focused field's value (keys that only move,
+// submit or leave it do not).
+bool EditsFocusedField(std::string_view method, const base::DictValue& params) {
+  if (method == "Input.insertText" || method == "Input.imeSetComposition") {
+    return true;
+  }
+  if (method != "Input.dispatchKeyEvent") {
+    return false;
+  }
+  const std::string* type = params.FindString("type");
+  if (type && *type == "keyUp") {
+    return false;
+  }
+  const std::string* text = params.FindString("text");
+  if (text && !text->empty() && *text != "\r" && *text != "\n" &&
+      *text != "\t") {
+    return true;
+  }
+  const std::string* key = params.FindString("key");
+  return key && (*key == "Backspace" || *key == "Delete");
+}
+
+bool IsRedactedMethod(std::string_view method) {
+  return method.starts_with("DOM.") || method.starts_with("Accessibility.");
+}
+
+constexpr char kSecretLockText[] =
+    "a password or card number is filled in this page (by Koan, the password "
+    "manager or the user): script and value reads wait until the page moves "
+    "on or the field is cleared. Click, "
+    "press keys in other fields and submit as usual";
+
+}  // namespace
+
+// static
+std::string CdpFacade::FrameIdOf(const TabSession& session) {
+  return session.is_child() ? session.child_target_id : std::string();
+}
+
+std::optional<std::string_view> CdpFacade::SecretRefusal(
+    const TabSession& session,
+    std::string_view method,
+    const base::DictValue& params) {
+  // A worker reaches no page.
+  if (session.child_type == "worker") {
+    return std::nullopt;
+  }
+  const bool script = IsScriptRead(method);
+  const bool edit = EditsFocusedField(method, params);
+  const bool shows_page =
+      method == "Page.printToPDF" || method == "Page.startScreencast";
+  if (!script && !edit && !shows_page) {
+    return std::nullopt;
+  }
+  const FacadeBackend::SecretFacts facts =
+      backend_->SecretsIn(session.target_id, FrameIdOf(session));
+  if (script && facts.locked) {
+    return kSecretLockText;
+  }
+  if (script && facts.unknown) {
+    return "Koan could not read this page's password and card fields (the "
+           "page did not answer), so script waits; try again";
+  }
+  if (edit && facts.focused_locked) {
+    return "the focused field holds a password or card number Koan filled; "
+           "only the user can change it";
+  }
+  if (shows_page && facts.card_filled) {
+    return "a card number Koan filled is on this page: print and screencast "
+           "wait until the page moves on (screenshots hide it)";
+  }
+  return std::nullopt;
+}
+
+CdpFacade::SecretsWait CdpFacade::MustWait(const TabSession& session,
+                                           std::string_view method) {
+  // A worker reaches no page; only script reads what a field holds (the DOM
+  // and accessibility answers hide it whatever the read found).
+  if (session.child_type == "worker" || !IsScriptRead(method)) {
+    return SecretsWait::kNone;
+  }
+  // A click or a key the tab has not handled yet may still change a field,
+  // or show a password the password manager filled on load.
+  if (InputInFlight(session.target_id)) {
+    return SecretsWait::kInput;
+  }
+  return backend_->SecretsCurrent(session.target_id, FrameIdOf(session))
+             ? SecretsWait::kNone
+             : SecretsWait::kRead;
+}
+
+void CdpFacade::DispatchSessionMethod(AgentMessage message,
+                                      TabSession& session) {
+  if (session.held.empty() &&
+      MustWait(session, message.method) == SecretsWait::kNone) {
+    HandleSessionMethod(message, session);
+    return;
+  }
+  if (session.held.size() >= kMaxHeldCommands) {
+    AuditCommand(message.method, session.target_id, std::string(),
+                 AuditOutcome::kDenied, base::TimeDelta());
+    ReplyError(message.id, message.session_id, "Koan.busy",
+               "too many commands wait while Koan reads the page's password "
+               "and card fields; wait for their answers first");
+    return;
+  }
+  const std::string session_id = session.session_id;
+  session.held.push_back(std::move(message));
+  RunHeld(session_id);
+}
+
+void CdpFacade::RunHeld(const std::string& session_id) {
+  // Each command may end the session (or the facade's tab): look it up again.
+  while (TabSession* session = SessionFor(session_id)) {
+    if (session->held.empty() || session->refreshing) {
+      return;
+    }
+    switch (MustWait(*session, session->held.front().method)) {
+      case SecretsWait::kInput:
+        // OnInputDone() goes on.
+        return;
+      case SecretsWait::kRead:
+        session->refreshing = true;
+        backend_->RefreshSecrets(
+            session->target_id, FrameIdOf(*session),
+            base::BindOnce(&CdpFacade::OnSecretsRefreshed,
+                           weak_factory_.GetWeakPtr(), session_id));
+        return;
+      case SecretsWait::kNone:
+        break;
+    }
+    AgentMessage message = std::move(session->held.front());
+    session->held.pop_front();
+    HandleSessionMethod(message, *session);
+  }
+}
+
+void CdpFacade::OnSecretsRefreshed(const std::string& session_id) {
+  TabSession* session = SessionFor(session_id);
+  if (!session) {
+    return;
+  }
+  session->refreshing = false;
+  // What was read is as current as it gets: the first command goes now
+  // (SecretRefusal() decides on it), even if input changed a field since,
+  // so that steady input cannot hold it for ever.
+  if (!session->held.empty() && !InputInFlight(session->target_id)) {
+    AgentMessage message = std::move(session->held.front());
+    session->held.pop_front();
+    HandleSessionMethod(message, *session);
+  }
+  RunHeld(session_id);
+}
+
+void CdpFacade::OnInputDone(const std::string& target_id) {
+  backend_->SecretsMayHaveChanged(target_id);
+  if (InputInFlight(target_id)) {
+    return;
+  }
+  std::vector<std::string> waiting;
+  for (const auto& [id, session] : sessions_) {
+    if (session->target_id == target_id && !session->held.empty()) {
+      waiting.push_back(id);
+    }
+  }
+  for (const std::string& id : waiting) {
+    RunHeld(id);
+  }
+}
+
+bool CdpFacade::InputInFlight(std::string_view target_id) const {
+  return std::ranges::any_of(pending_, [&](const auto& item) {
+    return item.second.client_message_id &&
+           item.second.target_id == target_id &&
+           item.second.method.starts_with("Input.");
+  });
+}
+
+void CdpFacade::RedactFields(const TabSession& session,
+                             std::string_view method,
+                             base::DictValue& params,
+                             bool answer) {
+  if (!IsRedactedMethod(method)) {
+    return;
+  }
+  const bool readable = Redacts(session.target_id);
+  // DOM events come often and carry attributes, never what a field holds:
+  // they are redacted by the inputs' types alone. Answers, and the
+  // accessibility tree's events (values), by the secret fields too.
+  const bool by_field = answer || method.starts_with("Accessibility.");
+  const FacadeBackend::SecretFacts facts =
+      by_field ? backend_->SecretsIn(session.target_id, FrameIdOf(session))
+               : FacadeBackend::SecretFacts();
+  // A tab the agent may only read hides its hidden inputs' values too
+  // (#196 N1); one it drives hides the secret fields.
+  RedactSecretFields(method, params, facts.fields, /*hidden=*/readable);
+}
+
+void CdpFacade::Autofill(const AgentMessage& message) {
+  const std::string& method = message.method;
+  TabSession* session =
+      message.session_id ? SessionFor(*message.session_id) : nullptr;
+  const std::string target_id = session ? session->target_id : std::string();
+  auto deny = [&](std::string_view code, std::string_view text) {
+    AuditCommand(method, target_id, "", AuditOutcome::kDenied,
+                 base::TimeDelta());
+    ReplyError(message.id, message.session_id, code, text);
+  };
+  if (!session || session->child_type == "worker") {
+    deny("Koan.invalidParams",
+         "send Koan.autofill with the sessionId of the tab, or of the frame "
+         "the field is in");
+    return;
+  }
+  const std::optional<int> node = message.params.FindInt("backendNodeId");
+  const std::optional<int> index = message.params.FindInt("pick");
+  const std::string* label = message.params.FindString("pickLabel");
+  const bool list = message.params.FindBool("list").value_or(false);
+  const int asked = (list ? 1 : 0) + (index ? 1 : 0) + (label ? 1 : 0);
+  if (!node || *node <= 0 || asked != 1 || (index && *index <= 0) ||
+      (label && (label->empty() || label->size() > 200))) {
+    deny("Koan.invalidParams",
+         "Koan.autofill takes backendNodeId and one of list: true, pick (a "
+         "suggestion's number) or pickLabel (its label)");
+    return;
+  }
+  const TargetEntry* entry = registry_->Find(target_id);
+  if (!registry_->MaySend(client_id_, target_id, method)) {
+    if (entry && entry->client_id == client_id_ &&
+        entry->state == TabState::kPaused) {
+      AuditCommand(method, target_id, "", AuditOutcome::kPaused,
+                   base::TimeDelta());
+      ReplyError(message.id, message.session_id, "Koan.paused",
+                 "the user is using this tab; wait until they hand it back");
+      return;
+    }
+    deny("Koan.notPermitted",
+         entry && entry->client_id == client_id_
+             ? "autofill would change a tab this agent may only read"
+             : "this tab is not in the agent's scope");
+    return;
+  }
+  const std::optional<TabFacts> facts = backend_->DescribeTab(target_id);
+  if (!facts || facts->interstitial) {
+    deny("Koan.interstitial",
+         "the tab shows a security warning; only the user can decide what "
+         "to do");
+    if (facts) {
+      TellUserNeededForInterstitial(target_id);
+    }
+    return;
+  }
+  FacadeBackend::AutofillRequest request;
+  request.node = *node;
+  request.list = list;
+  if (index) {
+    request.pick.index = *index;
+  } else if (label) {
+    request.pick.label = *label;
+  }
+  backend_->Autofill(
+      target_id, FrameIdOf(*session), request,
+      base::BindOnce(&CdpFacade::OnAutofilled, weak_factory_.GetWeakPtr(),
+                     message.id, *message.session_id, target_id,
+                     tick_clock_->NowTicks()));
+}
+
+void CdpFacade::OnAutofilled(int client_message_id,
+                             std::string session_id,
+                             std::string target_id,
+                             base::TimeTicks start,
+                             FacadeBackend::AutofillResult result) {
+  const base::TimeDelta duration = tick_clock_->NowTicks() - start;
+  if (!result.error_code.empty()) {
+    AuditCommand("Koan.autofill", target_id, std::move(result.summary),
+                 result.error_code == "Koan.paused" ? AuditOutcome::kPaused
+                                                    : AuditOutcome::kDenied,
+                 duration);
+    ReplyError(client_message_id, session_id, result.error_code,
+               result.error_message);
+    return;
+  }
+  AuditCommand("Koan.autofill", target_id, std::move(result.summary),
+               AuditOutcome::kOk, duration);
+  Reply(client_message_id, session_id, std::move(result.result));
+}
+
+void CdpFacade::StartMaskedScreenshot(const AgentMessage& message,
+                                      TabSession& session,
+                                      std::string summary) {
+  auto job = std::make_unique<ScreenshotJob>();
+  job->client_message_id = message.id;
+  job->session_id = session.session_id;
+  job->target_id = session.target_id;
+  job->summary = std::move(summary);
+  job->start = tick_clock_->NowTicks();
+  job->params = message.params.Clone();
+  const uint64_t id = next_job_++;
+  screenshot_jobs_[id] = std::move(job);
+  SendInternal(
+      session, "Page.getLayoutMetrics", base::DictValue(),
+      base::BindOnce(&CdpFacade::OnJobMetrics, weak_factory_.GetWeakPtr(), id));
+}
+
+void CdpFacade::OnJobMetrics(uint64_t job_id, const base::DictValue* result) {
+  auto it = screenshot_jobs_.find(job_id);
+  if (it == screenshot_jobs_.end()) {
+    return;
+  }
+  ScreenshotJob& job = *it->second;
+  TabSession* session = SessionFor(job.session_id);
+  if (!result || !session) {
+    FailJob(job_id, "the page's layout could not be read");
+    return;
+  }
+  job.metrics = result->Clone();
+  MeasureCardFields(*session,
+                    base::BindOnce(&CdpFacade::OnJobBoxes,
+                                   weak_factory_.GetWeakPtr(), job_id));
+}
+
+void CdpFacade::OnJobBoxes(
+    uint64_t job_id,
+    base::expected<std::vector<CssRect>, std::string> boxes) {
+  auto it = screenshot_jobs_.find(job_id);
+  if (it == screenshot_jobs_.end()) {
+    return;
+  }
+  if (!boxes.has_value()) {
+    FailJob(job_id, boxes.error());
+    return;
+  }
+  it->second->boxes = std::move(*boxes);
+  CaptureForJob(job_id);
+}
+
+void CdpFacade::MeasureCardFields(TabSession& session,
+                                  FieldBoxesCallback done) {
+  auto measure = std::make_unique<FieldMeasure>();
+  measure->session_id = session.session_id;
+  const FacadeBackend::CardFields fields =
+      backend_->CardFieldsOf(session.target_id);
+  measure->nodes = fields.nodes;
+  measure->frames = fields.frames;
+  measure->done = std::move(done);
+  const uint64_t id = next_measure_++;
+  FieldMeasure& started = *measure;
+  measures_[id] = std::move(measure);
+  if (started.frames.empty()) {
+    MeasureFieldQuads(id);
+    return;
+  }
+  // A frame in another process is painted over whole: its box is that of
+  // its <iframe> in this page.
+  started.waiting = started.frames.size();
+  const std::vector<std::string> frames = started.frames;
+  for (const std::string& frame : frames) {
+    SendInternal(session, "DOM.getFrameOwner",
+                 base::DictValue().Set("frameId", frame),
+                 base::BindOnce(&CdpFacade::OnMeasureOwner,
+                                weak_factory_.GetWeakPtr(), id));
+  }
+}
+
+void CdpFacade::OnMeasureOwner(uint64_t measure_id,
+                               const base::DictValue* result) {
+  auto it = measures_.find(measure_id);
+  if (it == measures_.end()) {
+    return;
+  }
+  FieldMeasure& measure = *it->second;
+  const std::optional<int> owner =
+      result ? result->FindInt("backendNodeId") : std::nullopt;
+  if (!owner) {
+    FinishMeasure(
+        measure_id,
+        base::unexpected("the frame with the card fields could not be found"));
+    return;
+  }
+  measure.nodes.push_back(*owner);
+  if (--measure.waiting == 0) {
+    MeasureFieldQuads(measure_id);
+  }
+}
+
+void CdpFacade::MeasureFieldQuads(uint64_t measure_id) {
+  auto it = measures_.find(measure_id);
+  if (it == measures_.end()) {
+    return;
+  }
+  FieldMeasure& measure = *it->second;
+  TabSession* session = SessionFor(measure.session_id);
+  if (!session) {
+    FinishMeasure(measure_id, base::unexpected("the tab went away"));
+    return;
+  }
+  if (measure.nodes.empty()) {
+    FinishMeasure(measure_id, std::vector<CssRect>());
+    return;
+  }
+  measure.waiting = measure.nodes.size();
+  const std::vector<int> nodes = measure.nodes;
+  for (int node : nodes) {
+    SendInternal(*session, "DOM.getContentQuads",
+                 base::DictValue().Set("backendNodeId", node),
+                 base::BindOnce(&CdpFacade::OnMeasureQuads,
+                                weak_factory_.GetWeakPtr(), measure_id));
+  }
+}
+
+void CdpFacade::OnMeasureQuads(uint64_t measure_id,
+                               const base::DictValue* result) {
+  auto it = measures_.find(measure_id);
+  if (it == measures_.end()) {
+    return;
+  }
+  FieldMeasure& measure = *it->second;
+  // The session ended (its commands are answered with nothing): the boxes
+  // are not known.
+  if (!SessionFor(measure.session_id)) {
+    FinishMeasure(measure_id, base::unexpected("the tab went away"));
+    return;
+  }
+  // A field with no box is not on the screen: nothing to paint over.
+  if (result) {
+    if (std::optional<CssRect> box = BoxFromQuads(*result)) {
+      measure.boxes.push_back(*box);
+    }
+  }
+  if (--measure.waiting == 0) {
+    std::vector<CssRect> boxes = std::move(measure.boxes);
+    FinishMeasure(measure_id, std::move(boxes));
+  }
+}
+
+void CdpFacade::FinishMeasure(
+    uint64_t measure_id,
+    base::expected<std::vector<CssRect>, std::string> boxes) {
+  auto it = measures_.find(measure_id);
+  if (it == measures_.end()) {
+    return;
+  }
+  FieldBoxesCallback done = std::move(it->second->done);
+  measures_.erase(it);
+  std::move(done).Run(std::move(boxes));
+}
+
+void CdpFacade::CaptureForJob(uint64_t job_id) {
+  auto it = screenshot_jobs_.find(job_id);
+  if (it == screenshot_jobs_.end()) {
+    return;
+  }
+  ScreenshotJob& job = *it->second;
+  TabSession* session = SessionFor(job.session_id);
+  if (!session) {
+    FailJob(job_id, "the tab went away");
+    return;
+  }
+  // Taken as PNG, so that it is painted over without loss and encoded in
+  // the format asked for after.
+  base::DictValue params = job.params.Clone();
+  params.Set("format", "png");
+  params.Remove("quality");
+  params.Remove("optimizeForSpeed");
+  if (!Forward(job.client_message_id, *session, "Page.captureScreenshot",
+               job.summary, std::move(params), InternalAnswer(), job_id)) {
+    FailJob(job_id, "the screenshot could not be asked for");
+  }
+}
+
+void CdpFacade::FinishJob(uint64_t job_id, base::DictValue* result) {
+  auto it = screenshot_jobs_.find(job_id);
+  if (it == screenshot_jobs_.end()) {
+    return;
+  }
+  std::unique_ptr<ScreenshotJob> job = std::move(it->second);
+  screenshot_jobs_.erase(it);
+  const std::string* data = result ? result->FindString("data") : nullptr;
+  const std::optional<ScreenshotGeometry> geometry =
+      GeometryFor(job->params, job->metrics);
+  std::optional<std::string> masked;
+  if (data && geometry) {
+    const std::string* format = job->params.FindString("format");
+    masked = backend_->MaskScreenshot(
+        *data, MaskFor(job->boxes, ViewportOffset(job->metrics), *geometry),
+        format ? *format : "png", job->params.FindInt("quality"));
+  }
+  const base::TimeDelta duration = tick_clock_->NowTicks() - job->start;
+  if (!masked) {
+    AuditCommand("Page.captureScreenshot", job->target_id, job->summary,
+                 AuditOutcome::kError, duration);
+    ReplyError(job->client_message_id, job->session_id, "Koan.secretField",
+               result ? "the card fields Koan filled could not be hidden in "
+                        "the screenshot; try again"
+                      : "the screenshot failed");
+    return;
+  }
+  AuditCommand("Page.captureScreenshot", job->target_id, job->summary,
+               AuditOutcome::kOk, duration);
+  base::DictValue answer;
+  answer.Set("data", std::move(*masked));
+  answer.Set("koanMasked", static_cast<int>(job->boxes.size()));
+  Reply(job->client_message_id, job->session_id, std::move(answer),
+        /*binary=*/true);
+}
+
+void CdpFacade::FailJob(uint64_t job_id, std::string_view why) {
+  auto it = screenshot_jobs_.find(job_id);
+  if (it == screenshot_jobs_.end()) {
+    return;
+  }
+  std::unique_ptr<ScreenshotJob> job = std::move(it->second);
+  screenshot_jobs_.erase(it);
+  AuditCommand("Page.captureScreenshot", job->target_id, job->summary,
+               AuditOutcome::kDenied, tick_clock_->NowTicks() - job->start);
+  ReplyError(
+      job->client_message_id, job->session_id, "Koan.secretField",
+      base::StrCat({"a card number Koan filled is on this page and ", why,
+                    ", so the screenshot was not taken; take it after "
+                    "the form is sent"}));
 }
 
 std::string SummarizeCommand(std::string_view method,

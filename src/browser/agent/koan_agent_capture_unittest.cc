@@ -393,6 +393,49 @@ TEST(KoanAgentCaptureTest, MasksInTheImagesPixels) {
   EXPECT_EQ(in_clip[0], (CaptureRect{100, 40, 20, 20}));
 }
 
+TEST(KoanAgentCaptureTest, MasksFollowZoomPinchDeviceScaleAndImageScale) {
+  // The boxes are in viewport CSS px (DOM.getContentQuads); the image's
+  // pixels depend on the clip, the zoom, the pinch, the device scale and
+  // the size asked for.
+  const std::vector<ViewportRect> field = {{20, 16, 32, 8}};
+  // 125% zoom on a 2x display, a clip at device pixels (2.5 per CSS px):
+  // the clip's DIPs (10, 10, 120, 50) show CSS (8, 8, 96, 40).
+  CapturePlan zoomed = Plan(Viewport(1152, 720, 1.25), 2, Clip({8, 8, 96, 40}));
+  ASSERT_EQ(zoomed.image_width, 240);
+  EXPECT_EQ(MaskPixels(zoomed, field, 0),
+            (std::vector<CaptureRect>{{30, 20, 80, 20}}));
+  // With padding: 2 CSS px = 5 image px each way.
+  EXPECT_EQ(MaskPixels(zoomed, field, 2),
+            (std::vector<CaptureRect>{{25, 15, 90, 30}}));
+
+  // Pinched in 2x on a 1x display: normal is CSS px, full the DIPs.
+  const std::vector<ViewportRect> box = {{100, 50, 40, 20}};
+  const PageViewport pinched = Viewport(720, 450, 1, 2);
+  EXPECT_EQ(MaskPixels(Plan(pinched, 1, Normal()), box, 0),
+            (std::vector<CaptureRect>{{100, 50, 40, 20}}));
+  EXPECT_EQ(MaskPixels(Plan(pinched, 1, Full()), box, 0),
+            (std::vector<CaptureRect>{{200, 100, 80, 40}}));
+
+  // Micro of a Retina 1440x900: 320x200, 4.5 CSS px per image px.
+  CapturePlan micro = Plan(Viewport(1440, 900), 2, Micro());
+  ASSERT_EQ(micro.image_width, 320);
+  EXPECT_EQ(
+      MaskPixels(micro, std::vector<ViewportRect>{{720, 450, 144, 90}}, 0),
+      (std::vector<CaptureRect>{{160, 100, 32, 20}}));
+
+  // An image scale in between (1.5 image px per CSS px) with a clip.
+  CaptureRequest sharp = Clip({100, 100, 200, 100});
+  sharp.scale = 1.5;
+  CapturePlan between = Plan(Viewport(800, 500), 2, sharp);
+  ASSERT_EQ(between.image_width, 300);
+  EXPECT_EQ(
+      MaskPixels(between, std::vector<ViewportRect>{{150, 120, 20, 10}}, 0),
+      (std::vector<CaptureRect>{{75, 30, 30, 15}}));
+  // Half in the clip: cut to the image.
+  EXPECT_EQ(MaskPixels(between, std::vector<ViewportRect>{{80, 90, 40, 20}}, 0),
+            (std::vector<CaptureRect>{{0, 0, 30, 15}}));
+}
+
 TEST(KoanAgentCaptureTest, TheAnswer) {
   CaptureAnswer surface;
   surface.data = "AQID";

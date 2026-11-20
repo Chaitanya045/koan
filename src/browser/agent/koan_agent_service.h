@@ -5,6 +5,7 @@
 #ifndef KOAN_BROWSER_AGENT_KOAN_AGENT_SERVICE_H_
 #define KOAN_BROWSER_AGENT_KOAN_AGENT_SERVICE_H_
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <memory>
@@ -148,6 +149,9 @@ uint64_t ShowTakeOverDialog(content::WebContents* contents,
                             bool any_site,
                             base::OnceCallback<void(bool)> answer);
 void CancelTakeOverDialog(uint64_t dialog_id);
+// Tests: answers every take-over prompt on screen, as its buttons would, and
+// returns how many there were.
+size_t AnswerTakeOverDialogsForTesting(bool allowed);
 
 }  // namespace koan::agent
 

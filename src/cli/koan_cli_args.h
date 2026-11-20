@@ -30,6 +30,9 @@ enum class CommandKind {
   kSnapshot,
   kScreenshot,
   kAct,
+  // autofill <tab> @field [--list | --pick N | --pick "label"]: Chrome's
+  // autofill suggestions for a field, or fills the one picked.
+  kAutofill,
   kTakeOver,
   kRelease,
   // Ends one task (--task), or the connection and every task.
@@ -119,6 +122,11 @@ struct Command {
   // --timeout: how long a navigation may take to commit, and --until may
   // wait, in seconds.
   int timeout_seconds = 15;
+
+  // autofill: the field is `ref`; --list (the default) or --pick, a
+  // suggestion's number or label.
+  bool autofill_list = false;
+  std::string pick;
 
   // wait: --resumed (what it waits for; the only condition so far), and
   // --timeout as a duration ("90s", "10m", "1h", or seconds), 1 s to 1 h.

@@ -31,6 +31,7 @@
 
 #include "base/base64.h"
 #include "base/command_line.h"
+#include "base/compiler_specific.h"
 #include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -52,6 +53,7 @@
 #include "koan/cli/koan_cli_actions.h"
 #include "koan/cli/koan_cli_admission.h"
 #include "koan/cli/koan_cli_args.h"
+#include "koan/cli/koan_cli_autofill.h"
 #include "koan/cli/koan_cli_batch.h"
 #include "koan/cli/koan_cli_client.h"
 #include "koan/cli/koan_cli_io.h"
@@ -91,6 +93,9 @@ enum Exit {
 // While a step of `koan act` runs, its failure is kept for the step's
 // receipt instead of printed (ScopedFailure).
 std::string* g_failure = nullptr;
+
+// How long Koan.autofill may take: suggestions, then Chrome's fill.
+constexpr base::TimeDelta kAutofillWait = base::Seconds(15);
 
 int Fail(const std::string& text, int code = kFailed) {
   if (g_failure) {
@@ -1770,6 +1775,31 @@ Acted DoAction(Link& link,
       return Selected(link, command, session);
     case ActKind::kChoose:
       return Choose(link, command, session);
+    case ActKind::kAutofill: {
+      // Chrome's own fill, as the user's pick of the row (Koan.autofill).
+      std::optional<Message> answer = link.Call(
+          "Koan.autofill", AutofillParams(node, /*list=*/false, command.text),
+          session, kAutofillWait);
+      if (!answer || answer->is_error() || !answer->result) {
+        return Failed(Describe(answer));
+      }
+      const AutofillOutcome outcome =
+          ReadAutofillPick(*answer->result, command.tab);
+      if (!outcome.filled) {
+        // The batch stops: the user verifies, or nothing was filled.
+        return Failed(outcome.line);
+      }
+      Acted acted;
+      acted.line = outcome.line;
+      acted.json.Set("filled", true);
+      if (const std::string* kind = answer->result->FindString("kind")) {
+        acted.json.Set("kind", *kind);
+      }
+      if (const std::string* label = answer->result->FindString("label")) {
+        acted.json.Set("label", *label);
+      }
+      return acted;
+    }
     case ActKind::kFill: {
       std::string error;
       std::optional<std::string> object_id =
@@ -1778,6 +1808,20 @@ Acted DoAction(Link& link,
           object_id ? RunOn(link, session, *object_id, kFillTargetFunction,
                             base::ListValue(), &error)
                     : std::nullopt;
+      if (!probe && error.starts_with("Koan.secretField")) {
+        // A secret Koan filled is in the page, so its script waits: the
+        // text is typed at the field without reading it first or after.
+        if (!call("DOM.focus", base::DictValue().Set("backendNodeId", node)) ||
+            !call("Input.insertText",
+                  base::DictValue().Set("text", command.text))) {
+          return failed();
+        }
+        Acted acted;
+        acted.line =
+            "ok: typed (a secret Koan filled is in this page, so the field "
+            "was not cleared first or read back)";
+        return acted;
+      }
       if (!probe) {
         return Failed(error);
       }
@@ -1890,7 +1934,8 @@ StepDone RunStep(Link& link,
   Command command = given;
   const bool on_ref =
       command.act == ActKind::kClick || command.act == ActKind::kFill ||
-      command.act == ActKind::kSelect || command.act == ActKind::kChoose;
+      command.act == ActKind::kSelect || command.act == ActKind::kChoose ||
+      command.act == ActKind::kAutofill;
   if (on_ref) {
     std::optional<int> node =
         FindNode(link, command, command.ref, target, session, &exit_code);
@@ -2084,7 +2129,28 @@ struct Shot {
   int width = 0;
   int height = 0;
   double css_per_pixel = 1;
+  // The card fields Koan filled that are painted over (design section 4.5).
+  int masked = 0;
 };
+
+// How a screenshot prints: ShotLine() or ShotJson(), and whether the card
+// fields Koan filled are hidden in it.
+std::string ShotText(const Shot& shot) {
+  std::string line =
+      ShotLine(shot.path, shot.width, shot.height, shot.css_per_pixel);
+  if (shot.masked > 0) {
+    line += "; the card fields Koan filled are hidden in it";
+  }
+  return line;
+}
+base::DictValue ShotDict(const Shot& shot) {
+  base::DictValue json =
+      ShotJson(shot.path, shot.width, shot.height, shot.css_per_pixel);
+  if (shot.masked > 0) {
+    json.Set("masked", shot.masked);
+  }
+  return json;
+}
 
 // The element --clip names, as koan act finds it (FindNode()), scrolled into
 // view: its box in viewport CSS pixels, of no size if it has none. nullopt
@@ -2191,6 +2257,7 @@ std::optional<Shot> TakeScreenshot(Link& link,
     shot.width = size->first;
     shot.height = size->second;
   }
+  shot.masked = taken->FindInt("masked").value_or(0);
   return shot;
 }
 
@@ -2378,8 +2445,7 @@ int Act(Link& link,
       json.Set("snapshot", *snapshot);
     }
     if (shot) {
-      json.Set("screenshot", ShotJson(shot->path, shot->width, shot->height,
-                                      shot->css_per_pixel));
+      json.Set("screenshot", ShotDict(*shot));
     }
     json.Set("ok", all_done);
     PrintJson(json);
@@ -2420,9 +2486,7 @@ int Act(Link& link,
     printf("%s", snapshot->c_str());
   }
   if (shot) {
-    printf("%s\n",
-           ShotLine(shot->path, shot->width, shot->height, shot->css_per_pixel)
-               .c_str());
+    printf("%s\n", ShotText(*shot).c_str());
   }
   fflush(stdout);
   return code != kOk ? code : snapshot_code != kOk ? snapshot_code : shot_code;
@@ -2637,6 +2701,47 @@ int Relay(const Command& command) {
 }
 
 std::unique_ptr<Link> ConnectionFor(const Command& command, int* exit_code);
+// `koan autofill <tab> @field`: --list prints Chrome's suggestions for the
+// field (labels only); --pick runs as act's one `autofill` step, with its
+// checks (the tab paused, the page waiting for the user) and its settle.
+int Autofill(Link& link,
+             const Command& command,
+             const std::string& target,
+             const std::string& session) {
+  if (!command.autofill_list) {
+    Command act = command;
+    act.kind = CommandKind::kAct;
+    Step step;
+    step.act = ActKind::kAutofill;
+    step.target = command.ref;
+    step.text = command.pick;
+    act.steps = {step};
+    act.act = step.act;
+    act.text = step.text;
+    return Act(link, act, target, session);
+  }
+  int exit_code = kOk;
+  std::optional<int> node =
+      FindNode(link, command, command.ref, target, session, &exit_code);
+  if (!node) {
+    return exit_code;
+  }
+  std::optional<base::DictValue> result = Expect(
+      link.Call("Koan.autofill", AutofillParams(*node, /*list=*/true, ""),
+                session, kAutofillWait),
+      &exit_code);
+  if (!result) {
+    return exit_code;
+  }
+  if (command.json) {
+    PrintJson(*result);
+    return kOk;
+  }
+  printf("%s", SuggestionLines(*result).c_str());
+  fflush(stdout);
+  return kOk;
+}
+
 int RunOnHolder(Link& link, const Command& command);
 int Shell(const Command& command);
 
@@ -2761,6 +2866,7 @@ int RunOnHolder(Link& link, const Command& command) {
     case CommandKind::kSnapshot:
     case CommandKind::kScreenshot:
     case CommandKind::kWait:
+    case CommandKind::kAutofill:
     case CommandKind::kAct: {
       std::optional<std::string> target =
           ResolveTabId(link, command.tab, &exit_code);
@@ -2778,6 +2884,9 @@ int RunOnHolder(Link& link, const Command& command) {
       if (command.kind == CommandKind::kWait) {
         return WaitResumed(link, command, *target, *session);
       }
+      if (command.kind == CommandKind::kAutofill) {
+        return Autofill(link, command, *target, *session);
+      }
       if (command.kind == CommandKind::kScreenshot) {
         std::optional<Shot> shot =
             TakeScreenshot(link, command, *target, *session, &exit_code);
@@ -2785,13 +2894,10 @@ int RunOnHolder(Link& link, const Command& command) {
           return exit_code;
         }
         if (command.json) {
-          PrintJson(ShotJson(shot->path, shot->width, shot->height,
-                             shot->css_per_pixel));
+          PrintJson(ShotDict(*shot));
           return kOk;
         }
-        printf("%s\n", ShotLine(shot->path, shot->width, shot->height,
-                                shot->css_per_pixel)
-                           .c_str());
+        printf("%s\n", ShotText(*shot).c_str());
         return kOk;
       }
       return Act(link, command, *target, *session);
@@ -3042,8 +3148,9 @@ int Shell(const Command& shell) {
   // A command's output and its errors in the order they were written.
   setvbuf(stdout, nullptr, _IOLBF, 0);
   while ((got = getline(&buffer, &size, stdin)) >= 0) {
-    const ShellLine line =
-        ParseShellLine(std::string_view(buffer, static_cast<size_t>(got)));
+    // SAFETY: getline() wrote `got` bytes (and a NUL) at `buffer`.
+    const ShellLine line = ParseShellLine(
+        UNSAFE_BUFFERS(std::string_view(buffer, static_cast<size_t>(got))));
     if (line.empty) {
       continue;
     }

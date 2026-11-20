@@ -45,6 +45,11 @@ enum class PageSurface {
   kScreenShare,
   // A modal WebAuthn request: a passkey or security key create() or get().
   kPasskey,
+  // An agent picked a card (or a login) that Chrome fills only once the user
+  // verifies it: Touch ID or the device password, or the card's CVC
+  // (`koan autofill`, design section 7.0). Open brings the tab forward and
+  // Chrome asks the user there.
+  kAutofillVerify,
 };
 
 // Whether `surface` only makes sense with the user in front of its tab (a
@@ -55,7 +60,9 @@ bool NeedsUserInFront(PageSurface surface);
 std::string_view ReasonFor(PageSurface surface);
 
 // The line the indicator shows for a held surface: `host` is the page's host
-// (may be empty), `detail` the app link's scheme for kExternalProtocol.
+// (may be empty), `detail` the app link's scheme for kExternalProtocol, and
+// "card:<agent>" or "login:<agent>" for kAutofillVerify ("Claude Code needs
+// you to verify a card").
 std::u16string PromptTextFor(PageSurface surface,
                              std::string_view host,
                              std::string_view detail);

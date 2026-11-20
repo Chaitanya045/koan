@@ -129,6 +129,19 @@ source_set("tab_hooks") {
   deps = [ "//third_party/blink/public/mojom:mojom_platform" ]
 }
 
+# The calls Chrome's autofill and password manager make into agent control
+# for `koan autofill` (//components/autofill only).
+source_set("autofill_hooks") {
+  sources = [
+    "koan_agent_autofill_hooks.cc",
+    "koan_agent_autofill_hooks.h",
+  ]
+  public_deps = [
+    "//base",
+    "//components/autofill/core/browser",
+  ]
+}
+
 # What pages in agent tabs wait to show the user (design section 9.4): the
 # queue the indicator shows, as pure logic.
 source_set("prompts") {
@@ -230,6 +243,8 @@ if (is_posix) {
   source_set("browser") {
     sources = [
       "koan_agent_approval_dialog.cc",
+      "koan_agent_autofill.cc",
+      "koan_agent_autofill.h",
       "koan_agent_devtools_client.cc",
       "koan_agent_devtools_client.h",
       "koan_agent_forwarder.cc",
@@ -242,6 +257,8 @@ if (is_posix) {
       "koan_agent_pause_watch.h",
       "koan_agent_reach_content.cc",
       "koan_agent_reach_content.h",
+      "koan_agent_secret_fields.cc",
+      "koan_agent_secret_fields.h",
       "koan_agent_service.cc",
       "koan_agent_service.h",
       "koan_agent_surface_capture.cc",
@@ -254,6 +271,8 @@ if (is_posix) {
     public_deps = [
       ":audit",
       ":auto_resume",
+      ":autofill_hooks",
+      ":autofill_logic",
       ":capture",
       ":facade",
       ":lease_scheduler",
@@ -274,6 +293,8 @@ if (is_posix) {
       ":gateway",
       ":limits",
       ":peer",
+      ":screenshot_mask",
+      ":secrets",
       ":socket",
       "//chrome/browser:browser_process",
       "//chrome/browser/external_protocol",
@@ -287,12 +308,15 @@ if (is_posix) {
       "//chrome/common:constants",
       "//components/autofill/content/browser",
       "//components/autofill/core/browser",
+      "//components/autofill/core/common",
       "//components/embedder_support:user_agent",
       "//components/javascript_dialogs",
+      "//components/password_manager/core/common",
       "//components/performance_manager",
       "//components/permissions",
       "//components/security_interstitials/content:security_interstitial_page",
       "//components/tabs:public",
+      "//components/user_prefs",
       "//components/version_info",
       "//components/viz/common",
       "//content/public/browser",
@@ -366,6 +390,36 @@ source_set("redact") {
   public_deps = [ "//base" ]
 }
 
+# The secrets Koan filled for an agent, and the scrubber that keeps them out
+# of everything it receives (design section 4.5).
+source_set("secrets") {
+  sources = [
+    "koan_agent_secrets.cc",
+    "koan_agent_secrets.h",
+  ]
+  public_deps = [ "//base" ]
+}
+
+# `koan autofill`: the labels an agent sees of Chrome's suggestions, and which
+# one it picked.
+source_set("autofill_logic") {
+  sources = [
+    "koan_agent_autofill_logic.cc",
+    "koan_agent_autofill_logic.h",
+  ]
+  public_deps = [ "//base" ]
+  deps = [ "//base:i18n" ]
+}
+
+# Where a screenshot shows the card fields Koan filled.
+source_set("screenshot_mask") {
+  sources = [
+    "koan_agent_screenshot_mask.cc",
+    "koan_agent_screenshot_mask.h",
+  ]
+  public_deps = [ "//base" ]
+}
+
 # Which tabs each client may see and drive, and the open-tab budgets.
 source_set("registry") {
   sources = [
@@ -398,7 +452,9 @@ source_set("facade") {
   ]
   public_deps = [
     ":audit",
+    ":autofill_logic",
     ":capture",
+    ":screenshot_mask",
     ":session",
     "//base",
     "//url",
@@ -411,6 +467,7 @@ source_set("facade") {
     ":reach",
     ":redact",
     ":registry",
+    ":secrets",
   ]
 }
 
@@ -425,6 +482,7 @@ test("koan_agent_unittests") {
     "koan_agent_audit_unittest.cc",
     "koan_agent_auth_unittest.cc",
     "koan_agent_auto_resume_unittest.cc",
+    "koan_agent_autofill_logic_unittest.cc",
     "koan_agent_capture_unittest.cc",
     "koan_agent_contexts_unittest.cc",
     "koan_agent_events_unittest.cc",
@@ -439,6 +497,8 @@ test("koan_agent_unittests") {
     "koan_agent_reach_unittest.cc",
     "koan_agent_redact_unittest.cc",
     "koan_agent_registry_unittest.cc",
+    "koan_agent_screenshot_mask_unittest.cc",
+    "koan_agent_secrets_unittest.cc",
     "koan_agent_session_unittest.cc",
     "koan_agent_wake_policy_unittest.cc",
   ]
@@ -447,6 +507,7 @@ test("koan_agent_unittests") {
     ":audit",
     ":auth",
     ":auto_resume",
+    ":autofill_logic",
     ":capture",
     ":contexts",
     ":events",
@@ -461,6 +522,8 @@ test("koan_agent_unittests") {
     ":reach",
     ":redact",
     ":registry",
+    ":screenshot_mask",
+    ":secrets",
     ":session",
     "//base",
     "//base/test:run_all_unittests",
@@ -522,6 +585,15 @@ fuzzer_test("koan_agent_filters_fuzzer") {
     ":filters",
     "//base",
     "//url",
+  ]
+}
+
+fuzzer_test("koan_agent_secrets_fuzzer") {
+  sources = [ "koan_agent_secrets_fuzzer.cc" ]
+  deps = [
+    ":secrets",
+    "//base",
+    "//testing/libfuzzer:libfuzzer_base_wrappers",
   ]
 }
 

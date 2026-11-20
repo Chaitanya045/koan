@@ -37,6 +37,9 @@ enum class ActKind {
   kPress,
   kScroll,
   kNavigate,
+  // Picks one of Chrome's autofill suggestions for a field (`koan autofill`):
+  // its number, or its label.
+  kAutofill,
 };
 
 // The most steps one batch takes: enough for a long form, few enough that a
@@ -62,7 +65,7 @@ struct Step {
   // click, fill, select, choose: "@12" or "loc:...".
   std::string target;
   // fill: the text; select, choose: the option; press: the key; navigate:
-  // the URL.
+  // the URL; autofill: the suggestion (its number or its label).
   std::string text;
   // scroll: pixels down.
   int scroll_by = 0;

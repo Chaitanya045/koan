@@ -8,14 +8,11 @@
 #include <utility>
 
 #include "base/functional/bind.h"
-#include "base/strings/string_split.h"
-#include "base/strings/string_util.h"
 #include "base/values.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/common/chrome_isolated_world_ids.h"
 #include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/core/browser/autofill_field.h"
-#include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/permissions/permission_request_manager.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
@@ -23,6 +20,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/agent/koan_agent_page_surfaces.h"
+#include "koan/browser/agent/koan_agent_secret_fields.h"
 
 namespace koan::agent {
 
@@ -77,29 +75,6 @@ void StopWatching(content::RenderFrameHost* frame) {
                                             base::DoNothing(),
                                             ISOLATED_WORLD_ID_CHROME_INTERNAL);
   }
-}
-
-// A field whose value is a payment secret: autofill's credit-card, CVC or
-// IBAN types (from its heuristics or the page's autocomplete="cc-*"), or a
-// password field.
-bool IsSecretField(const autofill::AutofillField& field) {
-  if (field.form_control_type() == autofill::FormControlType::kInputPassword) {
-    return true;
-  }
-  const autofill::FieldTypeGroupSet groups = field.Type().GetGroups();
-  if (groups.contains(autofill::FieldTypeGroup::kCreditCard) ||
-      groups.contains(autofill::FieldTypeGroup::kStandaloneCvcField) ||
-      groups.contains(autofill::FieldTypeGroup::kIban)) {
-    return true;
-  }
-  for (std::string_view token : base::SplitStringPiece(
-           field.autocomplete_attribute(), " \t\n", base::TRIM_WHITESPACE,
-           base::SPLIT_WANT_NONEMPTY)) {
-    if (base::StartsWith(token, "cc-", base::CompareCase::INSENSITIVE_ASCII)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 }  // namespace

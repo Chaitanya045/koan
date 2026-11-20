@@ -4,11 +4,14 @@
 
 #include "koan/browser/agent/koan_agent_facade.h"
 
+#include <array>
 #include <map>
 #include <memory>
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include "base/containers/span.h"
@@ -20,7 +23,9 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/simple_test_tick_clock.h"
+#include "koan/browser/agent/koan_agent_redact.h"
 #include "koan/browser/agent/koan_agent_registry.h"
+#include "koan/browser/agent/koan_agent_secrets.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -138,6 +143,52 @@ class FakeBackend : public FacadeBackend {
                   std::string_view reason) override {
     user_needed.push_back(target_id + ":" + std::string(reason));
   }
+  SecretFacts SecretsIn(const std::string& target_id,
+                        const std::string& frame_id) override {
+    secrets_asked.push_back(target_id + "|" + frame_id);
+    SecretFacts copy;
+    copy.locked = facts.locked;
+    copy.focused_locked = facts.focused_locked;
+    copy.card_filled = facts.card_filled;
+    copy.unknown = facts.unknown;
+    copy.fields = facts.fields;
+    return copy;
+  }
+  bool SecretsCurrent(const std::string& target_id,
+                      const std::string& frame_id) override {
+    return secrets_current;
+  }
+  void RefreshSecrets(const std::string& target_id,
+                      const std::string& frame_id,
+                      base::OnceClosure done) override {
+    refreshes.push_back(std::move(done));
+  }
+  void SecretsMayHaveChanged(const std::string& target_id) override {
+    ++secrets_changed;
+  }
+  CardFields CardFieldsOf(const std::string& target_id) override {
+    return card_fields;
+  }
+  std::optional<std::string> MaskScreenshot(
+      const std::string& png,
+      const ScreenshotMask& mask,
+      std::string_view format,
+      std::optional<int> quality) override {
+    masks.push_back(mask);
+    masked_format = std::string(format);
+    if (refuse_mask) {
+      return std::nullopt;
+    }
+    return "masked:" + png;
+  }
+  void Autofill(const std::string& target_id,
+                const std::string& frame_id,
+                const AutofillRequest& request,
+                AutofillCallback done) override {
+    autofills.push_back({target_id, frame_id, request});
+    autofill_done = std::move(done);
+  }
+  const SecretScrubber* Secrets() override { return &scrubber; }
 
   struct Sent {
     std::string target_id;
@@ -175,6 +226,25 @@ class FakeBackend : public FacadeBackend {
     SurfaceCaptureCallback done;
   };
   std::vector<Copy> copies;
+  // Secrets Koan filled (design section 4.5).
+  SecretFacts facts;
+  std::vector<std::string> secrets_asked;
+  // The fields' read (RefreshSecrets()), answered by the test.
+  bool secrets_current = true;
+  std::vector<base::OnceClosure> refreshes;
+  int secrets_changed = 0;
+  CardFields card_fields;
+  std::vector<ScreenshotMask> masks;
+  std::string masked_format;
+  bool refuse_mask = false;
+  struct AutofillCall {
+    std::string target_id;
+    std::string frame_id;
+    AutofillRequest request;
+  };
+  std::vector<AutofillCall> autofills;
+  AutofillCallback autofill_done;
+  SecretScrubber scrubber;
 };
 
 class KoanAgentFacadeTest : public testing::Test {
@@ -1259,6 +1329,406 @@ TEST_F(KoanAgentFacadeTest, PauseAndResumeEventsDescribeThePause) {
   EXPECT_EQ(Events("Koan.resumed").size(), 1u);
 }
 
+// --- Secrets Koan filled (design section 4.5) ------------------------------
+
+TEST_F(KoanAgentFacadeTest, ScriptWaitsWhileASecretIsFilledInThePage) {
+  const std::string session = AttachTo("T1");
+  backend_.facts.locked = true;
+  for (const char* method : {"Runtime.evaluate", "Runtime.callFunctionOn",
+                             "Runtime.getProperties", "Runtime.awaitPromise"}) {
+    Send(1, method,
+         base::DictValue()
+             .Set("expression", "document.querySelector('input').value")
+             .Set("objectId", "o")
+             .Set("functionDeclaration", "function(){return this.value}")
+             .Set("promiseObjectId", "p"),
+         session);
+    EXPECT_EQ(ErrorCode(1), "Koan.secretField") << method;
+  }
+  EXPECT_TRUE(backend_.sent.empty());
+  // Clicks, keys elsewhere, snapshots and navigation still go.
+  Send(2, "Input.dispatchMouseEvent",
+       base::DictValue()
+           .Set("type", "mousePressed")
+           .Set("x", 1)
+           .Set("y", 1)
+           .Set("button", "left"),
+       session);
+  EXPECT_EQ(ErrorCode(2), "");
+  Send(3, "Input.insertText", base::DictValue().Set("text", "Ada"), session);
+  EXPECT_EQ(ErrorCode(3), "");
+  Send(4, "Accessibility.getFullAXTree", base::DictValue(), session);
+  EXPECT_EQ(ErrorCode(4), "");
+  // Typing into the filled field itself does not; Enter, Tab and keyUp do.
+  backend_.facts.focused_locked = true;
+  Send(5, "Input.insertText", base::DictValue().Set("text", "x"), session);
+  EXPECT_EQ(ErrorCode(5), "Koan.secretField");
+  Send(6, "Input.dispatchKeyEvent",
+       base::DictValue().Set("type", "keyDown").Set("key", "Backspace"),
+       session);
+  EXPECT_EQ(ErrorCode(6), "Koan.secretField");
+  Send(7, "Input.dispatchKeyEvent",
+       base::DictValue().Set("type", "char").Set("text", "a"), session);
+  EXPECT_EQ(ErrorCode(7), "Koan.secretField");
+  Send(8, "Input.dispatchKeyEvent",
+       base::DictValue()
+           .Set("type", "keyDown")
+           .Set("key", "Enter")
+           .Set("text", "\r"),
+       session);
+  EXPECT_EQ(ErrorCode(8), "");
+  Send(9, "Input.dispatchKeyEvent",
+       base::DictValue().Set("type", "keyUp").Set("key", "a"), session);
+  EXPECT_EQ(ErrorCode(9), "");
+
+  // The page moved on (or the field was cleared): script runs again, once
+  // the tab has handled the input before it.
+  std::vector<std::pair<std::string, int>> unanswered;
+  for (const FakeBackend::Sent& sent : backend_.sent) {
+    unanswered.emplace_back(sent.target_id, *sent.command.FindInt("id"));
+  }
+  for (const auto& [target, id] : unanswered) {
+    facade_.OnTabMessage(target,
+                         *base::WriteJson(base::DictValue().Set("id", id).Set(
+                             "result", base::DictValue())));
+  }
+  backend_.facts = FacadeBackend::SecretFacts();
+  Send(10, "Runtime.evaluate", base::DictValue().Set("expression", "1"),
+       session);
+  EXPECT_EQ(*backend_.sent.back().command.FindString("method"),
+            "Runtime.evaluate");
+  EXPECT_EQ(ErrorCode(10), "");
+  // Each refusal is audited, without the script.
+  bool audited = false;
+  for (const AuditRecord& record : backend_.audits) {
+    audited = audited || (record.event == "Runtime.evaluate" &&
+                          record.outcome == AuditOutcome::kDenied);
+    EXPECT_EQ(record.summary.find("querySelector"), std::string::npos);
+  }
+  EXPECT_TRUE(audited);
+}
+
+// S1 (#412 review): a password Koan did not fill (the password manager's on
+// load, or one the user typed) locks script too. Before a script read the
+// backend reads the fields if anything changed them; the read's commands,
+// and those after them, wait in order.
+TEST_F(KoanAgentFacadeTest, ScriptWaitsForTheSecretFieldsToBeRead) {
+  const std::string session = AttachTo("T1");
+  backend_.secrets_current = false;
+  // Not script: no read.
+  Send(1, "DOM.getDocument", base::DictValue(), session);
+  ASSERT_EQ(backend_.sent.size(), 1u);
+  EXPECT_TRUE(backend_.refreshes.empty());
+  // Script waits, and so does what comes after it.
+  Send(2, "Runtime.evaluate", base::DictValue().Set("expression", "1"),
+       session);
+  Send(3, "DOM.getDocument", base::DictValue(), session);
+  EXPECT_EQ(backend_.sent.size(), 1u);
+  ASSERT_EQ(backend_.refreshes.size(), 1u);
+  EXPECT_EQ(Answer(2), nullptr);
+  // The read found a password the user typed: refused, then the next goes.
+  backend_.facts.locked = true;
+  backend_.secrets_current = true;
+  std::move(backend_.refreshes[0]).Run();
+  EXPECT_EQ(ErrorCode(2), "Koan.secretField");
+  ASSERT_EQ(backend_.sent.size(), 2u);
+  EXPECT_EQ(*backend_.sent[1].command.FindString("method"), "DOM.getDocument");
+  // A read that is current is not made again.
+  backend_.facts = FacadeBackend::SecretFacts();
+  Send(4, "Runtime.evaluate", base::DictValue().Set("expression", "1"),
+       session);
+  EXPECT_EQ(backend_.refreshes.size(), 1u);
+  EXPECT_EQ(backend_.sent.size(), 3u);
+  // A frame that did not answer counts as locked.
+  backend_.facts.unknown = true;
+  Send(5, "Runtime.callFunctionOn",
+       base::DictValue()
+           .Set("objectId", "o")
+           .Set("functionDeclaration", "function(){return this.value}"),
+       session);
+  EXPECT_EQ(ErrorCode(5), "Koan.secretField");
+}
+
+TEST_F(KoanAgentFacadeTest, ScriptWaitsForTheInputBeforeIt) {
+  const std::string session = AttachTo("T1");
+  // A click (which may show a password filled on load) is in flight.
+  Send(1, "Input.dispatchMouseEvent",
+       base::DictValue()
+           .Set("type", "mousePressed")
+           .Set("x", 1)
+           .Set("y", 1)
+           .Set("button", "left"),
+       session);
+  ASSERT_EQ(backend_.sent.size(), 1u);
+  Send(2, "Runtime.evaluate", base::DictValue().Set("expression", "1"),
+       session);
+  EXPECT_EQ(backend_.sent.size(), 1u);
+  // Its answer: the fields may have changed, and they are read first.
+  backend_.secrets_current = false;
+  AnswerLast(base::DictValue());
+  EXPECT_EQ(backend_.secrets_changed, 1);
+  EXPECT_EQ(ErrorCode(1), "");
+  ASSERT_EQ(backend_.refreshes.size(), 1u);
+  EXPECT_EQ(backend_.sent.size(), 1u);
+  backend_.secrets_current = true;
+  std::move(backend_.refreshes[0]).Run();
+  ASSERT_EQ(backend_.sent.size(), 2u);
+  EXPECT_EQ(*backend_.sent[1].command.FindString("method"), "Runtime.evaluate");
+}
+
+TEST_F(KoanAgentFacadeTest, CommandsThatWaitEndWithTheSession) {
+  const std::string session = AttachTo("T1");
+  backend_.secrets_current = false;
+  Send(1, "Runtime.evaluate", base::DictValue().Set("expression", "1"),
+       session);
+  Send(2, "Page.reload", base::DictValue(), session);
+  facade_.OnTabDetached("T1");
+  EXPECT_EQ(ErrorCode(1), "Koan.targetClosed");
+  EXPECT_EQ(ErrorCode(2), "Koan.targetClosed");
+  // The read's answer after that is nothing.
+  ASSERT_EQ(backend_.refreshes.size(), 1u);
+  std::move(backend_.refreshes[0]).Run();
+  EXPECT_TRUE(backend_.sent.empty());
+}
+
+// DOMSnapshot carries the live value of every input: its domain stays denied.
+TEST_F(KoanAgentFacadeTest, DomSnapshotIsDenied) {
+  const std::string session = AttachTo("T1");
+  for (const char* method :
+       {"DOMSnapshot.captureSnapshot", "DOMSnapshot.getSnapshot"}) {
+    Send(1, method, base::DictValue(), session);
+    EXPECT_EQ(ErrorCode(1), "Koan.notPermitted") << method;
+  }
+  EXPECT_TRUE(backend_.sent.empty());
+}
+
+TEST_F(KoanAgentFacadeTest, ACardFilledStopsPrintAndScreencast) {
+  const std::string session = AttachTo("T1");
+  backend_.facts.card_filled = true;
+  Send(1, "Page.printToPDF", base::DictValue(), session);
+  EXPECT_EQ(ErrorCode(1), "Koan.secretField");
+  Send(2, "Page.startScreencast", base::DictValue(), session);
+  EXPECT_EQ(ErrorCode(2), "Koan.secretField");
+  EXPECT_TRUE(backend_.sent.empty());
+  // A screencast that was running drops its frames (acknowledged, so it
+  // does not stall) while the card is filled.
+  TabEvent("T1", "Page.screencastFrame",
+           base::DictValue().Set("data", "AAAA").Set("sessionId", 3));
+  EXPECT_TRUE(Events("Page.screencastFrame").empty());
+  ASSERT_EQ(backend_.sent.size(), 1u);
+  EXPECT_EQ(*backend_.sent[0].command.FindString("method"),
+            "Page.screencastFrameAck");
+}
+
+TEST_F(KoanAgentFacadeTest, SecretFieldsAreHiddenOnTheAgentsOwnTab) {
+  const std::string session = AttachTo("T1");
+  backend_.facts.fields = {41};
+  Send(1, "Accessibility.getFullAXTree", base::DictValue(), session);
+  AnswerLast(Parse(R"({"nodes": [
+      {"nodeId": "2", "role": {"value": "textbox"}, "backendDOMNodeId": 41,
+       "value": {"type": "string", "value": "4111111111111111"}}]})"));
+  const base::ListValue* nodes =
+      Answer(1)->FindListByDottedPath("result.nodes");
+  ASSERT_TRUE(nodes);
+  EXPECT_EQ(*(*nodes)[0].GetDict().FindStringByDottedPath("value.value"),
+            kSecretFilled);
+  // A password field's value attribute, whatever the agent typed.
+  Send(2, "DOM.getAttributes", base::DictValue().Set("nodeId", 9), session);
+  AnswerLast(Parse(R"({"attributes": ["type", "password", "value", "pw"]})"));
+  EXPECT_EQ(base::WriteJson(*Answer(2))->find("\"pw\""), std::string::npos);
+  // A card field's, by its autocomplete, in every DOM read.
+  Send(3, "DOM.getAttributes", base::DictValue().Set("nodeId", 10), session);
+  AnswerLast(Parse(R"({"attributes": ["autocomplete", "cc-number",
+      "value", "4111111111111111"]})"));
+  Send(4, "DOM.describeNode", base::DictValue().Set("nodeId", 10), session);
+  AnswerLast(Parse(R"({"node": {"nodeId": 10, "backendNodeId": 50,
+      "nodeName": "INPUT", "attributes": ["autocomplete", "cc-number",
+      "value", "4111111111111111"]}})"));
+  Send(5, "DOM.getOuterHTML", base::DictValue().Set("nodeId", 1), session);
+  AnswerLast(Parse(
+      R"({"outerHTML": "<form><input autocomplete='cc-number' )"
+      R"(value='4111111111111111'><input type=password value=pw2></form>"})"));
+  // A field autofill classifies as a card, whatever its markup says.
+  Send(6, "DOM.describeNode", base::DictValue().Set("nodeId", 11), session);
+  AnswerLast(Parse(R"({"node": {"nodeId": 11, "backendNodeId": 41,
+      "nodeName": "INPUT", "attributes": ["name", "n", "value",
+      "4111111111111111"]}})"));
+  for (int id : {3, 4, 5, 6}) {
+    const std::string json = *base::WriteJson(*Answer(id));
+    EXPECT_EQ(json.find("4111"), std::string::npos) << json;
+    EXPECT_EQ(json.find("pw2"), std::string::npos) << json;
+  }
+}
+
+TEST_F(KoanAgentFacadeTest, NothingSentCarriesASecretKoanFilled) {
+  const std::string session = AttachTo("T1");
+  ASSERT_TRUE(backend_.scrubber.Add("hunter2-secret"));
+  // A console message, an answer, a request body.
+  TabEvent("T1", "Runtime.consoleAPICalled", Parse(R"({"type": "log", "args": [
+               {"type": "string", "value": "pw=hunter2-secret"}]})"));
+  Send(1, "Accessibility.getFullAXTree", base::DictValue(), session);
+  AnswerLast(Parse(R"({"nodes": [{"nodeId": "1",
+      "name": {"value": "hunter2-secret"}}]})"));
+  TabEvent("T1", "Network.requestWillBeSent",
+           Parse(R"({"requestId": "1", "request": {
+               "url": "https://example.com/login?p=hunter2-secret",
+               "headers": {}}})"));
+  for (const base::DictValue& message : received_) {
+    EXPECT_EQ(base::WriteJson(message)->find("hunter2"), std::string::npos)
+        << *base::WriteJson(message);
+  }
+  EXPECT_NE(base::WriteJson(*Answer(1))->find("[secret]"), std::string::npos);
+}
+
+TEST_F(KoanAgentFacadeTest, AutofillOnlyOnADrivenTab) {
+  const std::string session = AttachTo("T1");
+  // No session, or a bad request.
+  Send(1, "Koan.autofill",
+       base::DictValue().Set("backendNodeId", 4).Set("list", true));
+  EXPECT_EQ(ErrorCode(1), "Koan.invalidParams");
+  Send(2, "Koan.autofill", base::DictValue().Set("list", true), session);
+  EXPECT_EQ(ErrorCode(2), "Koan.invalidParams");
+  Send(3, "Koan.autofill",
+       base::DictValue()
+           .Set("backendNodeId", 4)
+           .Set("list", true)
+           .Set("pick", 1),
+       session);
+  EXPECT_EQ(ErrorCode(3), "Koan.invalidParams");
+  Send(4, "Koan.autofill",
+       base::DictValue().Set("backendNodeId", 4).Set("pick", 0), session);
+  EXPECT_EQ(ErrorCode(4), "Koan.invalidParams");
+  EXPECT_TRUE(backend_.autofills.empty());
+
+  // Paused, an interstitial.
+  registry_.Pause("T1");
+  Send(5, "Koan.autofill",
+       base::DictValue().Set("backendNodeId", 4).Set("list", true), session);
+  EXPECT_EQ(ErrorCode(5), "Koan.paused");
+  registry_.Resume("T1");
+  backend_.tabs["T1"].interstitial = true;
+  Send(6, "Koan.autofill",
+       base::DictValue().Set("backendNodeId", 4).Set("list", true), session);
+  EXPECT_EQ(ErrorCode(6), "Koan.interstitial");
+  backend_.tabs["T1"].interstitial = false;
+  EXPECT_TRUE(backend_.autofills.empty());
+
+  // A pick goes to the backend and is answered when it is done; its audit
+  // says the field's kind and the row's label, never a value.
+  Send(7, "Koan.autofill",
+       base::DictValue().Set("backendNodeId", 4).Set("pickLabel", "Visa"),
+       session);
+  ASSERT_EQ(backend_.autofills.size(), 1u);
+  EXPECT_EQ(backend_.autofills[0].target_id, "T1");
+  EXPECT_EQ(backend_.autofills[0].frame_id, "");
+  EXPECT_EQ(backend_.autofills[0].request.node, 4);
+  EXPECT_EQ(backend_.autofills[0].request.pick.label, "Visa");
+  EXPECT_FALSE(backend_.autofills[0].request.list);
+  FacadeBackend::AutofillResult result;
+  result.result.Set("filled", true);
+  result.result.Set("kind", "card");
+  result.summary = "card Visa ••••4242";
+  std::move(backend_.autofill_done).Run(std::move(result));
+  EXPECT_EQ(Answer(7)->FindBoolByDottedPath("result.filled"), true);
+  EXPECT_EQ(backend_.audits.back().event, "Koan.autofill");
+  EXPECT_EQ(backend_.audits.back().summary, "card Visa ••••4242");
+  EXPECT_EQ(backend_.audits.back().outcome, AuditOutcome::kOk);
+
+  // A refusal comes back as the backend's error.
+  Send(8, "Koan.autofill",
+       base::DictValue().Set("backendNodeId", 4).Set("pick", 2), session);
+  FacadeBackend::AutofillResult refused;
+  refused.error_code = "Koan.offSite";
+  refused.error_message = "no";
+  std::move(backend_.autofill_done).Run(std::move(refused));
+  EXPECT_EQ(ErrorCode(8), "Koan.offSite");
+  EXPECT_EQ(backend_.audits.back().outcome, AuditOutcome::kDenied);
+}
+
+TEST_F(KoanAgentFacadeTest, AutofillOnAReadableTabIsRefused) {
+  registry_.GrantUserTab("U1", "alice", TabState::kReadable);
+  const std::string session = AttachTo("U1");
+  Send(1, "Koan.autofill",
+       base::DictValue().Set("backendNodeId", 4).Set("list", true), session);
+  EXPECT_EQ(ErrorCode(1), "Koan.notPermitted");
+  EXPECT_TRUE(backend_.autofills.empty());
+}
+
+TEST_F(KoanAgentFacadeTest, AScreenshotHidesTheCardFieldsKoanFilled) {
+  const std::string session = AttachTo("T1");
+  backend_.facts.card_filled = true;
+  backend_.card_fields.nodes = {41};
+  backend_.card_fields.frames = {"FRAME1"};
+  Send(1, "Page.captureScreenshot",
+       base::DictValue().Set("format", "jpeg").Set("quality", 70), session);
+  // The layout, the payment frame's <iframe>, each box; then the shot.
+  ASSERT_EQ(*backend_.sent.back().command.FindString("method"),
+            "Page.getLayoutMetrics");
+  AnswerLast(Parse(R"({"cssVisualViewport": {"pageX": 0, "pageY": 100,
+      "clientWidth": 800, "clientHeight": 600}})"));
+  ASSERT_EQ(*backend_.sent.back().command.FindString("method"),
+            "DOM.getFrameOwner");
+  EXPECT_EQ(
+      *backend_.sent.back().command.FindStringByDottedPath("params.frameId"),
+      "FRAME1");
+  AnswerLast(Parse(R"({"backendNodeId": 50})"));
+  ASSERT_EQ(*backend_.sent.back().command.FindString("method"),
+            "DOM.getContentQuads");
+  // Two quads asked for (41 and the frame's 50); answered in order.
+  const size_t sent = backend_.sent.size();
+  ASSERT_GE(sent, 2u);
+  for (size_t i = sent - 2; i < sent; ++i) {
+    base::DictValue answer;
+    answer.Set("id", *backend_.sent[i].command.FindInt("id"));
+    answer.Set("result",
+               Parse(R"({"quads": [[10, 10, 110, 10, 110, 30, 10, 30]]})"));
+    facade_.OnTabMessage("T1", *base::WriteJson(answer));
+  }
+  const base::DictValue& shot = backend_.sent.back().command;
+  ASSERT_EQ(*shot.FindString("method"), "Page.captureScreenshot");
+  // Taken as PNG, encoded as asked after.
+  EXPECT_EQ(*shot.FindStringByDottedPath("params.format"), "png");
+  EXPECT_FALSE(shot.FindByDottedPath("params.quality"));
+  EXPECT_EQ(ErrorCode(1), "");
+  EXPECT_FALSE(Answer(1));
+  AnswerLast(base::DictValue().Set("data", "iVBORw0K"));
+  ASSERT_EQ(backend_.masks.size(), 1u);
+  EXPECT_EQ(backend_.masked_format, "jpeg");
+  ASSERT_EQ(backend_.masks[0].boxes.size(), 2u);
+  EXPECT_EQ(backend_.masks[0].css_width, 800);
+  EXPECT_EQ(*Answer(1)->FindStringByDottedPath("result.data"),
+            "masked:iVBORw0K");
+  EXPECT_EQ(Answer(1)->FindIntByDottedPath("result.koanMasked"), 2);
+}
+
+TEST_F(KoanAgentFacadeTest, AScreenshotThatCannotBeMaskedIsRefused) {
+  const std::string session = AttachTo("T1");
+  backend_.facts.card_filled = true;
+  backend_.card_fields.frames = {"FRAME1"};
+  Send(1, "Page.captureScreenshot", base::DictValue(), session);
+  AnswerLast(Parse(R"({"cssVisualViewport": {"clientWidth": 800,
+      "clientHeight": 600}})"));
+  // The frame's owner is not found: no screenshot at all.
+  base::DictValue error;
+  error.Set("id", *backend_.sent.back().command.FindInt("id"));
+  error.Set("error", base::DictValue().Set("code", -32000).Set("message", "x"));
+  facade_.OnTabMessage("T1", *base::WriteJson(error));
+  EXPECT_EQ(ErrorCode(1), "Koan.secretField");
+  for (const FakeBackend::Sent& command : backend_.sent) {
+    EXPECT_NE(*command.command.FindString("method"), "Page.captureScreenshot");
+  }
+}
+
+TEST_F(KoanAgentFacadeTest, AScreenshotDataIsNotScanned) {
+  const std::string session = AttachTo("T1");
+  // A secret whose base64 run happens to be in the image data: the image is
+  // passed over (it is masked instead), the rest of the answer is not.
+  ASSERT_TRUE(backend_.scrubber.Add("abcdefgh"));
+  Send(1, "Page.captureScreenshot", base::DictValue(), session);
+  AnswerLast(base::DictValue().Set("data", "YWJjZGVmZ2g="));
+  EXPECT_EQ(*Answer(1)->FindStringByDottedPath("result.data"), "YWJjZGVmZ2g=");
+}
+
 }  // namespace
 // Koan.captureScaled: the page's viewport, then a copy of the surface.
 constexpr char kLayoutMetrics[] = R"({
@@ -1373,6 +1843,114 @@ TEST_F(KoanAgentFacadeTest, CaptureScaledFallsBackToCdpOnlyOnAgentTabs) {
   std::move(backend_.copies[1].done).Run(std::move(none));
   EXPECT_EQ(ErrorCode(2), "Koan.noSurface");
   EXPECT_EQ(backend_.sent.size(), sent_before);
+}
+
+TEST_F(KoanAgentFacadeTest, CaptureScaledPaintsOverTheCardFieldsKoanFilled) {
+  // A user's tab with a card Koan filled: one field in the page, one in a
+  // payment frame in another process (its <iframe> is boxed).
+  registry_.GrantUserTab("U1", "alice", TabState::kDriven);
+  ASSERT_FALSE(AttachTo("U1").empty());
+  backend_.facts.card_filled = true;
+  backend_.card_fields.nodes = {41};
+  backend_.card_fields.frames = {"FRAME1"};
+  Send(1, "Koan.captureScaled",
+       Parse(R"({"targetId": "U1", "longEdge": 640, "scale": 1,
+                 "clip": {"x": 0, "y": 0, "width": 720, "height": 450}})"));
+  AnswerLast(Parse(kLayoutMetrics));
+  ASSERT_EQ(*backend_.sent.back().command.FindString("method"),
+            "DOM.getFrameOwner");
+  AnswerLast(Parse(R"({"backendNodeId": 50})"));
+  const size_t sent = backend_.sent.size();
+  ASSERT_GE(sent, 2u);
+  // Field 41 at (90, 45) 180x18; the frame at (360, 225) 90x45; CSS px.
+  const std::array<std::string_view, 2> quads = {
+      R"({"quads": [[90, 45, 270, 45, 270, 63, 90, 63]]})",
+      R"({"quads": [[360, 225, 450, 225, 450, 270, 360, 270]]})"};
+  for (size_t i = 0; i < 2; ++i) {
+    const base::DictValue& command = backend_.sent[sent - 2 + i].command;
+    ASSERT_EQ(*command.FindString("method"), "DOM.getContentQuads");
+    base::DictValue answer;
+    answer.Set("id", *command.FindInt("id"));
+    answer.Set("result", Parse(quads[i]));
+    facade_.OnTabMessage("U1", *base::WriteJson(answer));
+  }
+  // The clip's 720x450 CSS px at 640 px: 1 image px = 1.125 CSS px, and
+  // 2 CSS px of padding, rounded outwards.
+  ASSERT_EQ(backend_.copies.size(), 1u);
+  FakeBackend::Copy& copy = backend_.copies[0];
+  ASSERT_EQ(copy.job.masks.size(), 2u);
+  EXPECT_EQ(copy.job.masks[0], (CaptureRect{78, 38, 164, 20}));
+  EXPECT_EQ(copy.job.masks[1], (CaptureRect{318, 198, 84, 44}));
+  SurfaceCaptureResult copied;
+  copied.status = SurfaceStatus::kOk;
+  copied.encoded = {1, 2, 3};
+  copied.width = 640;
+  copied.height = 400;
+  std::move(copy.done).Run(std::move(copied));
+  EXPECT_EQ(Answer(1)->FindIntByDottedPath("result.masked"), 2);
+  // Painted in the bitmap: nothing decoded and encoded again.
+  EXPECT_TRUE(backend_.masks.empty());
+  for (const FakeBackend::Sent& command : backend_.sent) {
+    EXPECT_NE(*command.command.FindString("method"), "Page.captureScreenshot");
+  }
+}
+
+TEST_F(KoanAgentFacadeTest, CaptureScaledIsRefusedWhenAFieldCannotBeFound) {
+  ASSERT_FALSE(AttachTo("T1").empty());
+  backend_.facts.card_filled = true;
+  backend_.card_fields.frames = {"FRAME1"};
+  Send(1, "Koan.captureScaled", Parse(R"({"targetId": "T1"})"));
+  AnswerLast(Parse(kLayoutMetrics));
+  base::DictValue error;
+  error.Set("id", *backend_.sent.back().command.FindInt("id"));
+  error.Set("error", base::DictValue().Set("code", -32000).Set("message", "x"));
+  facade_.OnTabMessage("T1", *base::WriteJson(error));
+  EXPECT_EQ(ErrorCode(1), "Koan.secretField");
+  EXPECT_TRUE(backend_.copies.empty());
+}
+
+TEST_F(KoanAgentFacadeTest, CaptureScaledMasksTheCdpFallback) {
+  // An agent's own tab with no surface and a card filled: CDP draws it as
+  // PNG, and it is painted over and encoded as asked.
+  ASSERT_FALSE(AttachTo("T1").empty());
+  backend_.facts.card_filled = true;
+  backend_.card_fields.nodes = {41};
+  Send(1, "Koan.captureScaled",
+       Parse(R"({"targetId": "T1", "longEdge": 640, "scale": 1,
+                 "format": "jpeg", "quality": 60})"));
+  AnswerLast(Parse(kLayoutMetrics));
+  AnswerLast(Parse(R"({"quads": [[90, 45, 270, 45, 270, 63, 90, 63]]})"));
+  ASSERT_EQ(backend_.copies.size(), 1u);
+  ASSERT_EQ(backend_.copies[0].job.masks.size(), 1u);
+  SurfaceCaptureResult failed;
+  failed.status = SurfaceStatus::kNoSurface;
+  std::move(backend_.copies[0].done).Run(std::move(failed));
+  const base::DictValue& fallback = backend_.sent.back().command;
+  ASSERT_EQ(*fallback.FindString("method"), "Page.captureScreenshot");
+  EXPECT_EQ(*fallback.FindStringByDottedPath("params.format"), "png");
+  EXPECT_FALSE(fallback.FindByDottedPath("params.quality"));
+  AnswerLast(Parse(R"({"data": "iVBORw0K"})"));
+  ASSERT_EQ(backend_.masks.size(), 1u);
+  EXPECT_EQ(backend_.masked_format, "jpeg");
+  ASSERT_EQ(backend_.masks[0].boxes.size(), 1u);
+  EXPECT_DOUBLE_EQ(backend_.masks[0].boxes[0].x, 90);
+  EXPECT_DOUBLE_EQ(backend_.masks[0].css_width, 1440);
+  EXPECT_EQ(*Answer(1)->FindStringByDottedPath("result.data"),
+            "masked:iVBORw0K");
+  EXPECT_EQ(*Answer(1)->FindStringByDottedPath("result.via"), "cdp");
+  EXPECT_EQ(Answer(1)->FindIntByDottedPath("result.masked"), 1);
+
+  // Not hidden: no image at all.
+  backend_.refuse_mask = true;
+  Send(2, "Koan.captureScaled", Parse(R"({"targetId": "T1"})"));
+  AnswerLast(Parse(kLayoutMetrics));
+  AnswerLast(Parse(R"({"quads": [[90, 45, 270, 45, 270, 63, 90, 63]]})"));
+  ASSERT_EQ(backend_.copies.size(), 2u);
+  SurfaceCaptureResult none;
+  none.status = SurfaceStatus::kNoSurface;
+  std::move(backend_.copies[1].done).Run(std::move(none));
+  AnswerLast(Parse(R"({"data": "iVBORw0K"})"));
+  EXPECT_EQ(ErrorCode(2), "Koan.secretField");
 }
 
 TEST_F(KoanAgentFacadeTest, CaptureScaledEndsWithTheSession) {

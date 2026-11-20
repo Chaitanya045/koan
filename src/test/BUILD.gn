@@ -62,8 +62,10 @@ source_set("browsertests_impl") {
   testonly = true
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
   sources = [
+    "browser/koan_agent_autofill_browsertest.cc",
     "browser/koan_agent_capture_browsertest.cc",
     "browser/koan_agent_pause_watch_browsertest.cc",
+    "browser/koan_agent_secret_lock_browsertest.cc",
     "browser/koan_browser_test_utils.cc",
     "browser/koan_browser_test_utils.h",
     "browser/koan_command_palette_browsertest.cc",
@@ -109,9 +111,13 @@ source_set("browsertests_impl") {
     "//chrome/test:test_support",
     "//chrome/test:test_support_ui",
     "//chrome/test/base:browser_tests_runner",
+    "//components/autofill/content/browser",
+    "//components/autofill/core/browser",
+    "//components/autofill/core/browser:test_support",
     "//components/bookmarks/browser",
     "//components/bookmarks/test",
     "//components/keyed_service/core",
+    "//components/password_manager/core/browser:password_form",
     "//components/password_manager/core/browser/password_store:password_store_interface",
     "//components/password_manager/core/browser/password_store:test_support",
     "//components/prefs",
@@ -127,6 +133,7 @@ source_set("browsertests_impl") {
     "//koan/browser:features",
     "//koan/browser:prefs",
     "//koan/browser/agent:auto_resume",
+    "//koan/browser/agent:autofill_hooks",
     "//koan/browser/agent:browser",
     "//koan/browser/agent:capture",
     "//koan/browser/containers:partition",

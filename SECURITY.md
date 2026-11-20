@@ -77,8 +77,32 @@ What that means, plainly:
   cookies and sign-in tokens are still never sent to the agent program (Koan's
   scrubber drops them from what it reads), but a page signed in as you is
   yours to the agent.
-- **Saved passwords** on: Chrome fills your saved passwords in agent tabs, and
-  a filled password is in the page, where the agent can read it.
+- **Saved passwords** and **Addresses and cards** on: an agent uses them the
+  way you do, through Chrome's own autofill (`koan autofill`): it sees what the
+  dropdown shows you ("Visa ••••4242", "you@example.com (saved password)"),
+  picks one, and Chrome fills the form. It never reads the secrets it fills:
+  passwords, card numbers, CVCs and IBANs. A filled one reads "•••• (filled)"
+  to the agent, script in its page is refused until the page moves on or the
+  field is cleared, screenshots paint over filled card fields, and Koan
+  replaces any copy of a value it filled (in a page's text, a console message,
+  a request) with "[secret]" in everything sent to the agent. Nothing is
+  filled when an agent's page loads, and silent sign-in
+  (`navigator.credentials.get`) is off in agent tabs, so Koan knows every
+  password it filled. A password or card number Koan did not fill (one the
+  password manager filled in your own tab, or one you typed before you
+  handed the tab back) is treated the same way: Koan reads those fields
+  itself, in a world neither the page nor the agent sees, locks script and
+  scrubs the value. Known limit there: a value a page puts into a field by
+  script, after the last input Koan saw, is found only at the agent's next
+  script read. A login is filled only on its own site, into a form that
+  sends it there. When Chrome would ask you first (Touch ID, your device
+  password, a card's CVC), it still asks you: the agent waits until you verify
+  in Koan. Known limits: the page itself can read what is filled (it has to,
+  to send it), so a malicious page could show it in a way Koan doesn't
+  recognise (an image, an encoding Koan doesn't look for); values shorter than
+  6 characters (a CVC) are kept out by the field lock and the snapshot
+  redaction, not by the scrubber; and a password an agent types itself is the
+  agent's.
 - **Your extensions** off while **Your logins** is on: agent tabs share your
   tabs' renderer processes, so Koan can't stop your extensions' content scripts
   there. It still keeps extensions from finding agent tabs by id, attaching

@@ -79,6 +79,19 @@ class AgentPageSurfaces : public PageSurfaceDelegate {
   // The agent let go of `contents`.
   void ReleaseTab(content::WebContents* contents);
 
+  // An agent picked a card or a login that Chrome fills only once the user
+  // verifies it (`koan autofill`, PageSurface::kAutofillVerify; `detail` as
+  // PromptTextFor() takes it). Held until the user opens it: the tab comes
+  // forward, then `fill` runs and Chrome asks the user there. Dismissed, or
+  // the agent lets go of the tab: `dismissed` runs and nothing is filled.
+  // Returns the prompt's id, or 0 if the tab holds as many as it may.
+  uint64_t HoldAutofillVerify(content::WebContents* contents,
+                              std::string detail,
+                              base::OnceClosure fill,
+                              base::OnceClosure dismissed);
+  // The pick went away on its own (the page moved on).
+  void ForgetAutofillVerify(uint64_t id);
+
   // PageSurfaceDelegate:
   bool IsHeldByAgent(content::WebContents* contents) override;
   content::JavaScriptDialogManager* DialogManager() override;

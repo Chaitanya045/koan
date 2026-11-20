@@ -38,14 +38,16 @@ std::string_view VerbOf(ActKind act) {
       return "scroll";
     case ActKind::kNavigate:
       return "navigate";
+    case ActKind::kAutofill:
+      return "autofill";
   }
   return "";
 }
 
 std::optional<ActKind> ActOf(std::string_view verb) {
-  for (ActKind act :
-       {ActKind::kClick, ActKind::kFill, ActKind::kSelect, ActKind::kChoose,
-        ActKind::kPress, ActKind::kScroll, ActKind::kNavigate}) {
+  for (ActKind act : {ActKind::kClick, ActKind::kFill, ActKind::kSelect,
+                      ActKind::kChoose, ActKind::kPress, ActKind::kScroll,
+                      ActKind::kNavigate, ActKind::kAutofill}) {
     if (VerbOf(act) == verb) {
       return act;
     }
@@ -96,6 +98,8 @@ std::string Usage(ActKind act) {
       return "scroll <pixels>";
     case ActKind::kNavigate:
       return "navigate <url>";
+    case ActKind::kAutofill:
+      return "autofill @ref <suggestion number or label>";
   }
   return "";
 }
@@ -251,7 +255,8 @@ bool ParseSteps(const std::vector<std::string>& words,
     const std::optional<ActKind> act = ActOf(words[i]);
     if (!act) {
       *error = "unknown action \"" + words[i] +
-               "\" (click, fill, select, choose, press, scroll, navigate)";
+               "\" (click, fill, select, choose, press, scroll, navigate, "
+               "autofill)";
       return false;
     }
     ++i;
@@ -285,6 +290,7 @@ bool ParseSteps(const std::vector<std::string>& words,
         [[fallthrough]];
       case ActKind::kSelect:
       case ActKind::kChoose:
+      case ActKind::kAutofill:
         if (left < 2 || !IsTarget(words[i]) ||
             (*act != ActKind::kFill && words[i + 1].empty())) {
           return usage();
@@ -365,6 +371,9 @@ std::string StepLabel(const Step& step) {
     case ActKind::kSelect:
     case ActKind::kChoose:
       return label + " " + step.target;
+    case ActKind::kAutofill:
+      // The pick is a label the user sees, never a value.
+      return label + " " + step.target + " " + Quote(step.text);
     case ActKind::kPress:
     case ActKind::kNavigate:
       return label + " " + step.text;
