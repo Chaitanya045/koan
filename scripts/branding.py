@@ -86,14 +86,17 @@ LOGOS = {
     'chrome/app/theme/chromium/product_logo_128.png': 'logo_128.png',
     'chrome/app/theme/chromium/product_logo_256.png': 'logo_256.png',
     'chrome/app/theme/chromium/product_logo_22_mono.png': 'logo_22_mono.png',
+    # IDR_PRODUCT_LOGO_16/32 (About page, task manager, infobars, app
+    # window titles): branding/logo_small.svg, the mark large on a full-bleed
+    # body, crisper at these sizes than logo.svg's margin and smaller mark.
     'chrome/app/theme/default_100_percent/chromium/product_logo_16.png':
-        'logo_16.png',
+        'logo_small_16.png',
     'chrome/app/theme/default_100_percent/chromium/product_logo_32.png':
-        'logo_32.png',
+        'logo_small_32.png',
     'chrome/app/theme/default_200_percent/chromium/product_logo_16.png':
-        'logo_32.png',
+        'logo_small_32.png',
     'chrome/app/theme/default_200_percent/chromium/product_logo_32.png':
-        'logo_64.png',
+        'logo_small_64.png',
     'chrome/app/theme/default_100_percent/chromium/product_logo_name_22.png':
         'wordmark_22.png',
     'chrome/app/theme/default_100_percent/chromium/'
@@ -164,6 +167,10 @@ MAC_ICNS_SET = [(16, 1), (32, 1), (128, 1), (256, 1), (512, 1)]
 MAC_BADGE = {'icon_256x256.png': 'logo_256.png',
              'icon_256x256@2x.png': 'logo_512.png'}
 
+# branding/wordmark.svg's view box: the mark as the K, then "oan" (22 high;
+# product_logo_name_22, the payment sheet's header).
+WORDMARK_SIZE = (43, 22)
+
 # Apple's macOS icon grid: the icon body is 824 px on a 1024 px canvas, the
 # margin leaving room for the shadow. branding/logo.svg's body is the
 # rounded square at (8, 8), 240 x 240, in a 256 x 256 view box.
@@ -198,34 +205,98 @@ def rebrand_messages(text):
   return MESSAGE.sub(fix, text)
 
 
-def enso_path(size, y_offset=0.0):
-  """A filled open ring (the ensō) as an SVG path in a size x size box.
+# The K-Stone mark (docs/BRANDING.md): a K whose leg is a stone. Geometry
+# in a 100-unit box, the same as branding/logo.svg's mark: a fully rounded
+# stem, a round-capped arm and a pebble (a slightly egg-shaped superellipse
+# lying on the leg's 39 degree diagonal, from the junction to the arm's
+# right edge). MARK_OFFSET re-centres the glyph in the box.
+MARK_OFFSET = (0.25, 0.67)
+MARK_STEM = ((28.5, 22.5), (28.5, 77.5), 8.5)  # capsule: ends, radius
+MARK_ARM = ((30.0, 55.0), (71.0, 19.0), 8.5)
+MARK_PEBBLE = {
+    'cx': 60.4664,
+    'cy': 70.6875,
+    'a': 21.3870,
+    'b': 12.8,
+    'rot': 39,
+    'egg': 0.07,
+    'n': 2.15
+}
+# Share of the box the mark's height fills in mark_path() (Material icons
+# keep about 20 of 24 px).
+MARK_FILL = 20 / 24
 
-  Same geometry as branding/logo.svg: from -50 degrees the long way round to
-  -15 degrees.
-  """
+
+def pebble_points(steps=96):
+  """The mark's pebble as a clockwise polygon, in the 100-unit box."""
   import math
-  cx, cy = size / 2, size / 2 + y_offset
-  outer, inner = size * 0.40, size * 0.25
+  p = MARK_PEBBLE
+  rot = math.radians(p['rot'])
+  points = []
+  for i in range(steps):
+    t = 2 * math.pi * i / steps
+    c, s = math.cos(t), math.sin(t)
+    x = p['a'] * math.copysign(abs(c)**(2 / p['n']), c)
+    y = p['b'] * math.copysign(abs(s)**(2 / p['n']), s) * (1 + p['egg'] * c)
+    points.append((p['cx'] + x * math.cos(rot) - y * math.sin(rot),
+                   p['cy'] + x * math.sin(rot) + y * math.cos(rot)))
+  return points
 
-  def point(r, deg):
-    a = math.radians(deg)
-    return f'{cx + r * math.cos(a):.2f} {cy + r * math.sin(a):.2f}'
 
-  return (f'M{point(outer, -50)} A{outer:.2f} {outer:.2f} 0 1 0 '
-          f'{point(outer, -15)} L{point(inner, -15)} '
-          f'A{inner:.2f} {inner:.2f} 0 1 1 {point(inner, -50)} Z')
+def mark_bounds():
+  """(left, top, right, bottom) of the mark in the 100-unit box."""
+  xs, ys = [], []
+  for (x1, y1), (x2, y2), r in (MARK_STEM, MARK_ARM):
+    xs += [min(x1, x2) - r, max(x1, x2) + r]
+    ys += [min(y1, y2) - r, max(y1, y2) + r]
+  for x, y in pebble_points():
+    xs.append(x)
+    ys.append(y)
+  dx, dy = MARK_OFFSET
+  return min(xs) + dx, min(ys) + dy, max(xs) + dx, max(ys) + dy
+
+
+def mark_path(size, y_offset=0.0, fill=MARK_FILL):
+  """The K-Stone mark as one filled SVG path in a size x size box (shifted
+  by y_offset), centred, `fill` of the box high.
+
+  Three clockwise subpaths (stem, arm, pebble) that overlap, so the default
+  nonzero fill rule draws their union in one colour.
+  """
+  left, top, right, bottom = mark_bounds()
+  scale = size * fill / (bottom - top)
+  mid_x, mid_y = (left + right) / 2, (top + bottom) / 2
+  dx, dy = MARK_OFFSET
+
+  def point(x, y):
+    return (f'{size / 2 + (x + dx - mid_x) * scale:.2f} '
+            f'{size / 2 + y_offset + (y + dy - mid_y) * scale:.2f}')
+
+  def capsule(start, end, r):
+    # Clockwise on screen: down the side to the right of start->end, round
+    # the end cap, back up the other side, round the start cap.
+    (x1, y1), (x2, y2) = start, end
+    length = ((x2 - x1)**2 + (y2 - y1)**2)**0.5
+    nx, ny = -(y2 - y1) / length * r, (x2 - x1) / length * r
+    radius = f'{r * scale:.2f} {r * scale:.2f} 0 0 1'
+    return (f'M{point(x1 - nx, y1 - ny)} L{point(x2 - nx, y2 - ny)} '
+            f'A{radius} {point(x2 + nx, y2 + ny)} '
+            f'L{point(x1 + nx, y1 + ny)} '
+            f'A{radius} {point(x1 - nx, y1 - ny)} Z')
+
+  pebble = 'M' + ' L'.join(point(x, y) for x, y in pebble_points()) + ' Z'
+  return ' '.join([capsule(*MARK_STEM), capsule(*MARK_ARM), pebble])
 
 
 def rebrand_cr_icons(text):
-  """Replaces the product icon paths in the cr icon set with the ensō."""
+  """Replaces the product icon paths in the cr icon set with the mark."""
   icon = re.compile(
       r'(<g id="chrome-product"( viewBox="0 -960 960 960")?>\s*<path\s+d=")'
       r'[^"]*(")')
 
   def fix(match):
     big = match.group(2) is not None
-    path = enso_path(960, -960) if big else enso_path(24)
+    path = mark_path(960, -960) if big else mark_path(24)
     return match.group(1) + path + match.group(3)
 
   return icon.sub(fix, text)
@@ -241,13 +312,15 @@ def rebrand_info_plist(text):
 
 def expected_png_size(name):
   """(width, height) a rendered branding PNG must have, from its name."""
-  match = re.fullmatch(r'(?:logo|appicon)_(\d+)(?:_mono)?\.png', name)
+  match = re.fullmatch(r'(?:logo|logo_small|appicon)_(\d+)(?:_mono)?\.png',
+                       name)
   if match:
     return int(match.group(1)), int(match.group(1))
   match = re.fullmatch(r'wordmark_(22|44)(?:_white)?\.png', name)
   if match:
     height = int(match.group(1))
-    return height * 97 // 22, height
+    width, base = WORDMARK_SIZE
+    return width * height // base, height
   return None
 
 
