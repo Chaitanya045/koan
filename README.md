@@ -8,7 +8,7 @@
 [![Release](https://img.shields.io/github/v/release/Chaitanya045/koan?include_prereleases&sort=semver&label=release)](https://github.com/Chaitanya045/koan/releases/latest)
 [![CI](https://github.com/Chaitanya045/koan/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/Chaitanya045/koan/actions/workflows/ci.yml)
 [![Platform: macOS (Apple Silicon)](https://img.shields.io/badge/platform-macOS%20(Apple%20Silicon)-black.svg?logo=apple&logoColor=white)](#download)
-[![Chromium](https://img.shields.io/badge/Chromium-158-4285F4.svg?logo=googlechrome&logoColor=white)](CHROMIUM_VERSION)
+[![Chromium](https://img.shields.io/badge/Chromium-158-4285F4.svg)](CHROMIUM_VERSION)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
 
 [Download](https://github.com/Chaitanya045/koan/releases/latest) •
@@ -21,8 +21,7 @@
 
 Koan puts your tabs in a sidebar, shows the page as a floating card, and gets
 out of the way until you need it. Everything is a keystroke away. Its UI is
-native C++ on Chromium, so pages, extensions and DevTools work as they do in
-Chrome.
+native C++ on Chromium, so pages, extensions and DevTools just work.
 
 Koan also lets AI agents (Claude Code, Cursor and others) use your browser
 the way you do: in tabs of their own, signed in as you, without taking over
@@ -79,7 +78,7 @@ release's notes list its known issues. More detail:
 - **A clean look** in light and dark, built on shadcn/ui's design system,
   with a translucent glass style as an option. Onboarding imports your data
   from your current browser.
-- **Chromium 158 underneath.** Chrome's rendering, extensions and DevTools.
+- **Chromium 158 underneath.** Chromium's rendering engine, extensions and DevTools.
   Every Koan feature can be switched off in `chrome://flags`.
 
 <!-- Screenshots (pending, macOS official build):
@@ -103,7 +102,7 @@ release's notes list its known issues. More detail:
   what you changed.
 - **Your logins and autofill, without your secrets.** Agents can sign in
   with your saved logins and fill saved addresses and cards through
-  Chrome's own autofill. They see the labels, never the values: passwords
+  the browser's own autofill. They see the labels, never the values: passwords
   and card numbers stay hidden, even in screenshots.
 - **You stay in charge.** Agents hand the tab to you for passwords you
   haven't saved, two-factor codes, CAPTCHAs and the final Pay button.
@@ -149,8 +148,7 @@ Details, settings and every command:
 | Settings | ⌘, |
 
 Every shortcut can be changed in Settings → Keyboard Shortcuts. The full
-list, with what each key did in Chrome:
-[docs/USAGE.md](docs/USAGE.md#shortcuts).
+list: [docs/USAGE.md](docs/USAGE.md#shortcuts).
 
 ## Releases
 
@@ -161,9 +159,8 @@ list, with what each key did in Chrome:
 Versions follow SemVer and name the Chromium version they're built on, for
 example **Koan 0.0.1 (Alpha) · Chromium 158.0.8127.18**. While Koan is in
 alpha, settings and profile formats may change between versions, Chromium's
-security fixes are applied on a best-effort basis rather than on Chrome's
-schedule, and there's no automatic updater. How releases are made:
-[docs/RELEASING.md](docs/RELEASING.md).
+security fixes are applied on a best-effort basis, and there's no automatic
+updater.
 
 ## Building from source
 
@@ -205,7 +202,6 @@ new Chromium release cheap ([docs/REBASE.md](docs/REBASE.md)).
 |---|---|
 | [docs/USAGE.md](docs/USAGE.md) | Every feature, setting and shortcut, and agent control |
 | [docs/BUILDING-MAC.md](docs/BUILDING-MAC.md) | Building Koan on your Mac |
-| [docs/RELEASING.md](docs/RELEASING.md) | Channels, versions and how releases are made |
 | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | Memory and power defaults, tab freezing |
 | [docs/REBASE.md](docs/REBASE.md) | Updating Koan to a new Chromium version |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup, conventions and pull requests |
