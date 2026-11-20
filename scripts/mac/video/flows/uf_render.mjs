@@ -108,18 +108,16 @@ await step('UF-RND-4', 'Minimised: an agent waiting with --until keeps its tab l
   agentB = lastLine(o);
   t.check('koan open: a second chart tab', o.code === 0 && tabIdOk(agentB), brief(o));
   await sleep(1500);
+  // Nothing minimises while the session is locked (as it is while the
+  // person is away): asked first, so that a minimise that would stall never
+  // leaves the window half-minimised for the steps after.
+  const cannot = benchCannotMinimise();
+  if (cannot) return t.skip(cannot);
   // A real click on the window's minimise button (CDP's
   // Browser.setWindowBounds minimized did not minimise it here, cycle 19).
   const m = await minimiseWithButton({ click: async (x, y) => { await clickAt(x, y); return true; } });
   t.check('a real click on the window\'s minimise button', m.ok, m.why);
   const min = await waitFor(async () => await visibility(anchor.id) === 'hidden', 8000);
-  // Nothing minimises while the session is locked (as it is while the
-  // person is away): that's no failure of Koan's.
-  const cannot = !min && benchCannotMinimise();
-  if (cannot) {
-    unminimise();
-    return t.skip(cannot);
-  }
   t.check('the window is minimised (the front tab went hidden)', !!min, await visibility(anchor.id));
   // A wait that never comes true: the CLI holds the tab while it waits.
   const waiting = koan(['act', agentB, 'press', 'Tab', '--until', 'text~never-on-this-page', '--timeout', '10']);

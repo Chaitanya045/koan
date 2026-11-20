@@ -537,20 +537,25 @@ if (!realInput() || windowId === undefined) {
   }
   await waitFor(async () => await visibility(frontPage) === 'visible', 8000);
 
-  // Minimised as a person does it: a real click on the window's minimise
-  // button (CDP's Browser.setWindowBounds minimized did not minimise it on
-  // the Mac, cycle 19).
-  const m = await minimiseWithButton();
-  const minimised = m.ok && await waitFor(async () => await visibility(frontPage) === 'hidden', 8000);
-  const cannot = !minimised && benchCannotMinimise();
-  if (cannot) skipped('Minimised window', cannot);
-  else check('Minimised window (a real click on its minimise button): Koan\'s window is minimised (its shown tab ' +
-        'went hidden)', !!minimised, `${m.why}; the front tab is ${await visibility(frontPage)}`);
-  // By code a background tab under a capturer has its own compositor
-  // (BrowserCompositorMac with no parent layer), so minimising the window
-  // must not stop it: the PR's analysis.
-  if (minimised) await liveCase('Minimised window');
-  unminimise();
+  // Minimised as a person does it: a real click on its minimise button
+  // (CDP's Browser.setWindowBounds minimized did not minimise it on the Mac,
+  // cycle 19). Nothing minimises while the session is locked (as it is
+  // while the person is away): asked first, so that a stalled minimise never
+  // leaves the window half-minimised for the cases after.
+  const cannot = benchCannotMinimise();
+  if (cannot) {
+    skipped('Minimised window', cannot);
+  } else {
+    const m = await minimiseWithButton();
+    const minimised = m.ok && await waitFor(async () => await visibility(frontPage) === 'hidden', 8000);
+    check('Minimised window (a real click on its minimise button): Koan\'s window is minimised (its shown tab ' +
+          'went hidden)', !!minimised, `${m.why}; the front tab is ${await visibility(frontPage)}`);
+    // By code a background tab under a capturer has its own compositor
+    // (BrowserCompositorMac with no parent layer), so minimising the window
+    // must not stop it: the PR's analysis.
+    if (minimised) await liveCase('Minimised window');
+    unminimise();
+  }
   await waitFor(async () => await visibility(frontPage) === 'visible', 8000);
   await front(frontPage);
   await releaseCase('Release after the window cases');
