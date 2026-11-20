@@ -1421,7 +1421,17 @@ page's bottom corner says so ("Claude Code is controlling this tab") with
 border; a page there that waits for you shows **Open** and **Dismiss** in the
 pill instead. A short toast says when an agent connects or disconnects and when
 your input pauses it. **Stop** closes every agent connection and forgets every
-approval. Turning Agent ready off closes everything at once. It is off in
+approval.
+
+Clicking or typing in a tab an agent drives pauses the agent there. When you
+stop using the tab, the agent carries on from where you left it: about 5
+seconds after your last input if you went to another tab, window or app, or,
+if you stay on the tab, after the pill counts down ("Claude Code continues in
+5s"). Moving the mouse over the page makes it wait longer. **Keep paused** in
+the pill keeps it paused until you press **Hand back**, and so do Take over, a
+password or card field you are in, and anything the page asks you. Settings >
+Agent Control sets the wait (2 to 60 seconds), or turns this off so that only
+Hand back gives the tab back. Turning Agent ready off closes everything at once. It is off in
 Incognito and Guest launches and with another `--user-data-dir` unless you turn
 it on there. Your organisation's `RemoteDebuggingAllowed` policy turns it off.
 

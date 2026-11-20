@@ -1180,5 +1180,63 @@ TEST_F(KoanAgentFacadeTest, KeepAlivesAreLimited) {
   EXPECT_TRUE(Answer(35)->FindDict("result"));
 }
 
+// Auto-resume (design 9.2): Koan.paused says whether the pause waits for
+// Hand back or when it resumes by itself, Koan.listTabs too, and
+// Koan.resumed says how long it lasted and what the user left.
+TEST_F(KoanAgentFacadeTest, PauseAndResumeEventsDescribeThePause) {
+  registry_.Pause("T1");
+  const base::Time at = base::Time::UnixEpoch() + base::Seconds(1000);
+  registry_.SetPause("T1", {.reason = "user-input", .resumes_at = at});
+  facade_.OnTargetStateChanged("T1", "Koan.paused", "user-input");
+  ASSERT_EQ(Events("Koan.paused").size(), 1u);
+  const base::DictValue* paused = Events("Koan.paused")[0]->FindDict("params");
+  EXPECT_EQ(*paused->FindString("reason"), "user-input");
+  EXPECT_EQ(*paused->FindString("pauseReason"), "user-input");
+  EXPECT_FALSE(paused->FindString("sticky"));
+  EXPECT_EQ(paused->FindDouble("resumesAt"), 1000000.0);
+
+  Send(1, "Koan.listTabs");
+  const base::ListValue* tabs = Answer(1)->FindListByDottedPath("result.tabs");
+  ASSERT_TRUE(tabs);
+  ASSERT_EQ(tabs->size(), 1u);
+  const base::DictValue& tab = (*tabs)[0].GetDict();
+  EXPECT_EQ(tab.FindBool("paused"), true);
+  EXPECT_EQ(tab.FindDoubleByDottedPath("pause.resumesAt"), 1000000.0);
+
+  // Held: sticky with why, and no resume time.
+  registry_.SetPause("T1", {.reason = "user-input", .sticky = "secret-field"});
+  facade_.OnTargetStateChanged("T1", "Koan.paused", "user-input");
+  paused = Events("Koan.paused")[1]->FindDict("params");
+  EXPECT_EQ(*paused->FindString("sticky"), "secret-field");
+  EXPECT_FALSE(paused->FindDouble("resumesAt"));
+
+  registry_.Resume("T1");
+  backend_.tabs["T1"] = TabFacts{"Left", GURL("https://example.com/b")};
+  facade_.OnTargetResumed("T1", {.reason = "user-idle",
+                                 .paused_for = base::Milliseconds(6500),
+                                 .navigated = true});
+  ASSERT_EQ(Events("Koan.resumed").size(), 1u);
+  const base::DictValue* resumed =
+      Events("Koan.resumed")[0]->FindDict("params");
+  EXPECT_EQ(*resumed->FindString("targetId"), "T1");
+  EXPECT_EQ(*resumed->FindString("state"), "driven");
+  EXPECT_EQ(*resumed->FindString("reason"), "user-idle");
+  EXPECT_EQ(resumed->FindDouble("pausedMs"), 6500.0);
+  EXPECT_EQ(*resumed->FindString("url"), "https://example.com/b");
+  EXPECT_EQ(*resumed->FindString("title"), "Left");
+  EXPECT_EQ(resumed->FindBool("navigated"), true);
+  // A navigation is a change.
+  EXPECT_EQ(resumed->FindBool("changed"), true);
+
+  Send(2, "Koan.listTabs");
+  tabs = Answer(2)->FindListByDottedPath("result.tabs");
+  EXPECT_EQ((*tabs)[0].GetDict().FindBool("paused"), false);
+  EXPECT_FALSE((*tabs)[0].GetDict().FindDict("pause"));
+
+  // Another client's tab is never told about.
+  facade_.OnTargetResumed("T2", {.reason = "handed-back"});
+  EXPECT_EQ(Events("Koan.resumed").size(), 1u);
+}
+
 }  // namespace
 }  // namespace koan::agent

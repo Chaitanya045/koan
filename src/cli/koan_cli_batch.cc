@@ -454,6 +454,24 @@ bool ElementMeets(const Until& until, const base::Value* returned, bool gone) {
 // --- BatchGate
 // ------------------------------------------------------------------
 
+std::string PausedLine(std::string_view tab,
+                       std::string_view reason,
+                       std::string_view sticky) {
+  const std::string wait = "koan wait " + std::string(tab) + " --resumed";
+  if (sticky.empty() && reason == "user-input") {
+    return "Koan.paused: the user is using this tab (user-input); run `" +
+           wait +
+           "`: it returns once they stop, with a fresh snapshot of the "
+           "page as they left it. Go on from that snapshot, not from your "
+           "old plan";
+  }
+  const std::string why =
+      sticky.empty() ? std::string(reason) : std::string(sticky);
+  return "Koan.paused: the user is handling this tab (" + why +
+         "); it waits for them to hand it back. Tell the user what you "
+         "need and wait; do not work around it";
+}
+
 BatchGate::BatchGate(std::string target) : target_(std::move(target)) {}
 BatchGate::~BatchGate() = default;
 
@@ -467,8 +485,11 @@ void BatchGate::OnEvent(const Message& event) {
   if (event.method == "Koan.paused") {
     paused_ = true;
     paused_reason_ = why;
+    const std::string* sticky = event.params.FindString("sticky");
+    paused_sticky_ = sticky ? *sticky : std::string();
   } else if (event.method == "Koan.resumed") {
     paused_ = false;
+    paused_sticky_.clear();
   } else if (event.method == "Koan.userNeeded") {
     needs_.insert(why);
   } else if (event.method == "Koan.userNeededDone") {
@@ -505,6 +526,14 @@ void BatchGate::OnTab(const base::DictValue* tab) {
   if (paused && !paused_) {
     paused_reason_ = "user";
   }
+  // How the pause stands now (Koan.listTabs "pause").
+  if (const base::DictValue* pause = tab->FindDict("pause"); paused && pause) {
+    if (const std::string* reason = pause->FindString("pauseReason")) {
+      paused_reason_ = *reason;
+    }
+    const std::string* sticky = pause->FindString("sticky");
+    paused_sticky_ = sticky ? *sticky : std::string();
+  }
   paused_ = paused;
 }
 
@@ -513,9 +542,7 @@ std::optional<std::string> BatchGate::StopReason() const {
     return "Koan.tabGone: the tab closed";
   }
   if (paused_) {
-    return "Koan.paused: the user took this tab (" + paused_reason_ +
-           "); stop, and wait for them to hand it back (then snapshot "
-           "again: the page may have changed)";
+    return PausedLine(target_, paused_reason_, paused_sticky_);
   }
   if (!needs_.empty()) {
     std::vector<std::string> reasons(needs_.begin(), needs_.end());
@@ -523,6 +550,122 @@ std::optional<std::string> BatchGate::StopReason() const {
            base::JoinString(reasons, ", ") + "); tell the user what it asks";
   }
   return std::nullopt;
+}
+
+// --- ResumeWaiter
+// ---------------------------------------------------------------
+
+ResumeWaiter::ResumeWaiter(std::string target) : target_(std::move(target)) {}
+ResumeWaiter::~ResumeWaiter() = default;
+
+void ResumeWaiter::Paused(std::string reason, std::string sticky) {
+  // Only a pause from the user's input ends by itself.
+  if (!sticky.empty() || reason != "user-input") {
+    outcome_ = Outcome::kSticky;
+    why_ = sticky.empty() ? std::move(reason) : std::move(sticky);
+  }
+}
+
+void ResumeWaiter::OnTab(const base::DictValue* tab) {
+  if (done()) {
+    return;
+  }
+  if (!tab) {
+    outcome_ = Outcome::kTabGone;
+    return;
+  }
+  const std::string* state = tab->FindString("state");
+  if (!state || *state != "paused") {
+    outcome_ = Outcome::kNotPaused;
+    return;
+  }
+  const base::DictValue* pause = tab->FindDict("pause");
+  const std::string* reason =
+      pause ? pause->FindString("pauseReason") : nullptr;
+  const std::string* sticky = pause ? pause->FindString("sticky") : nullptr;
+  // A browser older than auto-resume says nothing more: its pauses wait for
+  // Hand back.
+  Paused(reason ? *reason : "user", sticky ? *sticky : std::string());
+}
+
+void ResumeWaiter::OnEvent(const Message& event) {
+  if (done()) {
+    return;
+  }
+  const std::string* target = event.params.FindString("targetId");
+  if (!target || *target != target_) {
+    return;
+  }
+  if (event.method == "Koan.resumed") {
+    outcome_ = Outcome::kResumed;
+    resumed_ = event.params.Clone();
+  } else if (event.method == "Koan.paused") {
+    const std::string* reason = event.params.FindString("reason");
+    const std::string* sticky = event.params.FindString("sticky");
+    Paused(reason ? *reason : std::string(), sticky ? *sticky : std::string());
+  } else if (event.method == "Koan.released") {
+    outcome_ = Outcome::kTakenBack;
+  } else if (event.method == "Target.targetDestroyed" ||
+             event.method == "Target.detachedFromTarget") {
+    outcome_ = Outcome::kTabGone;
+  }
+}
+
+void ResumeWaiter::OnClosed() {
+  if (!done()) {
+    outcome_ = Outcome::kStopped;
+  }
+}
+
+void ResumeWaiter::OnTimeout() {
+  if (!done()) {
+    outcome_ = Outcome::kTimedOut;
+  }
+}
+
+std::string ResumeWaiter::Line(std::string_view tab,
+                               int timeout_seconds) const {
+  switch (outcome_) {
+    case Outcome::kResumed: {
+      const std::string* reason = resumed_.FindString("reason");
+      const double ms = resumed_.FindDouble("pausedMs").value_or(0);
+      std::string line =
+          "resumed: " + (reason ? *reason : std::string()) + " after " +
+          base::NumberToString(static_cast<int>(ms / 1000)) + " s";
+      if (resumed_.FindBool("navigated").value_or(false)) {
+        line += "; the user navigated";
+      } else if (resumed_.FindBool("changed").value_or(false)) {
+        line += "; the page changed";
+      } else {
+        line += "; the page did not change";
+      }
+      if (const std::string* url = resumed_.FindString("url")) {
+        line += " (" + *url + ")";
+      }
+      return line;
+    }
+    case Outcome::kNotPaused:
+      return "not paused";
+    case Outcome::kSticky:
+      return "Koan.paused: the user is handling this tab (" + why_ +
+             "): it will not come back by itself. Tell the user what you "
+             "need, and ask them to hand it back when they are done";
+    case Outcome::kTakenBack:
+      return "Koan.released: the user took this tab back; it is no longer "
+             "yours";
+    case Outcome::kTabGone:
+      return "Koan.tabGone: the tab closed";
+    case Outcome::kStopped:
+      return "Koan.notConnected: the connection to Koan closed (the user "
+             "stopped the agents, or Koan quit)";
+    case Outcome::kTimedOut:
+      return "Koan.timeout: " + std::string(tab) + " was still paused after " +
+             base::NumberToString(timeout_seconds) +
+             " s; ask the user, or wait again";
+    case Outcome::kWaiting:
+      break;
+  }
+  return std::string();
 }
 
 // --- What it prints

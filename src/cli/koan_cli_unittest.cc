@@ -170,6 +170,52 @@ TEST(KoanCliArgsTest, SettleChooseAndShell) {
             std::string::npos);
 }
 
+// koan wait <tab> --resumed [--timeout <duration>] (design 9.2).
+TEST(KoanCliArgsTest, WaitResumed) {
+  Command wait = Parse({"wait", "abcd", "--resumed"});
+  EXPECT_EQ(wait.kind, CommandKind::kWait);
+  EXPECT_EQ(wait.tab, "abcd");
+  EXPECT_TRUE(wait.resumed);
+  EXPECT_EQ(wait.wait_seconds, 600);
+  EXPECT_EQ(
+      Parse({"wait", "--resumed", "abcd", "--timeout", "90s"}).wait_seconds,
+      90);
+  EXPECT_EQ(Parse({"wait", "abcd", "--resumed", "--timeout=2m"}).wait_seconds,
+            120);
+  EXPECT_EQ(
+      Parse({"wait", "abcd", "--resumed", "--timeout", "1h"}).wait_seconds,
+      3600);
+  EXPECT_EQ(
+      Parse({"wait", "abcd", "--resumed", "--timeout", "45"}).wait_seconds, 45);
+  // act's --timeout is still seconds, up to 600.
+  EXPECT_EQ(Parse({"act", "abcd", "press", "Tab", "--timeout", "600"})
+                .timeout_seconds,
+            600);
+  EXPECT_FALSE(
+      ErrorOf({"act", "abcd", "press", "Tab", "--timeout", "2m"}).empty());
+
+  for (const char* bad :
+       {"0", "0s", "61m", "2h", "3601", "-5", "soon", "m", "", "1.5m"}) {
+    EXPECT_NE(ErrorOf({"wait", "abcd", "--resumed", "--timeout", bad})
+                  .find("--timeout"),
+              std::string::npos)
+        << bad;
+  }
+  // What it waits for, and on which tab, must be said.
+  EXPECT_NE(ErrorOf({"wait", "abcd"}).find("--resumed"), std::string::npos);
+  EXPECT_FALSE(ErrorOf({"wait", "--resumed"}).empty());
+  EXPECT_FALSE(ErrorOf({"wait", "a", "b", "--resumed"}).empty());
+  EXPECT_NE(ErrorOf({"snapshot", "abcd", "--resumed"}).find("koan wait's"),
+            std::string::npos);
+  EXPECT_NE(ErrorOf({"tabs", "--timeout", "5"}).find("koan act's"),
+            std::string::npos);
+  EXPECT_TRUE(HelpText("wait"));
+
+  EXPECT_EQ(ParseWaitDuration("30s"), 30);
+  EXPECT_EQ(ParseWaitDuration("60m"), 3600);
+  EXPECT_FALSE(ParseWaitDuration("10x"));
+}
+
 TEST(KoanCliShellTest, LinesAsAShellSplitsThem) {
   ShellLine plain =
       ParseShellLine("koan act ab12 fill @3 \"Ada Lovelace\" --snapshot\n");
@@ -550,6 +596,10 @@ TEST(KoanCliSkillTest, TheGuideCoversPairingTakeOverAndSsh) {
            "HTTP 504",
            "Koan.timeout",
            "ControlMaster=auto",
+           // Auto-resume (design 9.2).
+           "koan wait <tab> --resumed",
+           "not from your old plan",
+           "never retry around it",
        }) {
     EXPECT_NE(guide.find(needed), std::string::npos) << needed;
   }
@@ -864,6 +914,31 @@ TEST(KoanCliSnapshotTest, RefsBelongToOnePage) {
   EXPECT_TRUE(refusal.starts_with("Koan.staleRef: @5 "));
   EXPECT_NE(refusal.find("koan snapshot abcd"), std::string::npos);
   EXPECT_EQ(RefRefusal(RefVerdict::kOk, "@5", "abcd"), "");
+}
+
+// Auto-resume (design 9.2): refs from before the user had the tab are stale
+// once it resumes, whatever document it shows, until a new snapshot.
+TEST(KoanCliSnapshotTest, AResumeMakesRefsStale) {
+  RefBook book;
+  book.Remember("T", "D1", {5, 6});
+  book.Remember("U", "D1", {5});
+  book.Resumed("T");
+  EXPECT_EQ(book.Check("T", "D1", 5), RefVerdict::kResumed);
+  EXPECT_EQ(book.Check("T", "D2", 5), RefVerdict::kResumed);
+  // Another tab keeps its refs; a tab with no snapshot has none to lose.
+  EXPECT_EQ(book.Check("U", "D1", 5), RefVerdict::kOk);
+  book.Resumed("V");
+  EXPECT_EQ(book.Check("V", "D1", 5), RefVerdict::kNoSnapshot);
+  // The next snapshot, of the same document too, starts again.
+  book.Remember("T", "D1", {7});
+  EXPECT_EQ(book.Check("T", "D1", 7), RefVerdict::kOk);
+  EXPECT_EQ(book.Check("T", "D1", 5), RefVerdict::kUnknown);
+  EXPECT_EQ(RefVerdictFromName(RefVerdictName(RefVerdict::kResumed)),
+            RefVerdict::kResumed);
+  const std::string refusal = RefRefusal(RefVerdict::kResumed, "@5", "abcd");
+  EXPECT_TRUE(refusal.starts_with("Koan.staleRef: @5 "));
+  EXPECT_NE(refusal.find("before the user used this tab"), std::string::npos);
+  EXPECT_NE(refusal.find("koan snapshot abcd"), std::string::npos);
 }
 
 // --- Actions -----------------------------------------------------------------
@@ -1297,6 +1372,20 @@ TEST(KoanCliRouterTest, TasksEventsAndWatchers) {
     router.FromBrowser(R"({"method":"Koan.paused","params":{}})");
   }
   EXPECT_EQ(router.events().size(), Router::kMaxEvents);
+}
+
+// The holder makes the refs of a resumed tab stale (RefBook::Resumed()).
+TEST(KoanCliRouterTest, ResumedTabsAreNoted) {
+  Router router;
+  router.FromBrowser(R"({"method":"Koan.paused","params":{"targetId":"T1"}})");
+  EXPECT_TRUE(router.TakeResumed().empty());
+  router.FromBrowser(R"({"method":"Koan.resumed",
+                         "params":{"targetId":"T1","reason":"user-idle"}})");
+  router.FromBrowser(R"({"method":"Koan.resumed","params":{}})");
+  router.FromBrowser(R"({"method":"Koan.resumed",
+                         "params":{"targetId":"T2","reason":"handed-back"}})");
+  EXPECT_EQ(router.TakeResumed(), (std::vector<std::string>{"T1", "T2"}));
+  EXPECT_TRUE(router.TakeResumed().empty());
 }
 
 TEST(KoanCliRouterTest, AFollowerGetsItsTabsEvents) {

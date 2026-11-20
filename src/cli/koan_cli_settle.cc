@@ -10,6 +10,7 @@
 
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "koan/cli/koan_cli_batch.h"
 
 namespace koan::cli {
 
@@ -170,8 +171,7 @@ void Settle::OnEvent(const Message& event, base::TimeTicks now) {
       const std::string reason = Str(params, "reason");
       blocked_reason_ =
           method == "Koan.paused"
-              ? "the user took this tab (" + reason +
-                    "): Koan.paused; wait for them to hand it back"
+              ? PausedLine(target_, reason, Str(params, "sticky"))
               : "the page waits for the user (" + reason +
                     "): Koan.userNeeded; tell the user what it asks";
     }

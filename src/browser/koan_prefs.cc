@@ -18,6 +18,7 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/universal_optout/prefs.h"
+#include "koan/browser/agent/koan_agent_auto_resume.h"
 #include "koan/browser/agent/koan_agent_limits.h"
 #include "koan/browser/containers/koan_agent_access_prefs.h"
 #include "koan/browser/koan_features.h"
@@ -175,6 +176,9 @@ void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {
                                 agent::kPromptsLimit.default_value);
   registry->RegisterIntegerPref(kAgentControlMaxAuthFailures,
                                 agent::kFailuresLimit.default_value);
+  registry->RegisterBooleanPref(kAgentControlAutoResume, true);
+  registry->RegisterIntegerPref(kAgentControlAutoResumeSeconds,
+                                agent::kAutoResumeSecondsLimit.default_value);
   namespace pm = performance_manager::user_tuning::prefs;
   // Memory Saver: discard tabs that have been hidden for 4 hours (the
   // balanced setting) until they are opened again. Chromium ships it off.

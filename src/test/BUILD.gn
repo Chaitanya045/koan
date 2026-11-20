@@ -62,6 +62,7 @@ source_set("browsertests_impl") {
   testonly = true
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
   sources = [
+    "browser/koan_agent_pause_watch_browsertest.cc",
     "browser/koan_browser_test_utils.cc",
     "browser/koan_browser_test_utils.h",
     "browser/koan_command_palette_browsertest.cc",
@@ -124,6 +125,8 @@ source_set("browsertests_impl") {
     "//ipc",
     "//koan/browser:features",
     "//koan/browser:prefs",
+    "//koan/browser/agent:auto_resume",
+    "//koan/browser/agent:browser",
     "//koan/browser/containers:partition",
     "//koan/browser/containers:user_containers",
     "//koan/browser/importer",

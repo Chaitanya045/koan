@@ -384,6 +384,20 @@ the Hand back / Take back buttons in `koan_agent_indicator.cc`) add no patch. Sy
 out-of-process iframes included, and a wheel event reaches the `InputEventObserver` of the frame's local root widget (T-take-1,
 T-take-1b); `RenderFrameHost::GetRenderWidgetHost()` is the local root's widget for any frame.
 
+Auto-resume (`koan_agent_auto_resume.*`, pure; `koan_agent_pause_watch.*`; the forwarder's `OnPauseTick`, `BeginResume`;
+Keep paused and the countdown in `koan_agent_indicator.cc`; design section 9.2) adds no patch. Symbols:
+`RenderFrameHost::IsFocusedElementPasswordLike`, `WebContents::GetFocusedFrame`,
+`RenderFrameHost::ExecuteJavaScriptInIsolatedWorld` with `ISOLATED_WORLD_ID_CHROME_INTERNAL`,
+`autofill::ScopedAutofillManagersObservation`, `AutofillManager::Observer::OnAfterFocusOnFormField` and
+`OnAfterFocusOnNonFormField`, `AutofillManager::FindCachedFormById`, `FormStructure::GetFieldById`,
+`AutofillType::GetGroups` (`FieldTypeGroup::kCreditCard`, `kStandaloneCvcField`, `kIban`),
+`permissions::PermissionRequestManager::IsRequestInProgress`, `SecurityInterstitialTabHelper::IsDisplayingInterstitial`,
+`tabs::TabInterface::IsVisible`, `BrowserWindowInterface::IsActive`. Behaviour it relies on: user mouse moves reach the
+frame widget's `InputEventObserver` as `kMouseMove` without `kFromDebugger`; on macOS a browser window stops being
+`IsActive()` when it is minimised or Koan is not the active app; the focused frame's text input state says a password
+field within the one-second tick. Guards: `koan_agent_auto_resume_unittest.cc`, e2e `agent_indicator` (auto-resume steps),
+Mac `scripts/mac/steps/agent_indicator.md` 15-20.
+
 A review that changes the outcome updates the table and the baseline in one change. The other things to re-check on a roll
 (the untrusted-client domain list, the `DevToolsAgentHostClient` flag defaults, the `PageLiveStateDecorator` setters the
 keep-alive uses) are in the design's section 14 and become REBASE rows with the PRs that add them.

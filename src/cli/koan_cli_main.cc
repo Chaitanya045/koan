@@ -285,6 +285,10 @@ int RunHolder(const Command& command) {
         for (const Router::Delivery& delivery : router.FromBrowser(*frame)) {
           send_to(delivery.connection, delivery.json);
         }
+        // The user had these tabs: refs from before are stale.
+        for (const std::string& target : router.TakeResumed()) {
+          refs.Resumed(target);
+        }
       }
     }
     if (fds[1].revents & POLLIN) {
@@ -2255,6 +2259,96 @@ int Act(Link& link,
   return code != kOk ? code : snapshot_code;
 }
 
+// `koan wait <tab> --resumed` (design section 9.2, auto-resume): blocks until
+// the paused tab comes back to the agent, then prints a fresh interactive
+// snapshot, so that the agent goes on from the page as the user left it in
+// the same turn. Sends nothing to the tab while it waits (no keep-alive, no
+// lease): it only listens to the client's events.
+int WaitResumed(Link& link,
+                const Command& command,
+                const std::string& target,
+                const std::string& session) {
+  int exit_code = kOk;
+  ResumeWaiter waiter(target);
+  // Events first, then the tab's state: a resume between the two is not
+  // missed.
+  std::optional<Message> followed =
+      link.Call("Hold.follow", base::DictValue().Set("sessionId", session));
+  const bool following = followed && !followed->is_error();
+  std::optional<base::DictValue> tabs =
+      Expect(link.Call("Koan.listTabs", base::DictValue(), {}, kAnswerWait,
+                       base::BindRepeating(&ResumeWaiter::OnEvent,
+                                           base::Unretained(&waiter))),
+             &exit_code);
+  if (!tabs) {
+    if (following) {
+      link.Call("Hold.follow", base::DictValue());
+    }
+    return exit_code;
+  }
+  const base::DictValue* entry = nullptr;
+  if (const base::ListValue* list = tabs->FindList("tabs")) {
+    for (const base::Value& tab : *list) {
+      const base::DictValue* dict = tab.GetIfDict();
+      const std::string* id = dict ? dict->FindString("targetId") : nullptr;
+      if (id && *id == target) {
+        entry = dict;
+      }
+    }
+  }
+  waiter.OnTab(entry);
+  const base::TimeTicks deadline =
+      base::TimeTicks::Now() + base::Seconds(command.wait_seconds);
+  while (!waiter.done()) {
+    std::optional<Message> message = link.Next(deadline);
+    if (!message) {
+      if (link.closed()) {
+        waiter.OnClosed();
+      } else if (base::TimeTicks::Now() >= deadline) {
+        waiter.OnTimeout();
+      }
+      continue;
+    }
+    if (!message->id) {
+      waiter.OnEvent(*message);
+    }
+  }
+  if (following && !link.closed()) {
+    link.Call("Hold.follow", base::DictValue());
+  }
+  const std::string line = waiter.Line(command.tab, command.wait_seconds);
+  if (!waiter.ok()) {
+    if (command.json) {
+      PrintJson(base::DictValue().Set("ok", false).Set("error", line));
+    }
+    return command.json ? kFailed : Fail(line);
+  }
+  SnapshotRequest request;
+  request.interactive = true;
+  int snapshot_code = kOk;
+  std::optional<std::string> snapshot =
+      TakeSnapshot(link, request, target, session, &snapshot_code);
+  if (command.json) {
+    base::DictValue json;
+    json.Set("ok", snapshot.has_value());
+    json.Set("line", line);
+    if (waiter.outcome() == ResumeWaiter::Outcome::kResumed) {
+      json.Set("resumed", waiter.resumed().Clone());
+    }
+    if (snapshot) {
+      json.Set("snapshot", *snapshot);
+    }
+    PrintJson(json);
+    return snapshot_code;
+  }
+  printf("%s\n", line.c_str());
+  if (snapshot) {
+    printf("%s", snapshot->c_str());
+  }
+  fflush(stdout);
+  return snapshot_code;
+}
+
 // --- agent-browser (design section 11) --------------------------------------
 
 // Runs `koan-relay <args>` (next to this executable) with this terminal, and
@@ -2497,6 +2591,7 @@ int RunOnHolder(Link& link, const Command& command) {
     }
     case CommandKind::kSnapshot:
     case CommandKind::kScreenshot:
+    case CommandKind::kWait:
     case CommandKind::kAct: {
       std::optional<std::string> target =
           ResolveTabId(link, command.tab, &exit_code);
@@ -2510,6 +2605,9 @@ int RunOnHolder(Link& link, const Command& command) {
       }
       if (command.kind == CommandKind::kSnapshot) {
         return PrintSnapshot(link, command, *target, *session);
+      }
+      if (command.kind == CommandKind::kWait) {
+        return WaitResumed(link, command, *target, *session);
       }
       if (command.kind == CommandKind::kScreenshot) {
         base::DictValue params;

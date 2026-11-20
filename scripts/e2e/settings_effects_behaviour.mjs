@@ -195,12 +195,12 @@ const CHECKBOXES = [
   'koan.agent_control.use.logins', 'koan.agent_control.use.passwords',
   'koan.agent_control.use.autofill', 'koan.agent_control.use.extensions',
   'koan.agent_control.use.history', 'koan.agent_control.limit_take_over_to_site',
-  'koan.agent_control.low_power_halves',
+  'koan.agent_control.low_power_halves', 'koan.agent_control.auto_resume',
 ];
 const MENUS = [
   'koan.workspaces.scroll_modifier_key', 'koan.pinned_tabs.close_shortcut_behavior',
   'koan.agent_control.max_leased_tabs', 'koan.agent_control.max_prompts_per_minute',
-  'koan.agent_control.max_auth_failures',
+  'koan.agent_control.max_auth_failures', 'koan.agent_control.auto_resume_seconds',
 ];
 const agentReadyBefore = await prefValue('koan.agent_control.enabled');
 // Strict greys out without Agent ready (its parent): on for the round trip.

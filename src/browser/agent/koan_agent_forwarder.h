@@ -20,8 +20,10 @@
 #include "base/functional/function_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/sequence_bound.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "koan/browser/agent/koan_agent_audit.h"
+#include "koan/browser/agent/koan_agent_auto_resume.h"
 #include "koan/browser/agent/koan_agent_facade.h"
 #include "koan/browser/agent/koan_agent_prompts.h"
 #include "koan/browser/agent/koan_agent_registry.h"
@@ -45,6 +47,8 @@ class WebContents;
 // the user's it was not given.
 namespace koan::agent {
 
+class PauseWatch;
+
 // A tab an agent holds, as the indicator shows it (design section 6.2): its
 // own tab, or a user tab it was given.
 struct ControlledTab {
@@ -55,6 +59,12 @@ struct ControlledTab {
   bool agent_owned = false;
   // The agent asked to resume (Koan.resume).
   bool resume_asked = false;
+  // Paused, and it goes back to the agent by itself once the user stops
+  // using the tab (design section 9.2, auto-resume): the pill offers Keep
+  // paused.
+  bool auto_resumes = false;
+  // While the pill counts down ("continues in 5s"): when the tab resumes.
+  std::optional<base::TimeTicks> countdown_ends;
   raw_ptr<content::WebContents> contents = nullptr;
 };
 
@@ -98,6 +108,8 @@ class AgentForwarder {
   void HandBack(const std::string& target_id);
   void TakeBack(const std::string& target_id);
   void TakeOver(const std::string& target_id);
+  // The pill's Keep paused: the pause waits for Hand back.
+  void KeepPaused(const std::string& target_id);
   // Every tab an agent holds.
   std::vector<ControlledTab> ControlledTabs() const;
 
@@ -154,6 +166,26 @@ class AgentForwarder {
   void OnUserInput(const std::string& target_id);
   // Pauses a driven tab; `reason` goes with Koan.paused.
   void Pause(const std::string& target_id, std::string_view reason);
+  // Auto-resume (design section 9.2, koan_agent_auto_resume.h). From the
+  // watcher: the mouse moved over a paused tab's page, a password or payment
+  // field got focus, and the pause's timer fired.
+  void OnUserMouseMove(const std::string& target_id);
+  void OnSecretFieldFocused(const std::string& target_id);
+  void OnPauseTick(const std::string& target_id);
+  // The pause waits for Hand back from now on.
+  void HoldPause(const std::string& target_id, PauseHold hold);
+  // Gives a paused tab back to its agent with Koan.resumed {reason}
+  // ("handed-back", "user-idle") once its page said what changed.
+  void BeginResume(const std::string& target_id, std::string_view reason);
+  void FinishResume(const std::string& target_id,
+                    const std::string& reason,
+                    uint64_t resume_id,
+                    bool changed);
+  // Writes the pause's state into the registry (Koan.listTabs); true if what
+  // holds it changed (Koan.paused is sent again then). `reason` empty: the
+  // one it was paused for.
+  bool SyncPause(const std::string& target_id, std::string_view reason);
+  PauseWatch* PauseWatchFor(std::string_view target_id) const;
   void OnTabNavigated(const std::string& target_id, const GURL& url);
 
   void ForEachFacadeOf(std::string_view client_id,

@@ -126,6 +126,14 @@ std::vector<Router::Delivery> Router::FromBrowser(std::string_view json) {
       }
     }
   }
+  if (*method == "Koan.resumed") {
+    const base::DictValue* params = message->FindDict("params");
+    const std::string* target =
+        params ? params->FindString("targetId") : nullptr;
+    if (target) {
+      resumed_.push_back(*target);
+    }
+  }
   std::string text(json);
   // What status shows: the Koan.* events, not a page's own CDP traffic.
   if (method->starts_with("Koan.")) {
@@ -151,6 +159,10 @@ std::vector<Router::Delivery> Router::FromBrowser(std::string_view json) {
     }
   }
   return deliveries;
+}
+
+std::vector<std::string> Router::TakeResumed() {
+  return std::exchange(resumed_, {});
 }
 
 void Router::AddWatcher(ConnectionId connection) {

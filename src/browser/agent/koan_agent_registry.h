@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "base/containers/span.h"
+#include "base/time/time.h"
 
 // Which tabs each agent client may see and drive
 // (.agent/notes/agent-control.md sections 4.2, 7 and 9.1): the facade lists a
@@ -54,6 +55,21 @@ struct TargetEntry {
   // agent's too (the reach rules still apply). `site` is only what the user
   // was asked about.
   bool any_site = false;
+
+  // While kPaused: how the pause stands (design section 9.2, auto-resume),
+  // for Koan.listTabs.
+  struct Pause {
+    // Koan.paused's reason: "user-input" (the user's input in the page) or
+    // "user" (the pill's Take over).
+    std::string reason;
+    // Why it waits for Hand back (PauseHoldName() in koan_agent_auto_resume.h);
+    // empty while it may resume by itself.
+    std::string sticky;
+    // When it resumes by itself if nothing else happens.
+    std::optional<base::Time> resumes_at;
+    bool operator==(const Pause&) const = default;
+  };
+  std::optional<Pause> pause;
 };
 
 class TargetRegistry {
@@ -97,8 +113,11 @@ class TargetRegistry {
 
   // The user typed or clicked in the tab. False if it is not in the registry.
   bool Pause(std::string_view target_id);
-  // The user handed a paused tab back (the agent cannot do this itself).
+  // The paused tab went back to its agent: the user handed it back, or
+  // stopped using it (auto-resume). The agent cannot do this itself.
   bool Resume(std::string_view target_id);
+  // How the pause of a kPaused tab stands now. False if it is not paused.
+  bool SetPause(std::string_view target_id, TargetEntry::Pause pause);
   // A user tab left the site the user allowed: the agent may only read it
   // now. False if it is not a user tab, or was readable already.
   bool SetReadable(std::string_view target_id);

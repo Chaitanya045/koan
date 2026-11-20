@@ -363,6 +363,12 @@ void AgentControlService::TakeOver(const std::string& target_id) {
   }
 }
 
+void AgentControlService::KeepPaused(const std::string& target_id) {
+  if (forwarder_) {
+    forwarder_->KeepPaused(target_id);
+  }
+}
+
 std::vector<HeldPrompt> AgentControlService::user_prompts() const {
   return forwarder_ ? AgentPageSurfaces::Get().Prompts()
                     : std::vector<HeldPrompt>();

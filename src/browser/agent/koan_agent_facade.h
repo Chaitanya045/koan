@@ -193,6 +193,20 @@ class CdpFacade {
   void OnTargetStateChanged(const std::string& target_id,
                             std::string_view event,
                             std::string_view reason);
+  // A paused tab went back to the agent (design section 9.2): the user handed
+  // it back ("handed-back") or stopped using it ("user-idle"). Koan.resumed
+  // {targetId, state, reason, pausedMs, url, title, navigated, changed}, so
+  // that the agent goes on from the page as the user left it.
+  struct Resumed {
+    std::string reason;
+    base::TimeDelta paused_for;
+    // A navigation committed in the tab during the pause.
+    bool navigated = false;
+    // The page changed during the pause: a navigation, or the DOM or a form
+    // field's value changed.
+    bool changed = false;
+  };
+  void OnTargetResumed(const std::string& target_id, const Resumed& resumed);
   // A page in the tab asked for something only the user can answer (design
   // section 9.4; `reason` as koan_agent_prompts.h's ReasonFor()), which waits
   // in the indicator: Koan.userNeeded {targetId, reason}. Once it no longer
