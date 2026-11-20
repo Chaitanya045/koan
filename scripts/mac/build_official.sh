@@ -11,9 +11,10 @@
 #      and holds it to the end;
 #   3. fetches Chromium and applies Koan's patches and branding when needed
 #      (scripts/build.sh --sync-only, the same steps as the everyday build);
-#   4. makes sure Chromium's mac-arm PGO profile is there: sets
+#   4. makes sure Chromium's mac-arm PGO profile and V8's builtins PGO
+#      profiles are there (the build fails without V8's); sets
 #      checkout_pgo_profiles in .gclient (so later syncs keep it current) and
-#      runs only that one gclient hook (needs the network once, ~100s of MB);
+#      runs only those two gclient hooks (needs the network once, ~100 MB);
 #   5. writes chromium/src/out/KoanOfficial/args.gn from
 #      build/koan-mac-official.gn plus the machine's lines, runs gn gen, and
 #      checks the generated build: one link at a time, the ThinLTO thread cap
@@ -301,6 +302,30 @@ EOF
   fi
   [[ -f $profile ]] || { echo "the hook ran but $profile is missing" >&2; exit 1; }
   echo "PGO profile: $profile ($(du -h "$profile" | cut -f1))"
+}
+
+# Step 4b. V8's builtins PGO profiles (v8/tools/builtins-pgo/profiles), which
+# an official build's gen/v8/embedded.S needs. DEPS fetches them with the same
+# checkout_pgo_profiles condition as Chromium's profile, but that hook never
+# runs here (step 4 runs only Chromium's), so this runs it: the same command.
+ensure_v8_builtins_profiles() {
+  local dir="$SRC/v8/tools/builtins-pgo"
+  if [[ -f $dir/profiles/meta.json ]] && compgen -G "$dir/profiles/*.profile" >/dev/null; then
+    step "V8 builtins PGO profiles: $(cd "$dir/profiles" && echo *.profile)"
+    return
+  fi
+  if ! grep -q "builtins-pgo/download_profiles.py" "$SRC/DEPS"; then
+    echo "chromium/src/DEPS no longer has V8's builtins-pgo hook: see how it" \
+      "fetches v8/tools/builtins-pgo/profiles now and update $0" >&2
+    exit 1
+  fi
+  step "Fetching V8's builtins PGO profiles (needs the network once)"
+  if ! (cd "$SRC" && python3 v8/tools/builtins-pgo/download_profiles.py download \
+      --depot-tools "$ROOT/depot_tools" --check-v8-revision --quiet); then
+    echo "Couldn't fetch V8's builtins PGO profiles (gs://chromium-v8-builtins-pgo;" \
+      "it needs access to storage.googleapis.com). Connect and run this again." >&2
+    exit 1
+  fi
 }
 
 # Step 5.
@@ -594,6 +619,7 @@ main() {
     "$ROOT/scripts/build.sh" --sync-only
   fi
   ensure_pgo_profile
+  ensure_v8_builtins_profiles
 
   local cpus avail jobs
   cpus="$(probe_cpus)"
