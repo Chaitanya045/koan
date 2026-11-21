@@ -255,7 +255,8 @@ function stalePairing(home) {
   stale = stalePairing(AGENT_HOME);
   r = await koan(['tabs']);
   check('Stale pairing: a command removes it and runs as the good one (no --client)',
-        r.code === 0 && !fs.existsSync(stale) && !/several paired clients/.test(r.err), brief(r));
+        r.code === 0 && !fs.existsSync(stale) && !/several paired clients/.test(r.err) &&
+        (r.err.match(/Koan forgot this pairing/g) ?? []).length === 1, brief(r));
   // Only a forgotten pairing, in a HOME of its own.
   const lone = fs.mkdtempSync(path.join(AGENT_HOME, 'lone-'));
   stale = stalePairing(lone);
@@ -263,6 +264,12 @@ function stalePairing(home) {
   check('Stale pairing: koan status says "paired: no (Koan forgot this pairing; run koan pair)"',
         /^paired: no \(Koan forgot this pairing; run koan pair\)$/m.test(r.out) && !fs.existsSync(stale),
         brief(r));
+  stale = stalePairing(lone);
+  r = await koan(['open', AGENT_URL], { home: lone });
+  check('Stale pairing: koan open with only a forgotten pairing reports the failure once',
+        r.code === 3 && r.out === '' && !fs.existsSync(stale) &&
+        (r.err.match(/Koan forgot this pairing/g) ?? []).length === 1 &&
+        /run koan pair/.test(r.err), brief(r));
 }
 
 // --- Open, snapshot, act, screenshot.

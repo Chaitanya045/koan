@@ -570,6 +570,12 @@ std::unique_ptr<Link> Holder(const Command& command,
       }
       return nullptr;
     }
+    // Report a forgotten pairing only when another one can be tried. If
+    // none remains, ConnectionFor() prints it as the command's failure.
+    if (!forgotten.empty()) {
+      fprintf(stderr, "koan: %s\n", forgotten.c_str());
+      forgotten.clear();
+    }
     if (std::unique_ptr<Link> link = ConnectHolder(*client_id)) {
       return link;
     }
@@ -589,7 +595,6 @@ std::unique_ptr<Link> Holder(const Command& command,
       return nullptr;
     }
     forgotten = *error;
-    fprintf(stderr, "koan: %s\n", error->c_str());
   }
 }
 
