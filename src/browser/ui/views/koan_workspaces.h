@@ -84,7 +84,8 @@ class SlideOutLayers;
 // is the focused group, so the sidebar shows only its tabs (plus the pinned
 // tabs, Koan's Essentials, shared by every Space). Like Zen, the window
 // always shows one Space: every unpinned tab belongs to one, and a Space
-// whose last tab closes gets a new tab instead of disappearing.
+// whose last tab closes gets a new tab instead of disappearing. Temporary
+// agent-created Spaces are the exception: they go with their last tab.
 //
 // A Space's name and icon are stored in its tab group, and its theme with
 // its tabs (see ReadSpace()), so all of it is restored with the session; the
@@ -232,10 +233,13 @@ class KoanWorkspaceController : public TabStripModelObserver,
                    const SpaceTheme& theme,
                    const std::string& container = std::string());
   // Makes the ungrouped tab at `index` a new Space with `data`, without
-  // showing it or changing the active tab (an agent container's Space,
-  // koan/browser/containers/koan_agent_containers.h).
+  // showing it or changing the active tab (imports and window sync).
   tab_groups::TabGroupId CreateBackgroundSpace(int index,
                                                const SpaceData& data);
+  // An agent's background Space: removed when its last tab leaves. Tabs the
+  // user opens in it keep it alive when the agent's task ends.
+  tab_groups::TabGroupId CreateTemporaryBackgroundSpace(int index,
+                                                        const SpaceData& data);
   // Makes a Space of the tabs at `indices` (sorted), right after the active
   // Space, and shows it on the last of them (folders' "Convert folder to
   // Space").

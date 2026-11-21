@@ -259,6 +259,14 @@ std::set<tab_groups::TabGroupId>& DeletedSpaces() {
   return *deleted;
 }
 
+// Agent-created Spaces go with their last tab instead of acquiring an empty
+// tab. Track their ids, not their names or icons; the set is shared by windows
+// so moving a whole Space doesn't change its lifetime.
+std::set<tab_groups::TabGroupId>& TemporarySpaces() {
+  static base::NoDestructor<std::set<tab_groups::TabGroupId>> temporary;
+  return *temporary;
+}
+
 // Before the tint was per window, Koan made the Space's colour the profile's
 // user colour and kept the user's own in prefs. A profile still showing that
 // tint gets its own colour back, once.
@@ -921,6 +929,14 @@ tab_groups::TabGroupId KoanWorkspaceController::CreateBackgroundSpace(
     const SpaceData& data) {
   const tab_groups::TabGroupId space = NewSpaceGroup({index});
   WriteSpace(space, data);
+  return space;
+}
+
+tab_groups::TabGroupId KoanWorkspaceController::CreateTemporaryBackgroundSpace(
+    int index,
+    const SpaceData& data) {
+  const tab_groups::TabGroupId space = CreateBackgroundSpace(index, data);
+  TemporarySpaces().insert(space);
   return space;
 }
 
@@ -2853,14 +2869,15 @@ void KoanWorkspaceController::OnTabGroupChanged(const TabGroupChange& change) {
   }
   if (change.type == TabGroupChange::kClosed) {
     const bool deleted = deleting_.erase(change.group);
-    if (deleted) {
-      DeletedSpaces().insert(change.group);
-    }
     const TabGroupChange::CloseChange* close = change.GetCloseChange();
     const bool moved_away =
         close &&
         close->reason() ==
             TabGroupChange::TabGroupClosureReason::kDetachedToAnotherTabstrip;
+    const bool temporary = !moved_away && TemporarySpaces().erase(change.group);
+    if (deleted || temporary) {
+      DeletedSpaces().insert(change.group);
+    }
     auto it = std::ranges::find(spaces_snapshot_, change.group,
                                 &decltype(spaces_snapshot_)::value_type::first);
     // A session restored into this window (Restore after a crash) closes the
@@ -2868,7 +2885,7 @@ void KoanWorkspaceController::OnTabGroupChanged(const TabGroupChange& change) {
     // Zen's restore never adds a Space.
     const bool replaced_by_restore =
         restore_started_ && pre_restore_space_ == change.group;
-    if (!deleted && !moved_away && !replaced_by_restore &&
+    if (!deleted && !temporary && !moved_away && !replaced_by_restore &&
         it != spaces_snapshot_.end()) {
       std::optional<tab_groups::TabGroupId> next;
       if (it + 1 != spaces_snapshot_.end()) {
@@ -3255,7 +3272,8 @@ std::optional<tab_groups::TabGroupId> CreateBackgroundSpace(
   if (!spaces || !spaces->IsEnabled()) {
     return std::nullopt;
   }
-  return spaces->CreateBackgroundSpace(index, {.name = name, .icon = icon});
+  return spaces->CreateTemporaryBackgroundSpace(index,
+                                                {.name = name, .icon = icon});
 }
 
 bool KeepsOtherSpacesRunning(const tabs::TabInterface* tab) {

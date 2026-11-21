@@ -1662,6 +1662,8 @@ waits. `koan skill` prints the guide
 agents follow; `skills/koan-browser/SKILL.md` is the entry for an agent's
 skills folder. The agent's tabs stay open between its commands, for as long as its
 task lasts: `koan end`, or 30 minutes without a command, closes them.
+An agent-created Space disappears when its last tab closes. User tabs you
+opened in that Space stay open when the agent ends its task.
 `koan open --saved <name>` uses a saved container you allowed that agent;
 otherwise it is refused, never opened in a throwaway one instead.
 

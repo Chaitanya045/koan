@@ -151,8 +151,9 @@ bool HasSpaces(TabStripModel* tab_strip);
 
 // Agent containers (koan/browser/containers/koan_agent_containers.h): makes
 // the ungrouped tab at `index` of `tab_strip` a new Space named `name` with
-// the emoji `icon`, without showing it or changing the active tab. Nullopt if
-// the window has no Spaces.
+// the emoji `icon`, without showing it or changing the active tab. This Space
+// is temporary: it goes when its last tab leaves, instead of getting an empty
+// placeholder tab. Nullopt if the window has no Spaces.
 std::optional<tab_groups::TabGroupId> CreateBackgroundSpace(
     TabStripModel* tab_strip,
     int index,
