@@ -2,8 +2,9 @@
 // setting (edit in the pill, floating for the keyboard), Ctrl+T opening
 // the URL bar instead of a tab (replace-newtab), the pill's look and size,
 // its copy-URL button and toast, its site icon (page info) and no page
-// actions. Then: the new-tab bar through a window switch, a pill edit in
-// compact mode's peeked sidebar, and the multiple-toolbars layout (Esc, the
+// actions. Then: the unedited Cmd+L card and the new-tab bar through a window
+// switch, a pill edit in compact mode's peeked sidebar, and the multiple-toolbars
+// layout (Esc, the
 // tab strip's "+" button, Alt+Enter), and last the card in a second, resized
 // window (sized and placed from that window, its suggestions inside it, an
 // address open in the first window's tab marked "Switch to Tab").
@@ -661,6 +662,55 @@ const closeInfoPeeked = vs.find(v => v.path.includes('PageInfoBubbleView') && v.
     /close/i.test(`${v.p.TooltipText ?? ''} ${v.p.AccessibleName ?? ''}`));
 if (closeInfoPeeked) await click(closeInfoPeeked);
 await key(VK.S, ACCEL, 's');
+
+// --- Cmd+L keeps the same card after switching away and back (#427) -------------
+// No typing: this opens on-focus suggestions rather than ordinary
+// autocomplete. A closed popup exposes Chromium's pill-shaped input/focus
+// ring, so check the card's surface and geometry too, not just its text.
+if (BEHAVIOR !== 'normal') {
+  const page = await visiblePage();
+  const { windowId: focusWindow } = (await browserCall('Browser.getWindowForTarget',
+      { targetId: page.id })).result ?? {};
+  const popup = now => now.find(v =>
+      v.cls === 'RoundedOmniboxResultsFrame' && v.shown && v.h > 0);
+  for (const style of ['zen', 'shadcn']) {
+    await setKoanPref('koan.look.style', style);
+    await key(76, ACCEL, 'l');
+    const before = await waitFor(async () => {
+      const now = await views();
+      return popup(now) && now;
+    });
+    check(`Cmd+L before switching (${style}): the card and on-focus popup are visible`,
+          !!before && !!omniboxText(before) && shown(before, 'KoanUrlBarCardDecoration') &&
+              shown(before, 'KoanUrlBarBackdrop'));
+    shot(`cmd-l-${style}-before-switch`);
+    await browserCall('Browser.setWindowBounds',
+        { windowId: focusWindow, bounds: { windowState: 'minimized' } });
+    await sleep(1000);
+    await browserCall('Browser.setWindowBounds',
+        { windowId: focusWindow, bounds: { windowState: 'normal' } });
+    await browserCall('Target.activateTarget', { targetId: page.id });
+    const after = await waitFor(async () => {
+      const now = await views();
+      return popup(now) && now;
+    });
+    const restored = after ?? await views();
+    const card = bar(restored);
+    const surface = find(restored, 'KoanUrlBarCardDecoration');
+    check(`Cmd+L after switching (${style}): the same card returns, not a rounded input`,
+          !!before && !!after && omniboxText(restored) === omniboxText(before) &&
+              card?.x === bar(before)?.x && card?.y === bar(before)?.y &&
+              card?.w === bar(before)?.w &&
+              shown(restored, 'KoanUrlBarBackdrop') && surface?.shown &&
+              surface.x === 0 && surface.y === 0 &&
+              surface.w === card.w && surface.h === card.h &&
+              (style !== 'zen' || card.h === INPUT_ROW + popup(restored).h),
+          `card ${card?.w}x${card?.h} at ${card?.x},${card?.y}, popup ${!!after}`);
+    shot(`cmd-l-${style}-after-switch`);
+    await closeBar();
+  }
+  await setKoanPref('koan.look.style', 'zen');
+}
 
 // --- Switching away from the window keeps the new-tab bar ----------------------
 // Like Zen: Alt-Tab and back, and what was typed is still there, for a new
