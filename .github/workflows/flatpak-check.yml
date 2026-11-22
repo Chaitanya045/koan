@@ -1,0 +1,35 @@
+# Packages a fake Koan build as a Flatpak (scripts/ci/linux_package.sh with
+# KOAN_CI_DUMMY=1) on pull requests that touch the packaging: a few minutes,
+# instead of finding out at the end of the Linux chain (linux.yml).
+name: Flatpak packaging
+
+on:
+  pull_request:
+    paths:
+      - flatpak/**
+      - scripts/ci/linux_package.sh
+      - scripts/ci/linux_runner_setup.sh
+      - .github/workflows/flatpak-check.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flatpak-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Package a fake build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Prepare the runner
+        run: scripts/ci/linux_runner_setup.sh --package
+      - name: Package a fake build
+        env:
+          KOAN_CI_DUMMY: "1"
+        run: scripts/ci/linux_package.sh "$RUNNER_TEMP/flatpak-check"

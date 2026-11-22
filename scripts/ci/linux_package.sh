@@ -101,6 +101,11 @@ flatpak remote-add --user --if-not-exists flathub \
   https://dl.flathub.org/repo/flathub.flatpakrepo
 if flatpak info --user org.flatpak.Builder >/dev/null 2>&1; then
   builder=(flatpak run "--filesystem=$ROOT" "--filesystem=$WORK" org.flatpak.Builder)
+  # The sandboxed builder runs flatpak on the host through the session
+  # bus, which a CI runner (no desktop session) doesn't have.
+  if [[ -z ${DBUS_SESSION_BUS_ADDRESS:-} ]]; then
+    builder=(dbus-run-session -- "${builder[@]}")
+  fi
 elif command -v flatpak-builder >/dev/null; then
   builder=(flatpak-builder)
 else
