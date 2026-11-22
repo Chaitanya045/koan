@@ -13,8 +13,9 @@
 # copy of flatpak/ (the manifest, launcher, desktop entry, metainfo) and the
 # icons rendered from branding/logo.svg, then runs flatpak-builder (the
 # runtime, SDK and org.chromium.Chromium.BaseApp come from Flathub, per
-# user) and flatpak build-bundle. Needs flatpak, flatpak-builder and
-# rsvg-convert. Works outside CI too.
+# user) and flatpak build-bundle. Needs flatpak, rsvg-convert and
+# Flathub's org.flatpak.Builder (flatpak install --user flathub
+# org.flatpak.Builder), else a flatpak-builder on PATH. Works outside CI too.
 #
 # KOAN_CI_OUT=<dir> packs another build dir (any Chromium Linux build with
 # the same layout). KOAN_CI_DUMMY=1 packs a fake build whose browser is a
@@ -26,7 +27,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 DEST="${1:?usage: $0 <dest dir>}"
 cd "$ROOT"
 APP_ID=dev.koan.Koan
-for tool in flatpak flatpak-builder rsvg-convert; do
+for tool in flatpak rsvg-convert; do
   command -v "$tool" >/dev/null || { echo "needs $tool" >&2; exit 1; }
 done
 
@@ -98,8 +99,16 @@ done
 echo "==> flatpak-builder"
 flatpak remote-add --user --if-not-exists flathub \
   https://dl.flathub.org/repo/flathub.flatpakrepo
+if flatpak info --user org.flatpak.Builder >/dev/null 2>&1; then
+  builder=(flatpak run "--filesystem=$ROOT" "--filesystem=$WORK" org.flatpak.Builder)
+elif command -v flatpak-builder >/dev/null; then
+  builder=(flatpak-builder)
+else
+  echo "needs org.flatpak.Builder (flatpak install --user flathub org.flatpak.Builder)" >&2
+  exit 1
+fi
 # rofiles-fuse needs FUSE, which containers and some runners lack.
-flatpak-builder --user --install-deps-from=flathub --disable-rofiles-fuse \
+"${builder[@]}" --user --install-deps-from=flathub --disable-rofiles-fuse \
   --force-clean --repo="$WORK/repo" --state-dir="$WORK/state" \
   "$WORK/app" "$WORK/build/$APP_ID.yml"
 

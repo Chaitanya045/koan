@@ -8,7 +8,7 @@
 # and installs zstd. The fetch job also needs librsvg and ImageMagick for
 # apply_branding.sh; Ubuntu's ImageMagick 6 has no `magick` command, so a
 # small one that runs `convert` goes on PATH. --package also installs
-# flatpak and flatpak-builder for scripts/ci/linux_package.sh.
+# flatpak and Flathub's org.flatpak.Builder for scripts/ci/linux_package.sh.
 #
 # Exports KOAN_SCRATCH to $GITHUB_ENV: the disk with the most room for the
 # archives (/mnt when the runner has that second disk, else RUNNER_TEMP).
@@ -43,12 +43,21 @@ echo "==> Packages"
 # librsvg renders the logos for both: the branding and the Flatpak's icons.
 pkgs=(zstd librsvg2-bin)
 if [[ $PACKAGE == 1 ]]; then
-  pkgs+=(flatpak flatpak-builder)
+  pkgs+=(flatpak)
 else
   pkgs+=(imagemagick)
 fi
 sudo apt-get update -qq
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${pkgs[@]}" >/dev/null
+
+# Flathub's flatpak-builder, the one linux_package.sh was checked with:
+# Ubuntu's (1.4) fails appstreamcli compose on the metainfo
+# ("E: file-read-error").
+if [[ $PACKAGE == 1 ]]; then
+  flatpak remote-add --user --if-not-exists flathub \
+    https://dl.flathub.org/repo/flathub.flatpakrepo
+  flatpak install --user -y --noninteractive flathub org.flatpak.Builder >/dev/null
+fi
 
 if [[ $PACKAGE == 0 ]] && ! command -v magick >/dev/null; then
   bin="$RUNNER_TEMP/koan-bin"

@@ -80,7 +80,9 @@ sandbox patches, on Flathub's big builders):
 
 `linux_package.sh` stages the files Chromium's Linux installer ships (the
 list from #13's `scripts/package.sh`, plus `resources/`), renders icons from
-`branding/logo.svg`, and runs flatpak-builder (`--install-deps-from=flathub`,
+`branding/logo.svg`, and runs Flathub's `org.flatpak.Builder` (Ubuntu
+24.04's flatpak-builder failed `appstreamcli compose` on the same files with
+`E: file-read-error`, run 45054968812) (`--install-deps-from=flathub`,
 `--disable-rofiles-fuse`) and `flatpak build-bundle` with Flathub as the
 runtime repo, so `flatpak install ./Koan-….flatpak` fetches the runtime.
 
