@@ -40,6 +40,30 @@ Build config: `build/koan-release.gn` (`KOAN_CONFIG=release`, set by
 Chromium's Debian sysroot. Same reasons as the Mac's for no
 `is_official_build`: a ThinLTO link wouldn't fit one slice.
 
+## Incremental builds
+
+A full build is ~90k steps (~12 h on these runners). A run builds on the
+newest successful run that kept its tree and finished `out/Release`
+(`linux_find_base.sh`; both kept 14 days, and each successful run's
+cleanup deletes older runs' copies), so a nightly rebuilds only what its
+commits changed.
+
+siso goes by mtime, so reusing out/ alone is useless: a fresh checkout
+re-dates every file. `linux_incremental.sh` instead turns the base run's
+source archive into this commit's tree: the checkout's tracked files are
+deleted and the base archive unpacked (so the tree is exactly the base's),
+this commit's files are copied in with `rsync --checksum` (only changed
+files get a new mtime; `.gitignore`d trees are kept), and each patch that
+changed is reversed (base's version) and applied (this commit's) with GNU
+`patch`, since the tree has no `.git`. A new `CHROMIUM_VERSION`, changed
+branding inputs or an expired archive fall back to a wiped workspace and
+the full fetch. If the base's out/Release is gone by the time slice 1
+looks for it, the build is still correct, just full.
+
+Checked locally on a fake tree (2026-11-22): new, changed and removed
+patches; a changed and a deleted repo file; untouched files keep their
+mtimes; branding change exits 3.
+
 ## Runner
 
 `ubuntu-24.04`, 4 cores, 16 GB, `JOBS=4`. `linux_runner_setup.sh` deletes
