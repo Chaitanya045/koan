@@ -40,11 +40,12 @@ sudo swapoff -a 2>/dev/null || true
 sudo rm -f /mnt/swapfile /swapfile || true
 
 echo "==> Packages"
-pkgs=(zstd)
+# librsvg renders the logos for both: the branding and the Flatpak's icons.
+pkgs=(zstd librsvg2-bin)
 if [[ $PACKAGE == 1 ]]; then
   pkgs+=(flatpak flatpak-builder)
 else
-  pkgs+=(librsvg2-bin imagemagick)
+  pkgs+=(imagemagick)
 fi
 sudo apt-get update -qq
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${pkgs[@]}" >/dev/null

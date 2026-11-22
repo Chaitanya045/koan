@@ -44,9 +44,10 @@ Chromium's Debian sysroot. Same reasons as the Mac's for no
 
 `ubuntu-24.04`, 4 cores, 16 GB, `JOBS=4`. `linux_runner_setup.sh` deletes
 the image's SDKs (Android, .NET, GHC, Swift, JVMs, CodeQL, ...) and docker
-images, adds 4 GB of swap on `/mnt`, and puts the archives on `/mnt`
-(`KOAN_SCRATCH`), the runner's second disk, so the root disk holds only the
-tree. Ubuntu's ImageMagick 6 has no `magick`, which `apply_branding.sh`
+images, and frees the root disk from 86 to 126 GB (of 145; run
+45054461809, 2026-11-22). That image has no second disk; when a runner has
+one at `/mnt`, the setup adds 4 GB of swap there and puts the archives on
+it (`KOAN_SCRATCH`, else `RUNNER_TEMP`). Ubuntu's ImageMagick 6 has no `magick`, which `apply_branding.sh`
 calls; the setup puts a `magick` that runs `convert` on PATH.
 
 The tool caches (vpython, CIPD) go to `.cache/linux` (`linux_env.sh`) so
