@@ -21,6 +21,11 @@ on:
         required: false
         default: false
         type: boolean
+      base_run:
+        description: Slice 1 only, the earlier run whose out/Release to build on
+        required: false
+        default: ""
+        type: string
     outputs:
       status:
         description: finished, or running when the next job must go on
@@ -31,6 +36,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   build:
@@ -93,6 +99,30 @@ jobs:
           scripts/ci/linux_archive.sh unpack "$KOAN_SCRATCH/koan-linux-out-$PREVIOUS.tar.zst"
           df -h / /mnt
 
+      # The base run's finished out/Release, matching the tree the fetch
+      # job built on. If it is gone (deleted by a newer run's cleanup), the
+      # build is still right, just full.
+      - name: Download the base run's build
+        id: base
+        if: inputs.slice == 1 && inputs.base_run != ''
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: koan-linux-out-final.tar.zst
+          path: ${{ env.KOAN_SCRATCH }}
+          run-id: ${{ inputs.base_run }}
+          repository: ${{ github.repository }}
+          github-token: ${{ github.token }}
+
+      - name: Unpack the base run's build
+        if: inputs.slice == 1 && inputs.base_run != '' && steps.base.outcome == 'success'
+        env:
+          BASE_RUN: ${{ inputs.base_run }}
+        run: |
+          scripts/ci/linux_archive.sh unpack "$KOAN_SCRATCH/koan-linux-out-final.tar.zst"
+          echo "Building on run $BASE_RUN's out/Release" >> "$GITHUB_STEP_SUMMARY"
+          df -h /
+
       - name: Build
         id: build
         run: scripts/ci/linux_build_slice.sh "$LOGS"
@@ -132,6 +162,21 @@ jobs:
         env:
           KOAN_RELEASE: ${{ inputs.release && '1' || '0' }}
         run: scripts/ci/linux_package.sh "$KOAN_SCRATCH/flatpak-dist"
+
+      # Kept for the next runs to build on (linux_find_base.sh).
+      - name: Pack the finished build
+        if: steps.build.outputs.status == 'finished'
+        run: scripts/ci/linux_archive.sh pack-out "$KOAN_SCRATCH/koan-linux-out-final.tar.zst"
+
+      - name: Upload the finished build
+        if: steps.build.outputs.status == 'finished'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ env.KOAN_SCRATCH }}/koan-linux-out-final.tar.zst
+          archive: false
+          overwrite: true
+          retention-days: 14
+          if-no-files-found: error
 
       - name: Upload the Flatpak
         if: steps.build.outputs.status == 'finished'

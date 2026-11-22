@@ -12,6 +12,14 @@
 # 4. Deletes Chromium's .git directories, before gn gen.
 # 5. scripts/build.sh --gen with build/koan-release.gn.
 #
+# With KOAN_BASE_RUN=<run id> (scripts/ci/linux_find_base.sh), it first
+# tries scripts/ci/linux_incremental.sh: that run's tree, brought up to this
+# commit with only the changed files touched, so the build jobs rebuild
+# only those on top of that run's out/Release. If that can't be done (new
+# Chromium, new branding, expired archive), the workspace is wiped and the
+# full fetch below runs. Writes based_on=<run id or empty> to
+# $GITHUB_OUTPUT.
+#
 # Runs with scripts/ci/linux_env.sh sourced. Prints disk use as it goes.
 set -euo pipefail
 
@@ -21,6 +29,27 @@ source "$ROOT/scripts/ci/linux_env.sh"
 cd "$ROOT"
 
 step() { echo "==> $* ($(date -u +%H:%M:%S), $(df -h / | awk 'NR == 2 { print $4 }') free)"; }
+output() { echo "$1=$2"; [[ -z ${GITHUB_OUTPUT:-} ]] || echo "$1=$2" >> "$GITHUB_OUTPUT"; }
+
+if [[ -n ${KOAN_BASE_RUN:-} ]]; then
+  step "Building on run $KOAN_BASE_RUN"
+  status=0
+  scripts/ci/linux_incremental.sh "$KOAN_BASE_RUN" || status=$?
+  if ((status == 0)); then
+    step "gn gen"
+    JOBS=1 scripts/build.sh --gen
+    output based_on "$KOAN_BASE_RUN"
+    step "Done (incremental)"
+    exit 0
+  fi
+  step "Can't build on run $KOAN_BASE_RUN (exit $status): a full fetch"
+  rm -rf chromium depot_tools .cache
+  git clean -ffdxq
+  git reset -q --hard
+  # shellcheck source=scripts/ci/linux_env.sh
+  source "$ROOT/scripts/ci/linux_env.sh"
+fi
+output based_on ""
 
 mkdir -p chromium
 cat > chromium/.gclient <<'EOF'
