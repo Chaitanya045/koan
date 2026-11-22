@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- @VERSION@ and @DATE@ are filled in by scripts/ci/linux_package.sh. -->
+<component type="desktop-application">
+  <id>dev.koan.Koan</id>
+  <name>Koan</name>
+  <summary>A calm, keyboard-first browser your AI agents can use too</summary>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT AND MPL-2.0 AND BSD-3-Clause</project_license>
+  <developer id="dev.koan">
+    <name>The Koan Authors</name>
+  </developer>
+  <description>
+    <p>
+      Koan is a Chromium-based browser with vertical tabs, Spaces, Essentials,
+      Glance and split view. Local AI agents can work in tabs of their own,
+      signed in as you, without interrupting you or seeing your passwords.
+    </p>
+    <p>This is an alpha build.</p>
+  </description>
+  <launchable type="desktop-id">dev.koan.Koan.desktop</launchable>
+  <url type="homepage">https://github.com/Chaitanya045/koan</url>
+  <url type="bugtracker">https://github.com/Chaitanya045/koan/issues</url>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="@VERSION@" date="@DATE@"/>
+  </releases>
+</component>

@@ -25,6 +25,8 @@ documentation lives in [`docs/`](../../docs) and
   (#86): the M158 move, the checkout switch plan, the routine
 - [macos-ci.md](macos-ci.md): the nightly macOS build on GitHub Actions:
   the job chain, how the source is fetched, measurements
+- [linux-ci.md](linux-ci.md): the nightly Linux build and its Flatpak (a
+  proposal from a fork): the chain, the runner, the Flatpak's launcher
 - [agent-brief.md](agent-brief.md): the brief every implementation agent gets
 - [parallel-agents.md](parallel-agents.md): one thread per issue, the
   shared build lock, memory limits and recovery

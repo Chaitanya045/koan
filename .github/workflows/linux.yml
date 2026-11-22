@@ -1,0 +1,160 @@
+# Nightly Linux (x86_64) build: Koan as a Flatpak bundle,
+# Koan-<version>-<sha>-x86_64.flatpak, kept as an artifact of the run and,
+# for develop, as the rolling "nightly-linux" pre-release. The Linux twin
+# of macos.yml.
+#
+# A first Chromium build takes far longer than GitHub's 6 h job limit on the
+# free Linux runners (4 cores, 16 GB RAM), so the build is chained like the
+# macOS one: the fetch job checks out the pinned Chromium, applies Koan and
+# uploads the tree; then up to 8 build jobs (linux-build.yml) each build for
+# ~5 h and hand out/Release on to the next; the job that finishes makes the
+# Flatpak; the release job publishes it. The chain is linux-chain.yml. See
+# .agent/notes/linux-ci.md.
+#
+# The plan job skips the whole chain for other labels, for forks' pull
+# requests, and for a nightly when nothing that goes into the app changed
+# since the commit the "nightly-linux" release was built from. Manual runs
+# always build.
+#
+# Runs only when asked for: nightly, by hand from the Actions tab or with
+#   gh workflow run linux.yml [-f ref=<branch, tag, commit or refs/pull/N/head>]
+# or by adding the "linux-build" label to a pull request from this
+# repository.
+name: Linux nightly
+
+on:
+  schedule:
+    - cron: "53 1 * * *"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to build (empty for the branch you run it on)
+        required: false
+        default: ""
+  # The "linux-build" label on a pull request builds its head once.
+  pull_request:
+    types: [labeled]
+
+permissions: {}
+
+# One build of a ref at a time, never cancelled, at most one more waiting
+# (as in macos.yml). Other labels get a group of their own.
+concurrency:
+  group: >-
+    ${{ github.event_name != 'pull_request' && format('linux-{0}', inputs.ref || github.ref_name) ||
+    github.event.label.name == 'linux-build' && format('linux-pr-{0}', github.event.pull_request.number) ||
+    format('linux-label-{0}', github.run_id) }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Decide whether to build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      build: ${{ steps.plan.outputs.build }}
+    steps:
+      - name: Decide
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          LABEL: ${{ github.event.label.name }}
+          SHA: ${{ github.sha }}
+        run: |
+          build=true
+          if [[ $EVENT == pull_request && $LABEL != linux-build ]]; then
+            build=false
+          elif [[ $EVENT == pull_request && $HEAD_REPO != "$GH_REPO" ]]; then
+            # A fork's PR would run its own scripts on 8 x 6 h of runners.
+            # A maintainer can build it by hand after review.
+            echo "Pull request from $HEAD_REPO: not building." >> "$GITHUB_STEP_SUMMARY"
+            build=false
+          elif [[ $EVENT == schedule ]]; then
+            # Skip when no file that goes into the app changed since the
+            # commit the nightly-linux release was built from.
+            old=$(gh api "repos/$GH_REPO/git/ref/tags/nightly-linux" --jq .object.sha 2>/dev/null || true)
+            if [[ -n $old ]] && cmp=$(gh api "repos/$GH_REPO/compare/$old...$SHA" \
+                --jq '[.status, (.files | length)] | @tsv'); then
+              read -r status count <<< "$cmp"
+              changed=$(gh api "repos/$GH_REPO/compare/$old...$SHA" --jq '.files[].filename' |
+                grep -E '^(src/|patches/|branding/|build/|scripts/|flatpak/|CHROMIUM_VERSION$|VERSION$|\.github/workflows/linux)' || true)
+              # The compare API lists at most 300 files: build then.
+              if [[ ($status == identical || $status == ahead) && $count -lt 300 && -z $changed ]]; then
+                echo "Nothing that goes into the app changed since the nightly (${old:0:7}): not building." >> "$GITHUB_STEP_SUMMARY"
+                build=false
+              fi
+            fi
+          fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
+    uses: ./.github/workflows/linux-chain.yml
+    permissions:
+      contents: read
+      actions: write
+    with:
+      # A labelled pull request builds its head, not the merge commit.
+      ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
+
+  release:
+    name: Update the nightly-linux pre-release
+    needs: [build]
+    # develop only: nightly runs, and manual runs on develop.
+    if: >-
+      ${{ !cancelled() && needs.build.result == 'success' &&
+      github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' &&
+      (inputs.ref == '' || inputs.ref == 'develop' || inputs.ref == null) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: linux-nightly-release
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SHA: ${{ needs.build.outputs.sha }}
+      CHROMIUM: ${{ needs.build.outputs.chromium }}
+      FLATPAK: ${{ needs.build.outputs.flatpak }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Download the Flatpak
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ env.FLATPAK }}
+          path: dist
+
+      - name: Publish
+        run: |
+          cd dist
+          sha256sum "$FLATPAK" > "$FLATPAK.sha256"
+          cat > notes.md <<EOF
+          Koan for Linux (x86_64) as a Flatpak, built from develop at $SHA
+          (Chromium $CHROMIUM) by [this run]($RUN_URL). Replaced by every
+          nightly build.
+
+          Install it for your user (Flatpak fetches the Freedesktop runtime
+          and the Chromium base app from Flathub):
+
+          \`\`\`sh
+          flatpak install --user ./$FLATPAK
+          flatpak run dev.koan.Koan
+          \`\`\`
+
+          See [Installing the Linux build](https://github.com/$GH_REPO/blob/develop/docs/USAGE.md#installing-the-linux-build).
+
+          SHA-256: \`$(cut -d' ' -f1 "$FLATPAK.sha256")\`
+          EOF
+          gh release delete nightly-linux --cleanup-tag --yes || true
+          gh release create nightly-linux "$FLATPAK" "$FLATPAK.sha256" \
+            --target "$SHA" --prerelease --latest=false \
+            --title "Linux nightly ($(date -u +%Y-%m-%d), ${SHA:0:7})" --notes-file notes.md

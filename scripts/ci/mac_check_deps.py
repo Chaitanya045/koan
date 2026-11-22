@@ -7,7 +7,8 @@
     mac_check_deps.py <chromium dir> <chromium version>
 
 Run in <chromium dir> (the one with .gclient) after `gclient sync`, with
-depot_tools on PATH. Used by scripts/ci/mac_fetch.sh.
+depot_tools on PATH. Used by scripts/ci/mac_fetch.sh and
+scripts/ci/linux_fetch.sh (nothing in it is Mac-specific).
 
 gclient can report success with a dependency missing: after a fetch
 fails, it moves the half-made directory to _bad_scm/, and a second sync
