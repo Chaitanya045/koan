@@ -13,7 +13,7 @@
 # Instead this downloads the base run's source archive (the patched,
 # branded Chromium tree, depot_tools and caches, with their mtimes) and:
 #
-# 1. unpacks it over the workspace (this commit's checkout);
+# 1. replaces the workspace's files (this commit's checkout) with it;
 # 2. gives up (exit 3) if CHROMIUM_VERSION or the branding inputs differ:
 #    the tree has no .git to undo branding with, and a new Chromium is a
 #    full build anyway;
@@ -55,7 +55,13 @@ mkdir -p "$new"
 git archive HEAD | tar -x -C "$new"
 
 step "Unpacking it"
-scripts/ci/linux_archive.sh unpack "$archive"
+# The workspace must become exactly the base's tree: files only this commit
+# has would otherwise survive the unpack and look unchanged. $new holds
+# this commit's files; .git stays.
+# (linux_archive.sh's unpack, inline: the script itself is deleted here.)
+git ls-files -z | xargs -0 rm -f
+zstd -dc -q "$archive" | tar -xf -
+rm -f "$archive"
 
 if ! cmp -s CHROMIUM_VERSION "$new/CHROMIUM_VERSION"; then
   echo "CHROMIUM_VERSION moved: a full build" >&2
