@@ -128,7 +128,12 @@ if (r.code !== 0) {
   finish();
 }
 
-const refOf = (text, re) => text.split('\n').find(l => re.test(l))?.match(/@(\d+)/)?.[0];
+// The control's line, never a heading's: the pages' headings can share a
+// control's name ("Attachments").
+const refOf = (text, re) => text.split('\n').find(l => re.test(l) && !/^\s*heading /.test(l))
+    ?.match(/@(\d+)/)?.[0];
+// The whole of koan's answer, for a failing check.
+const full = r => `exit ${r.code}; ${(r.out + ' | ' + r.err).replace(/\s+/g, ' ').slice(0, 600)}`;
 async function openTab(p) {
   const opened = await koan(['open', server.url(p), '--task', 'upload']);
   const tab = opened.out.split('\n').pop();
@@ -192,7 +197,7 @@ const plain = await openTab('/plain');
   const ref = refOf(await snapshot(tab), /"Attachments"/);
   r = await koan(['act', tab, 'upload', ref, NOTES.path, PIC.path]);
   check('multiple + accept: two files of accepted types', r.code === 0 &&
-        /attached notes\.txt .*pic\.png/.test(r.out), brief(r));
+        /attached notes\.txt .*pic\.png/.test(r.out), full(r));
   let page = await waitFor(async () => { const p = await received(tab); return p.got && p; }, 5000);
   check('...the page got both, in order', page && same(page.got, [NOTES, PIC]), say(page));
   await evalIn(await pageOf(tab), 'window.got = null');
@@ -224,7 +229,7 @@ const plain = await openTab('/plain');
   const ref = refOf(await snapshot(tab), /"Drop files here or browse"/);
   r = await koan(['act', tab, 'scroll', '50', 'upload', ref, NOTES.path, 'scroll', '-50']);
   check('drop zone: act upload on it as the 2nd of 3 steps', r.code === 0 &&
-        /2\/3 upload .*: ok: attached notes\.txt/.test(r.out) && /3\/3/.test(r.out), brief(r));
+        /2\/3 upload .*: ok: attached notes\.txt/.test(r.out) && /3\/3/.test(r.out), full(r));
   const page = await waitFor(async () => { const p = await received(tab); return p.got && p; }, 5000);
   check('...the page got it', page && same(page.got, [NOTES]), say(page));
 }
