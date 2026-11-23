@@ -10,6 +10,11 @@
 # the .dmg; the release job publishes it. The chain is macos-chain.yml,
 # which release.yml (tagged releases) shares. See .agent/notes/macos-ci.md.
 #
+# Runs here are incremental: they start from the last successful run's
+# tree and out/Koan and rebuild only what changed, so a full ~16 h build
+# happens only for a new Chromium, branding or Xcode (or when no recent
+# run is left to build on). Tagged releases always build from scratch.
+#
 # The plan job skips the whole chain for other labels, for forks, and for
 # a nightly when nothing that goes into the app changed since the commit
 # the "nightly" release was built from. Manual runs always build.
@@ -107,6 +112,8 @@ jobs:
     with:
       # A labelled pull request builds its head, not the merge commit.
       ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
+      # Rebuild only what changed since the last successful run.
+      incremental: true
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
