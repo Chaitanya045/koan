@@ -1611,6 +1611,33 @@ is not paying: an agent stops before the last Pay, Place order or Confirm
 button, tells you the amount and the card or account the page shows, and
 hands you the tab to click it yourself.
 
+Agents attach the files you gave them (a resume, a photo, a document) the
+way you would pick them, without the open panel. `koan act <tab> upload
+@ref ~/work/resume.pdf` clicks the file input, the site's "Upload" button
+or its drop zone and answers the file chooser the page opens; `koan upload
+<tab> <path>` answers one a click already opened (the page's chooser waits
+as "… wants you to choose a file" in the pill meanwhile, and you can still
+Open it and pick yourself). The page gets the files through Chrome's own
+chooser path, so it sees them exactly as your pick, with its change event;
+no panel or sheet shows over your work. The chooser's rules hold: one file
+unless the input takes several, of a type its `accept` list allows
+(Koan.notAccepted on a clear mismatch, such as a .docx where only .pdf is
+accepted); folder inputs are not supported yet (Koan.notSupported: you pick
+the folder). The paths are on the Mac that runs Koan; each must be a
+readable file (Koan.fileNotFound, Koan.notAFile, Koan.fileUnreadable), and
+Koan never uploads from its own profile, `~/.koan`, `~/.ssh`, `~/.gnupg` or
+your keychains. An agent on another machine copies the file over first:
+`scp resume.pdf mac:/tmp/` and then, over ssh, `koan upload <tab>
+/tmp/resume.pdf`. Files in Desktop, Documents or Downloads make macOS ask
+you once to let Koan read that folder. Uploads work only on the agent's
+own tabs and on tabs of yours you let it drive, and not while you are
+using the tab (Koan.paused). The pill says "Claude Code attached
+resume.pdf" for a few seconds, the window holding the tab shows a toast,
+and the activity log keeps each file's name and size, never its contents.
+There is no size limit: the page reads the file itself, as with your pick.
+Pages that use the File System Access picker (`showOpenFilePicker()`)
+still need you (#434).
+
 `koan snapshot` prints the page as a compact outline: controls, links,
 landmarks and headings with `@refs`, each block's text on one line, and
 states such as `[checked]`, `[selected]`, `[expanded]`, `[disabled]` and
