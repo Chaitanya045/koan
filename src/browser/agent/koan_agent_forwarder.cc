@@ -208,10 +208,17 @@ class AgentForwarder::TabWatcher final
     Watch(frame);
     pause_watch_.OnFrameCreated();
   }
-  // Mouse down, key down, the start of a scroll, a touch: in any frame of the
-  // tab. Switching to the tab is not input; the omnibox and the tab strip
-  // never reach here.
+  // Mouse down, key down, a touch: in any frame of the tab. Switching to the
+  // tab is not input; the omnibox and the tab strip never reach here.
   void DidGetUserInteraction(const blink::WebInputEvent& event) override {
+    // The start of a scroll is not the user's by itself: the wheel's
+    // MouseWheelEventQueue builds it with no modifiers, so an agent's CDP
+    // mouseWheel (kFromDebugger) would pause its own tab. The user's own
+    // wheel and trackpad scrolls are caught as kMouseWheel in OnInputEvent(),
+    // which keeps the flag; a touch scroll starts with a touch.
+    if (event.GetType() == blink::WebInputEvent::Type::kGestureScrollBegin) {
+      return;
+    }
     if (IsUsersInput(event)) {
       forwarder_->OnUserInput(target_id_);
     }
