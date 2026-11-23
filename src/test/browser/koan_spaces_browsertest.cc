@@ -909,7 +909,7 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
   KoanWorkspaceController* spaces = GetSpaces(browser());
   spaces->SwitchTo(*agent_space);
   ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
-      browser(), GURL(kPage), WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      browser(), GURL(kPage), WindowOpenDisposition::kNewForegroundTab,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
   TabStripModel* model = browser()->GetTabStripModel();
   content::WebContents* user_tab = model->GetActiveWebContents();
