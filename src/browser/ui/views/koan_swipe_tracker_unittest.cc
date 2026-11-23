@@ -38,6 +38,8 @@ class RecordingDelegate : public KoanSwipeTracker::Delegate {
 };
 
 // Fingers going down, then moving by `dx` points (negative: left) every 16 ms.
+// (KoanSpaceSwipe turns the scroll events' offsets into the fingers' own
+// direction first, whatever the system's natural scrolling setting is.)
 void Drag(KoanSwipeTracker& tracker, float dx, int steps, double& now) {
   EXPECT_FALSE(tracker.OnScroll(0, 0, SwipePhase::kBegin, now));
   for (int i = 0; i < steps; ++i) {
@@ -55,15 +57,15 @@ TEST(KoanSwipeTrackerTest, HorizontalSwipeFollowsTheFingersAndEnds) {
   Drag(tracker, -6, 5, now);
   // The first events are still short of the lock distance: not taken.
   ASSERT_FALSE(delegate.amounts.empty());
-  // 30 points to the left of 550 per amount: positive.
-  EXPECT_FLOAT_EQ(30 / 550.f, delegate.amounts.back());
+  // 30 points to the left of 550 per amount: negative, as the fingers' travel.
+  EXPECT_FLOAT_EQ(-30 / 550.f, delegate.amounts.back());
 
   now += 0.016;
   EXPECT_TRUE(tracker.OnScroll(0, 0, SwipePhase::kEnd, now));
   EXPECT_EQ(1, delegate.ends);
-  EXPECT_FLOAT_EQ(30 / 550.f, delegate.end_amount);
+  EXPECT_FLOAT_EQ(-30 / 550.f, delegate.end_amount);
   // The last movement: 6 points in 16 ms, to the left.
-  EXPECT_FLOAT_EQ(6 / 550.f / 0.016f, delegate.end_velocity);
+  EXPECT_FLOAT_EQ(-6 / 550.f / 0.016f, delegate.end_velocity);
 }
 
 TEST(KoanSwipeTrackerTest, TheVelocityHasAnEightMillisecondFloor) {
@@ -76,7 +78,7 @@ TEST(KoanSwipeTrackerTest, TheVelocityHasAnEightMillisecondFloor) {
   tracker.OnScroll(0, 0, SwipePhase::kEnd, now + 0.2);
   // Gecko: max(0.008, elapsed); and fingers resting before the lift don't
   // zero it (its end events don't update the velocity).
-  EXPECT_FLOAT_EQ(11 / 550.f / 0.008f, delegate.end_velocity);
+  EXPECT_FLOAT_EQ(-11 / 550.f / 0.008f, delegate.end_velocity);
 }
 
 TEST(KoanSwipeTrackerTest, TheFirstEventOfAGestureKeepsItsMovement) {
@@ -84,7 +86,7 @@ TEST(KoanSwipeTrackerTest, TheFirstEventOfAGestureKeepsItsMovement) {
   KoanSwipeTracker tracker(&delegate);
   EXPECT_TRUE(tracker.OnScroll(-12, 1, SwipePhase::kBegin, 1));
   ASSERT_EQ(1u, delegate.amounts.size());
-  EXPECT_FLOAT_EQ(12 / 550.f, delegate.amounts[0]);
+  EXPECT_FLOAT_EQ(-12 / 550.f, delegate.amounts[0]);
 }
 
 TEST(KoanSwipeTrackerTest, MomentumAfterTheLiftIsTakenUntilItsEnd) {
@@ -142,9 +144,51 @@ TEST(KoanSwipeTest, TheSwipeSucceedsAtAQuarterOfAnAmount) {
   // 0.25 of 550 points = 137.5 points of travel, at rest.
   EXPECT_FALSE(SwipeSucceeds(SwipeGestureAmount(137), 0));
   EXPECT_TRUE(SwipeSucceeds(SwipeGestureAmount(138), 0));
-  // The same to the other side (fingers moving right).
+  // The same to the other side (fingers moving left).
   EXPECT_FALSE(SwipeSucceeds(SwipeGestureAmount(-137), 0));
   EXPECT_TRUE(SwipeSucceeds(SwipeGestureAmount(-138), 0));
+}
+
+// The direction, end to end: fingers moving right to left bring in the Space to
+// the right (the next one) and the strip follows them to the left; left to
+// right, the one to the left (the previous one), the strip following to the
+// right. These pin the one sign convention the controller and the edge
+// actions share: positive is fingers moving right.
+TEST(KoanSwipeTest, FingersMovingLeftGoToTheNextSpaceAndDragTheStripLeft) {
+  RecordingDelegate delegate;
+  KoanSwipeTracker tracker(&delegate);
+  double now = 1;
+  Drag(tracker, -10, 8, now);
+  tracker.OnScroll(0, 0, SwipePhase::kEnd, now + 0.016);
+  ASSERT_FALSE(delegate.amounts.empty());
+
+  EXPECT_LT(delegate.end_amount, 0);
+  EXPECT_LT(delegate.end_velocity, 0);
+  EXPECT_TRUE(SwipeSucceeds(delegate.end_amount, delegate.end_velocity));
+  EXPECT_TRUE(SwipeGoesToNextSpace(delegate.end_amount, /*rtl=*/false));
+  EXPECT_FALSE(SwipeGoesToNextSpace(delegate.end_amount, /*rtl=*/true));
+
+  SwipeDrag drag;
+  EXPECT_LT(drag.Update(delegate.amounts.back(), 230), 0);
+}
+
+TEST(KoanSwipeTest,
+     FingersMovingRightGoToThePreviousSpaceAndDragTheStripRight) {
+  RecordingDelegate delegate;
+  KoanSwipeTracker tracker(&delegate);
+  double now = 1;
+  Drag(tracker, 10, 8, now);
+  tracker.OnScroll(0, 0, SwipePhase::kEnd, now + 0.016);
+  ASSERT_FALSE(delegate.amounts.empty());
+
+  EXPECT_GT(delegate.end_amount, 0);
+  EXPECT_GT(delegate.end_velocity, 0);
+  EXPECT_TRUE(SwipeSucceeds(delegate.end_amount, delegate.end_velocity));
+  EXPECT_FALSE(SwipeGoesToNextSpace(delegate.end_amount, /*rtl=*/false));
+  EXPECT_TRUE(SwipeGoesToNextSpace(delegate.end_amount, /*rtl=*/true));
+
+  SwipeDrag drag;
+  EXPECT_GT(drag.Update(delegate.amounts.back(), 230), 0);
 }
 
 TEST(KoanSwipeTest, TheLastVelocityCountsHalfInTheDirectionOfTheSwipe) {
@@ -195,7 +239,7 @@ TEST(KoanSwipeTrackerTest, CancelForgetsTheGestureWithoutTellingTheDelegate) {
   delegate.amounts.clear();
   EXPECT_TRUE(tracker.OnScroll(-14, 0, SwipePhase::kUpdate, now + 0.2));
   ASSERT_EQ(1u, delegate.amounts.size());
-  EXPECT_FLOAT_EQ(14 / 550.f, delegate.amounts[0]);
+  EXPECT_FLOAT_EQ(-14 / 550.f, delegate.amounts[0]);
 }
 
 TEST(KoanSwipeTrackerTest, ALateEndAfterCancelIsNoSwipe) {
