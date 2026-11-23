@@ -84,10 +84,18 @@ std::string_view DomainPrefix(ContainerKind kind) {
 
 const content::StoragePartitionConfig& ConfigOf(
     const content::WebContents* contents) {
-  return contents->GetPrimaryMainFrame()
-      ->GetSiteInstance()
-      ->GetSecurityPrincipal()
-      .GetStoragePartitionConfig();
+  const content::RenderFrameHost* frame = contents->GetPrimaryMainFrame();
+  const content::StoragePartitionConfig& config =
+      frame->GetSiteInstance()
+          ->GetSecurityPrincipal()
+          .GetStoragePartitionConfig();
+  if (!config.is_default()) {
+    return config;
+  }
+  // A frame whose site is unassigned (about:blank in a container's
+  // BrowsingInstance, CreateSiteInstance()) has the default principal, yet
+  // its process, where its storage goes, is in the container's partition.
+  return frame->GetProcess()->GetStoragePartition()->GetConfig();
 }
 
 // Any container, and any domain that only looks like an agent's (fails
