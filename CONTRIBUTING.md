@@ -18,7 +18,7 @@ is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ### Issues
 
-- Search the [existing issues](https://github.com/Chaitanya045/koan/issues)
+- Search the [existing issues](https://github.com/koan-browser/koan/issues)
   before opening a new one.
 - Use the bug report or feature request template, and be specific: the
   Koan version, your desktop (e.g. GNOME 48 on Wayland), the steps to
@@ -61,7 +61,7 @@ is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 ### Getting the source and building
 
 ```sh
-git clone https://github.com/Chaitanya045/koan.git && cd koan
+git clone https://github.com/koan-browser/koan.git && cd koan
 ./scripts/bootstrap.sh          # depot_tools and the Chromium revision in CHROMIUM_VERSION
 ./scripts/apply_patches.sh      # link chromium/src/koan -> src/, apply patches/
 ./scripts/apply_branding.sh     # Koan's name and logos

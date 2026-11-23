@@ -4,7 +4,7 @@
 
 Koan is in alpha (the first release, 0.0.1-alpha.1, came out on
 2026-11-20). Only the latest release on the
-[Releases page](https://github.com/Chaitanya045/koan/releases) is
+[Releases page](https://github.com/koan-browser/koan/releases) is
 supported: security fixes go to `develop` and ship in the next alpha or
 nightly. There's no automatic updater yet, so install new versions by hand.
 While Koan is in alpha, Chromium's security fixes are applied on a
@@ -25,7 +25,7 @@ Please don't report security vulnerabilities in public issues, discussions
 or pull requests.
 
 Report them privately through GitHub instead:
-[**Report a vulnerability**](https://github.com/Chaitanya045/koan/security/advisories/new)
+[**Report a vulnerability**](https://github.com/koan-browser/koan/security/advisories/new)
 (Security tab → Advisories → Report a vulnerability). Include:
 
 - what the vulnerability is and what an attacker could do with it;

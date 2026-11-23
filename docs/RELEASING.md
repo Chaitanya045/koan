@@ -10,8 +10,8 @@ build, the packaging and the release workflow all use.
 
 | Channel | What it is | Where |
 |---|---|---|
-| **Nightly** | An unsigned dev build of `develop`, every night that something changed. Replaced each time. | The rolling [`nightly`](https://github.com/Chaitanya045/koan/releases/tag/nightly) pre-release (`macos.yml`) |
-| **Alpha** | Tagged releases for early testers: `vX.Y.Z-alpha.N`. | [Releases](https://github.com/Chaitanya045/koan/releases), marked **Latest** |
+| **Nightly** | An unsigned dev build of `develop`, every night that something changed. Replaced each time. | The rolling [`nightly`](https://github.com/koan-browser/koan/releases/tag/nightly) pre-release (`macos.yml`) |
+| **Alpha** | Tagged releases for early testers: `vX.Y.Z-alpha.N`. | [Releases](https://github.com/koan-browser/koan/releases), marked **Latest** |
 | Beta, Stable | Later, once there is a signed, auto-updating app. | |
 
 Every tagged release, alphas included, is a full GitHub release marked
@@ -87,7 +87,10 @@ GitHub showed none in the repository's sidebar and `/releases/latest` was a
    (a mismatch fails there, not a day later), then builds for about 16 hours
    (the nightly's chain, `macos-chain.yml`), then publishes the release: the
    title, the notes followed by GitHub's generated notes since the previous
-   release tag, the `.dmg` and its `.sha256`.
+   release tag, the `.dmg` and its `.sha256`. Publishing waits for the
+   owner's approval in the `release` environment (the run's page shows
+   **Review deployments**); the environment only accepts `v*` tags and
+   `develop`.
 6. **Check the release:** download the `.dmg`, compare its SHA-256, install
    it, and look at About Koan (`0.0.2 (Alpha) · Chromium …`). Then bump
    `VERSION` for the next one (step 1).

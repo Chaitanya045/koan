@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Report a security vulnerability
-    url: https://github.com/Chaitanya045/koan/security/advisories/new
+    url: https://github.com/koan-browser/koan/security/advisories/new
     about: Please report vulnerabilities privately, not in a public issue.
   - name: Chromium bug
     url: https://issues.chromium.org

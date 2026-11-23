@@ -1259,7 +1259,7 @@ from …" folder on it.
 ## Updates
 
 Koan has no automatic updater yet. To update a release, download the newest
-one from the [Releases page](https://github.com/Chaitanya045/koan/releases)
+one from the [Releases page](https://github.com/koan-browser/koan/releases)
 and drag it over the old one in Applications (see
 [Installing the macOS build](#installing-the-macos-build)). A build from
 your own clone updates with `git pull && scripts/build.sh`
@@ -1370,25 +1370,25 @@ Koan runs on Macs with Apple Silicon (M1 and later), macOS 13 or later.
 Intel Macs aren't supported.
 
 - **Alpha releases** (start here): the newest is at the top of the
-  [Releases page](https://github.com/Chaitanya045/koan/releases/latest),
+  [Releases page](https://github.com/koan-browser/koan/releases/latest),
   `Koan-<version>-arm64.dmg` and its `.sha256`. How releases are made and
   what an alpha promises: [RELEASING.md](RELEASING.md).
 - **Nightly pre-release:** a test build made every night from `develop`,
   the `nightly` release on the
-  [Releases page](https://github.com/Chaitanya045/koan/releases/tag/nightly),
+  [Releases page](https://github.com/koan-browser/koan/releases/tag/nightly),
   `Koan-<version>-<commit>-arm64.dmg` and its `.sha256`. Each new nightly
   replaces it.
 - **Any run** (also of a branch): open a run of the
-  [macOS nightly workflow](https://github.com/Chaitanya045/koan/actions/workflows/macos.yml)
+  [macOS nightly workflow](https://github.com/koan-browser/koan/actions/workflows/macos.yml)
   and click the `Koan-….dmg` under "Artifacts" (you need to be signed in to
   GitHub). The file is the .dmg itself, not a zip. From a terminal
   (`gh run download` can't fetch it, because it expects a zip):
 
   ```sh
   run=<run id>
-  id=$(gh api repos/Chaitanya045/koan/actions/runs/$run/artifacts \
+  id=$(gh api repos/koan-browser/koan/actions/runs/$run/artifacts \
     --jq '.artifacts[] | select(.name | endswith(".dmg")) | .id')
-  gh api repos/Chaitanya045/koan/actions/artifacts/$id/zip > Koan.dmg
+  gh api repos/koan-browser/koan/actions/artifacts/$id/zip > Koan.dmg
   ```
 
 Open the .dmg and drag Koan to Applications.
@@ -1560,7 +1560,7 @@ Amp, Cline, Pi and `npx skills` share) and `~/.cursor/skills` (Cursor). It
 only writes when you click, never over a file that isn't Koan's, and says
 which agents it set up; **Remove** takes it out again. Set up again after
 moving Koan. The same skill is in the repo for `npx skills add
-Chaitanya045/koan`. The skill only says what Koan is and "run `koan skill`",
+koan-browser/koan`. The skill only says what Koan is and "run `koan skill`",
 whose guide comes from the installed Koan. An agent on another machine runs
 `koan` on the Mac over ssh, by its full path
 (`~/Applications/Koan.app/Contents/Resources/bin/koan`); screenshots are
