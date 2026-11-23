@@ -24,7 +24,7 @@ inline constexpr char kBranch[] = "develop";
 
 // The repository the links point at when the build's clone has no GitHub
 // remote.
-inline constexpr char kDefaultGitHubRepo[] = "Chaitanya045/koan";
+inline constexpr char kDefaultGitHubRepo[] = "koan-browser/koan";
 
 // At most one check a day.
 inline constexpr base::TimeDelta kCheckInterval = base::Days(1);

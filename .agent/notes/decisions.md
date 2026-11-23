@@ -179,7 +179,7 @@
   `koan-browser` skill only into installed agents' skill folders, only on
   click, with Remove. It never writes silently or into folders of agents that
   aren't installed: ego wrote up to 48 folders, and users complained.
-  `npx skills add Chaitanya045/koan` installs the repo copy. The entry skill
+  `npx skills add koan-browser/koan` installs the repo copy. The entry skill
   says only "run `koan skill`", so the guide matches the installed version.
 - **`koan pair` asks for every capability by default** (#397), as part of "agents
   use the browser as the user does". The user can untick any of them in the

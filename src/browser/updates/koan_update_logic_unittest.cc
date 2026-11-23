@@ -87,8 +87,8 @@ TEST(KoanUpdateLogicTest, StampsVersionAndCommit) {
 
 TEST(KoanUpdateLogicTest, Urls) {
   // Nothing but the repository and the branch.
-  EXPECT_EQ(LatestCommitUrl("Chaitanya045/koan").spec(),
-            "https://api.github.com/repos/Chaitanya045/koan/commits"
+  EXPECT_EQ(LatestCommitUrl("koan-browser/koan").spec(),
+            "https://api.github.com/repos/koan-browser/koan/commits"
             "?sha=develop&per_page=1");
   EXPECT_EQ(WhatsNewUrl("o/r", "aaa", "bbb").spec(),
             "https://github.com/o/r/compare/aaa...bbb");

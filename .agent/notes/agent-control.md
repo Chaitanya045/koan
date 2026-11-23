@@ -1570,7 +1570,7 @@ Code), `~/.agents/skills` (Codex's current user directory, also the one Amp, Cli
 `~/.cursor/skills` (Cursor), for each agent whose home directory exists, **only when the user clicks "Set Up Agents" in
 settings** (decision 10), never silently. Codex's older `~/.codex/skills` is not written, so that a Codex reading both does
 not list the skill twice. The same file is `skills/koan-browser/SKILL.md` in the repo, which `npx skills add
-Chaitanya045/koan` finds (the skills CLI looks for `skills/<name>/SKILL.md`); `scripts/tests/test_agent_skill.py` keeps the
+koan-browser/koan` finds (the skills CLI looks for `skills/<name>/SKILL.md`); `scripts/tests/test_agent_skill.py` keeps the
 two the same. The guide tells the agent: run `koan status`; if not paired, `koan pair` and wait for the user to approve;
 open tabs with `koan open` (they land in the agent's Space, never the user's); use `koan agent-browser` for page work;
 use `koan watch`; if `userNeeded` or `Koan.paused` appears, stop and tell the user; never ask the user for keys, never

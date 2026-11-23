@@ -71,7 +71,7 @@ compresses).
 | UF-ONB-7 | The person clicks **Remove** | Koan's skills and link are gone; the person's own skill in the same folder stays | UF-ONB-7 (real click); `agent_cli.mjs` "Set up agents: Remove takes the skills and the link out" | real |
 | UF-ONB-8 | The agent ends | `koan end` exits 0 | UF-ONB-8 | |
 | UF-ONB-9 | The person sets up agents on their own profile (their real `~/.claude`) | The found agents are listed; Remove cleans up | manual: PR #397 "Mac steps" 2 (only with the user's OK to write to `~/.claude`) | manual |
-| UF-ONB-10 | `npx skills add Chaitanya045/koan` | The skills CLI finds `skills/koan-browser/SKILL.md` | `test_agent_skill.py` (the repo's only skill, identical to the app's) | |
+| UF-ONB-10 | `npx skills add koan-browser/koan` | The skills CLI finds `skills/koan-browser/SKILL.md` | `test_agent_skill.py` (the repo's only skill, identical to the app's) | |
 
 ## Indicator layers (#398): `uf_indicator`
 
