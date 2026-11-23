@@ -52,8 +52,46 @@ fetch ──► build-01 ──► build-02 ──► … ──► build-16 ─
 Re-running: every job reads only artifacts earlier jobs left under fixed
 names and uploads with `overwrite: true`, so "Re-run failed jobs" on a run
 carries on from the last good job. Retention (after the #70 review): source
-3 days, out slices 2 days, logs 7 days, .dmg 7 days (the `nightly` release
+3 days (14 for incremental runs, which also keep out-final 14 days), out slices 2 days, logs 7 days, .dmg 7 days (the `nightly` release
 keeps the latest). So a failed job can be re-run for 2 days.
+
+## Incremental builds
+
+A full build is ~16 h, but most nightlies change a few files. Runs of
+`macos.yml` pass `incremental: true` to `macos-chain.yml` (release.yml
+doesn't: a tagged release is always a clean build):
+
+- The fetch job finds the newest successful `macos.yml` run that still has
+  `koan-mac-source.tar.zst` and `koan-mac-out-final.tar.zst`
+  (`scripts/ci/find_base.sh`). `scripts/ci/incremental.sh` then:
+  - deletes the checkout's tracked files and unpacks that run's source
+    archive in their place, mtimes and all;
+  - lets `git status` against this commit's index say what differs, and
+    restores just those files, so only they get new mtimes;
+  - reverses the base's version of each changed patch and applies this
+    commit's, with `git apply` as `apply_patches.sh` does.
+    `GIT_CEILING_DIRECTORIES` keeps git from using Koan's repo for
+    `chromium/src`, which has no `.git` by then. Without it, `git apply`
+    run from a subdirectory of Koan's repo silently skips every path.
+- It falls back to the full fetch (workspace wiped) when `CHROMIUM_VERSION`,
+  the branding inputs or the toolchain differ. The fetch writes
+  `.cache/ci-toolchain` (`xcodebuild -version` plus the SDK version), so a
+  runner image with a new Xcode or SDK gets a clean build. It also falls
+  back when a patch won't reverse or apply, or when the archive is gone.
+- Build 1 downloads the base's `out/Koan` (`koan-mac-out-final`) before
+  building. If that download fails, the build is full but still correct.
+- The job that finishes packs `out/Koan` as `koan-mac-out-final` **before**
+  `mac_package.sh`, which signs `Koan.app` in place and adds the VMP
+  signature. The next build then starts from the build's own output.
+- With `incremental`, source and out-final are kept 14 days. A successful
+  run deletes its own out-N slices, and the source and out-final of older
+  completed `macos.yml` runs. A running chain keeps its archives.
+- Why `git status` and `git apply` rather than rsync and GNU patch (the
+  first Linux version): macOS ships openrsync and BSD patch, which lack the
+  needed options.
+- Not checked on CI yet; tested locally on a fake tree (patches added,
+  changed and removed; files added, changed and deleted; toolchain,
+  branding and Chromium changes fall back).
 
 Concurrency: one group per ref for nightly and manual runs
 (`macos-<ref name>`; the nightly and a manual run of develop share

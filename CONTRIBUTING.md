@@ -182,10 +182,14 @@ Mac, so it catches Mac-only build errors.
 - A first build takes much longer than GitHub's 6-hour job limit, so it
   runs as a chain: a fetch job, then build jobs that each build for about
   5 hours and hand `out/Koan` on to the next as an artifact, then a
-  packaging step and the release. A whole run takes about 16 hours
+  packaging step and the release. A full build takes about 16 hours
   (4 build jobs).
-- **It never runs on pushes.** A run is a full build of about 16 hours,
-  so it runs only nightly or when asked for. To build a branch or pull
+- Runs of `macos.yml` are incremental: they start from the last
+  successful run's tree and `out/Koan` and rebuild only what changed. A
+  new `CHROMIUM_VERSION`, branding or Xcode, or no successful run in the
+  last 14 days, means a full build. Tagged releases always build in full.
+- **It never runs on pushes.** A run can still be a full build of about
+  16 hours, so it runs only nightly or when asked for. To build a branch or pull
   request with Mac-specific code (a compile check plus a .dmg to try):
   - add the **`macos-build` label** to the pull request (builds its head
     once; remove and add the label again for another run), or
