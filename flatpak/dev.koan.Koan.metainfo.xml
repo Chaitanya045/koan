@@ -18,8 +18,8 @@
     <p>This is an alpha build.</p>
   </description>
   <launchable type="desktop-id">dev.koan.Koan.desktop</launchable>
-  <url type="homepage">https://github.com/Chaitanya045/koan</url>
-  <url type="bugtracker">https://github.com/Chaitanya045/koan/issues</url>
+  <url type="homepage">https://github.com/koan-browser/koan</url>
+  <url type="bugtracker">https://github.com/koan-browser/koan/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
     <release version="@VERSION@" date="@DATE@"/>

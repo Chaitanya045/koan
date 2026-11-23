@@ -1432,9 +1432,9 @@ install a new nightly. Click **Always Allow**. The profile is in
 
 A Flatpak for x86_64 Linux, built every night from `develop`: the
 `nightly-linux` pre-release on the
-[Releases page](https://github.com/Chaitanya045/koan/releases/tag/nightly-linux),
+[Releases page](https://github.com/koan-browser/koan/releases/tag/nightly-linux),
 `Koan-<version>-<commit>-x86_64.flatpak` and its `.sha256`. Any run of the
-[Linux nightly workflow](https://github.com/Chaitanya045/koan/actions/workflows/linux.yml)
+[Linux nightly workflow](https://github.com/koan-browser/koan/actions/workflows/linux.yml)
 also has it under "Artifacts" (the file is the bundle itself, not a zip;
 fetch it from a terminal as in [Installing the macOS
 build](#installing-the-macos-build), with `.flatpak` for `.dmg`).
