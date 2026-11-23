@@ -132,8 +132,11 @@ runtime repo, so `flatpak install ./Koan-….flatpak` fetches the runtime.
   downloaded out-final and finished `[2/3]` steps in under a minute;
   ~25 min end to end. Cleanup then deleted run 45061138149's source and
   out-final, keeping its Flatpak.
-- Not yet: an incremental run with a changed patch or source file on CI,
-  and the Flatpak on a desktop
+- 2026-11-23, CI run 45257523045 (d44b6ee, koan-browser/koan develop
+  merged in, on top of run 45109561372): 5 patches reversed and
+  re-applied, `src/` changes copied in; build 1 ran 633 steps; ~43 min
+  end to end, headless check passed.
+- Not yet: the Flatpak on a desktop
   (Wayland and X11, GPU, Agent control's socket under the sandbox's
   config dir).
 
