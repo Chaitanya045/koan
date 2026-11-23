@@ -860,8 +860,12 @@ autofill, and never receives a secret (section 4.5, "Secrets Koan filled").
   login they open the URL in their own Space). Zen gives each workspace a default container that its new tabs use (`containers.md`, Zen);
   that is #111 and it reuses this core (`ContainerKind::kUser`, the same partition helpers, restore and hooks) with the
   blocks off.
-* **End of a task.** `EndAgentContainer` closes the container's tabs in every window (the Space goes with its last tab)
-  and, for a Throwaway container, clears all of its data. In-memory partitions are never unloaded before the profile
+* **End of a task.** `EndAgentContainer` closes the container's tabs in every window and, for a Throwaway container,
+  clears all of its data. Agent-created Spaces are explicitly temporary: their last-tab closure removes them instead
+  of invoking the normal user-Space rule that recreates an empty placeholder (#430). Their group ids carry that
+  lifetime across window moves; names and icons are never used to infer ownership. User tabs added to an agent Space
+  keep it alive when the agent's tabs close. Existing orphan Spaces created by older builds are not removed by guessing
+  their ownership. In-memory partitions are never unloaded before the profile
   shuts down (`browser_context.h`, E§1), so each throwaway task leaves an empty partition and its network context
   behind until quit: a known cost (T-cont-6 measures it). A partition is never reused for another task, because
   `ClearData` does not reset a network context's HTTP auth cache or sockets.
