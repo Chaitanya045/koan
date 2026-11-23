@@ -40,6 +40,9 @@ enum class ActKind {
   // Picks one of Chrome's autofill suggestions for a field (`koan autofill`):
   // its number, or its label.
   kAutofill,
+  // Clicks a file input, an upload button or a drop zone, and answers the
+  // file chooser the page opens with files (`koan upload`).
+  kUpload,
 };
 
 // The most steps one batch takes: enough for a long form, few enough that a
@@ -69,6 +72,8 @@ struct Step {
   std::string text;
   // scroll: pixels down.
   int scroll_by = 0;
+  // upload: the files, as given (koan_cli_upload.h resolves them).
+  std::vector<std::string> files;
 };
 
 // Whether `word` starts a step (click, fill, ...).
@@ -78,7 +83,9 @@ bool IsStepVerb(std::string_view word);
 // with "--" where a step would start, or the end; `*at` is left there.
 // Each verb takes its words by count (fill @ref <text>), so a text that
 // looks like an option ("--snapshot") is the text. `fill @12=Ada @13=Love`
-// is two fills (only @refs: a locator has "=" of its own). Fails (`error`)
+// is two fills (only @refs: a locator has "=" of its own). `upload @ref
+// <path> ...` takes its paths up to the next step's verb or a word that
+// begins with "--" (write such a path as ./click or ./--x). Fails (`error`)
 // on a malformed step, or past kMaxSteps in all (`steps` may hold some).
 bool ParseSteps(const std::vector<std::string>& words,
                 size_t* at,
@@ -139,6 +146,12 @@ std::string PausedLine(std::string_view tab,
                        std::string_view reason,
                        std::string_view sticky);
 
+// What to tell an agent whose page waits for the user (Koan.userNeeded
+// `reasons`): tell the user what it asks; for a file chooser, answer it with
+// `koan upload <tab> <path>` (or ask the user).
+std::string UserNeededLine(std::string_view tab,
+                           const std::vector<std::string>& reasons);
+
 // Whether the user has the tab or the page waits for them, from what the
 // browser said: the tab's state in Koan.listTabs ("paused"), the client's
 // Koan.* events (paused, resumed, userNeeded, userNeededDone, the tab
@@ -160,8 +173,11 @@ class BatchGate {
   // The tab's entry in Koan.listTabs, or nullptr if it is not listed.
   void OnTab(const base::DictValue* tab);
 
-  // Why the batch must stop now (an error line), or nullopt.
-  std::optional<std::string> StopReason() const;
+  // Why the batch must stop now (an error line), or nullopt. Before an
+  // `upload` step (`answers_file_chooser`), a file chooser the page holds is
+  // what the step answers, not a reason to stop.
+  std::optional<std::string> StopReason(
+      bool answers_file_chooser = false) const;
 
  private:
   const std::string target_;

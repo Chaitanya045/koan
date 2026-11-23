@@ -43,8 +43,9 @@ inline constexpr size_t kMaxPayload = 32 * 1024 * 1024;
 // and Koan.listTabs "sticky" and "resumesAt", koan wait --resumed). 4:
 // Koan.captureScaled, which koan screenshot and act --screenshot use on every
 // tab. 5: Koan.autofill (koan autofill, act's autofill step),
-// Koan.secretField, and Koan.userNeeded {reason: "autofill-verify"}.
-inline constexpr int kAgentInterfaceVersion = 5;
+// Koan.secretField, and Koan.userNeeded {reason: "autofill-verify"}. 6:
+// Koan.upload (koan upload, act's upload step).
+inline constexpr int kAgentInterfaceVersion = 6;
 
 // A peer that has not authenticated gets this many frames, in total, before the
 // decoder fails: pairing and authentication need two or three.

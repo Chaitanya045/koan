@@ -87,6 +87,10 @@ PillContent TabPill(const IndicatorTab& tab) {
   // An agent's own tab is paused by taking it over; a user tab is taken
   // back.
   pill.take_over = tab.agent_owned && tab.state == TabState::kDriven;
+  if (tab.state == TabState::kDriven && !tab.attached.empty()) {
+    pill.text = base::StrCat({kDot, agent, u" attached ", tab.attached});
+    return pill;
+  }
   pill.text = base::StrCat({kDot, agent,
                             tab.state == TabState::kReadable
                                 ? u" can read this tab"
@@ -211,6 +215,12 @@ EventState EventStateFor(const std::vector<IndicatorClient>& clients,
     if (tab.in_window && tab.state == TabState::kPaused) {
       state.paused.emplace(tab.target_id, tab.label);
     }
+    if (tab.in_window && !tab.attached.empty()) {
+      state.attached.emplace(
+          base::StrCat(
+              {tab.label, "\n", base::NumberToString(tab.attached_seq)}),
+          tab.attached);
+    }
   }
   return state;
 }
@@ -235,6 +245,13 @@ EventToasts EventToastsFor(const EventState& before, const EventState& after) {
     if (!before.paused.contains(id)) {
       toasts.pause =
           base::StrCat({AgentName(label), u" paused: you used its tab"});
+      break;
+    }
+  }
+  for (const auto& [key, attached] : after.attached) {
+    if (!before.attached.contains(key)) {
+      const std::string label = key.substr(0, key.rfind('\n'));
+      toasts.upload = base::StrCat({AgentName(label), u" attached ", attached});
       break;
     }
   }

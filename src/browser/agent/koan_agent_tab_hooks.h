@@ -23,8 +23,13 @@
 #include "url/gurl.h"
 #include "url/origin.h"
 
+namespace blink::mojom {
+class FileChooserParams;
+}  // namespace blink::mojom
+
 namespace content {
 class BrowserContext;
+class FileSelectListener;
 class GuestPageHolder;
 class JavaScriptDialogManager;
 class RenderFrameHost;
@@ -181,6 +186,14 @@ class PageSurfaceDelegate {
   virtual uint64_t HoldPicker(content::RenderFrameHost* frame,
                               HeldPicker picker,
                               base::OnceCallback<void(bool show)> show) = 0;
+  // HoldPicker() for a file chooser: also keeps what it asks for (`params`)
+  // and its `listener`, so that the agent can answer it (`koan upload`) as
+  // the user's pick would, instead of `show`.
+  virtual uint64_t HoldFileChooser(
+      content::RenderFrameHost* frame,
+      const blink::mojom::FileChooserParams& params,
+      scoped_refptr<content::FileSelectListener> listener,
+      base::OnceCallback<void(bool show)> show) = 0;
   // The held picker `id` ended on its own (its request went away).
   virtual void ForgetPicker(uint64_t id) = 0;
   // Answers the held `picker`s of the page in `frame` as cancelled.
@@ -236,6 +249,7 @@ bool HoldActivationForAgent(content::WebContents* contents);
 // Whether an agent holds the tab of `frame` and its pickers wait in the agent
 // indicator. The picker hooks ask this before their own refusal: a picker of
 // an agent container, or of an agent's tab no agent holds, stays refused.
+// (The file chooser waits in an agent container too: HoldFileChooserForAgent.)
 bool HoldsPickersForAgent(content::RenderFrameHost* frame);
 
 // Whether a picker `frame` asks for now is held (HoldsPickersForAgent(), and
@@ -244,9 +258,20 @@ bool ShouldHoldPickerForAgent(content::RenderFrameHost* frame);
 
 // WebContentsImpl::RunFileChooser, through
 // BrowserWebContentsDelegate::HoldFileChooser: true if the chooser is held;
-// `show` then runs later (true: run it again, false: cancel it).
-bool HoldFileChooserForAgent(content::RenderFrameHost* frame,
-                             base::OnceCallback<void(bool show)> show);
+// then either `show` runs later (true: run it again, false: cancel it), or
+// the agent answers it through `listener` (`koan upload`). Held in every tab
+// an agent holds a lease on, its containers' included: the agent may upload
+// the files it was given there, and the user may still open the chooser.
+bool HoldFileChooserForAgent(
+    content::RenderFrameHost* frame,
+    const blink::mojom::FileChooserParams& params,
+    scoped_refptr<content::FileSelectListener> listener,
+    base::OnceCallback<void(bool show)> show);
+
+// BrowserWebContentsDelegate::RunFileChooser, for an agent's tab (which shows
+// no file chooser otherwise): whether this is the held chooser of `frame` the
+// user opened from the agent indicator, being run again now.
+bool ShowsHeldFileChooserForAgent(content::RenderFrameHost* frame);
 
 // chrome::ShowDeviceChooserDialog, after ShouldHoldPickerForAgent(owner): holds
 // the chooser. `show` runs later with the frame to show it for, or with null

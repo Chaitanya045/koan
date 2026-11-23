@@ -69,8 +69,8 @@ the way in, and it is the one the user approved.
    custom one such as a Material or react-select dropdown: it opens it,
    clicks the option, and checks; it fails naming the options there are;
    use it for every dropdown: `koan act <tab> choose @56 "Option text"`),
-   `press Enter`, `scroll 600`, `navigate <url>`, `autofill @12 2` (below).
-   Up to 50 steps.
+   `press Enter`, `scroll 600`, `navigate <url>`, `autofill @12 2` and
+   `upload @12 resume.pdf` (below). Up to 50 steps.
    Each step prints one line (`2/4 fill @13: ok`). The batch stops at the
    first step that fails, and before any step if the user has taken the
    tab (Koan.paused: then `koan wait <tab> --resumed`, below) or the page
@@ -181,6 +181,18 @@ the way in, and it is the one the user approved.
    tabs it is and leave it open (no `koan end`) until they are done. The
    user makes that click, and anything the page or the bank asks next.
    (Koan may later let the user allow it in Settings; until then, never.)
+   Files: attach a file you were given (a resume, a photo, a document) as
+   the user would pick it: `koan act <tab> upload @12 ~/work/resume.pdf`
+   clicks the file input, the "Upload" button or the drop zone @12 and
+   answers the chooser the page opens; no panel opens. If a click already
+   opened one (Koan.userNeeded: ... file chooser), `koan upload <tab>
+   <path>` answers it. Paths are on the Mac that runs Koan; on another
+   machine, copy the file over first (`scp resume.pdf mac:/tmp/`, then
+   `koan upload <tab> /tmp/resume.pdf` there). One file unless the input
+   takes several; of a type it accepts (Koan.notAccepted: convert it, or
+   ask). Attach only what the user gave you or asked you to send, never a
+   key, a password file or anything from Koan's own folders (refused
+   anyway). Koan shows the user what you attached and logs it.
 5. A tab of the user's (to work on a page they have open, signed in): tell
    the user to bring that tab to the front in Koan, then run
    `koan take-over`. Koan asks them; once they allow it, you get the tab
@@ -205,10 +217,11 @@ navigated or finished a step, and your old refs are stale. If it says the
 user is handling the tab (Take over, Keep paused, a password or card field,
 a question the page asks), it will not come back by itself: tell the user
 what you need, and wait; never retry around it. If `koan status` or `koan watch` shows
-Koan.userNeeded (a dialog, a sign-in, a print, an app link, a file or
-device picker, screen sharing, a passkey, a security warning), the page is
+Koan.userNeeded (a dialog, a sign-in, a print, an app link, a device
+picker, screen sharing, a passkey, a security warning), the page is
 waiting for the user: tell them what it asks, and wait. Do not try to get
-around either.
+around either. A file chooser (file-picker) is the one you may answer
+yourself, with `koan upload <tab> <path>`, if you have the file.
 
 Your tabs stay open between commands for as long as your task lasts (30
 minutes without a command ends it). Some agents sandbox shell commands:
