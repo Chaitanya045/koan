@@ -40,14 +40,17 @@ std::string_view VerbOf(ActKind act) {
       return "navigate";
     case ActKind::kAutofill:
       return "autofill";
+    case ActKind::kUpload:
+      return "upload";
   }
   return "";
 }
 
 std::optional<ActKind> ActOf(std::string_view verb) {
-  for (ActKind act : {ActKind::kClick, ActKind::kFill, ActKind::kSelect,
-                      ActKind::kChoose, ActKind::kPress, ActKind::kScroll,
-                      ActKind::kNavigate, ActKind::kAutofill}) {
+  for (ActKind act :
+       {ActKind::kClick, ActKind::kFill, ActKind::kSelect, ActKind::kChoose,
+        ActKind::kPress, ActKind::kScroll, ActKind::kNavigate,
+        ActKind::kAutofill, ActKind::kUpload}) {
     if (VerbOf(act) == verb) {
       return act;
     }
@@ -100,6 +103,8 @@ std::string Usage(ActKind act) {
       return "navigate <url>";
     case ActKind::kAutofill:
       return "autofill @ref <suggestion number or label>";
+    case ActKind::kUpload:
+      return "upload @ref <path> [<path> ...]";
   }
   return "";
 }
@@ -256,7 +261,7 @@ bool ParseSteps(const std::vector<std::string>& words,
     if (!act) {
       *error = "unknown action \"" + words[i] +
                "\" (click, fill, select, choose, press, scroll, navigate, "
-               "autofill)";
+               "autofill, upload)";
       return false;
     }
     ++i;
@@ -304,6 +309,19 @@ bool ParseSteps(const std::vector<std::string>& words,
           return usage();
         }
         step.target = words[i++];
+        break;
+      case ActKind::kUpload:
+        if (left < 2 || !IsTarget(words[i])) {
+          return usage();
+        }
+        step.target = words[i++];
+        while (i < words.size() && !words[i].starts_with("--") &&
+               !IsStepVerb(words[i])) {
+          step.files.push_back(words[i++]);
+        }
+        if (step.files.empty()) {
+          return usage();
+        }
         break;
       case ActKind::kPress:
       case ActKind::kNavigate:
@@ -374,6 +392,16 @@ std::string StepLabel(const Step& step) {
     case ActKind::kAutofill:
       // The pick is a label the user sees, never a value.
       return label + " " + step.target + " " + Quote(step.text);
+    case ActKind::kUpload: {
+      // The files by name (their folders say nothing the receipt needs).
+      std::string files;
+      for (const std::string& file : step.files) {
+        const size_t slash = file.rfind('/');
+        files +=
+            " " + (slash == std::string::npos ? file : file.substr(slash + 1));
+      }
+      return label + " " + step.target + files;
+    }
     case ActKind::kPress:
     case ActKind::kNavigate:
       return label + " " + step.text;
@@ -481,6 +509,19 @@ std::string PausedLine(std::string_view tab,
          "need and wait; do not work around it";
 }
 
+std::string UserNeededLine(std::string_view tab,
+                           const std::vector<std::string>& reasons) {
+  std::string line = "Koan.userNeeded: the page waits for the user (" +
+                     base::JoinString(reasons, ", ") + ")";
+  if (std::ranges::find(reasons, "file-picker") != reasons.end()) {
+    return line + ": it opened a file chooser. Answer it with `koan upload " +
+           std::string(tab) +
+           " <path>` (a file you were given, on this Mac), or tell the user "
+           "to choose the file";
+  }
+  return line + "; tell the user what it asks";
+}
+
 BatchGate::BatchGate(std::string target) : target_(std::move(target)) {}
 BatchGate::~BatchGate() = default;
 
@@ -551,17 +592,22 @@ void BatchGate::OnTab(const base::DictValue* tab) {
   paused_ = paused;
 }
 
-std::optional<std::string> BatchGate::StopReason() const {
+std::optional<std::string> BatchGate::StopReason(
+    bool answers_file_chooser) const {
   if (gone_) {
     return "Koan.tabGone: the tab closed";
   }
   if (paused_) {
     return PausedLine(target_, paused_reason_, paused_sticky_);
   }
-  if (!needs_.empty()) {
-    std::vector<std::string> reasons(needs_.begin(), needs_.end());
-    return "Koan.userNeeded: the page waits for the user (" +
-           base::JoinString(reasons, ", ") + "); tell the user what it asks";
+  std::vector<std::string> reasons;
+  for (const std::string& reason : needs_) {
+    if (!(answers_file_chooser && reason == "file-picker")) {
+      reasons.push_back(reason);
+    }
+  }
+  if (!reasons.empty()) {
+    return UserNeededLine(target_, reasons);
   }
   return std::nullopt;
 }

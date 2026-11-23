@@ -286,5 +286,39 @@ TEST(KoanAgentIndicatorLogicTest, EventToasts) {
       u"");
 }
 
+// `koan upload`: for a few seconds the pill on the tab says what the agent
+// attached, and its window gets a toast once per upload.
+TEST(KoanAgentIndicatorLogicTest, WhatAnAgentAttached) {
+  IndicatorTab tab = Tab("t", true, TabState::kDriven, true);
+  tab.attached = u"resume.pdf";
+  tab.attached_seq = 4;
+  const IndicatorContent content = IndicatorFor(Claude(), {tab}, {});
+  ASSERT_TRUE(content.pill);
+  EXPECT_EQ(content.pill->text, u"● Claude Code attached resume.pdf");
+  EXPECT_TRUE(content.pill->take_over);
+  // Paused, the pause says more.
+  IndicatorTab paused = tab;
+  paused.state = TabState::kPaused;
+  EXPECT_EQ(IndicatorFor(Claude(), {paused}, {}).pill->text,
+            u"● Claude Code paused: you used this tab");
+
+  const EventState before = EventStateFor(Claude(), {});
+  const EventState after = EventStateFor(Claude(), {tab});
+  EXPECT_EQ(EventToastsFor(before, after).upload,
+            u"Claude Code attached resume.pdf");
+  // Once per upload: not again while it is shown, again for the next one.
+  EXPECT_EQ(EventToastsFor(after, after).upload, u"");
+  IndicatorTab next = tab;
+  next.attached_seq = 5;
+  EXPECT_EQ(EventToastsFor(after, EventStateFor(Claude(), {next})).upload,
+            u"Claude Code attached resume.pdf");
+  // A tab of another window: no toast here.
+  IndicatorTab elsewhere = Tab("t", true, TabState::kDriven, false, false);
+  elsewhere.attached = u"resume.pdf";
+  elsewhere.attached_seq = 6;
+  EXPECT_EQ(EventToastsFor(before, EventStateFor(Claude(), {elsewhere})).upload,
+            u"");
+}
+
 }  // namespace
 }  // namespace koan::agent

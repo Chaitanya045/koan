@@ -14,7 +14,8 @@ assert(is_posix)
 
 # What the tool decides, without I/O: arguments, messages, the snapshot
 # outline and its refs, actions' answers and errors, when a page has settled,
-# the holder's routing.
+# the holder's routing; and the checks of the files an upload names (their
+# metadata only).
 source_set("cli_lib") {
   sources = [
     "koan_cli_actions.cc",
@@ -41,6 +42,8 @@ source_set("cli_lib") {
     "koan_cli_skill.h",
     "koan_cli_snapshot.cc",
     "koan_cli_snapshot.h",
+    "koan_cli_upload.cc",
+    "koan_cli_upload.h",
   ]
   public_deps = [
     "//base",
@@ -137,6 +140,7 @@ test("koan_cli_unittests") {
     "koan_cli_screenshot_unittest.cc",
     "koan_cli_settle_unittest.cc",
     "koan_cli_unittest.cc",
+    "koan_cli_upload_unittest.cc",
     "koan_relay_gate_unittest.cc",
   ]
   deps = [

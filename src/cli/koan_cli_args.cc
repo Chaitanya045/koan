@@ -32,6 +32,7 @@ const std::map<std::string_view, CommandKind>& Commands() {
       {"screenshot", CommandKind::kScreenshot},
       {"act", CommandKind::kAct},
       {"autofill", CommandKind::kAutofill},
+      {"upload", CommandKind::kUpload},
       {"take-over", CommandKind::kTakeOver},
       {"release", CommandKind::kRelease},
       // The design's name for release (section 12).
@@ -459,6 +460,13 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
       command.autofill_list = command.pick.empty();
       break;
     }
+    case CommandKind::kUpload:
+      if (rest.size() < 2) {
+        return Error("usage: koan upload <tab> <path> [<path> ...]");
+      }
+      command.tab = rest[0];
+      command.files.assign(rest.begin() + 1, rest.end());
+      break;
     case CommandKind::kWatch:
       if (!expect(0, 1)) {
         return Error("usage: koan watch [tab]");
@@ -496,6 +504,7 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
         command.ref = first.target;
         command.text = first.text;
         command.scroll_by = first.scroll_by;
+        command.files = first.files;
       }
       break;
     }
@@ -530,6 +539,10 @@ Steps (at most 50):
   autofill <target> <pick>     one of Chrome's autofill suggestions for the
                                field, by number or label (koan help
                                autofill)
+  upload <target> <path> ...   clicks a file input, an upload button or a
+                               drop zone, and answers the file chooser the
+                               page opens with those files (koan help
+                               upload)
 <target> is @ref, from a snapshot of the page as it is now (a ref from
 before a navigation fails: Koan.staleRef), or a locator,
 loc:role=<role>[name="<name>"], which must name exactly one element (it
@@ -623,6 +636,42 @@ Fails with Koan.autofillOff (the user does not let agents use them),
 Koan.noSuggestions, Koan.noSuchSuggestion, Koan.offSite (a login for another
 site, or a form that sends it elsewhere), Koan.paused, Koan.notPermitted (a
 tab you may only read) or Koan.interstitial.
+)HELP"},
+      {"upload", R"HELP(koan upload <tab> <path> [<path> ...]
+koan act <tab> upload <target> <path> [<path> ...]
+
+Attaches files you were given to the page's file input, as the user's pick
+in the open panel would: the page gets them and its change event fires; no
+panel opens. `koan upload` answers the file chooser the page has open (the
+page waits for it: Koan.userNeeded file-picker, after a click on its file
+input or "Upload" button). `act ... upload <target>` clicks <target> (the
+input, a styled button or label for a hidden input, a drop zone that opens a
+chooser when clicked), waits up to 5 s for the chooser, and answers it; it
+works as a step of a longer act. Each waits up to 5 s for a chooser.
+
+The paths are on the Mac that runs Koan, relative to the current folder or
+absolute; each must be a readable regular file (not a folder). An agent on
+another machine copies the file to the Mac first:
+  scp resume.pdf mac:/tmp/resume.pdf
+  ssh mac '~/Applications/Koan.app/Contents/Resources/bin/koan upload <tab> /tmp/resume.pdf'
+Files in Desktop, Documents or Downloads make macOS ask the user once to let
+Koan read that folder; /tmp or a folder of your own does not.
+
+The chooser's rules hold: one path unless the input has `multiple` (at most
+32), and each file of a type its `accept` list allows (Koan.notAccepted on a
+clear mismatch, say a .docx for accept=".pdf"; convert it first). Folder
+inputs (webkitdirectory) are not supported yet (Koan.notSupported): ask the
+user. Koan never uploads from its own profile, ~/.koan, ~/.ssh, ~/.gnupg,
+cloud and developer credentials (~/.aws, ~/.netrc, ...) or
+the keychains (Koan.notPermitted). Only on a tab you drive: your own, or one
+the user gave you; not while the user is using it (Koan.paused). Koan's pill
+shows "<agent> attached <file>" and the activity log keeps each file's name
+and size.
+
+Fails with Koan.fileNotFound, Koan.notAFile, Koan.fileUnreadable,
+Koan.noFileChooser (nothing opened a chooser: click the input first, or use
+act's upload step), Koan.tooManyFiles, Koan.notAccepted, Koan.notSupported,
+Koan.notPermitted, Koan.paused or Koan.interstitial.
 )HELP"},
       {"screenshot",
        R"HELP(koan screenshot <tab> [--size S] [--clip C] [-o file.png]
@@ -729,7 +778,7 @@ std::string UsageText() {
                          steps: click @ref | fill @ref <text> | select @ref
                          <option> | choose @ref <option> | press <key> |
                          scroll <pixels> | navigate <url> | autofill @ref
-                         <pick>, in order, each
+                         <pick> | upload @ref <path...>, in order, each
                          once the page settled; stops at the first failure
                          and when the user takes the tab. A locator
                          (loc:role=button[name="Next"]) works for @ref
@@ -737,6 +786,10 @@ std::string UsageText() {
                          Chrome's autofill suggestions for a field (labels
                          only), or fill the one picked as the user would;
                          secrets stay hidden (a filled one reads as dots)
+  koan upload <tab> <path> [<path> ...]
+                         attach files (on this Mac) to the file chooser the
+                         page opened; act's `upload @ref <path>` clicks the
+                         input first
   koan help <command>    a command's exact form and options
   koan take-over [tab]   ask to control a tab of yours (you approve in Koan)
   koan release <tab>     give a tab of yours back

@@ -52,6 +52,10 @@ struct IndicatorTab {
   bool auto_resumes = false;
   // While it counts down to that: the seconds left (at least 1).
   std::optional<int> countdown_seconds;
+  // For a few seconds after the agent attached files to a page in the tab
+  // (`koan upload`): their names, and which upload it was.
+  std::u16string attached;
+  uint64_t attached_seq = 0;
   // In this window's tab strip, and shown there (the active tab, or a pane
   // of the active split).
   bool in_window = false;
@@ -135,22 +139,27 @@ std::vector<MenuEntry> MenuFor(const std::vector<IndicatorTab>& tabs,
                                const std::vector<IndicatorPrompt>& prompts);
 
 // What the event toasts compare (design section 6.2, "Events"): the clients
-// connected, and the tabs paused, by id, with their agent's label.
+// connected, the tabs paused, by id, with their agent's label, and the
+// uploads to this window's tabs ("<label>\n<seq>" -> what was attached).
 struct EventState {
   std::map<std::string, std::string> clients;
   std::map<std::string, std::string> paused;
+  std::map<std::string, std::u16string> attached;
   bool operator==(const EventState&) const = default;
 };
 EventState EventStateFor(const std::vector<IndicatorClient>& clients,
                          const std::vector<IndicatorTab>& tabs);
 
 // The toasts for a change from `before` to `after`: an agent connected or
-// disconnected (for the front window), a tab of this window paused. Empty
-// when nothing of that kind changed. With several changes at once, the
-// toast names the first (by id); a toast replaces the one before anyway.
+// disconnected (for the front window), a tab of this window paused, an agent
+// attached files to a page in a tab of this window ("Claude Code attached
+// resume.pdf"). Empty when nothing of that kind changed. With several
+// changes at once, the toast names the first (by id); a toast replaces the
+// one before anyway.
 struct EventToasts {
   std::u16string connection;
   std::u16string pause;
+  std::u16string upload;
 };
 EventToasts EventToastsFor(const EventState& before, const EventState& after);
 

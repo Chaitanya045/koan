@@ -4,6 +4,7 @@
 
 #include "koan/browser/agent/koan_agent_forwarder.h"
 
+#include <algorithm>
 #include <set>
 #include <utility>
 #include <vector>
@@ -43,6 +44,7 @@
 #include "koan/browser/agent/koan_agent_service.h"
 #include "koan/browser/agent/koan_agent_surface_capture.h"
 #include "koan/browser/agent/koan_agent_tab_hooks.h"
+#include "koan/browser/agent/koan_agent_upload_logic.h"
 #include "koan/browser/containers/koan_agent_access.h"
 #include "koan/browser/containers/koan_agent_containers.h"
 #include "koan/browser/koan_prefs.h"
@@ -552,6 +554,12 @@ class AgentForwarder::Connection final : public FacadeBackend {
     return forwarder_->ScrubberFor(client_id_);
   }
 
+  void Upload(const std::string& target_id,
+              const UploadRequest& request,
+              UploadCallback done) override {
+    forwarder_->Upload(client_id_, target_id, request, std::move(done));
+  }
+
  private:
   bool MayDispatch(int command_id) { return facade_->MayDispatch(command_id); }
   void OnDropped(int command_id) { facade_->OnCommandDropped(command_id); }
@@ -831,6 +839,7 @@ void AgentForwarder::RemoveTab(const std::string& target_id, bool destroyed) {
   std::unique_ptr<TabWatcher> watcher = std::move(it->second);
   tabs_.erase(it);
   resume_asked_.erase(target_id);
+  attached_.erase(target_id);
   // The secrets Koan filled in it, and those found in its fields, go with it.
   if (!watcher->autofill().secret_values().empty() ||
       !watcher->autofill().found_values().empty()) {
@@ -878,6 +887,9 @@ void AgentForwarder::OnOpenedFromAgentTab(content::WebContents* source,
 void AgentForwarder::OnPageSurface(content::WebContents* contents,
                                    PageSurface surface,
                                    bool held) {
+  if (surface == PageSurface::kFilePicker && held) {
+    uploads_.OnFileChooserHeld(contents);
+  }
   const std::string target_id = TargetIdFor(contents);
   const TargetEntry* entry = registry_.Find(target_id);
   if (!entry) {
@@ -1459,10 +1471,96 @@ std::vector<ControlledTab> AgentForwarder::ControlledTabs() const {
                        pause.policy().hold() == PauseHold::kNone;
     tab.countdown_ends =
         tab.auto_resumes ? pause.policy().CountdownEnds() : std::nullopt;
+    if (auto attached = attached_.find(target_id);
+        attached != attached_.end() &&
+        attached->second.until > base::TimeTicks::Now()) {
+      tab.attached = attached->second.text;
+      tab.attached_seq = attached->second.seq;
+    }
     tab.contents = watcher->web_contents();
     tabs.push_back(std::move(tab));
   }
   return tabs;
+}
+
+void AgentForwarder::Upload(const std::string& client_id,
+                            const std::string& target_id,
+                            const FacadeBackend::UploadRequest& request,
+                            FacadeBackend::UploadCallback done) {
+  content::WebContents* contents = ContentsFor(target_id);
+  if (!contents) {
+    FacadeBackend::UploadResult result;
+    result.error_code = "Koan.targetClosed";
+    result.error_message = "the tab closed";
+    std::move(done).Run(std::move(result));
+    return;
+  }
+  // Asked again just before the answer: the user may take the tab meanwhile.
+  auto may_answer = base::BindRepeating(
+      [](base::WeakPtr<AgentForwarder> forwarder, std::string client_id,
+         std::string target_id) -> std::string {
+        const TargetEntry* entry =
+            forwarder ? forwarder->registry_.Find(target_id) : nullptr;
+        if (entry && entry->client_id == client_id &&
+            entry->state == TabState::kPaused) {
+          return "Koan.paused";
+        }
+        return forwarder && forwarder->registry_.MaySend(client_id, target_id,
+                                                         "Koan.upload")
+                   ? std::string()
+                   : "Koan.notPermitted";
+      },
+      weak_factory_.GetWeakPtr(), client_id, target_id);
+  uploads_.Upload(
+      contents, request, std::move(may_answer),
+      base::BindOnce(&AgentForwarder::OnUploaded, weak_factory_.GetWeakPtr(),
+                     target_id, std::move(done)));
+}
+
+void AgentForwarder::OnUploaded(const std::string& target_id,
+                                FacadeBackend::UploadCallback done,
+                                FacadeBackend::UploadResult result) {
+  if (result.error_code.empty()) {
+    // The indicator says what was attached, for a few seconds: the pill on
+    // the tab, and a toast in its window.
+    std::vector<std::string> names;
+    if (const base::ListValue* files = result.result.FindList("files")) {
+      for (const base::Value& file : *files) {
+        if (const std::string* name =
+                file.is_dict() ? file.GetDict().FindString("name") : nullptr) {
+          names.push_back(*name);
+        }
+      }
+    }
+    constexpr base::TimeDelta kShown = base::Seconds(6);
+    attached_[target_id] = {AttachedText(names), next_attached_seq_++,
+                            base::TimeTicks::Now() + kShown};
+    // One that ends sooner is due first; this one's turn comes after.
+    if (!attached_timer_.IsRunning()) {
+      attached_timer_.Start(FROM_HERE, kShown,
+                            base::BindOnce(&AgentForwarder::OnAttachedShown,
+                                           base::Unretained(this)));
+    }
+    NotifyChanged();
+  }
+  std::move(done).Run(std::move(result));
+}
+
+void AgentForwarder::OnAttachedShown() {
+  const base::TimeTicks now = base::TimeTicks::Now();
+  std::erase_if(attached_, [now](const auto& attached) {
+    return attached.second.until <= now;
+  });
+  if (!attached_.empty()) {
+    base::TimeTicks next = base::TimeTicks::Max();
+    for (const auto& [target_id, attached] : attached_) {
+      next = std::min(next, attached.until);
+    }
+    attached_timer_.Start(FROM_HERE, next - now,
+                          base::BindOnce(&AgentForwarder::OnAttachedShown,
+                                         base::Unretained(this)));
+  }
+  NotifyChanged();
 }
 
 void AgentForwarder::NotifyChanged() {

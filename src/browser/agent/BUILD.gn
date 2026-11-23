@@ -263,6 +263,8 @@ if (is_posix) {
       "koan_agent_service.h",
       "koan_agent_surface_capture.cc",
       "koan_agent_surface_capture.h",
+      "koan_agent_upload.cc",
+      "koan_agent_upload.h",
     ]
     if (is_mac) {
       sources += [ "koan_agent_lease_mac.mm" ]
@@ -296,6 +298,7 @@ if (is_posix) {
       ":screenshot_mask",
       ":secrets",
       ":socket",
+      ":upload_logic",
       "//chrome/browser:browser_process",
       "//chrome/browser/external_protocol",
       "//chrome/browser/lifetime:termination_notification",
@@ -310,6 +313,7 @@ if (is_posix) {
       "//components/autofill/core/browser",
       "//components/autofill/core/common",
       "//components/embedder_support:user_agent",
+      "//components/enterprise/connectors/core",
       "//components/javascript_dialogs",
       "//components/password_manager/core/common",
       "//components/performance_manager",
@@ -327,6 +331,7 @@ if (is_posix) {
       "//net",
       "//skia",
       "//third_party/blink/public/common",
+      "//third_party/blink/public/mojom:mojom_platform",
       "//ui/base",
       "//ui/gfx/codec",
       "//ui/gfx/geometry",
@@ -411,6 +416,17 @@ source_set("autofill_logic") {
   deps = [ "//base:i18n" ]
 }
 
+# `koan upload`: what a page's file chooser takes from an agent, and what the
+# indicator and the audit log say about it.
+source_set("upload_logic") {
+  sources = [
+    "koan_agent_upload_logic.cc",
+    "koan_agent_upload_logic.h",
+  ]
+  public_deps = [ "//base" ]
+  deps = [ "//net" ]
+}
+
 # Where a screenshot shows the card fields Koan filled.
 source_set("screenshot_mask") {
   sources = [
@@ -468,6 +484,7 @@ source_set("facade") {
     ":redact",
     ":registry",
     ":secrets",
+    ":upload_logic",
   ]
 }
 
@@ -500,6 +517,7 @@ test("koan_agent_unittests") {
     "koan_agent_screenshot_mask_unittest.cc",
     "koan_agent_secrets_unittest.cc",
     "koan_agent_session_unittest.cc",
+    "koan_agent_upload_logic_unittest.cc",
     "koan_agent_wake_policy_unittest.cc",
   ]
   deps = [
@@ -525,6 +543,7 @@ test("koan_agent_unittests") {
     ":screenshot_mask",
     ":secrets",
     ":session",
+    ":upload_logic",
     "//base",
     "//base/test:run_all_unittests",
     "//base/test:test_support",

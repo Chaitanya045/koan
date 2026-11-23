@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/location.h"
@@ -328,6 +329,7 @@ void AgentPageSurfaces::Uninstall() {
     queue_.ReplayTab(tab);
   }
   tabs_.clear();
+  PruneFileChoosers();
 }
 
 std::vector<HeldPrompt> AgentPageSurfaces::Prompts() const {
@@ -357,6 +359,7 @@ void AgentPageSurfaces::Open(uint64_t id) {
     return;
   }
   pickers_.erase(id);
+  file_choosers_.erase(id);
   opening_.erase(id);
   queue_.Open(id);
   Notify(tab, surface, /*held=*/false);
@@ -370,6 +373,7 @@ void AgentPageSurfaces::Dismiss(uint64_t id) {
   const uintptr_t tab = prompt->tab;
   const PageSurface surface = prompt->surface;
   pickers_.erase(id);
+  file_choosers_.erase(id);
   opening_.erase(id);
   queue_.Dismiss(id);
   Notify(tab, surface, /*held=*/false);
@@ -381,6 +385,7 @@ void AgentPageSurfaces::ReleaseTab(content::WebContents* contents) {
     return;
   }
   queue_.ReplayTab(tab);
+  PruneFileChoosers();
   if (std::ranges::none_of(queue_.List(), [tab](const UserPrompt& prompt) {
         return prompt.tab == tab;
       })) {
@@ -569,8 +574,79 @@ uint64_t AgentPageSurfaces::HoldPicker(
 
 void AgentPageSurfaces::ForgetPicker(uint64_t id) {
   pickers_.erase(id);
+  file_choosers_.erase(id);
   opening_.erase(id);
   Forget(id);
+}
+
+uint64_t AgentPageSurfaces::HoldFileChooser(
+    content::RenderFrameHost* frame,
+    const blink::mojom::FileChooserParams& params,
+    scoped_refptr<content::FileSelectListener> listener,
+    base::OnceCallback<void(bool show)> show) {
+  const uint64_t id =
+      HoldPicker(frame, HeldPicker::kFileChooser, std::move(show));
+  if (id) {
+    file_choosers_[id] = {params.mode, params.accept_types,
+                          std::move(listener)};
+  }
+  return id;
+}
+
+std::optional<AgentPageSurfaces::HeldFileChooser>
+AgentPageSurfaces::FileChooserOf(content::WebContents* contents) {
+  PruneFileChoosers();
+  for (const UserPrompt& prompt : queue_.List()) {
+    if (prompt.tab != KeyFor(contents) ||
+        prompt.surface != PageSurface::kFilePicker ||
+        opening_.contains(prompt.id)) {
+      continue;
+    }
+    auto hold = file_choosers_.find(prompt.id);
+    auto page = pickers_.find(prompt.id);
+    content::RenderFrameHost* frame =
+        page == pickers_.end() ? nullptr
+                               : page->second.AsRenderFrameHostIfValid();
+    if (hold == file_choosers_.end() || !frame || !frame->IsActive()) {
+      continue;
+    }
+    return HeldFileChooser{prompt.id, hold->second.mode,
+                           hold->second.accept_types};
+  }
+  return std::nullopt;
+}
+
+bool AgentPageSurfaces::AnswerFileChooser(
+    uint64_t id,
+    std::vector<blink::mojom::FileChooserFileInfoPtr> files) {
+  PruneFileChoosers();
+  auto hold = file_choosers_.find(id);
+  auto page = pickers_.find(id);
+  // Opened by the user meanwhile: theirs.
+  if (hold == file_choosers_.end() || page == pickers_.end() ||
+      opening_.contains(id)) {
+    return false;
+  }
+  content::RenderFrameHost* frame = page->second.AsRenderFrameHostIfValid();
+  if (!frame || !frame->IsActive()) {
+    return false;
+  }
+  scoped_refptr<content::FileSelectListener> listener =
+      std::move(hold->second.listener);
+  const blink::mojom::FileChooserParams::Mode mode = hold->second.mode;
+  file_choosers_.erase(hold);
+  pickers_.erase(page);
+  // Out of the queue unrun: its show is dropped, the listener answered here.
+  Forget(id);
+  // What FileSelectHelper hands the listener for the user's pick (no folder:
+  // no base directory).
+  listener->FileSelected(std::move(files), base::FilePath(), mode);
+  return true;
+}
+
+void AgentPageSurfaces::PruneFileChoosers() {
+  std::erase_if(file_choosers_,
+                [this](const auto& hold) { return !queue_.Find(hold.first); });
 }
 
 void AgentPageSurfaces::DismissPickers(content::RenderFrameHost* frame,
@@ -646,6 +722,7 @@ void AgentPageSurfaces::OnTabDestroyed(uintptr_t tab) {
     return !queue_.Find(picker.first);
   });
   std::erase_if(opening_, [this](uint64_t id) { return !queue_.Find(id); });
+  PruneFileChoosers();
   if (on_changed_) {
     on_changed_.Run();
   }

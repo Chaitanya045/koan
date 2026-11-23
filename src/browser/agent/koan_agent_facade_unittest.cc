@@ -188,6 +188,12 @@ class FakeBackend : public FacadeBackend {
     autofills.push_back({target_id, frame_id, request});
     autofill_done = std::move(done);
   }
+  void Upload(const std::string& target_id,
+              const UploadRequest& request,
+              UploadCallback done) override {
+    uploads.push_back({target_id, request});
+    upload_done = std::move(done);
+  }
   const SecretScrubber* Secrets() override { return &scrubber; }
 
   struct Sent {
@@ -244,6 +250,12 @@ class FakeBackend : public FacadeBackend {
   };
   std::vector<AutofillCall> autofills;
   AutofillCallback autofill_done;
+  struct UploadCall {
+    std::string target_id;
+    UploadRequest request;
+  };
+  std::vector<UploadCall> uploads;
+  UploadCallback upload_done;
   SecretScrubber scrubber;
 };
 
@@ -1652,6 +1664,116 @@ TEST_F(KoanAgentFacadeTest, AutofillOnAReadableTabIsRefused) {
        base::DictValue().Set("backendNodeId", 4).Set("list", true), session);
   EXPECT_EQ(ErrorCode(1), "Koan.notPermitted");
   EXPECT_TRUE(backend_.autofills.empty());
+}
+
+// `koan upload`: only on a tab the agent drives, with absolute paths, and
+// audited with the files' names and sizes only.
+TEST_F(KoanAgentFacadeTest, UploadOnlyOnADrivenTab) {
+  const std::string session = AttachTo("T1");
+  auto files = [](std::initializer_list<std::string_view> paths) {
+    base::ListValue list;
+    for (std::string_view path : paths) {
+      list.Append(base::DictValue().Set("path", path));
+    }
+    return list;
+  };
+  // No session, no files, a relative path, a name with a separator, too
+  // long a wait, too many files.
+  Send(1, "Koan.upload", base::DictValue().Set("files", files({"/a.pdf"})));
+  EXPECT_EQ(ErrorCode(1), "Koan.invalidParams");
+  Send(2, "Koan.upload", base::DictValue(), session);
+  EXPECT_EQ(ErrorCode(2), "Koan.invalidParams");
+  Send(3, "Koan.upload", base::DictValue().Set("files", files({"cv.pdf"})),
+       session);
+  EXPECT_EQ(ErrorCode(3), "Koan.invalidParams");
+  base::ListValue renamed;
+  renamed.Append(
+      base::DictValue().Set("path", "/tmp/cv.pdf").Set("name", "../cv.pdf"));
+  Send(4, "Koan.upload", base::DictValue().Set("files", std::move(renamed)),
+       session);
+  EXPECT_EQ(ErrorCode(4), "Koan.invalidParams");
+  Send(5, "Koan.upload",
+       base::DictValue()
+           .Set("files", files({"/tmp/cv.pdf"}))
+           .Set("waitMs", 60000),
+       session);
+  EXPECT_EQ(ErrorCode(5), "Koan.invalidParams");
+  base::ListValue many;
+  for (int i = 0; i < 33; ++i) {
+    many.Append(base::DictValue().Set("path", "/tmp/x.png"));
+  }
+  Send(6, "Koan.upload", base::DictValue().Set("files", std::move(many)),
+       session);
+  EXPECT_EQ(ErrorCode(6), "Koan.invalidParams");
+  EXPECT_TRUE(backend_.uploads.empty());
+
+  // Paused (the user took the tab), an interstitial.
+  registry_.Pause("T1");
+  Send(7, "Koan.upload", base::DictValue().Set("files", files({"/tmp/a.pdf"})),
+       session);
+  EXPECT_EQ(ErrorCode(7), "Koan.paused");
+  EXPECT_EQ(backend_.audits.back().outcome, AuditOutcome::kPaused);
+  registry_.Resume("T1");
+  backend_.tabs["T1"].interstitial = true;
+  Send(8, "Koan.upload", base::DictValue().Set("files", files({"/tmp/a.pdf"})),
+       session);
+  EXPECT_EQ(ErrorCode(8), "Koan.interstitial");
+  backend_.tabs["T1"].interstitial = false;
+  EXPECT_TRUE(backend_.uploads.empty());
+
+  // An upload goes to the backend and is answered when it is done; its audit
+  // names the files and their sizes.
+  base::ListValue two;
+  two.Append(base::DictValue().Set("path", "/Users/<user>/cv.pdf"));
+  two.Append(base::DictValue().Set("path", "/tmp/x1").Set("name", "cover.pdf"));
+  Send(9, "Koan.upload",
+       base::DictValue().Set("files", std::move(two)).Set("waitMs", 5000),
+       session);
+  ASSERT_EQ(backend_.uploads.size(), 1u);
+  EXPECT_EQ(backend_.uploads[0].target_id, "T1");
+  ASSERT_EQ(backend_.uploads[0].request.files.size(), 2u);
+  EXPECT_EQ(backend_.uploads[0].request.files[0].path, "/Users/<user>/cv.pdf");
+  EXPECT_EQ(backend_.uploads[0].request.files[0].name, "");
+  EXPECT_EQ(backend_.uploads[0].request.files[1].name, "cover.pdf");
+  EXPECT_EQ(backend_.uploads[0].request.wait, base::Seconds(5));
+  EXPECT_FALSE(Answer(9));
+  FacadeBackend::UploadResult result;
+  result.result.Set(
+      "files", base::ListValue().Append(
+                   base::DictValue().Set("name", "cv.pdf").Set("size", 1200)));
+  result.summary = "cv.pdf (1.2 KB), cover.pdf (12 B)";
+  std::move(backend_.upload_done).Run(std::move(result));
+  const base::ListValue* attached =
+      Answer(9)->FindListByDottedPath("result.files");
+  ASSERT_TRUE(attached);
+  EXPECT_EQ(attached->size(), 1u);
+  EXPECT_EQ(backend_.audits.back().event, "Koan.upload");
+  EXPECT_EQ(backend_.audits.back().summary,
+            "cv.pdf (1.2 KB), cover.pdf (12 B)");
+  EXPECT_EQ(backend_.audits.back().outcome, AuditOutcome::kOk);
+
+  // A refusal comes back as the backend's error, and is audited as one.
+  Send(10, "Koan.upload",
+       base::DictValue().Set("files", files({"/tmp/missing.pdf"})), session);
+  FacadeBackend::UploadResult refused;
+  refused.error_code = "Koan.fileNotFound";
+  refused.error_message = "no file at /tmp/missing.pdf";
+  std::move(backend_.upload_done).Run(std::move(refused));
+  EXPECT_EQ(ErrorCode(10), "Koan.fileNotFound");
+  EXPECT_EQ(backend_.audits.back().outcome, AuditOutcome::kDenied);
+}
+
+TEST_F(KoanAgentFacadeTest, UploadOnAReadableOrAnotherAgentsTabIsRefused) {
+  registry_.GrantUserTab("U1", "alice", TabState::kReadable);
+  const std::string session = AttachTo("U1");
+  base::ListValue files;
+  files.Append(base::DictValue().Set("path", "/tmp/a.pdf"));
+  Send(1, "Koan.upload", base::DictValue().Set("files", files.Clone()),
+       session);
+  EXPECT_EQ(ErrorCode(1), "Koan.notPermitted");
+  // Bob's tab is not in alice's scope: she cannot even attach to it.
+  EXPECT_EQ(AttachTo("T2"), "");
+  EXPECT_TRUE(backend_.uploads.empty());
 }
 
 TEST_F(KoanAgentFacadeTest, AScreenshotHidesTheCardFieldsKoanFilled) {

@@ -16,6 +16,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/no_destructor.h"
 #include "base/task/sequenced_task_runner.h"
+#include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/weak_document_ptr.h"
@@ -270,13 +271,29 @@ bool ShouldHoldPickerForAgent(content::RenderFrameHost* frame) {
              content::WebContents::FromRenderFrameHost(frame));
 }
 
-bool HoldFileChooserForAgent(content::RenderFrameHost* frame,
-                             base::OnceCallback<void(bool show)> show) {
-  if (!ShouldHoldPickerForAgent(frame)) {
+bool HoldFileChooserForAgent(
+    content::RenderFrameHost* frame,
+    const blink::mojom::FileChooserParams& params,
+    scoped_refptr<content::FileSelectListener> listener,
+    base::OnceCallback<void(bool show)> show) {
+  content::WebContents* contents =
+      frame ? content::WebContents::FromRenderFrameHost(frame) : nullptr;
+  PageSurfaceDelegate* surfaces = SurfacesFor(contents);
+  if (!surfaces || surfaces->IsShowingHeld(contents)) {
     return false;
   }
-  g_surfaces->HoldPicker(frame, HeldPicker::kFileChooser, std::move(show));
+  // A refused hold (the tab holds as many as it may) has answered it as
+  // cancelled.
+  surfaces->HoldFileChooser(frame, params, std::move(listener),
+                            std::move(show));
   return true;
+}
+
+bool ShowsHeldFileChooserForAgent(content::RenderFrameHost* frame) {
+  content::WebContents* contents =
+      frame ? content::WebContents::FromRenderFrameHost(frame) : nullptr;
+  PageSurfaceDelegate* surfaces = SurfacesFor(contents);
+  return surfaces && surfaces->IsShowingHeld(contents);
 }
 
 base::OnceClosure HoldDeviceChooserForAgent(content::RenderFrameHost* owner,

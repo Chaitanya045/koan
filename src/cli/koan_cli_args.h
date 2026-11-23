@@ -33,6 +33,9 @@ enum class CommandKind {
   // autofill <tab> @field [--list | --pick N | --pick "label"]: Chrome's
   // autofill suggestions for a field, or fills the one picked.
   kAutofill,
+  // upload <tab> <path> [<path> ...]: answers the file chooser the tab's
+  // page opened with those files.
+  kUpload,
   kTakeOver,
   kRelease,
   // Ends one task (--task), or the connection and every task.
@@ -127,6 +130,9 @@ struct Command {
   // suggestion's number or label.
   bool autofill_list = false;
   std::string pick;
+
+  // upload, and act's upload step (the one being run): the files, as given.
+  std::vector<std::string> files;
 
   // wait: --resumed (what it waits for; the only condition so far), and
   // --timeout as a duration ("90s", "10m", "1h", or seconds), 1 s to 1 h.

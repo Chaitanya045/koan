@@ -27,6 +27,7 @@
 #include "koan/browser/agent/koan_agent_redact.h"
 #include "koan/browser/agent/koan_agent_registry.h"
 #include "koan/browser/agent/koan_agent_secrets.h"
+#include "koan/browser/agent/koan_agent_upload_logic.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 #include "url/url_constants.h"
@@ -119,6 +120,21 @@ void FacadeBackend::Autofill(const std::string& target_id,
   AutofillResult result;
   result.error_code = "Koan.unavailable";
   result.error_message = "autofill is not in this build";
+  std::move(done).Run(std::move(result));
+}
+
+FacadeBackend::UploadRequest::UploadRequest() = default;
+FacadeBackend::UploadRequest::UploadRequest(const UploadRequest&) = default;
+FacadeBackend::UploadRequest& FacadeBackend::UploadRequest::operator=(
+    const UploadRequest&) = default;
+FacadeBackend::UploadRequest::~UploadRequest() = default;
+
+void FacadeBackend::Upload(const std::string& target_id,
+                           const UploadRequest& request,
+                           UploadCallback done) {
+  UploadResult result;
+  result.error_code = "Koan.unavailable";
+  result.error_message = "uploads are not in this build";
   std::move(done).Run(std::move(result));
 }
 
@@ -585,6 +601,8 @@ void CdpFacade::HandleKoanMethod(AgentMessage& message) {
     CaptureScaled(message);  // audited when it is answered
   } else if (message.method == "Koan.autofill") {
     Autofill(message);
+  } else if (message.method == "Koan.upload") {
+    Upload(message);  // audited when it is answered
   } else {
     AuditCommand(message.method, "", "", AuditOutcome::kDenied,
                  base::TimeDelta());
@@ -2335,6 +2353,101 @@ void CdpFacade::OnAutofilled(int client_message_id,
     return;
   }
   AuditCommand("Koan.autofill", target_id, std::move(result.summary),
+               AuditOutcome::kOk, duration);
+  Reply(client_message_id, session_id, std::move(result.result));
+}
+
+void CdpFacade::Upload(const AgentMessage& message) {
+  const std::string& method = message.method;
+  TabSession* session =
+      message.session_id ? SessionFor(*message.session_id) : nullptr;
+  const std::string target_id = session ? session->target_id : std::string();
+  auto deny = [&](std::string_view code, std::string_view text) {
+    AuditCommand(method, target_id, "", AuditOutcome::kDenied,
+                 base::TimeDelta());
+    ReplyError(message.id, message.session_id, code, text);
+  };
+  if (!session || session->child_type == "worker") {
+    deny("Koan.invalidParams",
+         "send Koan.upload with the sessionId of the tab");
+    return;
+  }
+  // The request: 1 to kMaxUploadFiles absolute paths, each with the name the
+  // page may see; how long to wait for the page to open its chooser.
+  constexpr std::string_view kForm =
+      "Koan.upload takes files: [{path, name?}] (1 to 32 absolute paths on "
+      "this Mac; name a plain file name) and waitMs (0 to 30000)";
+  FacadeBackend::UploadRequest request;
+  const base::ListValue* files = message.params.FindList("files");
+  const std::optional<int> wait_ms = message.params.FindInt("waitMs");
+  if (!files || files->empty() || files->size() > kMaxUploadFiles ||
+      (message.params.Find("waitMs") &&
+       (!wait_ms || *wait_ms < 0 || *wait_ms > 30000))) {
+    deny("Koan.invalidParams", kForm);
+    return;
+  }
+  for (const base::Value& value : *files) {
+    const base::DictValue* file = value.GetIfDict();
+    const std::string* path = file ? file->FindString("path") : nullptr;
+    const std::string* name = file ? file->FindString("name") : nullptr;
+    if (!path || path->empty() || path->size() > 4096 || path->front() != '/' ||
+        !base::IsStringUTF8(*path) ||
+        (file->Find("name") && (!name || !IsPlainFileName(*name)))) {
+      deny("Koan.invalidParams", kForm);
+      return;
+    }
+    request.files.push_back({*path, name ? *name : std::string()});
+  }
+  request.wait = base::Milliseconds(wait_ms.value_or(0));
+  const TargetEntry* entry = registry_->Find(target_id);
+  if (!registry_->MaySend(client_id_, target_id, method)) {
+    if (entry && entry->client_id == client_id_ &&
+        entry->state == TabState::kPaused) {
+      AuditCommand(method, target_id, "", AuditOutcome::kPaused,
+                   base::TimeDelta());
+      ReplyError(message.id, message.session_id, "Koan.paused",
+                 "the user is using this tab; wait until they hand it back");
+      return;
+    }
+    deny("Koan.notPermitted",
+         entry && entry->client_id == client_id_
+             ? "an upload would change a tab this agent may only read"
+             : "this tab is not in the agent's scope");
+    return;
+  }
+  const std::optional<TabFacts> facts = backend_->DescribeTab(target_id);
+  if (!facts || facts->interstitial) {
+    deny("Koan.interstitial",
+         "the tab shows a security warning; only the user can decide what "
+         "to do");
+    if (facts) {
+      TellUserNeededForInterstitial(target_id);
+    }
+    return;
+  }
+  backend_->Upload(
+      target_id, request,
+      base::BindOnce(&CdpFacade::OnUploaded, weak_factory_.GetWeakPtr(),
+                     message.id, *message.session_id, target_id,
+                     tick_clock_->NowTicks()));
+}
+
+void CdpFacade::OnUploaded(int client_message_id,
+                           std::string session_id,
+                           std::string target_id,
+                           base::TimeTicks start,
+                           FacadeBackend::UploadResult result) {
+  const base::TimeDelta duration = tick_clock_->NowTicks() - start;
+  if (!result.error_code.empty()) {
+    AuditCommand("Koan.upload", target_id, std::move(result.summary),
+                 result.error_code == "Koan.paused" ? AuditOutcome::kPaused
+                                                    : AuditOutcome::kDenied,
+                 duration);
+    ReplyError(client_message_id, session_id, result.error_code,
+               result.error_message);
+    return;
+  }
+  AuditCommand("Koan.upload", target_id, std::move(result.summary),
                AuditOutcome::kOk, duration);
   Reply(client_message_id, session_id, std::move(result.result));
 }

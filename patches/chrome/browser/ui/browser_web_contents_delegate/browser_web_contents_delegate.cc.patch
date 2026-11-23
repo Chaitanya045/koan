@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
-index 3c3aaff..e2c004d 100644
+index 3c3aaff..043ea52 100644
 --- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 +++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 @@ -88,6 +88,10 @@
@@ -109,14 +109,14 @@ index 3c3aaff..e2c004d 100644
    return javascript_dialogs::TabModalDialogManager::FromWebContents(source);
  }
  
-@@ -1174,14 +1232,43 @@ void BrowserWebContentsDelegate::RunFileChooser(
+@@ -1174,14 +1232,45 @@ void BrowserWebContentsDelegate::RunFileChooser(
      content::RenderFrameHost* render_frame_host,
      scoped_refptr<content::FileSelectListener> listener,
      const blink::mojom::FileChooserParams& params) {
-+  // Koan: no file picker for an agent tab, unless an agent holds it (it
-+  // waited in the agent indicator: HoldFileChooser()).
++  // Koan: no file picker for an agent tab, unless it is the held one the user
++  // opened from the agent indicator (HoldFileChooser()).
 +  if (koan::containers::IsAgentTabFrame(render_frame_host) &&
-+      !koan::agent::HoldsPickersForAgent(render_frame_host)) {
++      !koan::agent::ShowsHeldFileChooserForAgent(render_frame_host)) {
 +    listener->FileSelectionCanceled();
 +    return;
 +  }
@@ -126,9 +126,11 @@ index 3c3aaff..e2c004d 100644
  
 +bool BrowserWebContentsDelegate::HoldFileChooser(
 +    content::RenderFrameHost* render_frame_host,
++    const blink::mojom::FileChooserParams& params,
++    scoped_refptr<content::FileSelectListener> listener,
 +    base::OnceCallback<void(bool show)> show) {
-+  return koan::agent::HoldFileChooserForAgent(render_frame_host,
-+                                              std::move(show));
++  return koan::agent::HoldFileChooserForAgent(
++      render_frame_host, params, std::move(listener), std::move(show));
 +}
 +
 +base::OnceCallback<void(content::WebContentsDelegate::WebAuthnRun run)>
@@ -153,7 +155,7 @@ index 3c3aaff..e2c004d 100644
    FileSelectHelper::EnumerateDirectory(web_contents, std::move(listener), path);
  }
  
-@@ -1369,6 +1456,10 @@ void BrowserWebContentsDelegate::RegisterProtocolHandler(
+@@ -1369,6 +1458,10 @@ void BrowserWebContentsDelegate::RegisterProtocolHandler(
    if (context->IsOffTheRecord()) {
      return;
    }

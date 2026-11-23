@@ -514,6 +514,8 @@ KoanAgentIndicator::Snapshot KoanAgentIndicator::TakeSnapshot() const {
     tab.agent_owned = controlled.agent_owned;
     tab.resume_asked = controlled.resume_asked;
     tab.auto_resumes = controlled.auto_resumes;
+    tab.attached = controlled.attached;
+    tab.attached_seq = controlled.attached_seq;
     if (controlled.countdown_ends) {
       tab.countdown_seconds = base::ClampCeil(
           (*controlled.countdown_ends - base::TimeTicks::Now()).InSecondsF());
@@ -615,9 +617,10 @@ void KoanAgentIndicator::ShowEventToasts(const koan::agent::EventState& state) {
   if (!toast) {
     return;
   }
-  // A pause in this window says more than a connection; a connection is
-  // told in the front window only.
-  std::u16string text = toasts.pause;
+  // A pause in this window says more than an upload to one of its tabs,
+  // which says more than a connection; a connection is told in the front
+  // window only.
+  std::u16string text = toasts.pause.empty() ? toasts.upload : toasts.pause;
   if (text.empty() && !toasts.connection.empty() &&
       GetLastActiveBrowserWindowInterfaceWithAnyProfile() ==
           browser_view_->browser()) {
