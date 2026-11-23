@@ -37,6 +37,8 @@ clang -fobjc-arc -framework Cocoa -o "$KOAN_MAC_TOOLS/hold" scripts/mac/tools/ho
 | `flows/uf_shots.mjs` | #409, #410: every screenshot size and clip on an agent tab and a taken-over tab; the person's page sees nothing (and the still check of the recording, with a control) |
 | `flows/uf_build.mjs` | #393-#395, #405: signed with a stable identity (SKIP on an ad hoc dev build; `run_flows.sh --build-app <signed Koan.app>`), the VMP signature in the bundle, Widevine a component |
 | `flows/uf_autofill.mjs` | #412 (stub until merged; skips without `koan autofill`): saved password used by the agent, never read |
+| `flows/uf_upload.mjs` | #420: an agent fills a job form and attaches the resume through a styled button (the page's own read of the file, Koan's "attached"), refused while the person has the tab, again after Hand back |
+| `flows/uf_swipe.mjs` | #91, #436: two-finger swipes over the sidebar (`swipe`, built from `scripts/mac/tools/swipe.m` like `ptr`): right to left the next Space, left to right the previous one, a short drag springs back, past the last Space the Create form, past the first the Library |
 
 ## The gates (do not bypass)
 

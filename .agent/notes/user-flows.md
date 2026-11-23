@@ -199,6 +199,27 @@ compresses).
 | UF-SET-3 | Turns Memory Saver on, in dark and light | "Moderate", "Balanced" and "Maximum" each show a visible ring; the selected one is a primary ring with a primary dot | `settings_controls.mjs` ("ring has >= 3:1 contrast", "the selected choice's ring is the primary colour") | manual (a look) |
 | UF-SET-4 | Switches to the Zen look | Chromium's own switches, on still at the right | `settings_controls.mjs` (the `zen` checks) | |
 
+## Agent uploads (#420): `uf_upload`
+
+| ID | The person / their agent | Expected | Covered by | Needs |
+|---|---|---|---|---|
+| UF-UP-1 | The agent pairs and opens a job application in its own tab; the person goes to it from the chip's menu | The form in the agent's Space, the pill on it | UF-UP-1 (real clicks) | real |
+| UF-UP-2 | The agent fills the name and runs `act <tab> fill @name … upload @button resume.pdf --snapshot` on a styled button over a hidden input | "attached resume.pdf"; the page itself says "Attached: resume.pdf" and read the same name, size and SHA-256; Koan shows "UF agent attached resume.pdf"; no open panel | UF-UP-2; `agent_upload.mjs` (every chooser kind and refusal) | real, rec |
+| UF-UP-3 | The person clicks in the agent's page (takes it over) | The agent's upload is refused (Koan.paused) until **Hand back** (real click); then it attaches again | UF-UP-3; `agent_upload.mjs` "a tab the user took over: Koan.paused" | real |
+
+## Swiping between Spaces (#91, the direction fixed in #436): `uf_swipe`
+
+A trackpad-like gesture (`scripts/mac/tools/swipe.m`: continuous scroll events with Began/Changed/Ended phases at the sidebar), with the deltas a real trackpad gives for the finger direction (`swipe --info`: how AppKit reads them). The strip following the fingers is checked in the contact sheets. A real trackpad, with natural scrolling on and off, stays `full-flow.md` step 7.
+
+| ID | The person | Expected | Covered by | Needs |
+|---|---|---|---|---|
+| UF-SW-1 | Has three Spaces and is in the middle one | Three Space buttons, the second active | UF-SW-1 | real |
+| UF-SW-2 | Swipes right to left over the sidebar | The Space on the right (the next one) comes in, following the fingers | UF-SW-2 (sheets: the strip moves left) | real, rec |
+| UF-SW-3 | Swipes left to right | The Space on the left (the previous one) comes back | UF-SW-3 | real, rec |
+| UF-SW-4 | Drags 60 pt slowly and lifts | It springs back; the same Space | UF-SW-4 | real |
+| UF-SW-5 | On the last Space, swipes on right to left, far | The + badge comes in, then the Create-a-Space form opens; no Space is made by itself; Esc closes it | UF-SW-5 | real, rec |
+| UF-SW-6 | On the first Space, swipes left to right (towards the Library on the left), then back | The Library opens, following the fingers; swiping back closes it | UF-SW-6 | real, rec |
+
 ## Agent usage across the flows
 
 What an agent does in a real task, and where each part is exercised end to end with the real CLI:
