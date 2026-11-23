@@ -27,6 +27,8 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/prefs/pref_service.h"
 #include "components/tabs/public/tab_interface.h"
+#include "content/public/browser/render_process_host.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -893,10 +895,11 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
   EXPECT_TRUE(WaitForSpaceCount(browser(), 1));
 }
 
-// A throwaway agent's tab that opens at about:blank or a data: URL is in the
-// agent's container, and so is the site it goes to next: a URL that assigns
-// no site once left the tab's SiteInstance in the default storage partition
-// (the user's cookies), and every later page with it (the 0.0.2 Mac cycle).
+// A throwaway agent's tab that opens at about:blank (CDP's new tab) or a
+// data: URL is in the agent's container, and so is the site it goes to next:
+// a SiteInstance made for about:blank once had no site, and so the default
+// storage partition (the user's cookies), and every later page with it (the
+// 0.0.2 Mac cycle).
 IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
                        AgentTabOpenedBlankStaysInItsContainer) {
   ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
@@ -909,16 +912,21 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
     content::WebContents* tab =
         containers::OpenAgentTab(browser()->GetProfile(), container->id, first);
     ASSERT_TRUE(tab);
-    ASSERT_TRUE(base::test::RunUntil([&] {
-      return !tab->IsLoading() && !tab->GetLastCommittedURL().is_empty();
-    })) << first;
-    EXPECT_EQ(containers::ContainerOf(tab), container->id) << first;
+    ASSERT_TRUE(base::test::RunUntil([&] { return !tab->IsLoading(); }))
+        << first;
     tab->GetController().LoadURL(page, content::Referrer(),
                                  ui::PAGE_TRANSITION_TYPED, std::string());
     ASSERT_TRUE(base::test::RunUntil([&] {
       return !tab->IsLoading() && tab->GetLastCommittedURL() == page;
     })) << first;
     EXPECT_EQ(containers::ContainerOf(tab), container->id)
+        << first << ", then " << page;
+    EXPECT_NE(
+        tab->GetPrimaryMainFrame()
+            ->GetProcess()
+            ->GetStoragePartition()
+            ->GetConfig(),
+        browser()->GetProfile()->GetDefaultStoragePartition()->GetConfig())
         << first << ", then " << page;
   }
   containers::EndAgentContainer(browser()->GetProfile(), container->id);

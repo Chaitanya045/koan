@@ -608,11 +608,20 @@ content::WebContents* OpenAgentTab(Profile* profile,
   }
   TabStripModel* tab_strip = browser->GetTabStripModel();
 
+  // about:blank (CDP's new tab) assigns no site: a SiteInstance made for it,
+  // and its navigation there, leave the container (SiteInstanceImpl::
+  // CreateForUrlInfo(): an unassigned site has the default storage
+  // partition), with the user's cookies, and the pages after it too. Such a
+  // tab isn't navigated: its initial empty document is about:blank already,
+  // and its first page assigns the site in the container, as a restored
+  // container tab's does (SiteInstanceForRestoredTab()).
+  const bool blank = url.IsAboutBlank();
   // In the container, or in the user's partition (upstream's SiteInstance
   // for a new tab), as the agent's.
   content::WebContents::CreateParams create_params(
       profile, user_partition ? scoped_refptr<content::SiteInstance>()
-                              : CreateSiteInstance(profile, container, url));
+                              : CreateSiteInstance(profile, container,
+                                                   blank ? GURL() : url));
   // In the background: never the active tab, never shown.
   create_params.initially_hidden = true;
   std::unique_ptr<content::WebContents> owned =
@@ -631,9 +640,11 @@ content::WebContents* OpenAgentTab(Profile* profile,
   if (content::WebContents* active = tab_strip->GetActiveWebContents()) {
     contents->Resize(gfx::Rect(active->GetContainerBounds().size()));
   }
-  content::NavigationController::LoadURLParams load(url);
-  load.transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
-  contents->GetController().LoadURLWithParams(load);
+  if (user_partition || !blank) {
+    content::NavigationController::LoadURLParams load(url);
+    load.transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
+    contents->GetController().LoadURLWithParams(load);
+  }
 
   const std::optional<tab_groups::TabGroupId> space =
       FindSpace(tab_strip, container);

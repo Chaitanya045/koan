@@ -39,10 +39,6 @@ const int kAgentLeasedKey = 0;
 // The mark SetAgentTab() puts on an agent's own tab in the user's partition.
 const int kAgentTabKey = 0;
 
-// Where a container's tab that opens at about:blank or a data: URL starts
-// (CreateSiteInstance()): a site of its own that no page has (.invalid).
-constexpr char kContainerPlaceholderUrl[] = "https://container.koan.invalid/";
-
 class AgentTabMark : public base::SupportsUserData::Data {
  public:
   explicit AgentTabMark(ContainerId task) : task_(std::move(task)) {}
@@ -51,27 +47,6 @@ class AgentTabMark : public base::SupportsUserData::Data {
  private:
   const ContainerId task_;
 };
-
-// A SiteInstance for `url` in `config`. A URL that assigns no site
-// (about:blank, data:) would leave the SiteInstance's site unassigned, and an
-// unassigned site has the default storage partition
-// (SiteInstanceImpl::CreateForUrlInfo()): the tab, and the pages it went to
-// next, would be outside the container, with the user's cookies. Such a tab
-// starts at the container's own placeholder site instead; its about:blank
-// commits there, and a site it goes to next stays in the container's
-// partition. (An empty URL, a restored or replaced tab's, already keeps it:
-// its first navigation assigns the site.)
-scoped_refptr<content::SiteInstance> FixedSiteInstance(
-    content::BrowserContext* context,
-    const GURL& url,
-    const content::StoragePartitionConfig& config) {
-  const GURL site_url =
-      url.is_empty() || content::SiteInstance::ShouldAssignSiteForURL(url)
-          ? url
-          : GURL(kContainerPlaceholderUrl);
-  return content::SiteInstance::CreateForFixedStoragePartition(
-      context, site_url, config);
-}
 
 const AgentTabMark* MarkOf(const content::WebContents* contents) {
   return static_cast<const AgentTabMark*>(contents->GetUserData(&kAgentTabKey));
@@ -273,8 +248,8 @@ scoped_refptr<content::SiteInstance> CreateSiteInstance(
     content::BrowserContext* context,
     const ContainerId& container,
     const GURL& url) {
-  return FixedSiteInstance(context, url,
-                           PartitionConfigFor(context, container));
+  return content::SiteInstance::CreateForFixedStoragePartition(
+      context, url, PartitionConfigFor(context, container));
 }
 
 scoped_refptr<content::SiteInstance> SiteInstanceForNewTab(
@@ -289,7 +264,8 @@ scoped_refptr<content::SiteInstance> SiteInstanceForNewTab(
   if (!IsContainerConfig(config)) {
     return nullptr;
   }
-  return FixedSiteInstance(context, url, config);
+  return content::SiteInstance::CreateForFixedStoragePartition(context, url,
+                                                               config);
 }
 
 std::unique_ptr<content::WebContents> InheritAgentTab(
