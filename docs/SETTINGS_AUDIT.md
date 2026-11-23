@@ -142,8 +142,14 @@ at one upstream switch:
 
 In the shadcn style (the default) Chromium's sections are drawn as shadcn/ui's
 components, from the look's tokens: cards as its Card (bg-card, rounded-xl,
-a 1 px border, no elevation), `cr-toggle` as its Switch, `md-select`
-drop-downs as its Select (Lucide's chevron, as Koan's panes), `cr-button` as
+a 1 px border, no elevation), `cr-toggle` as its Switch (on: the primary
+track, the thumb at the right edge; off: the muted `--input` track, the thumb
+at the left; a 150 ms ease between them, a 3 px focus ring, half opacity when
+disabled), the radio buttons (`cr-radio-button`, `controlled-radio-button`,
+`settings-collapse-radio-button`) as its Radio Group (a 1 px ring, an 8 px
+primary dot when selected; the unselected ring is `--input` taken halfway to
+the foreground, so it reaches 3:1 against the card in both modes, #419),
+`md-select` drop-downs as its Select (Lucide's chevron, as Koan's panes), `cr-button` as
 its outline Button (`.action-button` the default one, `.tonal-button` the
 secondary one), `cr-input` as its Input, the left menu as its sidebar menu and
 the toolbar's search box as an Input. At chrome://settings/ (Koan's Look and
@@ -164,4 +170,13 @@ Koan's colour mixers' (`koan_shadcn_color_mixer.cc` maps the tokens onto
 `kColorSys*`), which `settings.mjs` checks in light and dark mode.
 `settings.mjs` reads the computed styles of each control, so an upstream
 rename (`#bar`, `#knob`, `#card`, `#input-container`, `.md-select`,
-`.cr-nav-menu-item`) fails there.
+`.cr-nav-menu-item`) fails there. The switch is sized only through
+`cr_toggle.css`'s own variables (`--cr-toggle-bar-width`,
+`--cr-toggle-knob-diameter`, in each `:host` state that redefines them):
+upstream places the knob and computes its travel from them, so a fixed width
+on `#bar` leaves the knob short of the edge (#419).
+`settings_controls.mjs` checks every switch on chrome://settings/performance
+in both modes and both looks (thumb at the edge, the transform's travel, the
+tracks) and the unselected radio rings' contrast;
+`scripts/tests/test_settings_shell.py` checks the variables statically, and
+against upstream's `cr_toggle.css` where a Chromium checkout is present.

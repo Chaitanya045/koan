@@ -3,8 +3,8 @@
  * found in the LICENSE file. */
 
 /* Chromium's settings sections in the shadcn look (#301): its cards and
- * controls drawn as shadcn/ui's Card, Switch, Select, Button and Input, its
- * menu as shadcn's sidebar menu, its search box as an Input.
+ * controls drawn as shadcn/ui's Card, Switch, Radio Group, Select, Button
+ * and Input, its menu as shadcn's sidebar menu, its search box as an Input.
  *
  * Served only in the shadcn style (koan_settings_ui.cc: empty in the Zen
  * style, which keeps Chromium's look). koan_settings_page.js adopts it into
@@ -34,17 +34,35 @@
   font-weight: 600;
 }
 
-/* Switch: a 32 by 18.4 px track (h-[1.15rem] w-8) with a 16 px thumb, no
- * ripple; the thumb moves 14 px. */
+/* Switch: a 32 by 18.4 px track (h-[1.15rem] w-8) with a 16 px thumb
+ * (size-4), no ripple; the thumb moves 14 px (translate-x-[calc(100%-2px)])
+ * with Tailwind's 150 ms ease.
+ *
+ * Sized through cr_toggle.css's own variables, never fixed widths: it lays
+ * the knob out from --cr-toggle-bar-width (its centre and its travel,
+ * `0.5 * bar width - centre-to-edge distance`, both sides) and sizes it with
+ * --cr-toggle-knob-diameter, which it redefines on `:host([checked])`,
+ * `:host(:active)` and `:host([checked]:active)`, so every one of those
+ * states is set here too (#419: a 32 px #bar over its 26 px variable left
+ * the "on" knob 7 px short of the right edge). */
+:host(cr-toggle),
+:host(cr-toggle:active),
+:host(cr-toggle[checked]),
+:host(cr-toggle[checked]:active) {
+  --cr-toggle-bar-width: 32px;
+  --cr-toggle-knob-diameter: 16px;
+}
+
 :host(cr-toggle) #bar {
   box-sizing: border-box;
-  width: 32px;
   height: 1.15rem;
   border: 1px solid transparent;
   border-radius: 9999px;
   background-color: var(--koan-switch-track);
   box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  transition: background-color 150ms, box-shadow 150ms;
+  transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+      border-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+      box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 :host(cr-toggle[checked]) #bar {
@@ -52,13 +70,12 @@
 }
 
 :host(cr-toggle) #knob {
-  /* The thumb's centre, 1 px border + half the thumb from the edge
-   * (cr_toggle.css: the knob's travel is derived from it). */
+  /* The thumb's centre, 1 px border + half the thumb from the edge, in both
+   * states: off its left edge sits on the track's border, on its right. */
   --cr-toggle-knob-center-edge-distance_: 9px;
-  width: 16px;
-  height: 16px;
   background-color: var(--koan-switch-thumb);
-  transition: transform 150ms;
+  transition: transform 150ms cubic-bezier(0.4, 0, 0.2, 1),
+      background-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 :host(cr-toggle[checked]) #knob {
@@ -69,13 +86,42 @@
   display: none;
 }
 
+/* focus-visible:border-ring focus-visible:ring-[3px] ring-ring/50 */
 :host(cr-toggle:focus-visible) #bar {
   outline: none;
+  border-color: var(--ring);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 50%, transparent);
 }
 
 :host(cr-toggle[disabled]) {
   opacity: 0.5;
+}
+
+/* Radio: shadcn's RadioGroupItem, a 16 px ring (size-4, a 1 px border)
+ * with an 8 px primary dot (size-2) when checked. Coloured through
+ * cr_radio_button_style_lit.css's variables, for every element that
+ * includes it (cr-radio-button and settings' controlled-radio-button and
+ * settings-collapse-radio-button). The unchecked ring is border-input
+ * taken halfway to the foreground: shadcn's --input alone is about 1.3:1
+ * against the card in light mode and 1.6:1 in dark (#419), under WCAG's
+ * 3:1 for a control's edge. Not in forced colours, which keep upstream's
+ * system colours. */
+@media (forced-colors: none) {
+  :host(cr-radio-button),
+  :host(controlled-radio-button),
+  :host(settings-collapse-radio-button) {
+    --koan-radio-ring: color-mix(in srgb, var(--input), var(--foreground) 50%);
+    --cr-radio-button-checked-color: var(--primary);
+    --cr-radio-button-unchecked-color: var(--koan-radio-ring);
+  }
+
+  :host(cr-radio-button) .disc-border,
+  :host(controlled-radio-button) .disc-border,
+  :host(settings-collapse-radio-button) .disc-border {
+    border-width: 1px;
+    background-color: var(--koan-field-background);
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  }
 }
 
 /* Button: h-9, rounded-md, text-sm font-medium. The plain cr-button is
