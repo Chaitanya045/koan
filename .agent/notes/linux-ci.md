@@ -126,7 +126,14 @@ runtime repo, so `flatpak install ./Koan-….flatpak` fetches the runtime.
 - Same day, locally: that run's bundle installed with
   `flatpak install --user` and rendered a page headless inside the
   sandbox; `--version` prints `Koan 158.0.8127.18`.
-- Not yet: an incremental run on CI, and the Flatpak on a desktop
+- 2026-11-23, CI run 45109561372 (7128095, a notes-only commit on top of
+  that run): fetch took the incremental path (download 5 min, unpack
+  1.5 min; rsync touched only the note, 0 patches changed); build 1
+  downloaded out-final and finished `[2/3]` steps in under a minute;
+  ~25 min end to end. Cleanup then deleted run 45061138149's source and
+  out-final, keeping its Flatpak.
+- Not yet: an incremental run with a changed patch or source file on CI,
+  and the Flatpak on a desktop
   (Wayland and X11, GPU, Agent control's socket under the sandbox's
   config dir).
 
