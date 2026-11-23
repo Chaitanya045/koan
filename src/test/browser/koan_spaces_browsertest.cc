@@ -44,6 +44,7 @@
 #include "koan/browser/ui/views/koan_window_sync.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/base/models/list_selection_model.h"
 #include "ui/base/page_transition_types.h"
@@ -890,6 +891,37 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
   ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
   containers::EndAgentContainer(browser()->GetProfile(), container->id);
   EXPECT_TRUE(WaitForSpaceCount(browser(), 1));
+}
+
+// A throwaway agent's tab that opens at about:blank or a data: URL is in the
+// agent's container, and so is the site it goes to next: a URL that assigns
+// no site once left the tab's SiteInstance in the default storage partition
+// (the user's cookies), and every later page with it (the 0.0.2 Mac cycle).
+IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
+                       AgentTabOpenedBlankStaysInItsContainer) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL page = embedded_test_server()->GetURL("/title1.html");
+  const auto container = StartAgentTask(browser()->GetProfile(),
+                                        containers::AgentMode::kThrowaway);
+  ASSERT_TRUE(container);
+  for (const GURL& first : {GURL(url::kAboutBlankURL), GURL(kPage)}) {
+    content::WebContents* tab =
+        containers::OpenAgentTab(browser()->GetProfile(), container->id, first);
+    ASSERT_TRUE(tab);
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return !tab->IsLoading() && !tab->GetLastCommittedURL().is_empty();
+    })) << first;
+    EXPECT_EQ(containers::ContainerOf(tab), container->id) << first;
+    tab->GetController().LoadURL(page, content::Referrer(),
+                                 ui::PAGE_TRANSITION_TYPED, std::string());
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return !tab->IsLoading() && tab->GetLastCommittedURL() == page;
+    })) << first;
+    EXPECT_EQ(containers::ContainerOf(tab), container->id)
+        << first << ", then " << page;
+  }
+  containers::EndAgentContainer(browser()->GetProfile(), container->id);
 }
 
 IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
