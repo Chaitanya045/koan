@@ -37,7 +37,8 @@ class WebContents;
 // `accept` list, refused on a clear mismatch; no folder, no save dialog);
 // each path an absolute path to an existing, readable regular file (read on a
 // blocking thread), not in Koan's profile, Koan's agent keys (~/.koan), ~/.ssh,
-// ~/.gnupg or ~/Library/Keychains; and not while an administrator's policy
+// ~/.gnupg, ~/Library/Keychains or the usual cloud and developer credential
+// stores (~/.aws, ~/.netrc, ...); and not while an administrator's policy
 // scans uploads (the File Attached enterprise connector, which only
 // FileSelectHelper runs: the user picks then). No size limit: the page reads
 // the file itself, nothing passes through the agent connection.

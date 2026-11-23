@@ -76,8 +76,10 @@ std::vector<std::string> NamesOf(
   return names;
 }
 
-// The folders no upload is taken from: Koan's own data (the profile, its
-// cookies and logins), the agents' keys, and the user's keys.
+// The folders and files no upload is taken from: Koan's own data (the
+// profile, its cookies and logins), the agents' keys, the user's keys and the
+// usual credential stores of cloud and developer tools (a page that talks an
+// agent into attaching ~/.aws/credentials gets nothing).
 std::vector<base::FilePath> RefusedRoots(content::WebContents* contents) {
   std::vector<base::FilePath> roots;
   base::FilePath user_data;
@@ -88,7 +90,9 @@ std::vector<base::FilePath> RefusedRoots(content::WebContents* contents) {
   const base::FilePath home = base::GetHomeDir();
   if (!home.empty()) {
     for (const char* folder :
-         {".koan", ".ssh", ".gnupg", "Library/Keychains"}) {
+         {".koan", ".ssh", ".gnupg", "Library/Keychains", "Library/Cookies",
+          ".aws", ".azure", ".config/gcloud", ".config/gh", ".docker", ".kube",
+          ".git-credentials", ".netrc", ".npmrc", ".pypirc"}) {
       roots.push_back(home.Append(folder));
     }
   }
@@ -289,7 +293,8 @@ AgentUploads::Checked AgentUploads::CheckFiles(
                      shown +
                          " is in a folder Koan never uploads from (Koan's "
                          "own data, the agents' keys in ~/.koan, ~/.ssh, "
-                         "~/.gnupg, the keychains)");
+                         "~/.gnupg, the keychains, cloud and developer "
+                         "credentials such as ~/.aws or ~/.netrc)");
     }
     if (!base::PathIsReadable(real)) {
       return Refused("Koan.fileUnreadable",

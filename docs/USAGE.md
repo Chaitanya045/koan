@@ -1625,8 +1625,10 @@ unless the input takes several, of a type its `accept` list allows
 accepted); folder inputs are not supported yet (Koan.notSupported: you pick
 the folder). The paths are on the Mac that runs Koan; each must be a
 readable file (Koan.fileNotFound, Koan.notAFile, Koan.fileUnreadable), and
-Koan never uploads from its own profile, `~/.koan`, `~/.ssh`, `~/.gnupg` or
-your keychains. An agent on another machine copies the file over first:
+Koan never uploads from its own profile, `~/.koan`, `~/.ssh`, `~/.gnupg`,
+your keychains, or cloud and developer credentials (`~/.aws`, `~/.azure`,
+`~/.config/gcloud`, `~/.config/gh`, `~/.docker`, `~/.kube`,
+`~/.git-credentials`, `~/.netrc`, `~/.npmrc`, `~/.pypirc`). An agent on another machine copies the file over first:
 `scp resume.pdf mac:/tmp/` and then, over ssh, `koan upload <tab>
 /tmp/resume.pdf`. Files in Desktop, Documents or Downloads make macOS ask
 you once to let Koan read that folder. Uploads work only on the agent's

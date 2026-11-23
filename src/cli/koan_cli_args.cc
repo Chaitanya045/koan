@@ -661,7 +661,8 @@ The chooser's rules hold: one path unless the input has `multiple` (at most
 32), and each file of a type its `accept` list allows (Koan.notAccepted on a
 clear mismatch, say a .docx for accept=".pdf"; convert it first). Folder
 inputs (webkitdirectory) are not supported yet (Koan.notSupported): ask the
-user. Koan never uploads from its own profile, ~/.koan, ~/.ssh, ~/.gnupg or
+user. Koan never uploads from its own profile, ~/.koan, ~/.ssh, ~/.gnupg,
+cloud and developer credentials (~/.aws, ~/.netrc, ...) or
 the keychains (Koan.notPermitted). Only on a tab you drive: your own, or one
 the user gave you; not while the user is using it (Koan.paused). Koan's pill
 shows "<agent> attached <file>" and the activity log keeps each file's name
