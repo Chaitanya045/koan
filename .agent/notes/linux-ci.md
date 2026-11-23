@@ -42,7 +42,7 @@ Chromium's Debian sysroot. Same reasons as the Mac's for no
 
 ## Incremental builds
 
-A full build is ~90k steps (~12 h on these runners). A run builds on the
+A full build is ~73k steps (~8 h of build jobs on these runners). A run builds on the
 newest successful run that kept its tree and finished `out/Release`
 (`linux_find_base.sh`; both kept 14 days, and each successful run's
 cleanup deletes older runs' copies), so a nightly rebuilds only what its
@@ -118,9 +118,17 @@ runtime repo, so `flatpak install ./Koan-….flatpak` fetches the runtime.
   `flatpak run dev.koan.Koan --headless --dump-dom data:...` rendered the
   page. `G_MESSAGES_DEBUG=cobalt` showed `zypak-wrapper.sh
   /app/koan/chrome` with no `--no-sandbox`.
-- Not yet: a full CI run of the chain, and a real Koan build in the
-  Flatpak on a desktop (Wayland and X11, GPU, Agent control's socket under
-  the sandbox's config dir).
+- 2026-11-22/23, CI run 45061138149 (tnfssc/koan, full build, 1c82a0a):
+  fetch 16 min (126 GB free at start, 105 GB after gn gen); build 1
+  4 h 55 min, 38077/72946 steps; build 2 3 h 13 min, finished (2 build
+  jobs, ~8 h 25 min end to end). Headless check on the runner passed.
+  Artifacts: source 5.1 GB, out-final 1.3 GB, Flatpak 133 MB.
+- Same day, locally: that run's bundle installed with
+  `flatpak install --user` and rendered a page headless inside the
+  sandbox; `--version` prints `Koan 158.0.8127.18`.
+- Not yet: an incremental run on CI, and the Flatpak on a desktop
+  (Wayland and X11, GPU, Agent control's socket under the sandbox's
+  config dir).
 
 ## Open
 
