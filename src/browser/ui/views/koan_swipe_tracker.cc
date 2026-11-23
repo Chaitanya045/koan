@@ -44,8 +44,12 @@ constexpr float kAxisLockDistance = 10.f;
 
 }  // namespace
 
-float SwipeGestureAmount(float travel_left) {
-  return travel_left / kSwipePixelSize;
+float SwipeGestureAmount(float travel_right) {
+  return travel_right / kSwipePixelSize;
+}
+
+bool SwipeGoesToNextSpace(float amount, bool rtl) {
+  return (amount < 0) != rtl;
 }
 
 float SwipeTranslate(float amount,
@@ -96,7 +100,7 @@ bool KoanSwipeTracker::OnScroll(float dx,
     case SwipePhase::kBegin:
       // (A swipe whose end was missed is over: let go of the Space.)
       if (state_ == State::kSwiping) {
-        delegate_->EndSwipe(SwipeGestureAmount(-total_x_), 0);
+        delegate_->EndSwipe(SwipeGestureAmount(total_x_), 0);
       }
       Reset();
       state_ = State::kUndecided;
@@ -118,7 +122,7 @@ bool KoanSwipeTracker::OnScroll(float dx,
       // The fingers lifting, and, after the momentum, its end.
       const bool lifted = state_ == State::kSwiping;
       if (lifted) {
-        delegate_->EndSwipe(SwipeGestureAmount(-total_x_), velocity_);
+        delegate_->EndSwipe(SwipeGestureAmount(total_x_), velocity_);
         state_ = State::kEnded;
       }
       const bool ours = lifted || state_ == State::kEnded;
@@ -138,7 +142,7 @@ bool KoanSwipeTracker::Move(float dx, float dy, double seconds) {
   if (has_moved_) {
     const double elapsed =
         std::max(seconds - last_move_seconds_, kMinElapsedSeconds);
-    velocity_ = static_cast<float>(SwipeGestureAmount(-dx) / elapsed);
+    velocity_ = static_cast<float>(SwipeGestureAmount(dx) / elapsed);
   }
   has_moved_ = true;
   last_move_seconds_ = seconds;
@@ -157,7 +161,7 @@ bool KoanSwipeTracker::Move(float dx, float dy, double seconds) {
     }
     state_ = State::kSwiping;
   }
-  delegate_->UpdateSwipe(SwipeGestureAmount(-total_x_));
+  delegate_->UpdateSwipe(SwipeGestureAmount(total_x_));
   return true;
 }
 

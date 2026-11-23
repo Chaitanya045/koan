@@ -456,6 +456,7 @@ source_set("impl") {
     "koan_pinned_tab_views.h",
     "koan_pinned_tabs.cc",
     "koan_pinned_tabs.h",
+    "koan_scroll_direction.h",
     "koan_session_data.cc",
     "koan_shortcuts.cc",
     "koan_shortcuts.h",
@@ -749,6 +750,7 @@ source_set("impl") {
     sources += [
       "koan_haptics_mac.mm",
       "koan_keyboard_state_mac.mm",
+      "koan_scroll_direction_mac.mm",
       "koan_system_accent_mac.mm",
       "koan_system_accent_observer_mac.mm",
       "koan_theme_platform_mac.mm",
@@ -776,6 +778,7 @@ source_set("impl") {
     sources += [
       "koan_haptics.cc",
       "koan_keyboard_state.cc",
+      "koan_scroll_direction.cc",
       "koan_system_accent.cc",
       "koan_system_accent_observer.cc",
       "koan_theme_platform.cc",

@@ -505,8 +505,9 @@ belongs to a Space, and new tabs open in the active one.
   the Space (see Space themes below).
 - **Switch**: click a Space in the bottom bar, ⌘⌥← / ⌘⌥→ (they wrap around unless you turn that off in Settings > Tab
   Management > Workspaces), ⌃1…⌃0 for Space 1 to 10, swipe
-  horizontally with two fingers over the sidebar (on a Mac, as in Zen, the Space moves against your
-  fingers: moving them right goes to the next Space, and lifting them
+  horizontally with two fingers over the sidebar (on a Mac, as in Zen, the Space follows your
+  fingers, whatever the system's natural scrolling setting: moving them left
+  brings in the next Space, right the previous one, and lifting them
   after enough travel, or a quick flick, switches Space), or turn the mouse wheel
   there (horizontally, or vertically while holding ⌃; the key and
   natural scrolling, which turns the wheel and the swipe round, are in
@@ -516,9 +517,10 @@ belongs to a Space, and new tabs open in the active one.
   (also after a restart).
 - **Swipe past the ends** (on a Mac, as in Zen): from the first Space (the
   one next to the Library; the last with the tabs on the right), swiping
-  on towards the Library's side (fingers moving left) opens the
+  on towards the Library's side (fingers moving right, with the Library on
+  the left) opens the
   **Library**, which follows your fingers; swipe back over it to close it.
-  From the last Space, swiping on (fingers moving right) brings in a round
+  From the last Space, swiping on (fingers moving left) brings in a round
   **+** badge whose ring fills as you go; once the ring fills the badge
   (the trackpad ticks), lifting your fingers opens the Create-a-Space
   form. With one Space, both. These swipes don't wrap around; ⌘⌥← / ⌘⌥→

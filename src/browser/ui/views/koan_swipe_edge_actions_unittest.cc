@@ -20,10 +20,10 @@ namespace koan {
 
 namespace {
 
-// Fingers moving left (the strip moves right, towards a Library on the left)
-// and right.
-constexpr float kLeft = 0.1f;
-constexpr float kRight = -0.1f;
+// The gesture amount of fingers moving right (the strip follows them, towards
+// a Library on the left) and left: positive for right, as in Zen.
+constexpr float kFingersRight = 0.1f;
+constexpr float kFingersLeft = -0.1f;
 
 SwipeEdgeContext Context(size_t index, size_t count) {
   SwipeEdgeContext context;
@@ -45,14 +45,14 @@ SwipeEdgeAction Decide(const SwipeEdgeContext& context, float amount) {
 TEST(KoanSwipeEdgeActionsTest, LibraryOnTheLeft) {
   // First of three: towards the Library opens it; the other way is the next
   // Space.
-  EXPECT_EQ(Decide(Context(0, 3), kLeft), SwipeEdgeAction::kLibrary);
-  EXPECT_EQ(Decide(Context(0, 3), kRight), SwipeEdgeAction::kNone);
+  EXPECT_EQ(Decide(Context(0, 3), kFingersRight), SwipeEdgeAction::kLibrary);
+  EXPECT_EQ(Decide(Context(0, 3), kFingersLeft), SwipeEdgeAction::kNone);
   // In the middle, only Spaces.
-  EXPECT_EQ(Decide(Context(1, 3), kLeft), SwipeEdgeAction::kNone);
-  EXPECT_EQ(Decide(Context(1, 3), kRight), SwipeEdgeAction::kNone);
+  EXPECT_EQ(Decide(Context(1, 3), kFingersRight), SwipeEdgeAction::kNone);
+  EXPECT_EQ(Decide(Context(1, 3), kFingersLeft), SwipeEdgeAction::kNone);
   // Last: past it a new Space; back is the previous Space.
-  EXPECT_EQ(Decide(Context(2, 3), kRight), SwipeEdgeAction::kAddSpace);
-  EXPECT_EQ(Decide(Context(2, 3), kLeft), SwipeEdgeAction::kNone);
+  EXPECT_EQ(Decide(Context(2, 3), kFingersLeft), SwipeEdgeAction::kAddSpace);
+  EXPECT_EQ(Decide(Context(2, 3), kFingersRight), SwipeEdgeAction::kNone);
 }
 
 // Tabs (and the Library) on the right: the ends swap.
@@ -61,28 +61,28 @@ TEST(KoanSwipeEdgeActionsTest, LibraryOnTheRight) {
   first.library_on_screen_right = true;
   SwipeEdgeContext last = Context(2, 3);
   last.library_on_screen_right = true;
-  EXPECT_EQ(Decide(last, kRight), SwipeEdgeAction::kLibrary);
-  EXPECT_EQ(Decide(last, kLeft), SwipeEdgeAction::kNone);
-  EXPECT_EQ(Decide(first, kLeft), SwipeEdgeAction::kAddSpace);
-  EXPECT_EQ(Decide(first, kRight), SwipeEdgeAction::kNone);
+  EXPECT_EQ(Decide(last, kFingersLeft), SwipeEdgeAction::kLibrary);
+  EXPECT_EQ(Decide(last, kFingersRight), SwipeEdgeAction::kNone);
+  EXPECT_EQ(Decide(first, kFingersRight), SwipeEdgeAction::kAddSpace);
+  EXPECT_EQ(Decide(first, kFingersLeft), SwipeEdgeAction::kNone);
 }
 
-// A right-to-left UI turns the swipe round: fingers moving left go to the
+// A right-to-left UI turns the swipe round: fingers moving right go to the
 // next Space, so the Library on the screen's left is past the last one.
 TEST(KoanSwipeEdgeActionsTest, RightToLeft) {
   SwipeEdgeContext first = Context(0, 3);
   first.rtl = true;
   SwipeEdgeContext last = Context(2, 3);
   last.rtl = true;
-  EXPECT_EQ(Decide(last, kLeft), SwipeEdgeAction::kLibrary);
-  EXPECT_EQ(Decide(first, kRight), SwipeEdgeAction::kAddSpace);
-  EXPECT_EQ(Decide(first, kLeft), SwipeEdgeAction::kNone);
+  EXPECT_EQ(Decide(last, kFingersRight), SwipeEdgeAction::kLibrary);
+  EXPECT_EQ(Decide(first, kFingersLeft), SwipeEdgeAction::kAddSpace);
+  EXPECT_EQ(Decide(first, kFingersRight), SwipeEdgeAction::kNone);
 }
 
 // With one Space both ends are its own.
 TEST(KoanSwipeEdgeActionsTest, OneSpace) {
-  EXPECT_EQ(Decide(Context(0, 1), kLeft), SwipeEdgeAction::kLibrary);
-  EXPECT_EQ(Decide(Context(0, 1), kRight), SwipeEdgeAction::kAddSpace);
+  EXPECT_EQ(Decide(Context(0, 1), kFingersRight), SwipeEdgeAction::kLibrary);
+  EXPECT_EQ(Decide(Context(0, 1), kFingersLeft), SwipeEdgeAction::kAddSpace);
 }
 
 // Edge actions off (or no Library in the window): swipes only switch Space,
@@ -92,16 +92,16 @@ TEST(KoanSwipeEdgeActionsTest, Off) {
   first.edge_actions = false;
   SwipeEdgeContext last = Context(2, 3);
   last.edge_actions = false;
-  EXPECT_EQ(Decide(first, kLeft), SwipeEdgeAction::kNone);
-  EXPECT_EQ(Decide(last, kRight), SwipeEdgeAction::kNone);
+  EXPECT_EQ(Decide(first, kFingersRight), SwipeEdgeAction::kNone);
+  EXPECT_EQ(Decide(last, kFingersLeft), SwipeEdgeAction::kNone);
 }
 
 // The Create-a-Space form already open: no second one, the Library still.
 TEST(KoanSwipeEdgeActionsTest, CreatingSpace) {
   SwipeEdgeContext only = Context(0, 1);
   only.creating_space = true;
-  EXPECT_EQ(Decide(only, kRight), SwipeEdgeAction::kNone);
-  EXPECT_EQ(Decide(only, kLeft), SwipeEdgeAction::kLibrary);
+  EXPECT_EQ(Decide(only, kFingersLeft), SwipeEdgeAction::kNone);
+  EXPECT_EQ(Decide(only, kFingersRight), SwipeEdgeAction::kLibrary);
 }
 
 // An open Library takes every swipe from its start, whichever the Space.
@@ -137,9 +137,9 @@ TEST(KoanSwipeEdgeActionsTest, LibraryProgress) {
   EXPECT_LT(under, 0.f);
   EXPECT_GT(under, -0.2f);
   // A succeeded swipe opens it if it went its way, else closes it.
-  EXPECT_TRUE(LibrarySwipeOpens(kLeft, false));
-  EXPECT_FALSE(LibrarySwipeOpens(kRight, false));
-  EXPECT_TRUE(LibrarySwipeOpens(kRight, true));
+  EXPECT_TRUE(LibrarySwipeOpens(kFingersRight, false));
+  EXPECT_FALSE(LibrarySwipeOpens(kFingersLeft, false));
+  EXPECT_TRUE(LibrarySwipeOpens(kFingersLeft, true));
 }
 
 // ZenSpaceAddSwipe: ready at 0.8 of travel away from the Library, which is

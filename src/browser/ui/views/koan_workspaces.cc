@@ -2641,12 +2641,13 @@ void KoanWorkspaceController::EndSwipe(float amount, float velocity) {
     case SwipeEdgeAction::kNone:
       break;
   }
-  // Fingers moving right (a negative amount) go to the next Space, the
-  // strip moving left, as Zen's does (ZenSpacesSwipe #handleSwipeEnd()).
-  // The slide takes the dragged offset (PlaySwitchAnimation()). Past the
-  // last or first Space without wrap-around, the drag springs back.
+  // Fingers moving left (a negative amount) go to the next Space, the strip
+  // following them to the left, as Zen's does (ZenSpacesSwipe
+  // #handleSwipeEnd()). The slide takes the dragged offset
+  // (PlaySwitchAnimation()). Past the last or first Space without
+  // wrap-around, the drag springs back.
   if (SwipeSucceeds(amount, velocity) && CanSwipe() &&
-      Navigate((amount < 0) != base::i18n::IsRTL())) {
+      Navigate(SwipeGoesToNextSpace(amount, base::i18n::IsRTL()))) {
     // If there was no slide (no animation, no other Space), the drag is over.
     drag_.Reset();
     DropSwitchLayers();

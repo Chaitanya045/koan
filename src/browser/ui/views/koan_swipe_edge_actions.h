@@ -21,7 +21,7 @@ namespace koan {
 // a two-finger swipe over the sidebar (koan_swipe_tracker.h) that would go
 // past the Space next to the Library opens the Library instead, and one past
 // the Space at the other end offers to create a Space. Everything here works
-// on Koan's gesture amount (positive: fingers moving left, after
+// on Koan's gesture amount (positive: fingers moving right, after
 // zen.workspaces.natural-scroll), in screen terms. Plain C++, so that it can
 // be tested without a window.
 
@@ -45,7 +45,7 @@ struct SwipeEdgeContext {
   bool library_open = false;
   // Whether the Library (the sidebar's side) is on the screen's right.
   bool library_on_screen_right = false;
-  // A right-to-left UI, which turns the swipe round (fingers moving left go
+  // A right-to-left UI, which turns the swipe round (fingers moving right go
   // to the next Space).
   bool rtl = false;
   // The Create-a-Space form is open (Zen's creatingWorkspaceId).
@@ -53,7 +53,7 @@ struct SwipeEdgeContext {
 };
 
 // Whether a strip dragged by `amount` moves towards the Library, which it
-// uncovers: the strip moves against the fingers, so to the right (towards a
+// uncovers: the strip follows the fingers, so it moves right (towards a
 // Library on the left) for a positive amount. ZenSpacesSwipe's
 // towardsLibrary.
 bool SwipeTowardsLibrary(float amount, bool library_on_screen_right);

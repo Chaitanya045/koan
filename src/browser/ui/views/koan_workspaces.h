@@ -341,11 +341,11 @@ class KoanWorkspaceController : public TabStripModelObserver,
   bool IsSpaceScrollModifierDown(const ui::Event& event) const;
   // Zen's two-finger swipe (koan_swipe_tracker.h, koan_space_swipe.h): the
   // Space follows the fingers by the gesture `amount` (positive: fingers moving
-  // left; the strip moves the other way, as in Zen), then EndSwipe() when they
-  // lift, with the last movement's `velocity` (amounts per second): it switches
-  // to the next (fingers moved right) or previous Space, or lets the Space
-  // spring back. Both do nothing where the sidebar shows no Space to swipe
-  // (one Space, the Create form open).
+  // right, the strip moving the same way, as in Zen), then EndSwipe() when
+  // they lift, with the last movement's `velocity` (amounts per second): it
+  // switches to the next (fingers moved left) or previous Space, or lets the
+  // Space spring back. Both do nothing where the sidebar shows no Space to
+  // swipe (one Space, the Create form open).
   //
   // With Zen's edge actions (kWorkspacesSwipeEdgeActions,
   // koan_swipe_edge_actions.h) a swipe past the Space next to the Library

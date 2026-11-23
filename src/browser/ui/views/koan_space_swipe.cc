@@ -5,6 +5,7 @@
 #include "koan/browser/ui/views/koan_space_swipe.h"
 
 #include "base/time/time.h"
+#include "koan/browser/ui/views/koan_scroll_direction.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/events/event_constants.h"
 
@@ -33,8 +34,13 @@ bool KoanSpaceSwipe::OnScrollEvent(const ui::ScrollEvent& event) {
       phase = SwipePhase::kUpdate;
       break;
   }
+  // The swipe follows the fingers, not the system's natural scrolling setting
+  // (as Gecko's swipe tracker, and Zen with it, and Chromium's own swipe back
+  // and forward do): the offsets are turned round when the system had.
+  const float dx =
+      ScrollFollowsFingers(event) ? event.x_offset() : -event.x_offset();
   return tracker_.OnScroll(
-      event.x_offset(), event.y_offset(), phase,
+      dx, event.y_offset(), phase,
       (event.time_stamp() - base::TimeTicks()).InSecondsF());
 }
 
