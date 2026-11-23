@@ -35,18 +35,22 @@ diff --git a/chrome/browser/ui/navigator/browser_navigator.cc b/chrome/browser/u
  
    WebContents::CreateParams create_params(
        params.browser->GetProfile(), initial_site_instance_for_new_contents);
-@@ -600,7 +613,9 @@
+@@ -600,7 +613,13 @@
    }
  #endif
  
 -  return WebContents::Create(create_params);
-+  // Koan: a tab an agent's own tab opens is the agent's too.
-+  return koan::containers::InheritAgentTab(params.source_contents,
-+                                           WebContents::Create(create_params));
++  // Koan: a tab an agent's own tab opens is the agent's too. Only a page's
++  // own navigation (a link, a middle-click) has a source_site_instance; one
++  // the browser starts (the URL bar, a bookmark, a new tab) has the active
++  // tab as source_contents by default (Navigate()), and stays the user's.
++  return koan::containers::InheritAgentTab(
++      params.source_site_instance ? params.source_contents.get() : nullptr,
++      WebContents::Create(create_params));
  }
  
  }  // namespace
-@@ -864,6 +879,14 @@
+@@ -864,6 +883,14 @@
  
    std::unique_ptr<web_app::NavigationCapturingProcess> app_navigation =
        web_app::NavigationCapturingProcess::MaybeHandleAppNavigation(*params);
