@@ -1072,7 +1072,9 @@ Agent-Space tabs start `driven`.
 * **Agent releases.** `Koan.release {tab}` or `koan hand-back`: lease released, banner removed; a moved tab returns to
   its origin Space and index. **User releases**: banner *Release*, or revoking/Stop all.
 * **Pause on user input.** The signal is `WebContentsObserver::DidGetUserInteraction` for the **whole frame tree**
-  (mouse-down, key-down, gesture-scroll-begin, touch-start; `WebContentsImpl::HandleUserInteractionForInputEvent`
+  (mouse-down, key-down, touch-start; gesture-scroll-begin is skipped, as `MouseWheelEventQueue` builds it with no
+  modifiers, so an agent's CDP wheel would read as the user's: the user's scrolls come through the wheel observer
+  below; `WebContentsImpl::HandleUserInteractionForInputEvent`
   covers the primary frame tree including cross-origin child widgets, `web_contents_impl.cc:11307`), filtered by the
   `WebInputEvent::kFromDebugger` bit that every CDP-injected event carries (B§7; Chrome's own
   `extension_actor_tracker.cc:129-138` makes the same distinction). A `RenderWidgetHost::InputEventObserver` is added
