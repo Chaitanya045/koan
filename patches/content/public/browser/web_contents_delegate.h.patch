@@ -1,15 +1,19 @@
 diff --git a/content/public/browser/web_contents_delegate.h b/content/public/browser/web_contents_delegate.h
-index 7e0c703..ebc0370 100644
+index 7e0c703..c293c77 100644
 --- a/content/public/browser/web_contents_delegate.h
 +++ b/content/public/browser/web_contents_delegate.h
-@@ -504,6 +504,25 @@ class CONTENT_EXPORT WebContentsDelegate {
+@@ -504,6 +504,29 @@ class CONTENT_EXPORT WebContentsDelegate {
                                scoped_refptr<FileSelectListener> listener,
                                const blink::mojom::FileChooserParams& params);
  
-+  // Koan: whether the file chooser `render_frame_host` asks for waits (an
-+  // agent holds its tab). `show` then runs later, with true to run the chooser
-+  // again, with false to cancel it.
++  // Koan: whether the file chooser `render_frame_host` asks for with `params`
++  // waits (an agent holds its tab). Then either `show` runs later, with true
++  // to run the chooser again, with false to cancel it; or the delegate answers
++  // through `listener` itself (an agent chose the files: FileSelected(), as a
++  // chooser does) and drops `show`. Never both.
 +  virtual bool HoldFileChooser(RenderFrameHost* render_frame_host,
++                               const blink::mojom::FileChooserParams& params,
++                               scoped_refptr<FileSelectListener> listener,
 +                               base::OnceCallback<void(bool show)> show);
 +
 +  // Koan: what holds the WebAuthn request (a modal create() or get())

@@ -9,15 +9,20 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
+#include <string>
 #include <vector>
 
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/no_destructor.h"
+#include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/weak_document_ptr.h"
 #include "koan/browser/agent/koan_agent_prompts.h"
 #include "koan/browser/agent/koan_agent_tab_hooks.h"
+#include "third_party/blink/public/mojom/choosers/file_chooser.mojom.h"
 
 class HttpAuthCoordinator;
 
@@ -39,7 +44,10 @@ class WebContents;
 //  - window.focus(): the tab comes forward on open;
 //  - <input type=file>, the device choosers (WebUSB, WebHID, Web Serial, Web
 //    Bluetooth) and getDisplayMedia()'s picker: Chrome's own path once the tab
-//    is in front and visible (the file chooser checks both);
+//    is in front and visible (the file chooser checks both). The agent may
+//    answer a file chooser itself instead (`koan upload`,
+//    AnswerFileChooser()): the page gets the files through the chooser's own
+//    listener, as from the user's pick, and no panel shows;
 //  - a modal passkey or security key request: made again from the start once
 //    the tab is in front and visible (create() needs focus).
 // When the agent lets go of the tab, what it held is shown as Chrome would
@@ -92,6 +100,24 @@ class AgentPageSurfaces : public PageSurfaceDelegate {
   // The pick went away on its own (the page moved on).
   void ForgetAutofillVerify(uint64_t id);
 
+  // `koan upload`: the oldest file chooser held for `contents` whose page is
+  // still there, and what it asks for; nullopt if none (or the user opened
+  // it: it is theirs then).
+  struct HeldFileChooser {
+    uint64_t id = 0;
+    blink::mojom::FileChooserParams::Mode mode =
+        blink::mojom::FileChooserParams::Mode::kOpen;
+    std::vector<std::u16string> accept_types;
+  };
+  std::optional<HeldFileChooser> FileChooserOf(content::WebContents* contents);
+  // Answers the held chooser `id` with `files`, as the user's pick in the open
+  // panel would: it leaves the indicator (Koan.userNeededDone) and the page
+  // gets the files, with read access to them, and its input and change
+  // events. False (nothing done) if it is no longer held.
+  bool AnswerFileChooser(
+      uint64_t id,
+      std::vector<blink::mojom::FileChooserFileInfoPtr> files);
+
   // PageSurfaceDelegate:
   bool IsHeldByAgent(content::WebContents* contents) override;
   content::JavaScriptDialogManager* DialogManager() override;
@@ -112,6 +138,10 @@ class AgentPageSurfaces : public PageSurfaceDelegate {
   uint64_t HoldPicker(content::RenderFrameHost* frame,
                       HeldPicker picker,
                       base::OnceCallback<void(bool show)> show) override;
+  uint64_t HoldFileChooser(content::RenderFrameHost* frame,
+                           const blink::mojom::FileChooserParams& params,
+                           scoped_refptr<content::FileSelectListener> listener,
+                           base::OnceCallback<void(bool show)> show) override;
   void ForgetPicker(uint64_t id) override;
   void DismissPickers(content::RenderFrameHost* frame,
                       HeldPicker picker) override;
@@ -141,6 +171,8 @@ class AgentPageSurfaces : public PageSurfaceDelegate {
   void OnTabVisible(uintptr_t tab);
   // A page of the tab went: its held pickers go too.
   void SweepPickers(uintptr_t tab);
+  // Drops what is kept for the file choosers no longer held.
+  void PruneFileChoosers();
   void Notify(uintptr_t tab, PageSurface surface, bool held);
 
   PromptQueue queue_;
@@ -149,6 +181,14 @@ class AgentPageSurfaces : public PageSurfaceDelegate {
   std::unique_ptr<HttpAuthCoordinator> http_auth_;
   // The page each held picker is for.
   std::map<uint64_t, content::WeakDocumentPtr> pickers_;
+  // What each held file chooser asks for, and its listener (`koan upload`).
+  struct FileChooserHold {
+    blink::mojom::FileChooserParams::Mode mode =
+        blink::mojom::FileChooserParams::Mode::kOpen;
+    std::vector<std::u16string> accept_types;
+    scoped_refptr<content::FileSelectListener> listener;
+  };
+  std::map<uint64_t, FileChooserHold> file_choosers_;
   // Pickers the user opened whose tab isn't visible yet.
   std::set<uint64_t> opening_;
   // The tab whose held print preview or picker is being shown now (not held

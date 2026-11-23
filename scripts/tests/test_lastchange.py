@@ -18,12 +18,12 @@ import lastchange  # noqa: E402
 class GitHubRepoTest(unittest.TestCase):
 
   def test_https_and_ssh_remotes(self):
-    for url in ('https://github.com/Chaitanya045/koan.git',
-                'https://github.com/Chaitanya045/koan',
-                'https://token@github.com/Chaitanya045/koan.git',
-                'git@github.com:Chaitanya045/koan.git',
-                'ssh://git@github.com/Chaitanya045/koan.git\n'):
-      self.assertEqual(lastchange.github_repo(url), 'Chaitanya045/koan', url)
+    for url in ('https://github.com/koan-browser/koan.git',
+                'https://github.com/koan-browser/koan',
+                'https://token@github.com/koan-browser/koan.git',
+                'git@github.com:koan-browser/koan.git',
+                'ssh://git@github.com/koan-browser/koan.git\n'):
+      self.assertEqual(lastchange.github_repo(url), 'koan-browser/koan', url)
 
   def test_other_remotes_have_none(self):
     for url in ('', 'https://gitlab.com/a/koan.git', '/home/me/koan',

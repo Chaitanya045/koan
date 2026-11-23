@@ -227,8 +227,8 @@ class KoanUrlBarController
   // Posted after the omnibox got focus: an invisible focus closes the bar
   // again.
   void CloseIfFocusInvisible();
-  // Z23: posted when the focus came back with the window: the suggestions
-  // for what is typed, which upstream closed on the blur.
+  // Z23: posted when the focus came back with the window, or the popup was
+  // rebuilt for the card. Restores on-focus, empty or typed suggestions.
   void ReopenSuggestions();
   // Z43: whether the active tab shows a tab-modal dialog; hiding the open bar
   // for it, and showing it again.

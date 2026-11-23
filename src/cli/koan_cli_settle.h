@@ -99,6 +99,9 @@ class Settle {
   void OnDomProbe(DomProbe result, base::TimeTicks now);
   // The page waits for the user, as an answer said (Koan.paused, ...).
   void Block(std::string reason) { blocked_reason_ = std::move(reason); }
+  // The step answers the page's file chooser itself (act's upload): the
+  // chooser waiting (Koan.userNeeded {file-picker}) does not block it.
+  void ExpectFileChooser() { expects_file_chooser_ = true; }
 
   SettleState Check(base::TimeTicks now) const;
   // When Check() may say something else without an event: the earliest of
@@ -128,6 +131,7 @@ class Settle {
   const base::TimeTicks start_;
   const std::string target_;
   const std::string main_frame_;
+  bool expects_file_chooser_ = false;
   // A navigation of the main frame began (and when), committed, loaded.
   std::optional<base::TimeTicks> navigation_started_;
   bool committed_ = false;

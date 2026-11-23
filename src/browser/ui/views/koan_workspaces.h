@@ -84,7 +84,8 @@ class SlideOutLayers;
 // is the focused group, so the sidebar shows only its tabs (plus the pinned
 // tabs, Koan's Essentials, shared by every Space). Like Zen, the window
 // always shows one Space: every unpinned tab belongs to one, and a Space
-// whose last tab closes gets a new tab instead of disappearing.
+// whose last tab closes gets a new tab instead of disappearing. Temporary
+// agent-created Spaces are the exception: they go with their last tab.
 //
 // A Space's name and icon are stored in its tab group, and its theme with
 // its tabs (see ReadSpace()), so all of it is restored with the session; the
@@ -232,10 +233,13 @@ class KoanWorkspaceController : public TabStripModelObserver,
                    const SpaceTheme& theme,
                    const std::string& container = std::string());
   // Makes the ungrouped tab at `index` a new Space with `data`, without
-  // showing it or changing the active tab (an agent container's Space,
-  // koan/browser/containers/koan_agent_containers.h).
+  // showing it or changing the active tab (imports and window sync).
   tab_groups::TabGroupId CreateBackgroundSpace(int index,
                                                const SpaceData& data);
+  // An agent's background Space: removed when its last tab leaves. Tabs the
+  // user opens in it keep it alive when the agent's task ends.
+  tab_groups::TabGroupId CreateTemporaryBackgroundSpace(int index,
+                                                        const SpaceData& data);
   // Makes a Space of the tabs at `indices` (sorted), right after the active
   // Space, and shows it on the last of them (folders' "Convert folder to
   // Space").
@@ -337,11 +341,11 @@ class KoanWorkspaceController : public TabStripModelObserver,
   bool IsSpaceScrollModifierDown(const ui::Event& event) const;
   // Zen's two-finger swipe (koan_swipe_tracker.h, koan_space_swipe.h): the
   // Space follows the fingers by the gesture `amount` (positive: fingers moving
-  // left; the strip moves the other way, as in Zen), then EndSwipe() when they
-  // lift, with the last movement's `velocity` (amounts per second): it switches
-  // to the next (fingers moved right) or previous Space, or lets the Space
-  // spring back. Both do nothing where the sidebar shows no Space to swipe
-  // (one Space, the Create form open).
+  // right, the strip moving the same way, as in Zen), then EndSwipe() when
+  // they lift, with the last movement's `velocity` (amounts per second): it
+  // switches to the next (fingers moved left) or previous Space, or lets the
+  // Space spring back. Both do nothing where the sidebar shows no Space to
+  // swipe (one Space, the Create form open).
   //
   // With Zen's edge actions (kWorkspacesSwipeEdgeActions,
   // koan_swipe_edge_actions.h) a swipe past the Space next to the Library

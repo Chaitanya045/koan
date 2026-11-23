@@ -139,6 +139,7 @@ source_set("browsertests_impl") {
     "//koan/browser/agent:autofill_hooks",
     "//koan/browser/agent:browser",
     "//koan/browser/agent:capture",
+    "//koan/browser/containers",
     "//koan/browser/containers:partition",
     "//koan/browser/containers:user_containers",
     "//koan/browser/importer",

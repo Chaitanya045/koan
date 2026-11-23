@@ -53,7 +53,18 @@
 // the client's scope (nothing else is ever listed or attachable),
 // Browser.getVersion, and Koan.listTabs, Koan.openTab, Koan.closeTab,
 // Koan.keepAlive, Koan.captureScaled and Koan.autofill (sent with a tab's or
-// a frame's sessionId).
+// a frame's sessionId), and Koan.upload (with a tab's sessionId).
+//
+// Uploads (design section 9.4, `koan upload`): Koan.upload {files: [{path,
+// name?}], waitMs?} answers the file chooser the tab's page opened (held as
+// Koan.userNeeded {file-picker}) with those files, as the user's pick in the
+// open panel would; with waitMs (at most 30 s) it waits that long for the
+// page to open one. Only on a tab the agent drives (its own, or a user's it
+// was given to drive), never while the user has it (Koan.paused), never on
+// a security interstitial. The paths are on the Mac: the backend checks each
+// is a readable regular file outside Koan's own folders, and the chooser's
+// own rules (one file or `multiple`, `accept`). Audited with the files'
+// names and sizes, never their contents.
 //
 // Screenshots (section 12, "One capture path"): Koan.captureScaled {targetId,
 // longEdge?, scale?, clip?, format?, quality?} copies the frame the tab's
@@ -272,6 +283,36 @@ class FacadeBackend {
                         const std::string& frame_id,
                         const AutofillRequest& request,
                         AutofillCallback done);
+  // Koan.upload: answers the file chooser held for the tab with `files`
+  // (absolute paths on this Mac; `name`, if not empty, is what the page sees
+  // as the file's name), waiting up to `wait` for the page to open one
+  // (koan_agent_upload.h). The facade checked the tab is the client's,
+  // driven and not behind an interstitial.
+  struct UploadFile {
+    std::string path;
+    std::string name;
+  };
+  struct UploadRequest {
+    UploadRequest();
+    UploadRequest(const UploadRequest&);
+    UploadRequest& operator=(const UploadRequest&);
+    ~UploadRequest();
+    std::vector<UploadFile> files;
+    base::TimeDelta wait;
+  };
+  struct UploadResult {
+    // Empty on success.
+    std::string error_code;
+    std::string error_message;
+    // {files: [{name, size}], summary: "resume.pdf (120.4 KB)"}.
+    base::DictValue result;
+    // The audit summary: the files' names and sizes, never their contents.
+    std::string summary;
+  };
+  using UploadCallback = base::OnceCallback<void(UploadResult)>;
+  virtual void Upload(const std::string& target_id,
+                      const UploadRequest& request,
+                      UploadCallback done);
   // The values Koan filled for the client's tabs, which nothing sent to it
   // may carry; null if none.
   virtual const SecretScrubber* Secrets();
@@ -409,6 +450,12 @@ class CdpFacade {
                     std::string target_id,
                     base::TimeTicks start,
                     FacadeBackend::AutofillResult result);
+  void Upload(const AgentMessage& message);
+  void OnUploaded(int client_message_id,
+                  std::string session_id,
+                  std::string target_id,
+                  base::TimeTicks start,
+                  FacadeBackend::UploadResult result);
   // Script reads wait for the secret fields to be read (design section 4.5):
   // a session's command that must wait, and every one after it, is held and
   // run in order once it may go.

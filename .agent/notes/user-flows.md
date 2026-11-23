@@ -71,7 +71,7 @@ compresses).
 | UF-ONB-7 | The person clicks **Remove** | Koan's skills and link are gone; the person's own skill in the same folder stays | UF-ONB-7 (real click); `agent_cli.mjs` "Set up agents: Remove takes the skills and the link out" | real |
 | UF-ONB-8 | The agent ends | `koan end` exits 0 | UF-ONB-8 | |
 | UF-ONB-9 | The person sets up agents on their own profile (their real `~/.claude`) | The found agents are listed; Remove cleans up | manual: PR #397 "Mac steps" 2 (only with the user's OK to write to `~/.claude`) | manual |
-| UF-ONB-10 | `npx skills add Chaitanya045/koan` | The skills CLI finds `skills/koan-browser/SKILL.md` | `test_agent_skill.py` (the repo's only skill, identical to the app's) | |
+| UF-ONB-10 | `npx skills add koan-browser/koan` | The skills CLI finds `skills/koan-browser/SKILL.md` | `test_agent_skill.py` (the repo's only skill, identical to the app's) | |
 
 ## Indicator layers (#398): `uf_indicator`
 
@@ -189,6 +189,15 @@ compresses).
 | UF-AFL-5 | A card that must be verified; a grouped (affiliated) match; a form posting off-site | `userNeeded: autofill-verify` and the pill's Open; `Koan.offSite` | to write with #412's e2e | real |
 | UF-AFL-6 | In a tab of the person's where Chrome filled the saved login on load: the agent runs `koan take-over`, the person clicks into the password field, then **Hand back**; the agent runs script on the page (`koan agent-browser eval ...value`), `koan snapshot`, then `koan act <tab> press Enter` | The eval is refused (Koan.secretField, "…by Koan, the password manager or the user"); the snapshot shows `•••• (filled)`; after sign-in, nothing the agent gets has the password, and a page that echoes it reads `[secret]` | `KoanAgentSecretLockBrowserTest.APasswordFilledOnLoadInAUsersTab` (T-sec-18); UF-AFL-6 to write in `uf_autofill` | real |
 | UF-AFL-7 | The same with no saved login: the person types a password into the field themselves, then **Hand back** | As UF-AFL-6 | `KoanAgentSecretLockBrowserTest.APasswordTheUserTypedInAUsersTab` (T-sec-19); UF-AFL-7 to write in `uf_autofill` | real |
+
+## Settings switches and radios (#419): no flow (e2e `settings_controls`)
+
+| ID | The person | Expected | Covered by | Needs |
+|---|---|---|---|---|
+| UF-SET-1 | Opens chrome://settings/performance in the shadcn look, light then dark, and looks at the switches that are on (Memory Saver, Inactive tabs appearance, Performance issue alerts) | On: the primary track with the thumb at the right edge; off: the muted track with the thumb at the left | `settings_controls.mjs` ("the thumb is at the right edge", "...left edge", "on and off tracks differ"); `test_settings_shell.py` (`SwitchAndRadioStyleTest`) | manual (a look) |
+| UF-SET-2 | Clicks a switch | The thumb slides to the other end in about 150 ms, the track changes colour; Tab to it shows a ring | `settings_controls.mjs` ("the knob's transform travels"); the ease and the ring by eye | real, manual |
+| UF-SET-3 | Turns Memory Saver on, in dark and light | "Moderate", "Balanced" and "Maximum" each show a visible ring; the selected one is a primary ring with a primary dot | `settings_controls.mjs` ("ring has >= 3:1 contrast", "the selected choice's ring is the primary colour") | manual (a look) |
+| UF-SET-4 | Switches to the Zen look | Chromium's own switches, on still at the right | `settings_controls.mjs` (the `zen` checks) | |
 
 ## Agent usage across the flows
 

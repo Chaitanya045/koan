@@ -167,13 +167,13 @@ void Settle::OnEvent(const Message& event, base::TimeTicks now) {
         "the page opened a dialog (" + Str(params, "type") +
         ") and waits for the user: Koan.userNeeded; tell the user";
   } else if (method == "Koan.userNeeded" || method == "Koan.paused") {
-    if (Str(params, "targetId") == target_) {
-      const std::string reason = Str(params, "reason");
-      blocked_reason_ =
-          method == "Koan.paused"
-              ? PausedLine(target_, reason, Str(params, "sticky"))
-              : "the page waits for the user (" + reason +
-                    "): Koan.userNeeded; tell the user what it asks";
+    const std::string reason = Str(params, "reason");
+    if (Str(params, "targetId") == target_ &&
+        !(method == "Koan.userNeeded" && reason == "file-picker" &&
+          expects_file_chooser_)) {
+      blocked_reason_ = method == "Koan.paused"
+                            ? PausedLine(target_, reason, Str(params, "sticky"))
+                            : UserNeededLine(target_, {reason});
     }
   } else if (method == "Target.detachedFromTarget" ||
              method == "Target.targetDestroyed") {

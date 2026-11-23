@@ -1,5 +1,5 @@
 diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
-index a2638c2..1ba4b37 100644
+index a2638c2..53eb53d 100644
 --- a/content/browser/web_contents/web_contents_impl.cc
 +++ b/content/browser/web_contents/web_contents_impl.cc
 @@ -5807,6 +5807,11 @@ FrameTree* WebContentsImpl::CreateNewWindow(
@@ -14,14 +14,15 @@ index a2638c2..1ba4b37 100644
      } else {
        site_instance = SiteInstance::Create(GetBrowserContext());
      }
-@@ -9943,6 +9948,30 @@ void WebContentsImpl::RunFileChooser(
+@@ -9943,6 +9948,31 @@ void WebContentsImpl::RunFileChooser(
    OPTIONAL_TRACE_EVENT1("content", "WebContentsImpl::RunFileChooser",
                          "render_frame_host", render_frame_host);
  
-+  // Koan: the delegate may hold the chooser and run it again later.
++  // Koan: the delegate may hold the chooser and run it again later, or answer
++  // it itself.
 +  if (delegate_ && render_frame_host &&
 +      delegate_->HoldFileChooser(
-+          render_frame_host,
++          render_frame_host, params, listener,
 +          base::BindOnce(
 +              [](base::WeakPtr<FileChooserImpl> file_chooser,
 +                 GlobalRenderFrameHostId frame_id,

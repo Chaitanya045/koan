@@ -791,10 +791,22 @@ void KoanUrlBarController::ReopenSuggestions() {
     return;
   }
   OmniboxController* omnibox = bar->GetOmniboxController();
-  if (omnibox->edit_model()->user_input_in_progress() &&
-      !omnibox->IsPopupOpen()) {
+  if (omnibox->IsPopupOpen()) {
+    return;
+  }
+  if (bar->omnibox_view()->GetText().empty() &&
+      !omnibox->edit_model()->is_keyword_selected()) {
+    ScheduleEmptyListRetry(kZeroSuggestRetries);
+  } else if (omnibox->edit_model()->user_input_in_progress()) {
     omnibox->edit_model()->StartAutocomplete(
         /*prevent_inline_autocomplete=*/true);
+  } else {
+    // Cmd+L selects the page's address without starting a user edit. A
+    // regular autocomplete would not restore its on-focus popup; leaving
+    // that popup closed also exposes Chromium's rounded input and focus
+    // ring instead of the card the user opened.
+    omnibox->edit_model()->StartZeroSuggestRequest(
+        /*user_clobbered_permanent_text=*/false);
   }
 }
 
@@ -1168,29 +1180,9 @@ void KoanUrlBarController::RebuildPopupForCard() {
   // Clearing the result closes the popup (its frame goes with it); the next
   // one, asked for once that is done, is built for the card.
   omnibox->StopAutocomplete(/*clear_result=*/true);
-  if (omnibox->edit_model()->user_input_in_progress()) {
-    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(&KoanUrlBarController::ReopenSuggestions,
-                                  weak_factory_.GetWeakPtr()));
-  } else if (bar->omnibox_view()->GetText().empty()) {
-    ScheduleEmptyListRetry(kZeroSuggestRetries);
-  } else {
-    // The page's URL, selected (Cmd+L in the pill): its on-focus suggestions.
-    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(
-                       [](base::WeakPtr<KoanUrlBarController> self) {
-                         LocationBarView* bar =
-                             self ? self->location_bar() : nullptr;
-                         if (bar && self->is_open() &&
-                             !bar->GetOmniboxController()->IsPopupOpen()) {
-                           bar->GetOmniboxController()
-                               ->edit_model()
-                               ->StartZeroSuggestRequest(
-                                   /*user_clobbered_permanent_text=*/false);
-                         }
-                       },
-                       weak_factory_.GetWeakPtr()));
-  }
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&KoanUrlBarController::ReopenSuggestions,
+                                weak_factory_.GetWeakPtr()));
 }
 
 bool KoanUrlBarController::OnOmniboxPopupFrameCreated() {

@@ -1,14 +1,17 @@
 diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h
-index cb68c45..5bb6cc4 100644
+index cb68c45..7d1adaa 100644
 --- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h
 +++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h
-@@ -196,6 +196,15 @@ class BrowserWebContentsDelegate : public content::WebContentsDelegate {
+@@ -196,6 +196,18 @@ class BrowserWebContentsDelegate : public content::WebContentsDelegate {
    void RunFileChooser(content::RenderFrameHost* render_frame_host,
                        scoped_refptr<content::FileSelectListener> listener,
                        const blink::mojom::FileChooserParams& params) override;
 +  // Koan: the file chooser of a tab an agent holds waits in the agent
-+  // indicator (koan/browser/agent/koan_agent_tab_hooks.h).
++  // indicator, or for the agent's `koan upload`
++  // (koan/browser/agent/koan_agent_tab_hooks.h).
 +  bool HoldFileChooser(content::RenderFrameHost* render_frame_host,
++                       const blink::mojom::FileChooserParams& params,
++                       scoped_refptr<content::FileSelectListener> listener,
 +                       base::OnceCallback<void(bool show)> show) override;
 +  // Koan: so does a passkey request.
 +  base::OnceCallback<void(WebAuthnRun run)> HoldWebAuthnRequest(

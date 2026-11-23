@@ -64,6 +64,7 @@
 #include "koan/cli/koan_cli_settle.h"
 #include "koan/cli/koan_cli_skill.h"
 #include "koan/cli/koan_cli_snapshot.h"
+#include "koan/cli/koan_cli_upload.h"
 #include "koan/cli/koan_relay_gate.h"
 
 namespace koan::cli {
@@ -96,6 +97,9 @@ std::string* g_failure = nullptr;
 
 // How long Koan.autofill may take: suggestions, then Chrome's fill.
 constexpr base::TimeDelta kAutofillWait = base::Seconds(15);
+// How long Koan.upload may take: the wait for a chooser, then reading the
+// files' metadata.
+constexpr base::TimeDelta kUploadAnswerWait = kUploadWait + base::Seconds(15);
 
 int Fail(const std::string& text, int code = kFailed) {
   if (g_failure) {
@@ -570,6 +574,12 @@ std::unique_ptr<Link> Holder(const Command& command,
       }
       return nullptr;
     }
+    // Report a forgotten pairing only when another one can be tried. If
+    // none remains, ConnectionFor() prints it as the command's failure.
+    if (!forgotten.empty()) {
+      fprintf(stderr, "koan: %s\n", forgotten.c_str());
+      forgotten.clear();
+    }
     if (std::unique_ptr<Link> link = ConnectHolder(*client_id)) {
       return link;
     }
@@ -589,7 +599,6 @@ std::unique_ptr<Link> Holder(const Command& command,
       return nullptr;
     }
     forgotten = *error;
-    fprintf(stderr, "koan: %s\n", error->c_str());
   }
 }
 
@@ -1816,6 +1825,37 @@ Acted DoAction(Link& link,
       }
       return acted;
     }
+    case ActKind::kUpload: {
+      // The files first: nothing is clicked for one that isn't there.
+      base::FilePath cwd;
+      base::GetCurrentDirectory(&cwd);
+      std::vector<UploadPath> paths;
+      std::string error;
+      if (!ResolveUploadPaths(command.files, cwd, &paths, &error)) {
+        return Failed(error);
+      }
+      // The click opens the page's chooser, which Koan holds for the agent
+      // (Koan.userNeeded file-picker): this step answers it.
+      settle.ExpectFileChooser();
+      std::optional<Message> answer;
+      std::string note;
+      if (!Click(link, session, base::DictValue().Set("backendNodeId", node),
+                 &answer, &note)) {
+        return Failed(Describe(answer));
+      }
+      std::optional<Message> uploaded =
+          link.Call("Koan.upload", UploadParams(paths, kUploadWait), session,
+                    kUploadAnswerWait);
+      if (!uploaded || uploaded->is_error() || !uploaded->result) {
+        return Failed(Describe(uploaded));
+      }
+      Acted acted;
+      acted.line = UploadedLine(*uploaded->result);
+      if (const base::ListValue* files = uploaded->result->FindList("files")) {
+        acted.json.Set("files", files->Clone());
+      }
+      return acted;
+    }
     case ActKind::kFill: {
       std::string error;
       std::optional<std::string> object_id =
@@ -1924,6 +1964,7 @@ Command StepCommand(const Command& command, const Step& step) {
   one.ref = step.target;
   one.text = step.text;
   one.scroll_by = step.scroll_by;
+  one.files = step.files;
   return one;
 }
 
@@ -1951,7 +1992,7 @@ StepDone RunStep(Link& link,
   const bool on_ref =
       command.act == ActKind::kClick || command.act == ActKind::kFill ||
       command.act == ActKind::kSelect || command.act == ActKind::kChoose ||
-      command.act == ActKind::kAutofill;
+      command.act == ActKind::kAutofill || command.act == ActKind::kUpload;
   if (on_ref) {
     std::optional<int> node =
         FindNode(link, command, command.ref, target, session, &exit_code);
@@ -2361,7 +2402,9 @@ int Act(Link& link,
       }
       gate.OnTab(entry);
       tab_gone = !entry;
-      if (std::optional<std::string> stop = gate.StopReason()) {
+      // An upload step answers the file chooser the page may hold already.
+      if (std::optional<std::string> stop =
+              gate.StopReason(steps[i].act == ActKind::kUpload)) {
         stopped = i;
         why = *stop;
         break;
@@ -2758,6 +2801,38 @@ int Autofill(Link& link,
   return kOk;
 }
 
+// `koan upload <tab> <path...>`: answers the file chooser the tab's page
+// opened (waiting a little for one), as the user's pick would.
+int Upload(Link& link,
+           const Command& command,
+           const std::string& target,
+           const std::string& session) {
+  base::FilePath cwd;
+  base::GetCurrentDirectory(&cwd);
+  std::vector<UploadPath> paths;
+  std::string error;
+  if (!ResolveUploadPaths(command.files, cwd, &paths, &error)) {
+    return Fail(error);
+  }
+  // The page's change handler runs at full speed meanwhile.
+  TabKeepAlive keep_alive(link, target);
+  int exit_code = kOk;
+  std::optional<base::DictValue> result =
+      Expect(link.Call("Koan.upload", UploadParams(paths, kUploadWait), session,
+                       kUploadAnswerWait),
+             &exit_code);
+  if (!result) {
+    return exit_code;
+  }
+  if (command.json) {
+    PrintJson(*result);
+    return kOk;
+  }
+  printf("%s\n", UploadedLine(*result).c_str());
+  fflush(stdout);
+  return kOk;
+}
+
 int RunOnHolder(Link& link, const Command& command);
 int Shell(const Command& command);
 
@@ -2883,6 +2958,7 @@ int RunOnHolder(Link& link, const Command& command) {
     case CommandKind::kScreenshot:
     case CommandKind::kWait:
     case CommandKind::kAutofill:
+    case CommandKind::kUpload:
     case CommandKind::kAct: {
       std::optional<std::string> target =
           ResolveTabId(link, command.tab, &exit_code);
@@ -2902,6 +2978,9 @@ int RunOnHolder(Link& link, const Command& command) {
       }
       if (command.kind == CommandKind::kAutofill) {
         return Autofill(link, command, *target, *session);
+      }
+      if (command.kind == CommandKind::kUpload) {
+        return Upload(link, command, *target, *session);
       }
       if (command.kind == CommandKind::kScreenshot) {
         std::optional<Shot> shot =

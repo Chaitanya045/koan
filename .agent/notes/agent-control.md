@@ -167,12 +167,12 @@ How agent control compares with Chrome's approval mode:
 | T10 | Hidden action: the user does not know the agent is active | Persistent indicator (§6.2), banner on a driven visible tab, toast, menu-bar item, agent-Space glow; "Stop all agents" one click away; audit log. **The indicator ships before, or in the same PR as, anything that makes the default-on gateway reachable by a real build** (T21) |
 | T11 | Incognito leaks | Excluded by default for every client (§13) |
 | T12 | The agent changes the user's data through the page (deletes, buys) | Out of scope for the browser (the same as any extension). Reduced by capability `drive` (take-over of user tabs needs per-tab approval) and the audit log. The agent Space is where the agent acts by default |
-| T13 | Downloads / uploads | `Page.setDownloadBehavior` denied; downloads go through the normal download UI and Safe Browsing; uploads need a Koan-mediated, user-approved path (a later `Koan.upload`) |
+| T13 | Downloads / uploads | `Page.setDownloadBehavior` denied; downloads go through the normal download UI and Safe Browsing. Uploads (decided by the user 2026-11-20, #420): an agent attaches files it was given as the user would pick them, through `Koan.upload` (`koan upload`, act's `upload` step, §9.4 "Built (#420)"): only the page's own held file chooser, only in tabs the agent drives and not while paused, the chooser's rules (single/`multiple`, `accept`, no folder or save), readable regular files outside Koan's profile, `~/.koan`, `~/.ssh`, `~/.gnupg`, the keychains and the cloud/developer credential stores (`~/.aws`, `~/.azure`, `~/.config/gcloud`, `~/.config/gh`, `~/.docker`, `~/.kube`, `~/.git-credentials`, `~/.netrc`, `~/.npmrc`, `~/.pypirc`, `~/Library/Cookies`); shown in the pill and a toast, audited by name and size. `DOM.setFileInputFiles` stays denied |
 | T14 | Denial of service: floods, leases, pre-auth bytes, parser bugs | Raw length-prefixed frames, **4 KB cap before authentication**, connection and per-peer caps, 10 s incomplete-frame timeout (§4.1); per-connection rate limits; a lighter lease with a hold-off and a concurrent cap of 4 by default, a setting from 1 to 16 (§6.1, §8); tab caps 8 per task, 12 per client, 16 total |
 | T15 | Policy bypass | `RemoteDebuggingAllowed=false` stops the gateway and closes sessions; `DeveloperToolsAvailability` is enforced on every attach (C§1a) |
 | T16 | Upgrade drift: a Chromium roll changes which domains or methods an untrusted client gets | The protocol-coverage unit test of §4.3 fails on any unclassified CDP method; REBASE rows name the symbols and the behaviours; a Mac test per denied domain (§14, §15) |
 | T17 | The agent reads or writes the OS clipboard (`Input.dispatchKeyEvent {commands:["paste"]}` pastes whatever the user last copied, such as passwords or 2FA codes) | `commands` is stripped from every key event (§4.5); no `clipboard` capability in v1; T-sec-10 |
-| T18 | A page the agent drives takes the user's attention or focus: `window.open`/`target=_blank`/popups (CDP clicks carry a user gesture), a `<select>` native menu, a file chooser sheet, HTTP auth, client-cert picker, external-protocol launch, print, permission bubbles | Page-opened tabs open in the background in the agent Space (hook #2, §14); `ForbidExternalPopupMenus()` in the lease; file chooser interception forced on; the others become **`userNeeded` approval prompts** that pause the tab and ask the user, never a silent native sheet (§9.4); T-focus-3..7 |
+| T18 | A page the agent drives takes the user's attention or focus: `window.open`/`target=_blank`/popups (CDP clicks carry a user gesture), a `<select>` native menu, a file chooser sheet, HTTP auth, client-cert picker, external-protocol launch, print, permission bubbles | Page-opened tabs open in the background in the agent Space (hook #2, §14); `ForbidExternalPopupMenus()` in the lease; file chooser interception forced on; the others become **`userNeeded` approval prompts** that pause the tab and ask the user, never a silent native sheet (§9.4); a held file chooser may instead be answered by the agent (`Koan.upload`, #420), still with no sheet; T-focus-3..7, T-up-1 |
 | T19 | Agent browsing leaks into the user's own surfaces: history, omnibox suggestions, Recently Closed, saved tab groups and sync, session restore, session files | Required. The agent works in a container (§7), so its cookies and storage never mix with the user's; the blocks of §7.2 keep its visits out of History, the omnibox, `@tabs` and sync; the restore hook blanks agent tabs (§7.1); conditional write-side hooks keep them out of the Recently Closed list and the session files (§7.4); T-hist-1, T-sync-1, T-sync-2, T-block-5, T-cont-8 |
 | T20 | Audit-log tampering or secret leakage through the log | Best-effort integrity (hash-chained records, chain key Keychain-bound), size-capped, URL paths redacted by default, nothing typed or evaluated stored (§6.3). A same-uid attacker can still delete it; the log is evidence for the user, not a security boundary |
 
@@ -326,7 +326,7 @@ allowlist and a scrubber, not the reverse.
 |---|---|
 | `Page` | `enable`, `disable`, `navigate`, `reload`, `stopLoading`, `getFrameTree`, `getLayoutMetrics`, `getNavigationHistory`, `navigateToHistoryEntry`, `captureScreenshot` (see below), `printToPDF`, `addScriptToEvaluateOnNewDocument`, `removeScriptToEvaluateOnNewDocument`, `handleJavaScriptDialog`, `startScreencast`, `stopScreencast`, `screencastFrameAck`, `createIsolatedWorld`, `setLifecycleEventsEnabled`, `setDocumentContent`. `setInterceptFileChooserDialog` is **forced on by Koan** (§9) |
 | `Runtime` | `enable`, `disable`, `evaluate`, `callFunctionOn`, `awaitPromise`, `getProperties`, `releaseObject`, `releaseObjectGroup`, `runIfWaitingForDebugger`, `addBinding`/`removeBinding`, `discardConsoleEntries`; **`contextId`/`uniqueContextId` must name the main world or a world the agent created** (§4.4) |
-| `DOM` | `enable`, `disable`, `getDocument`, `describeNode`, `resolveNode`, `requestNode`, `querySelector`, `querySelectorAll`, `getBoxModel`, `getContentQuads`, `getNodeForLocation`, `getFrameOwner`, `getAttributes`, `getOuterHTML`, `focus`, `scrollIntoViewIfNeeded`, `pushNodesByBackendIdsToFrontend`. **Not** `setFileInputFiles`, `getFileInfo`, `setNodeValue`, `setOuterHTML`, `removeNode`: writes go through `Runtime` or `Input` |
+| `DOM` | `enable`, `disable`, `getDocument`, `describeNode`, `resolveNode`, `requestNode`, `querySelector`, `querySelectorAll`, `getBoxModel`, `getContentQuads`, `getNodeForLocation`, `getFrameOwner`, `getAttributes`, `getOuterHTML`, `focus`, `scrollIntoViewIfNeeded`, `pushNodesByBackendIdsToFrontend`. **Not** `setFileInputFiles` (uploads go through `Koan.upload`, which answers the page's own chooser: §9.4, #420), `getFileInfo`, `setNodeValue`, `setOuterHTML`, `removeNode`: writes go through `Runtime` or `Input` |
 | `Accessibility` | `enable`, `disable`, `getFullAXTree`, `getPartialAXTree`, `queryAXTree`, `getChildAXNodes`, `getRootAXNode`. Renderer-side, not trust-gated upstream (review correction), so reachable; OOPIF behaviour still tested (T-cdp-3) |
 | `Input` | `dispatchMouseEvent`, `dispatchKeyEvent` (**`commands` stripped**, §4.5), `dispatchTouchEvent`, `insertText`, `imeSetComposition`, `synthesizeScrollGesture`, `synthesizeTapGesture`. **Not** `setIgnoreInputEvents` (would lock out the user), `dispatchDragEvent`, `setInterceptDrags`, `emulateTouchFromMouseEvent`, `cancelDragging` |
 | `Emulation` | `setDeviceMetricsOverride`, `clearDeviceMetricsOverride`, `setUserAgentOverride`, `setEmulatedMedia`, `setLocaleOverride`, `setTimezoneOverride`, `setGeolocationOverride`, `clearGeolocationOverride`, `setTouchEmulationEnabled`, `setScrollbarsHidden`, `setDefaultBackgroundColorOverride`. **Not** `setFocusEmulationEnabled` (the lease does it), `setVirtualTimePolicy`, `setCPUThrottlingRate`, `setIdleOverride` |
@@ -860,8 +860,12 @@ autofill, and never receives a secret (section 4.5, "Secrets Koan filled").
   login they open the URL in their own Space). Zen gives each workspace a default container that its new tabs use (`containers.md`, Zen);
   that is #111 and it reuses this core (`ContainerKind::kUser`, the same partition helpers, restore and hooks) with the
   blocks off.
-* **End of a task.** `EndAgentContainer` closes the container's tabs in every window (the Space goes with its last tab)
-  and, for a Throwaway container, clears all of its data. In-memory partitions are never unloaded before the profile
+* **End of a task.** `EndAgentContainer` closes the container's tabs in every window and, for a Throwaway container,
+  clears all of its data. Agent-created Spaces are explicitly temporary: their last-tab closure removes them instead
+  of invoking the normal user-Space rule that recreates an empty placeholder (#430). Their group ids carry that
+  lifetime across window moves; names and icons are never used to infer ownership. User tabs added to an agent Space
+  keep it alive when the agent's tabs close. Existing orphan Spaces created by older builds are not removed by guessing
+  their ownership. In-memory partitions are never unloaded before the profile
   shuts down (`browser_context.h`, E§1), so each throwaway task leaves an empty partition and its network context
   behind until quit: a known cost (T-cont-6 measures it). A partition is never reused for another task, because
   `ClearData` does not reset a network context's HTTP auth cache or sockets.
@@ -1157,9 +1161,9 @@ The agent controls CDP calls; the page controls what it does next. Everything be
 |---|---|
 | `window.open`, `target=_blank`, popups, a link click that opens a tab | opened **in the background in the agent Space**, owned by the same lease, never activated, no window raised (hook #2, §14); T-focus-3 |
 | `<select>` dropdowns, date and colour pickers | `ForbidExternalPopupMenus()` so no native NSMenu opens over the user's work (T-focus-4); the page renders them in-process |
-| File chooser, device choosers (WebUSB, WebHID, Web Serial, Web Bluetooth and its scanning prompt), `getDisplayMedia` | held as `userNeeded {file-picker}`, `{device-chooser}`, `{screen-share}` prompts (#273); refused in agent containers; `Page.setInterceptFileChooserDialog` stays denied (T-focus-5, T-pick-1..5) |
+| File chooser, device choosers (WebUSB, WebHID, Web Serial, Web Bluetooth and its scanning prompt), `getDisplayMedia` | held as `userNeeded {file-picker}`, `{device-chooser}`, `{screen-share}` prompts (#273); the device choosers and screen share are refused in agent containers, the file chooser is held there too (#420); the agent may answer a held file chooser itself with `Koan.upload` (#420); `Page.setInterceptFileChooserDialog` and `DOM.setFileInputFiles` stay denied (T-focus-5, T-pick-1..5, T-up-*) |
 | Passkeys (WebAuthn): a modal `create()` or `get()` | held as a `userNeeded {passkey}` prompt (#276); refused in agent containers; passkey autofill and the other non-modal requests stay refused (B9, T-pick-6) |
-| File System Access pickers | refused in every agent tab (B2), not held: see "Built (#273)" below |
+| File System Access pickers | refused in every agent tab (B2), not held: see "Built (#273)" below; answering `showOpenFilePicker()` with `Koan.upload` is #434 |
 | HTTP auth, client-certificate picker, external-protocol launch, print, `beforeunload` | `userNeeded` approval prompts, never a silent native sheet; `beforeunload` is handled explicitly (T-focus-6) |
 | Permission prompts (location, camera, microphone, notifications, USB, …) | the tab pauses and the normal permission bubble is anchored in the agent Space; the agent can never grant (`Browser.grantPermissions` does not exist); event reason keys as in §19.4 |
 | `alert`/`confirm`/`prompt` | held as `userNeeded {dialog}` prompts (maintainer, 2026-11-11); the agent can still answer with `Page.handleJavaScriptDialog` |
@@ -1190,7 +1194,8 @@ like the surfaces above instead of being refused: `<input type=file>` (`userNeed
 Web Serial and Web Bluetooth choosers and the Bluetooth scanning prompt (`{device-chooser}`) and `getDisplayMedia()`'s
 picker (`{screen-share}`). They are held in every tab an agent holds a lease on (its own, and a user tab it drives),
 except in an agent container, where they stay refused as before (B2; WebUSB, WebHID and Web Serial are refused for any
-non-default partition upstream). **Open** brings the tab forward and, once it is visible, runs Chrome's own path:
+non-default partition upstream). Since #420 the file chooser is held in agent containers too, so that the agent can
+answer it (`Koan.upload`, below). **Open** brings the tab forward and, once it is visible, runs Chrome's own path:
 `WebContentsImpl::RunFileChooser` and `FileSelectHelper`, `chrome::ShowDeviceChooserDialog` with the request's own
 `ChooserController`, `DisplayMediaAccessHandler::ShowMediaSelectionDialog`. **Dismiss** answers as the user's cancel
 would: the file input's `cancel`, the controller's `Close()` (the request rejects with `NotFoundError`),
@@ -1211,6 +1216,43 @@ each is held, and why there:
 - *Not held:* **File System Access pickers** (`showOpenFilePicker()` and the like) stay refused: content shows them
   itself (`FileSystemChooser`) after a synchronous `CanShowFilePicker`. (Passkeys were refused here too; #276 holds
   them, below.)
+
+**Built (#420, uploads):** the user decided (2026-11-20) that agents use the browser as the user does, and attaching a
+file the agent was given is part of that (the agent has file-system access already; making the user click every picker
+only adds latency). The password, payment and secrets rules are unchanged. `Koan.upload {files: [{path, name?}], waitMs?}`
+(sent with the tab's sessionId; `koan upload <tab> <path...>`, and act's `upload @ref <path...>`, which clicks the input,
+a styled button or a drop zone first) answers the file chooser the page opened, held as `userNeeded {file-picker}`:
+- *Upstream reused:* the chooser's own `content::FileSelectListener` (`FileChooserImpl::FileSelectListenerImpl`), the
+  object `FileSelectHelper` answers for the user's pick: `FileSelected(files, base_dir, mode)` with
+  `NativeFileInfo{path, display_name}` as `FileSelectHelper::ConvertToFileChooserFileInfoList` builds them. Content then
+  grants the renderer read access to exactly those files (`ChildProcessSecurityPolicy::GrantReadFile` in
+  `FileChooserImpl::FileSelected`), and Blink sets the input's files and fires `input` and `change`. Content's own
+  refusal of a save chooser from the renderer (`FileChooserImpl::OpenFileChooser`) and its one-chooser-per-frame rule
+  stay in force.
+- *Upstream suppressed:* the open panel and `FileSelectHelper` (which shows the panel, and cancels a chooser of a tab
+  that isn't active and visible, as an agent's background tab is), and `WebContentsImpl::RunFileChooser`'s visibility and
+  active-tab checks for this answer (they keep a panel off another tab; no panel shows). The hook is the #273 one,
+  widened: `WebContentsDelegate::HoldFileChooser` now also gets the chooser's `params` and its `listener`
+  (`koan::agent::HoldFileChooserForAgent` → `AgentPageSurfaces::HoldFileChooser`), so that the agent's answer goes to the
+  listener and the held `show` is dropped unrun. `FileSelectHelper`'s File Attached enterprise scan is not run, so with
+  that policy set Koan refuses agent uploads (`Koan.notPermitted`; the user picks). Mac packages are not zipped (a
+  package is a folder: refused).
+- *Where:* in every tab an agent holds a lease on, now its containers' too (only the file chooser: the device choosers
+  and screen share stay refused there; the user's Open there shows the panel, through
+  `ShowsHeldFileChooserForAgent()` in `BrowserWebContentsDelegate::RunFileChooser`). Only a tab the agent drives
+  (`TargetRegistry::MaySend`: its own, or a user's it was given to drive), never while the user has it (Koan.paused, also
+  checked again just before the answer), never behind an interstitial. A chooser the user opened is theirs.
+- *Checks* (`koan_agent_upload_logic.h`, pure, and `koan_agent_upload.h`): one file unless `multiple` (at most 32);
+  `accept` refused on a clear mismatch only (an extension none of the entries names and a MIME type Chrome knows for it
+  that none matches; an unknown type passes: the page checks anyway); folder pickers (`webkitdirectory`) refused as not
+  supported yet; each path absolute, an existing readable regular file (links resolved), not under Koan's user data,
+  the profile, `~/.koan`, `~/.ssh`, `~/.gnupg`, `~/Library/Keychains`, `~/Library/Cookies` and the cloud/developer credential
+  stores (`~/.aws`, `~/.azure`, `~/.config/gcloud`, `~/.config/gh`, `~/.docker`, `~/.kube`, `~/.git-credentials`, `~/.netrc`,
+  `~/.npmrc`, `~/.pypirc`). The CLI checks the same first (on the Mac: an agent
+  elsewhere `scp`s the file there). No size limit: the page reads the file itself.
+- *Visible and logged:* the pill reads "<agent> attached resume.pdf" for 6 s, the tab's window shows a toast, and the
+  audit record is `Koan.upload` with "resume.pdf (120.4 KB)" (names and sizes; never contents or folders).
+- *Not yet:* File System Access pickers (#434).
 
 **Built (#276, passkeys):** a modal WebAuthn request (`navigator.credentials.create({publicKey})` or
 `get({publicKey})` without `mediation`, or with `"optional"`/`"required"`) in a tab an agent holds now waits as
@@ -1566,7 +1608,7 @@ Code), `~/.agents/skills` (Codex's current user directory, also the one Amp, Cli
 `~/.cursor/skills` (Cursor), for each agent whose home directory exists, **only when the user clicks "Set Up Agents" in
 settings** (decision 10), never silently. Codex's older `~/.codex/skills` is not written, so that a Codex reading both does
 not list the skill twice. The same file is `skills/koan-browser/SKILL.md` in the repo, which `npx skills add
-Chaitanya045/koan` finds (the skills CLI looks for `skills/<name>/SKILL.md`); `scripts/tests/test_agent_skill.py` keeps the
+koan-browser/koan` finds (the skills CLI looks for `skills/<name>/SKILL.md`); `scripts/tests/test_agent_skill.py` keeps the
 two the same. The guide tells the agent: run `koan status`; if not paired, `koan pair` and wait for the user to approve;
 open tabs with `koan open` (they land in the agent's Space, never the user's); use `koan agent-browser` for page work;
 use `koan watch`; if `userNeeded` or `Koan.paused` appears, stop and tell the user; never ask the user for keys, never
@@ -1723,7 +1765,8 @@ Port to a `scripts/mac/agent.sh` driver and `scripts/e2e/agent_*.mjs` specs.
 | T-pick-2 | the same with `navigator.usb.requestDevice`, `navigator.hid.requestDevice`, `navigator.serial.requestPort`, `navigator.bluetooth.requestDevice` and `requestLEScan` (Bluetooth on, a device nearby) | `{device-chooser}`; Open shows Chrome's chooser bubble on the tab, listing the devices found while it waited; Dismiss rejects the promise with `NotFoundError` (the scan with its cancel error) |
 | T-pick-3 | the same with `getDisplayMedia({video: true})` (also `preferCurrentTab`) | `{screen-share}`; Open shows Chrome's screen-share picker on the tab and the chosen screen is shared; Dismiss rejects with `NotAllowedError` |
 | T-pick-4 | a picker waiting, then: the agent's page navigates; the agent ends the task (`koan end`) or the user takes the tab back; the tab closes | the prompt goes when the page goes (`Koan.userNeededDone`); on release the picker is cancelled, never shown; a closed tab leaves nothing |
-| T-pick-5 | "Your logins" off (a container), and a user tab driven in place: the steps of T-pick-1..3; and `navigator.credentials.get({publicKey})`, `showOpenFilePicker()` in an agent tab | in the container every picker is refused at once (no prompt), as before; in the driven user tab they wait like T-pick-1..3; `showOpenFilePicker()` is refused in agent tabs, the passkey request is refused in the container and waits like T-pick-6 in the driven user tab, nothing shows over the user's work |
+| T-pick-5 | "Your logins" off (a container), and a user tab driven in place: the steps of T-pick-1..3; and `navigator.credentials.get({publicKey})`, `showOpenFilePicker()` in an agent tab | in the container every picker but the file chooser is refused at once (no prompt), as before; the file chooser waits there too since #420 (T-up-10); in the driven user tab they wait like T-pick-1..3; `showOpenFilePicker()` is refused in agent tabs, the passkey request is refused in the container and waits like T-pick-6 in the driven user tab, nothing shows over the user's work |
+| T-up-1..13 | `koan upload` and act's `upload` step (#420) | `scripts/mac/steps/agent_upload.md`; scripted in `scripts/e2e/agent_upload.mjs` |
 | T-pick-6 | "Your logins" on, the user typing in another tab, a site with passkeys (webauthn.io): in an agent tab, register a passkey (`create()`), then Open; sign in with it (`get()`), then Open; each again, then Dismiss; one more, then the page aborts it (`AbortController`), the agent's page navigates, and `koan end`; also a page with passkey autofill (`mediation: "conditional"`) | nothing over the user's tab until Open (no Touch ID sheet, no security-key prompt, no iCloud Keychain sheet): `Koan.userNeeded {passkey}` and the pill's "… wants you to use a passkey"; Open brings the tab forward and Chrome's passkey sheet shows on it, Touch ID creates and then signs in with the passkey; the page's `timeout` runs from Open, not from the request; Dismiss, the abort, the navigation and `koan end` reject with `NotAllowedError` (the abort with its reason) and the prompt goes (`Koan.userNeededDone`); autofill offers no passkey and nothing is held |
 | T-focus-6 | HTTP auth, client-certificate request, an external-protocol link, `window.print()`, `beforeunload` | each becomes a `userNeeded` approval prompt, none a silent native sheet |
 | T-focus-7 | all of the above while the user is typing in a different window | the frontmost pid and the user's text are unchanged |

@@ -29,6 +29,7 @@
 #include "koan/browser/agent/koan_agent_prompts.h"
 #include "koan/browser/agent/koan_agent_registry.h"
 #include "koan/browser/agent/koan_agent_session.h"
+#include "koan/browser/agent/koan_agent_upload.h"
 
 class GURL;
 
@@ -69,6 +70,10 @@ struct ControlledTab {
   bool auto_resumes = false;
   // While the pill counts down ("continues in 5s"): when the tab resumes.
   std::optional<base::TimeTicks> countdown_ends;
+  // For a few seconds after the agent attached files to a page in the tab
+  // (`koan upload`): their names ("resume.pdf"), and which upload it was.
+  std::u16string attached;
+  uint64_t attached_seq = 0;
   raw_ptr<content::WebContents> contents = nullptr;
 };
 
@@ -162,6 +167,16 @@ class AgentForwarder : public AutofillHooksDelegate {
   // A page in an agent tab opened `opened` (AgentLeaseManager).
   void OnOpenedFromAgentTab(content::WebContents* source,
                             content::WebContents* opened);
+  // `koan upload`, from a facade (koan_agent_upload.h), and what the
+  // indicator says once it attached files.
+  void Upload(const std::string& client_id,
+              const std::string& target_id,
+              const FacadeBackend::UploadRequest& request,
+              FacadeBackend::UploadCallback done);
+  void OnUploaded(const std::string& target_id,
+                  FacadeBackend::UploadCallback done,
+                  FacadeBackend::UploadResult result);
+  void OnAttachedShown();
 
   // Take-over (design section 9.2), from a facade.
   void RequestTakeOver(const std::string& client_id,
@@ -251,6 +266,17 @@ class AgentForwarder : public AutofillHooksDelegate {
   std::map<std::string, std::unique_ptr<SecretScrubber>, std::less<>>
       scrubbers_;
   base::SequenceBound<AuditLog> audit_;
+  AgentUploads uploads_;
+  // What the indicator says a tab was given (ControlledTab::attached), and
+  // until when.
+  struct Attached {
+    std::u16string text;
+    uint64_t seq = 0;
+    base::TimeTicks until;
+  };
+  std::map<std::string, Attached, std::less<>> attached_;
+  uint64_t next_attached_seq_ = 1;
+  base::OneShotTimer attached_timer_;
   base::WeakPtrFactory<AgentForwarder> weak_factory_{this};
 };
 

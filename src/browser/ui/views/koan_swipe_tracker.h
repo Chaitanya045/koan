@@ -20,19 +20,27 @@ namespace koan {
 // swipe tracker (widget/SwipeTracker.cpp, patched by Zen) that feeds it. All
 // numbers are theirs.
 //
-// The tracker turns the fingers' travel into a gesture amount: -x / 550 on
+// The tracker turns the fingers' travel into a gesture amount: x / 550 on
 // macOS (widget.swipe.pixel-size, in points), so 550pt of travel is 1; moving
-// the fingers left makes it positive, right negative. The Space is shown
-// translated by a function of that amount (SwipeTranslate()), and when the
-// fingers lift the swipe succeeds (SwipeSucceeds()) if the amount plus the
-// last event's velocity (amounts per second) times Zen's contribution reaches
-// Zen's threshold. A negative amount (fingers moving right) goes to the next
-// Space, a positive one to the previous (ZenSpacesSwipe #handleSwipeEnd(),
-// zen.workspaces.natural-scroll off), the strip moving the other way from the
-// fingers.
+// the fingers right makes it positive, left negative. (Gecko's SwipeTracker
+// and Zen's translateX use the fingers' own direction, whatever the system's
+// natural scrolling setting: see KoanSpaceSwipe.) The Space is shown
+// translated by a function of that amount (SwipeTranslate()), so it follows
+// the fingers, and when the fingers lift the swipe succeeds (SwipeSucceeds())
+// if the amount plus the last event's velocity (amounts per second) times
+// Zen's contribution reaches Zen's threshold. A negative amount (fingers
+// moving left) goes to the next Space, a positive one to the previous
+// (SwipeGoesToNextSpace(); ZenSpacesSwipe #handleSwipeEnd(),
+// zen.workspaces.natural-scroll off): the Space coming in follows the fingers
+// the whole way, like paging on iOS.
 
-// The gesture amount of `travel` points of finger movement to the left.
-float SwipeGestureAmount(float travel_left);
+// The gesture amount of `travel_right` points of finger movement to the right.
+float SwipeGestureAmount(float travel_right);
+
+// Whether a swipe that succeeded at gesture `amount` goes to the next Space
+// (else the previous one): fingers moving left, or right in a right-to-left
+// UI, where the next Space is on the left.
+bool SwipeGoesToNextSpace(float amount, bool rtl);
 
 // The state SwipeTranslate() carries between the events of a gesture
 // (ZenSpacesSwipe's swipeState.lastDelta).
@@ -95,8 +103,9 @@ class KoanSwipeTracker {
   KoanSwipeTracker& operator=(const KoanSwipeTracker&) = delete;
   ~KoanSwipeTracker();
 
-  // Takes a scroll event over the sidebar: `dx` and `dy` pixels (positive:
-  // content moving right and down) at `seconds` on any steady clock. Returns
+  // Takes a scroll event over the sidebar: `dx` pixels (positive: fingers
+  // moving right, whatever the system's natural scrolling setting is) and `dy`
+  // pixels (only its size matters) at `seconds` on any steady clock. Returns
   // whether it belongs to a horizontal swipe, which the caller then handles:
   // nothing else sees it, like upstream's own swipe, and the tab list
   // underneath doesn't get the momentum that follows. Over the page there is

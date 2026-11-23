@@ -507,8 +507,9 @@ belongs to a Space, and new tabs open in the active one.
   the Space (see Space themes below).
 - **Switch**: click a Space in the bottom bar, ⌘⌥← / ⌘⌥→ (they wrap around unless you turn that off in Settings > Tab
   Management > Workspaces), ⌃1…⌃0 for Space 1 to 10, swipe
-  horizontally with two fingers over the sidebar (on a Mac, as in Zen, the Space moves against your
-  fingers: moving them right goes to the next Space, and lifting them
+  horizontally with two fingers over the sidebar (on a Mac, as in Zen, the Space follows your
+  fingers, whatever the system's natural scrolling setting: moving them left
+  brings in the next Space, right the previous one, and lifting them
   after enough travel, or a quick flick, switches Space), or turn the mouse wheel
   there (horizontally, or vertically while holding ⌃; the key and
   natural scrolling, which turns the wheel and the swipe round, are in
@@ -518,9 +519,10 @@ belongs to a Space, and new tabs open in the active one.
   (also after a restart).
 - **Swipe past the ends** (on a Mac, as in Zen): from the first Space (the
   one next to the Library; the last with the tabs on the right), swiping
-  on towards the Library's side (fingers moving left) opens the
+  on towards the Library's side (fingers moving right, with the Library on
+  the left) opens the
   **Library**, which follows your fingers; swipe back over it to close it.
-  From the last Space, swiping on (fingers moving right) brings in a round
+  From the last Space, swiping on (fingers moving left) brings in a round
   **+** badge whose ring fills as you go; once the ring fills the badge
   (the trackpad ticks), lifting your fingers opens the Create-a-Space
   form. With one Space, both. These swipes don't wrap around; ⌘⌥← / ⌘⌥→
@@ -1261,7 +1263,7 @@ from …" folder on it.
 ## Updates
 
 Koan has no automatic updater yet. To update a release, download the newest
-one from the [Releases page](https://github.com/Chaitanya045/koan/releases)
+one from the [Releases page](https://github.com/koan-browser/koan/releases)
 and drag it over the old one in Applications (see
 [Installing the macOS build](#installing-the-macos-build)). A build from
 your own clone updates with `git pull && scripts/build.sh`
@@ -1372,25 +1374,25 @@ Koan runs on Macs with Apple Silicon (M1 and later), macOS 13 or later.
 Intel Macs aren't supported.
 
 - **Alpha releases** (start here): the newest is at the top of the
-  [Releases page](https://github.com/Chaitanya045/koan/releases/latest),
+  [Releases page](https://github.com/koan-browser/koan/releases/latest),
   `Koan-<version>-arm64.dmg` and its `.sha256`. How releases are made and
   what an alpha promises: [RELEASING.md](RELEASING.md).
 - **Nightly pre-release:** a test build made every night from `develop`,
   the `nightly` release on the
-  [Releases page](https://github.com/Chaitanya045/koan/releases/tag/nightly),
+  [Releases page](https://github.com/koan-browser/koan/releases/tag/nightly),
   `Koan-<version>-<commit>-arm64.dmg` and its `.sha256`. Each new nightly
   replaces it.
 - **Any run** (also of a branch): open a run of the
-  [macOS nightly workflow](https://github.com/Chaitanya045/koan/actions/workflows/macos.yml)
+  [macOS nightly workflow](https://github.com/koan-browser/koan/actions/workflows/macos.yml)
   and click the `Koan-….dmg` under "Artifacts" (you need to be signed in to
   GitHub). The file is the .dmg itself, not a zip. From a terminal
   (`gh run download` can't fetch it, because it expects a zip):
 
   ```sh
   run=<run id>
-  id=$(gh api repos/Chaitanya045/koan/actions/runs/$run/artifacts \
+  id=$(gh api repos/koan-browser/koan/actions/runs/$run/artifacts \
     --jq '.artifacts[] | select(.name | endswith(".dmg")) | .id')
-  gh api repos/Chaitanya045/koan/actions/artifacts/$id/zip > Koan.dmg
+  gh api repos/koan-browser/koan/actions/artifacts/$id/zip > Koan.dmg
   ```
 
 Open the .dmg and drag Koan to Applications.
@@ -1593,7 +1595,7 @@ Amp, Cline, Pi and `npx skills` share) and `~/.cursor/skills` (Cursor). It
 only writes when you click, never over a file that isn't Koan's, and says
 which agents it set up; **Remove** takes it out again. Set up again after
 moving Koan. The same skill is in the repo for `npx skills add
-Chaitanya045/koan`. The skill only says what Koan is and "run `koan skill`",
+koan-browser/koan`. The skill only says what Koan is and "run `koan skill`",
 whose guide comes from the installed Koan. An agent on another machine runs
 `koan` on the Mac over ssh, by its full path
 (`~/Applications/Koan.app/Contents/Resources/bin/koan`); screenshots are
@@ -1643,6 +1645,35 @@ log with the field's kind and the row's label, never a value. Filling a card
 is not paying: an agent stops before the last Pay, Place order or Confirm
 button, tells you the amount and the card or account the page shows, and
 hands you the tab to click it yourself.
+
+Agents attach the files you gave them (a resume, a photo, a document) the
+way you would pick them, without the open panel. `koan act <tab> upload
+@ref ~/work/resume.pdf` clicks the file input, the site's "Upload" button
+or its drop zone and answers the file chooser the page opens; `koan upload
+<tab> <path>` answers one a click already opened (the page's chooser waits
+as "… wants you to choose a file" in the pill meanwhile, and you can still
+Open it and pick yourself). The page gets the files through Chrome's own
+chooser path, so it sees them exactly as your pick, with its change event;
+no panel or sheet shows over your work. The chooser's rules hold: one file
+unless the input takes several, of a type its `accept` list allows
+(Koan.notAccepted on a clear mismatch, such as a .docx where only .pdf is
+accepted); folder inputs are not supported yet (Koan.notSupported: you pick
+the folder). The paths are on the Mac that runs Koan; each must be a
+readable file (Koan.fileNotFound, Koan.notAFile, Koan.fileUnreadable), and
+Koan never uploads from its own profile, `~/.koan`, `~/.ssh`, `~/.gnupg`,
+your keychains, or cloud and developer credentials (`~/.aws`, `~/.azure`,
+`~/.config/gcloud`, `~/.config/gh`, `~/.docker`, `~/.kube`,
+`~/.git-credentials`, `~/.netrc`, `~/.npmrc`, `~/.pypirc`). An agent on another machine copies the file over first:
+`scp resume.pdf mac:/tmp/` and then, over ssh, `koan upload <tab>
+/tmp/resume.pdf`. Files in Desktop, Documents or Downloads make macOS ask
+you once to let Koan read that folder. Uploads work only on the agent's
+own tabs and on tabs of yours you let it drive, and not while you are
+using the tab (Koan.paused). The pill says "Claude Code attached
+resume.pdf" for a few seconds, the window holding the tab shows a toast,
+and the activity log keeps each file's name and size, never its contents.
+There is no size limit: the page reads the file itself, as with your pick.
+Pages that use the File System Access picker (`showOpenFilePicker()`)
+still need you (#434).
 
 `koan snapshot` prints the page as a compact outline: controls, links,
 landmarks and headings with `@refs`, each block's text on one line, and
@@ -1695,6 +1726,8 @@ waits. `koan skill` prints the guide
 agents follow; `skills/koan-browser/SKILL.md` is the entry for an agent's
 skills folder. The agent's tabs stay open between its commands, for as long as its
 task lasts: `koan end`, or 30 minutes without a command, closes them.
+An agent-created Space disappears when its last tab closes. User tabs you
+opened in that Space stay open when the agent ends its task.
 `koan open --saved <name>` uses a saved container you allowed that agent;
 otherwise it is refused, never opened in a throwaway one instead.
 

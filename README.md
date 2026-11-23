@@ -2,14 +2,14 @@
 
 ### `Koan`
 
-[![Downloads](https://img.shields.io/github/downloads/Chaitanya045/koan/total.svg)](https://github.com/Chaitanya045/koan/releases)
-[![Release](https://img.shields.io/github/v/release/Chaitanya045/koan?sort=semver&label=release)](https://github.com/Chaitanya045/koan/releases/latest)
-[![CI](https://github.com/Chaitanya045/koan/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/Chaitanya045/koan/actions/workflows/ci.yml)
+[![Downloads](https://img.shields.io/github/downloads/koan-browser/koan/total.svg)](https://github.com/koan-browser/koan/releases)
+[![Release](https://img.shields.io/github/v/release/koan-browser/koan?sort=semver&label=release)](https://github.com/koan-browser/koan/releases/latest)
+[![CI](https://github.com/koan-browser/koan/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/koan-browser/koan/actions/workflows/ci.yml)
 
 **The only browser you need.** Koan is a calm, keyboard-first browser for macOS, and your AI agents can use it too: in tabs of their own, signed in as you, without interrupting you or seeing your passwords.
 
 <div flex="true">
-  <a href="https://github.com/Chaitanya045/koan/releases/latest">
+  <a href="https://github.com/koan-browser/koan/releases/latest">
     Download
   </a>
   •
@@ -31,7 +31,7 @@
 
 ### Contributing
 
-If you'd like to report a bug or ask for a feature, please use our [GitHub Issues page](https://github.com/Chaitanya045/koan/issues/new/choose).
+If you'd like to report a bug or ask for a feature, please use our [GitHub Issues page](https://github.com/koan-browser/koan/issues/new/choose).
 
 Koan is an open-source project, and contributions are welcome! Please read the [contribution guidelines](CONTRIBUTING.md) and [building on macOS](docs/BUILDING-MAC.md) before getting started. To report a security issue, see [SECURITY.md](SECURITY.md).
 

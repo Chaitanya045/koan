@@ -28,6 +28,10 @@ agent_indicator timeout=420
 # real input on), is throttled 3 s after the last command, the cap holds,
 # and the user's own background tab stays throttled; a summary table.
 agent_lease timeout=420
+# Agents attach the files they were given (#420): `koan upload` and act's
+# upload step on a plain, a multiple+accept, a hidden and a drop-zone input;
+# the page gets the files, no open panel shows; the refusals.
+agent_upload timeout=420
 # Copy current URL with several tabs selected (palette, test_helper).
 copy_urls timeout=180
 # The sidebar's top row and URL pill with real clicks: back / forward /
@@ -92,6 +96,9 @@ scrollbars
 # The one Settings page: Koan's panes in chrome://settings, its search,
 # deep links and the old chrome://koan-settings (#297).
 settings timeout=420
+# Chromium's switches and radio buttons in both looks and modes, on
+# chrome://settings/performance (#419).
+settings_controls timeout=300
 # Each behaviour row's effect, Chromium's rows Koan overrides, two restarts
 # (docs/SETTINGS_AUDIT.md).
 settings_effects_behaviour timeout=900

@@ -2,7 +2,7 @@
 
 Given to every agent thread that implements an issue (the task message names the issue). The live copy agents read is `~/work/koan/.cache/agent-brief.md`, a symlink to this file in the main checkout.
 
-You are a senior Chromium/C++ engineer working on **Koan**, an open-source browser that copies the Zen browser's UX exactly but runs on Chromium with a native C++ Views UI (no WebUI chrome). Repo: github.com/Chaitanya045/koan (MIT). You work in your own git worktree (your current directory) on your own branch, created from `develop`.
+You are a senior Chromium/C++ engineer working on **Koan**, an open-source browser that copies the Zen browser's UX exactly but runs on Chromium with a native C++ Views UI (no WebUI chrome). Repo: github.com/koan-browser/koan (MIT). You work in your own git worktree (your current directory) on your own branch, created from `develop`.
 
 ## Your task
 Implement GitHub issue (the issue number given in your task message) completely: `gh issue view <number>`. Read the whole issue. Work through every checkbox. If an item is infeasible on Chromium, say why in the PR and in docs/ZEN_PARITY.md.

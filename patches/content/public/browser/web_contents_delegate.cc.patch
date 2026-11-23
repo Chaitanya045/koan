@@ -1,13 +1,15 @@
 diff --git a/content/public/browser/web_contents_delegate.cc b/content/public/browser/web_contents_delegate.cc
-index 0b44d8b..6249e34 100644
+index 0b44d8b..4d45803 100644
 --- a/content/public/browser/web_contents_delegate.cc
 +++ b/content/public/browser/web_contents_delegate.cc
-@@ -285,6 +285,20 @@ void WebContentsDelegate::RunFileChooser(
+@@ -285,6 +285,22 @@ void WebContentsDelegate::RunFileChooser(
    listener->FileSelectionCanceled();
  }
  
 +bool WebContentsDelegate::HoldFileChooser(
 +    RenderFrameHost* render_frame_host,
++    const blink::mojom::FileChooserParams& params,
++    scoped_refptr<FileSelectListener> listener,
 +    base::OnceCallback<void(bool show)> show) {
 +  return false;
 +}

@@ -140,7 +140,7 @@ _Last updated: 2026-11-02_
   docs/REBASE.md) and a cheap mode check on each layout.
 - About-menu ensō icon verified in chrome://settings.
 
-- 2026-10-19: public repo github.com/Chaitanya045/koan (MIT, default
+- 2026-10-19: public repo github.com/koan-browser/koan (MIT, default
   branch `develop`, protected: PR + CI). Issues/PRs: #1/#8 release config,
   #2/#9 CI, #7/#10 contributing, #3/#11 Zen shortcuts, #4/#17 Alt+click
   Glance, #15/#16 Zen parity doc. Open: #5/#13 packaging (draft), #6/#14

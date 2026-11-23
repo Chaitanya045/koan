@@ -45,7 +45,7 @@ jobs:
     # a dispatch from a feature branch would edit the real tracking issue
     # from that branch's patches and pin. Dry runs can be from anywhere.
     if: >-
-      github.repository == 'Chaitanya045/koan' &&
+      github.repository == 'koan-browser/koan' &&
       (github.ref == 'refs/heads/develop' || inputs.dry_run)
     runs-on: ubuntu-latest
     timeout-minutes: 30

@@ -10,6 +10,7 @@
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/run_until.h"
+#include "base/test/test_future.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -25,9 +26,11 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/prefs/pref_service.h"
+#include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "koan/browser/containers/koan_agent_containers.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/koan_shortcut_table.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
@@ -58,6 +61,17 @@ constexpr char16_t kRocket[] = u"\U0001F680";
 
 // A page that is not blank, so it is never taken for an empty tab.
 constexpr char kPage[] = "data:text/html,<title>Page</title>";
+
+std::optional<containers::AgentContainer> StartAgentTask(
+    Profile* profile,
+    containers::AgentMode mode) {
+  base::test::TestFuture<containers::AgentContainerResult> started;
+  containers::StartAgentContainer(
+      profile, {.mode = mode, .space_name = u"Agent cleanup"},
+      started.GetCallback());
+  const containers::AgentContainerResult& result = started.Get();
+  return result.has_value() ? std::make_optional(*result) : std::nullopt;
+}
 
 // Zen's "Clear" (the sidebar's button above the tab list, Ctrl+Shift+K).
 void Clear(BrowserWindowInterface* browser) {
@@ -821,6 +835,147 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
       browser(), GURL(kPage), WindowOpenDisposition::kNewForegroundTab,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
   EXPECT_FALSE(HandleTabCloseRequest(model->GetActiveTab()));
+}
+
+// EndAgentContainer is also the task/last-connection cleanup path. Ordinary
+// user Spaces keep empty tabs, but an ended agent's Space must not get one.
+IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest, EndingAgentTaskRemovesItsSpace) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kPage)));
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  TabStripModel* model = browser()->GetTabStripModel();
+  const tab_groups::TabGroupId user_space = *spaces->GetActiveSpace();
+  content::WebContents* user_tab = model->GetActiveWebContents();
+  for (const auto mode : {containers::AgentMode::kThrowaway,
+                          containers::AgentMode::kUserPartition}) {
+    const auto container = StartAgentTask(browser()->GetProfile(), mode);
+    ASSERT_TRUE(container);
+    ASSERT_TRUE(containers::OpenAgentTab(browser()->GetProfile(), container->id,
+                                         GURL(url::kAboutBlankURL)));
+    ASSERT_TRUE(containers::OpenAgentTab(browser()->GetProfile(), container->id,
+                                         GURL(url::kAboutBlankURL)));
+    ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+    EXPECT_EQ(user_space, *spaces->GetActiveSpace());
+
+    containers::EndAgentContainer(browser()->GetProfile(), container->id);
+    ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+    base::RunLoop().RunUntilIdle();
+    EXPECT_EQ(1, model->count());
+    EXPECT_EQ(user_tab, model->GetActiveWebContents());
+    EXPECT_EQ(user_space, *spaces->GetActiveSpace());
+    EXPECT_TRUE(
+        containers::GetContainerTabs(browser()->GetProfile(), container->id)
+            .empty());
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
+                       ClosingLastAgentTabRemovesItsSpace) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kPage)));
+  const auto container = StartAgentTask(browser()->GetProfile(),
+                                        containers::AgentMode::kUserPartition);
+  ASSERT_TRUE(container);
+  TabStripModel* model = browser()->GetTabStripModel();
+  content::WebContents* agent_tab = containers::OpenAgentTab(
+      browser()->GetProfile(), container->id, GURL(url::kAboutBlankURL));
+  ASSERT_TRUE(agent_tab);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  model->CloseWebContentsAt(model->GetIndexOfWebContents(agent_tab),
+                            TabCloseTypes::CLOSE_NONE);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  // The task may open another tab later: it gets a new temporary Space.
+  ASSERT_TRUE(containers::OpenAgentTab(browser()->GetProfile(), container->id,
+                                       GURL(url::kAboutBlankURL)));
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  containers::EndAgentContainer(browser()->GetProfile(), container->id);
+  EXPECT_TRUE(WaitForSpaceCount(browser(), 1));
+}
+
+IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
+                       EndingAgentTaskKeepsUserTabsInItsSpace) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kPage)));
+  const auto container = StartAgentTask(browser()->GetProfile(),
+                                        containers::AgentMode::kUserPartition);
+  ASSERT_TRUE(container);
+  content::WebContents* agent_tab = containers::OpenAgentTab(
+      browser()->GetProfile(), container->id, GURL(url::kAboutBlankURL));
+  ASSERT_TRUE(agent_tab);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  const auto agent_space =
+      tabs::TabInterface::GetFromContents(agent_tab)->GetGroup();
+  ASSERT_TRUE(agent_space);
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  spaces->SwitchTo(*agent_space);
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL(kPage), WindowOpenDisposition::kNewForegroundTab,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  TabStripModel* model = browser()->GetTabStripModel();
+  content::WebContents* user_tab = model->GetActiveWebContents();
+  ASSERT_EQ(agent_space, model->GetActiveTab()->GetGroup());
+  ASSERT_NE(containers::ContainerOf(user_tab), container->id);
+
+  containers::EndAgentContainer(browser()->GetProfile(), container->id);
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(spaces->GetSpace(*agent_space));
+  ASSERT_EQ(1u, TabsOfSpace(model, *agent_space).size());
+  EXPECT_EQ(user_tab,
+            model->GetWebContentsAt(TabsOfSpace(model, *agent_space).front()));
+}
+
+IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
+                       EndingAgentTaskKeepsUserSpaceWithRobotIcon) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  spaces->CreateSpace(u"My robot", u"\U0001F916", {});
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kPage)));
+  const tab_groups::TabGroupId user_space = *spaces->GetActiveSpace();
+  const auto container = StartAgentTask(browser()->GetProfile(),
+                                        containers::AgentMode::kUserPartition);
+  ASSERT_TRUE(container);
+  content::WebContents* agent_tab = containers::OpenAgentTab(
+      browser()->GetProfile(), container->id, GURL(url::kAboutBlankURL));
+  ASSERT_TRUE(agent_tab);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 3));
+  TabStripModel* model = browser()->GetTabStripModel();
+  model->AddToExistingGroup({model->GetIndexOfWebContents(agent_tab)},
+                            user_space);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  containers::EndAgentContainer(browser()->GetProfile(), container->id);
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(spaces->GetSpace(user_space));
+  EXPECT_EQ(u"My robot", spaces->GetSpace(user_space)->name);
+  EXPECT_EQ(1u, TabsOfSpace(model, user_space).size());
+}
+
+IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
+                       EndingLastAgentSpaceLeavesOrdinaryEmptySpace) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kPage)));
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  const tab_groups::TabGroupId user_space = *spaces->GetActiveSpace();
+  const auto container = StartAgentTask(browser()->GetProfile(),
+                                        containers::AgentMode::kUserPartition);
+  ASSERT_TRUE(container);
+  content::WebContents* agent_tab = containers::OpenAgentTab(
+      browser()->GetProfile(), container->id, GURL(url::kAboutBlankURL));
+  ASSERT_TRUE(agent_tab);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  const auto agent_space =
+      tabs::TabInterface::GetFromContents(agent_tab)->GetGroup();
+  ASSERT_TRUE(agent_space);
+  spaces->DeleteSpaceForSync(user_space);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  containers::EndAgentContainer(browser()->GetProfile(), container->id);
+  TabStripModel* model = browser()->GetTabStripModel();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return model->count() == 1 && spaces->GetSpaces().size() == 1 &&
+           !spaces->GetSpace(*agent_space);
+  }));
+  EXPECT_TRUE(spaces->GetSpaces().front().icon.empty());
+  EXPECT_TRUE(IsEmptyTab(model->GetActiveTab()));
 }
 
 }  // namespace koan

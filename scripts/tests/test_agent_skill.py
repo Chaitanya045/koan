@@ -4,7 +4,7 @@
 # found in the LICENSE file.
 """The koan-browser entry skill has one text in two places.
 
-skills/koan-browser/SKILL.md is what `npx skills add Chaitanya045/koan`
+skills/koan-browser/SKILL.md is what `npx skills add koan-browser/koan`
 installs (the skills CLI finds skills/<name>/SKILL.md in a repo), and
 src/browser/agent/koan_agent_setup.cc writes the same text when the user
 clicks Settings > Agent Control > Set Up Agents. These run in CI; the C++
