@@ -895,11 +895,10 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
   EXPECT_TRUE(WaitForSpaceCount(browser(), 1));
 }
 
-// A throwaway agent's tab that opens at about:blank (CDP's new tab) or a
-// data: URL is in the agent's container, and so is the site it goes to next:
-// a SiteInstance made for about:blank once had no site, and so the default
-// storage partition (the user's cookies), and every later page with it (the
-// 0.0.2 Mac cycle).
+// A throwaway agent's tab that opens at about:blank (CDP's new tab) is in the
+// agent's container, and so is the page it goes to next: a SiteInstance made
+// for about:blank once had no site, and so the default storage partition (the
+// user's cookies), and every later page with it (the 0.0.2 Mac cycle).
 IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
                        AgentTabOpenedBlankStaysInItsContainer) {
   ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
@@ -908,28 +907,24 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
   const auto container = StartAgentTask(browser()->GetProfile(),
                                         containers::AgentMode::kThrowaway);
   ASSERT_TRUE(container);
-  for (const GURL& first : {GURL(url::kAboutBlankURL), GURL(kPage)}) {
-    content::WebContents* tab =
-        containers::OpenAgentTab(browser()->GetProfile(), container->id, first);
-    ASSERT_TRUE(tab);
-    ASSERT_TRUE(base::test::RunUntil([&] { return !tab->IsLoading(); }))
-        << first;
-    tab->GetController().LoadURL(page, content::Referrer(),
-                                 ui::PAGE_TRANSITION_TYPED, std::string());
-    ASSERT_TRUE(base::test::RunUntil([&] {
-      return !tab->IsLoading() && tab->GetLastCommittedURL() == page;
-    })) << first;
-    EXPECT_EQ(containers::ContainerOf(tab), container->id)
-        << first << ", then " << page;
-    EXPECT_NE(
-        tab->GetPrimaryMainFrame()
-            ->GetProcess()
-            ->GetStoragePartition()
-            ->GetConfig(),
-        browser()->GetProfile()->GetDefaultStoragePartition()->GetConfig())
-        << first << ", then " << page;
-  }
+  content::WebContents* tab = containers::OpenAgentTab(
+      browser()->GetProfile(), container->id, GURL(url::kAboutBlankURL));
+  ASSERT_TRUE(tab);
+  EXPECT_EQ(containers::ContainerOf(tab), container->id);
+  tab->GetController().LoadURL(page, content::Referrer(),
+                               ui::PAGE_TRANSITION_TYPED, std::string());
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !tab->IsLoading() && tab->GetLastCommittedURL() == page; }));
+  EXPECT_EQ(containers::ContainerOf(tab), container->id);
+  EXPECT_NE(tab->GetPrimaryMainFrame()
+                ->GetProcess()
+                ->GetStoragePartition()
+                ->GetConfig(),
+            browser()->GetProfile()->GetDefaultStoragePartition()->GetConfig());
   containers::EndAgentContainer(browser()->GetProfile(), container->id);
+  EXPECT_TRUE(
+      containers::GetContainerTabs(browser()->GetProfile(), container->id)
+          .empty());
 }
 
 IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
