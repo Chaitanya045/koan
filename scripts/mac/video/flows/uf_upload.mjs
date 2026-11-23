@@ -111,8 +111,12 @@ await step('UF-UP-3', 'The person takes the tab over: the agent can\'t attach un
   await t.shot('paused');
   const h = await clickPill('Hand back');
   t.check('a real click on Hand back', h.ok, h.why);
-  r = await koan(['act', tab, 'upload', button ?? '@1', resume]);
-  t.check('handed back: the agent attaches again', r.code === 0 && /attached resume\.pdf/.test(r.out), brief(r));
+  // The person may have changed the page: the old refs are stale
+  // (Koan.staleRef), so the agent looks again first.
+  const again = refOf((await koan(['snapshot', tab, '--interactive'])).out, /button "Upload resume"/);
+  r = await koan(['act', tab, 'upload', again ?? '@1', resume]);
+  t.check('handed back, after a fresh snapshot: the agent attaches again',
+          r.code === 0 && /attached resume\.pdf/.test(r.out), brief(r));
   r = await koan(['end']);
   t.check('koan end', r.code === 0, brief(r));
 }, { needs: ['real input'] });
