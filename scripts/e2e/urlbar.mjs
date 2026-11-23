@@ -24,6 +24,7 @@
 import { copyFileSync, readdirSync, statSync } from 'node:fs';
 import { browserCall, setKoanPref, viewEvent, viewTree, visiblePage, waitFor, ACCEL, IS_MAC,
          sendKey } from './lib/koan.mjs';
+import { menuKey } from './lib/mac.mjs';
 
 const UI_PORT = process.env.UI_PORT;
 const CDP_PORT = process.env.CDP_PORT;
@@ -675,7 +676,17 @@ if (BEHAVIOR !== 'normal') {
       v.cls === 'RoundedOmniboxResultsFrame' && v.shown && v.h > 0);
   for (const style of ['zen', 'shadcn']) {
     await setKoanPref('koan.look.style', style);
-    await key(76, ACCEL, 'l');
+    // A real Cmd+L on the Mac (the main menu's key equivalent: a CDP key
+    // doesn't always reach it, lib/mac.mjs menuKey()).
+    if (!IS_MAC || !(await menuKey(await visiblePage(), 'l', 'c', async () => {}, 1200))) {
+      await key(76, ACCEL, 'l');
+    }
+    {
+      const now = await views();
+      console.log(`INFO  after Cmd+L (${style}): backdrop ${shown(now, 'KoanUrlBarBackdrop')}, card ` +
+                  `${shown(now, 'KoanUrlBarCardDecoration')}, popup ${!!popup(now)}, bar ` +
+                  `${bar(now)?.w}x${bar(now)?.h}`);
+    }
     const before = await waitFor(async () => {
       const now = await views();
       return popup(now) && now;
