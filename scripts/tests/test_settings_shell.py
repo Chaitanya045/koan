@@ -144,5 +144,98 @@ class SettingsShellTest(unittest.TestCase):
     self.assertNotIn('$i18n', JS)
 
 
+
+CHROMIUM_CSS = ROOT / 'src/browser/ui/webui/resources/koan_chromium.css'
+CR_ELEMENTS = 'ui/webui/resources/cr_elements'
+
+
+def chromium_file(path):
+  """Pristine upstream `path`, or None without a Chromium checkout (CI)."""
+  import os
+  for src in (os.environ.get('KOAN_CHROMIUM_SRC'), ROOT / 'chromium/src'):
+    if src and (pathlib.Path(src) / path).is_file():
+      return (pathlib.Path(src) / path).read_text()
+  return None
+
+
+def css_rules(css):
+  """{selector: body} of a flat stylesheet (one level of @media unwrapped),
+  each selector of a list on its own."""
+  css = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
+  css = re.sub(r'@media[^{]*\{((?:[^{}]*\{[^{}]*\})*)\s*\}', r'\1', css)
+  rules = {}
+  for selectors, body in re.findall(r'([^{}]+)\{([^{}]*)\}', css):
+    for selector in selectors.split(','):
+      key = ' '.join(selector.split())
+      rules[key] = rules.get(key, '') + body
+  return rules
+
+
+class SwitchAndRadioStyleTest(unittest.TestCase):
+  """#419: koan_chromium.css sizes cr-toggle through cr_toggle.css's own
+  variables. A fixed #bar width over upstream's 26 px --cr-toggle-bar-width
+  left the "on" knob short of the right edge, since upstream derives the
+  knob's centre and travel from the variable."""
+
+  # cr_toggle.css's :host states that redefine the knob's size (158).
+  TOGGLE_STATES = ('', ':active', '[checked]', '[checked]:active')
+
+  def setUp(self):
+    self.rules = css_rules(CHROMIUM_CSS.read_text())
+
+  def test_toggle_is_sized_by_upstream_variables_in_every_state(self):
+    for state in self.TOGGLE_STATES:
+      body = self.rules.get(':host(cr-toggle%s)' % state, '')
+      self.assertRegex(body, r'--cr-toggle-bar-width:\s*32px', state)
+      self.assertRegex(body, r'--cr-toggle-knob-diameter:\s*16px', state)
+
+  def test_toggle_has_no_fixed_widths(self):
+    for selector, body in self.rules.items():
+      if selector.startswith(':host(cr-toggle'):
+        self.assertNotRegex(body, r'(^|;)\s*(min-|max-)?width\s*:',
+                            selector)
+
+  def test_toggle_eases_in_150ms_and_has_focus_and_disabled_states(self):
+    self.assertRegex(self.rules[':host(cr-toggle) #knob'],
+                     r'transition:\s*transform 150ms')
+    self.assertIn('box-shadow',
+                  self.rules[':host(cr-toggle:focus-visible) #bar'])
+    self.assertIn('opacity: 0.5', self.rules[':host(cr-toggle[disabled])'])
+
+  def test_unchecked_radio_ring_is_not_bare_input(self):
+    for host in ('cr-radio-button', 'controlled-radio-button',
+                 'settings-collapse-radio-button'):
+      body = self.rules.get(':host(%s)' % host, '')
+      self.assertIn('--cr-radio-button-unchecked-color', body, host)
+      self.assertIn('--cr-radio-button-checked-color: var(--primary)', body,
+                    host)
+    ring = re.search(r'--koan-radio-ring:\s*([^;]+);',
+                     self.rules[':host(cr-radio-button)']).group(1)
+    self.assertIn('var(--foreground)', ring)
+
+  def test_upstream_still_uses_these_variables(self):
+    toggle = chromium_file(CR_ELEMENTS + '/cr_toggle/cr_toggle.css')
+    radio = chromium_file(
+        CR_ELEMENTS + '/cr_radio_button/cr_radio_button_style_lit.css')
+    if toggle is None or radio is None:
+      self.skipTest('no Chromium checkout')
+    upstream = css_rules(toggle)
+    # The knob's travel and centre come from the bar width variable, and the
+    # bar is drawn at that width.
+    self.assertRegex(upstream['#knob'],
+                     r'--cr-toggle-knob-travel-distance_:\s*calc\(\s*0\.5 \* '
+                     r'var\(--cr-toggle-bar-width\)')
+    self.assertIn('width: var(--cr-toggle-knob-diameter)', upstream['#knob'])
+    self.assertIn('width: var(--cr-toggle-bar-width)', upstream['#bar'])
+    self.assertIn('var(--cr-toggle-knob-position-end_)',
+                  upstream[':host([checked]) #knob'])
+    # Every upstream state that resizes the knob has a Koan rule.
+    resized = {s[len(':host'):].strip('()') for s, b in upstream.items()
+               if s.startswith(':host') and ' ' not in s and
+               '--cr-toggle-knob-diameter' in b}
+    self.assertLessEqual(resized, set(self.TOGGLE_STATES))
+    self.assertIn('var(--cr-radio-button-unchecked-color)',
+                  css_rules(radio)['.disc-border'])
+
 if __name__ == '__main__':
   unittest.main()

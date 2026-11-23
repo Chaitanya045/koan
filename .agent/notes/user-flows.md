@@ -190,6 +190,15 @@ compresses).
 | UF-AFL-6 | In a tab of the person's where Chrome filled the saved login on load: the agent runs `koan take-over`, the person clicks into the password field, then **Hand back**; the agent runs script on the page (`koan agent-browser eval ...value`), `koan snapshot`, then `koan act <tab> press Enter` | The eval is refused (Koan.secretField, "…by Koan, the password manager or the user"); the snapshot shows `•••• (filled)`; after sign-in, nothing the agent gets has the password, and a page that echoes it reads `[secret]` | `KoanAgentSecretLockBrowserTest.APasswordFilledOnLoadInAUsersTab` (T-sec-18); UF-AFL-6 to write in `uf_autofill` | real |
 | UF-AFL-7 | The same with no saved login: the person types a password into the field themselves, then **Hand back** | As UF-AFL-6 | `KoanAgentSecretLockBrowserTest.APasswordTheUserTypedInAUsersTab` (T-sec-19); UF-AFL-7 to write in `uf_autofill` | real |
 
+## Settings switches and radios (#419): no flow (e2e `settings_controls`)
+
+| ID | The person | Expected | Covered by | Needs |
+|---|---|---|---|---|
+| UF-SET-1 | Opens chrome://settings/performance in the shadcn look, light then dark, and looks at the switches that are on (Memory Saver, Inactive tabs appearance, Performance issue alerts) | On: the primary track with the thumb at the right edge; off: the muted track with the thumb at the left | `settings_controls.mjs` ("the thumb is at the right edge", "...left edge", "on and off tracks differ"); `test_settings_shell.py` (`SwitchAndRadioStyleTest`) | manual (a look) |
+| UF-SET-2 | Clicks a switch | The thumb slides to the other end in about 150 ms, the track changes colour; Tab to it shows a ring | `settings_controls.mjs` ("the knob's transform travels"); the ease and the ring by eye | real, manual |
+| UF-SET-3 | Turns Memory Saver on, in dark and light | "Moderate", "Balanced" and "Maximum" each show a visible ring; the selected one is a primary ring with a primary dot | `settings_controls.mjs` ("ring has >= 3:1 contrast", "the selected choice's ring is the primary colour") | manual (a look) |
+| UF-SET-4 | Switches to the Zen look | Chromium's own switches, on still at the right | `settings_controls.mjs` (the `zen` checks) | |
+
 ## Agent usage across the flows
 
 What an agent does in a real task, and where each part is exercised end to end with the real CLI:
