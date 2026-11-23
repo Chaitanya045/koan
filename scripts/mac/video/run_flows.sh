@@ -48,7 +48,7 @@ NODE="${NODE:-$(command -v node || echo /opt/homebrew/bin/node)}"
 FLOW_SECS="${UF_FLOW_SECS:-300}"
 SHEET_FPS="${UF_SHEET_FPS:-10}"
 LOCK="${KOAN_UF_LOCK:-$M/tmp/e2e.lock}"
-ALL=(uf_build uf_onboarding uf_agent_task uf_indicator uf_resume uf_shots uf_render uf_toprow uf_compact uf_autofill)
+ALL=(uf_build uf_onboarding uf_agent_task uf_indicator uf_resume uf_shots uf_render uf_toprow uf_compact uf_autofill uf_upload uf_swipe)
 
 usage() { sed -n '2,/^set -uo/p' "$0" | sed 's/^# \{0,1\}//; /^set -uo/d'; exit 2; }
 app="$M/koan/chromium/src/out/Koan/Koan.app" only="" out="" keep_raw=0 video=1 note="" build_app=""
