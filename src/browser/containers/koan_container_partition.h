@@ -173,7 +173,9 @@ scoped_refptr<content::SiteInstance> SiteInstanceForNewTab(
 // a tab that an agent's own tab in the user's partition opened (Cmd-click,
 // middle-click, the context menu) is the agent's too, marked here before its
 // tab helpers are attached (MarkAgentTab() then follows it, from the source's
-// DidOpenRequestedURL). Returns `contents`.
+// DidOpenRequestedURL). `source` is null for a tab the browser opens (the
+// URL bar, Cmd+T, a bookmark), even while an agent's tab is the active one:
+// that tab is the user's. Returns `contents`.
 std::unique_ptr<content::WebContents> InheritAgentTab(
     const content::WebContents* source,
     std::unique_ptr<content::WebContents> contents);
