@@ -97,8 +97,9 @@ sandbox patches, on Flathub's big builders):
   com.google.Chrome); `chrome-sandbox` is a stub that fails if called.
 - finish-args are com.google.Chrome's without its dconf module (GNOME proxy
   settings).
-- The profile is `~/.var/app/dev.koan.Koan/config/chromium` (unbranded
-  Chromium's folder name on Linux; Koan doesn't rename it).
+- The profile is `~/.var/app/dev.koan.Koan/config/koan`: the branding
+  renames Chromium's folder (seen on a desktop install, 2026-11-24).
+  cobalt.ini's ConfigDir says the same.
 - App id `dev.koan.Koan`, the Mac bundle id. Flathub would need a domain
   the project controls; a bundle installed from a file doesn't.
 
@@ -144,7 +145,7 @@ runtime repo, so `flatpak install ./Koan-….flatpak` fetches the runtime.
 
 - Agent control: the `koan` tool is staged into `/app/koan/` if the build
   makes it, but agents outside the sandbox reach Koan's socket under
-  `~/.var/app/dev.koan.Koan/config/chromium/AgentControl/` only if they
+  `~/.var/app/dev.koan.Koan/config/koan/AgentControl/` only if they
   know that path. Not looked at yet.
 - Tagged releases (`release.yml`) build only the Mac; a Linux leg would
   call `linux-chain.yml` with `release: true`.

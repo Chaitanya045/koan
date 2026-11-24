@@ -1451,7 +1451,7 @@ Flathub the first time. Koan then shows up in your app menu. To update,
 install the newer file the same way. To remove it, `flatpak uninstall
 dev.koan.Koan` (add `--delete-data` to remove the profile too).
 
-- The profile is in `~/.var/app/dev.koan.Koan/config/chromium`.
+- The profile is in `~/.var/app/dev.koan.Koan/config/koan`.
 - Extra command-line flags go in
   `~/.var/app/dev.koan.Koan/config/koan-flags.conf`, one per line (for
   example `--ozone-platform=wayland`).
