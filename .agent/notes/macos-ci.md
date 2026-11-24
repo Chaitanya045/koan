@@ -89,9 +89,12 @@ doesn't: a tagged release is always a clean build):
 - Why `git status` and `git apply` rather than rsync and GNU patch (the
   first Linux version): macOS ships openrsync and BSD patch, which lack the
   needed options.
-- Not checked on CI yet; tested locally on a fake tree (patches added,
-  changed and removed; files added, changed and deleted; toolchain,
-  branding and Chromium changes fall back).
+- Tested locally on a fake tree (patches added, changed and removed;
+  files added, changed and deleted; toolchain, branding and Chromium
+  changes fall back).
+- 2026-11-24, tnfssc/koan run 45281812693 (a1141b7, no base: full): fetch
+  35 min, then 3 build jobs (4 h 57 min, 4 h 57 min, 4 h 47 min), ~15 h
+  15 min end to end. Kept: source 5.5 GB, out-final 1.5 GB; .dmg 186 MB.
 
 Concurrency: one group per ref for nightly and manual runs
 (`macos-<ref name>`; the nightly and a manual run of develop share
