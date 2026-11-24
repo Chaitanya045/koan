@@ -279,6 +279,8 @@ jobs:
             gh api --paginate "repos/$GH_REPO/actions/artifacts?name=$name" \
               --jq ".artifacts[] | select(.workflow_run.id < $RUN) | \"\(.id) \(.workflow_run.id)\"" |
               while read -r id run; do
+                # A chain still running needs its source.
+                [[ $(gh api "repos/$GH_REPO/actions/runs/$run" --jq .status) == completed ]] || continue
                 echo "deleting $name of run $run"
                 gh api -X DELETE "repos/$GH_REPO/actions/artifacts/$id"
               done
