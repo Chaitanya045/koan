@@ -474,11 +474,19 @@ void KoanLibraryRow::SetMenuOpen(bool open) {
 }
 
 void KoanLibraryRow::SetDimmed(bool dimmed) {
-  if (!layer()) {
-    SetPaintToLayer();
-    layer()->SetFillsBoundsOpaquely(false);
+  // Only a dimmed row needs a layer (for its opacity): Library > Downloads
+  // calls this for every row every 250 ms, and a layer per row of a long list
+  // is memory and compositing for nothing.
+  if (dimmed == !!layer()) {
+    return;
   }
-  layer()->SetOpacity(dimmed ? library::kMissingOpacity : 1.f);
+  if (!dimmed) {
+    DestroyLayer();
+    return;
+  }
+  SetPaintToLayer();
+  layer()->SetFillsBoundsOpaquely(false);
+  layer()->SetOpacity(library::kMissingOpacity);
 }
 
 bool KoanLibraryRow::GetHovered() const {
