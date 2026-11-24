@@ -66,6 +66,29 @@ TEST(KoanAgentFrameTest, EncodeRefusesEmptyAndOversizePayloads) {
                    .has_value());
 }
 
+// A sender that queues the header and the payload as two buffers puts the same
+// bytes on the wire as EncodeFrame(), and refuses the same payloads.
+TEST(KoanAgentFrameTest, HeaderIsTheFrameWithoutItsPayload) {
+  const std::vector<uint8_t> payload = Bytes("{\"id\":1,\"result\":{}}");
+  const auto header = EncodeFrameHeader(payload.size());
+  ASSERT_TRUE(header.has_value());
+  EXPECT_EQ(
+      Concat(std::vector<uint8_t>(header->begin(), header->end()), payload),
+      *EncodeFrame(payload));
+  EXPECT_EQ(std::vector<uint8_t>(header->begin(), header->end()),
+            Header(static_cast<uint32_t>(payload.size())));
+}
+
+TEST(KoanAgentFrameTest, HeaderRefusesWhatEncodeRefuses) {
+  EXPECT_FALSE(EncodeFrameHeader(0).has_value());
+  EXPECT_FALSE(EncodeFrameHeader(4, /*max_payload=*/3).has_value());
+  EXPECT_TRUE(EncodeFrameHeader(3, /*max_payload=*/3).has_value());
+  EXPECT_TRUE(EncodeFrameHeader(kMaxPayload).has_value());
+  EXPECT_FALSE(EncodeFrameHeader(kMaxPayload + 1).has_value());
+  // A limit above the maximum is the maximum.
+  EXPECT_FALSE(EncodeFrameHeader(kMaxPayload + 1, SIZE_MAX).has_value());
+}
+
 TEST(KoanAgentFrameTest, RoundTrip) {
   FrameDecoder decoder(kMaxPayload);
   ASSERT_TRUE(decoder.Append(*EncodeFrame(Bytes("{\"id\":1}"))));
