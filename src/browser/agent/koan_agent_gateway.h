@@ -158,8 +158,9 @@ class Gateway {
   static constexpr size_t kMaxQueuedBytesAuthenticated = 64 * 1024 * 1024;
   // The most all the connections may have queued together: a few clients that
   // stop reading cannot make the browser hold the per-connection limit eight
-  // times over. A frame that would take an authenticated connection past it
-  // closes that connection, as the per-connection limit does.
+  // times over. A frame that would take the total past it closes the
+  // connections holding the most until it fits (the one sent the frame only
+  // if it holds the most itself).
   static constexpr size_t kMaxQueuedBytesTotal = 96 * 1024 * 1024;
 
   // The pointers must outlive the gateway. `resolver` is shared because its

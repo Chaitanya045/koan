@@ -899,8 +899,8 @@ TEST_F(KoanAgentGatewayTest, ABigAnswerReachesAReadingClientWhole) {
 }
 
 // Clients that stop reading cannot make the browser hold, together, more than
-// the total limit: the one whose frame would pass it is dropped, and the ones
-// that read are not touched by that.
+// the total limit. When a frame would pass it, the connection holding the most
+// is dropped, not the client that reads and is sent that frame.
 TEST_F(KoanAgentGatewayTest, StalledClientsTogetherCannotPassTheTotalLimit) {
   Key key;
   const std::string id = Pair(key);
@@ -908,38 +908,69 @@ TEST_F(KoanAgentGatewayTest, StalledClientsTogetherCannotPassTheTotalLimit) {
   Peer second = AuthenticatedPeer(key, id);
   Peer reader = AuthenticatedPeer(key, id);
   const size_t frame = 30 * 1024 * 1024;
-  // Two frames fit in one connection's limit (64 MiB), three do not fit in
-  // the total (96 MiB) with the first client's.
+  const size_t big = 20 * 1024 * 1024;
+  // Two frames fit in one connection's limit (64 MiB). Three frames and the
+  // reader's answer do not fit in the total (96 MiB); without the first
+  // client's two, they do.
   ASSERT_LT(2 * frame, Gateway::kMaxQueuedBytesAuthenticated);
-  ASSERT_GT(3 * frame, Gateway::kMaxQueuedBytesTotal);
-  ASSERT_LT(2 * frame, Gateway::kMaxQueuedBytesTotal);
+  ASSERT_GT(3 * frame + big, Gateway::kMaxQueuedBytesTotal);
+  ASSERT_LT(frame + big, Gateway::kMaxQueuedBytesTotal);
 
   gateway_->SendToClient(first.id, AnswerOfSize(frame));
   gateway_->SendToClient(first.id, AnswerOfSize(frame));
+  gateway_->SendToClient(second.id, AnswerOfSize(frame));
   const size_t held = gateway_->queued_bytes_for_testing();
-  EXPECT_GT(held, frame + frame / 2);
+  EXPECT_GT(held, 2 * frame + frame / 2);
   EXPECT_EQ(gateway_->connection_count(), 3u);
 
-  gateway_->SendToClient(second.id, AnswerOfSize(frame));
-  EXPECT_GT(gateway_->queued_bytes_for_testing(), held + frame / 2);
-  EXPECT_EQ(gateway_->connection_count(), 3u);
-  // This one would take the gateway past 96 MiB.
-  gateway_->SendToClient(second.id, AnswerOfSize(frame));
-  EXPECT_TRUE(second.client->WaitForClose());
-  EXPECT_TRUE(WaitForConnections(2));
-  // What the dropped connection still had queued is not held any more.
-  EXPECT_EQ(gateway_->queued_bytes_for_testing(), held);
-
-  // The client that reads is served, and the stalled one that stayed within
-  // the limits is kept.
-  const std::string answer = AnswerOfSize(20 * 1024 * 1024);
+  // The reader's answer would take the gateway past 96 MiB: the first client,
+  // which holds the most, goes, and the answer is sent.
+  const std::string answer = AnswerOfSize(big);
   gateway_->SendToClient(reader.id, std::string(answer));
+  EXPECT_TRUE(first.client->WaitForClose());
+  EXPECT_TRUE(WaitForConnections(2));
   const auto payload = reader.client->ReadPayload();
   ASSERT_TRUE(payload);
-  EXPECT_EQ(payload->size(), answer.size());
-  EXPECT_TRUE(base::test::RunUntil(
-      [&] { return gateway_->queued_bytes_for_testing() == held; }));
+  EXPECT_EQ(std::string_view(reinterpret_cast<const char*>(payload->data()),
+                             payload->size()),
+            answer);
+  // What the dropped connection had queued is not held any more, and what the
+  // reader was sent is written: only the second client's frame is left.
+  EXPECT_TRUE(base::test::RunUntil([&] {
+    return gateway_->queued_bytes_for_testing() <= frame + kFrameHeaderSize;
+  }));
+  EXPECT_GT(gateway_->queued_bytes_for_testing(), frame / 2);
   EXPECT_EQ(gateway_->connection_count(), 2u);
+}
+
+// The connection sent the frame that passes the total is dropped itself when
+// it is the one holding the most.
+TEST_F(KoanAgentGatewayTest, TheConnectionHoldingTheMostIsDroppedEvenIfSentTo) {
+  Key key;
+  const std::string id = Pair(key);
+  Peer small = AuthenticatedPeer(key, id);
+  Peer medium = AuthenticatedPeer(key, id);
+  Peer greedy = AuthenticatedPeer(key, id);
+  const size_t mib = 1024 * 1024;
+  // 10 + 33 + 30 MiB fit in 96 MiB; another 31 MiB to the greedy client does
+  // not, and leaves it holding 61 MiB, more than any other (and within its
+  // own 64 MiB).
+  ASSERT_LT(73 * mib, Gateway::kMaxQueuedBytesTotal);
+  ASSERT_GT(104 * mib, Gateway::kMaxQueuedBytesTotal);
+  ASSERT_LT(61 * mib, Gateway::kMaxQueuedBytesAuthenticated);
+
+  gateway_->SendToClient(small.id, AnswerOfSize(10 * mib));
+  gateway_->SendToClient(medium.id, AnswerOfSize(33 * mib));
+  gateway_->SendToClient(greedy.id, AnswerOfSize(30 * mib));
+  EXPECT_EQ(gateway_->connection_count(), 3u);
+
+  gateway_->SendToClient(greedy.id, AnswerOfSize(31 * mib));
+  EXPECT_TRUE(greedy.client->WaitForClose());
+  EXPECT_TRUE(WaitForConnections(2));
+  // The others keep what they were sent.
+  EXPECT_GT(gateway_->queued_bytes_for_testing(), 40 * mib);
+  EXPECT_LE(gateway_->queued_bytes_for_testing(),
+            43 * mib + 2 * kFrameHeaderSize);
 }
 
 TEST_F(KoanAgentGatewayTest, WhatAGoneConnectionHadQueuedIsNotCountedAnyMore) {

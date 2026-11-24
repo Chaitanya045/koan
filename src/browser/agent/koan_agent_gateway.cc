@@ -361,11 +361,29 @@ class Gateway::Connection final : public SessionDelegate {
     }
     const size_t limit =
         authenticated_ ? kMaxQueuedBytesAuthenticated : kMaxQueuedBytesPreAuth;
-    if (queued_bytes_ + bytes > limit ||
-        (authenticated_ &&
-         gateway_->queued_bytes_total_ + bytes > kMaxQueuedBytesTotal)) {
+    if (queued_bytes_ + bytes > limit) {
       Drop();
       return false;
+    }
+    // Over the total, the connection holding the most goes first, until this
+    // frame fits: that is the one that stopped reading, not one that reads
+    // and happens to be sent the frame that crosses the limit. Each turn drops
+    // a connection that holds something (if the others held nothing, this one
+    // would hold the most), so the loop ends.
+    while (authenticated_ &&
+           gateway_->queued_bytes_total_ + bytes > kMaxQueuedBytesTotal) {
+      Connection* most = this;
+      size_t most_bytes = queued_bytes_ + bytes;
+      for (const auto& [id, connection] : gateway_->connections_) {
+        if (!connection->dropped_ && connection->queued_bytes_ > most_bytes) {
+          most = connection.get();
+          most_bytes = connection->queued_bytes_;
+        }
+      }
+      most->Drop();
+      if (most == this) {
+        return false;
+      }
     }
     queued_bytes_ += bytes;
     gateway_->queued_bytes_total_ += bytes;
