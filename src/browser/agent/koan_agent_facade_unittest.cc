@@ -1851,6 +1851,26 @@ TEST_F(KoanAgentFacadeTest, AScreenshotDataIsNotScanned) {
   EXPECT_EQ(*Answer(1)->FindStringByDottedPath("result.data"), "YWJjZGVmZ2g=");
 }
 
+// The data is put back by what is between the quotes of its placeholder, so
+// the answer is the tab's, whatever the data and whatever follows it.
+TEST_F(KoanAgentFacadeTest, AScreenshotAnswerKeepsItsDataAndTheRestScrubbed) {
+  const std::string session = AttachTo("T1");
+  ASSERT_TRUE(backend_.scrubber.Add("hunter2-secret"));
+  const std::string data(300 * 1024, 'Q');
+  Send(1, "Page.captureScreenshot", base::DictValue(), session);
+  AnswerLast(base::DictValue().Set("data", data).Set("note", "hunter2-secret"));
+  const base::DictValue* answer = Answer(1);
+  ASSERT_TRUE(answer);
+  EXPECT_EQ(*answer->FindStringByDottedPath("result.data"), data);
+  EXPECT_EQ(answer->FindStringByDottedPath("result.note")->find("hunter2"),
+            std::string::npos);
+
+  Send(2, "Page.captureScreenshot", base::DictValue(), session);
+  AnswerLast(base::DictValue().Set("data", ""));
+  ASSERT_TRUE(Answer(2));
+  EXPECT_EQ(*Answer(2)->FindStringByDottedPath("result.data"), "");
+}
+
 }  // namespace
 // Koan.captureScaled: the page's viewport, then a copy of the surface.
 constexpr char kLayoutMetrics[] = R"({

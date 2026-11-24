@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <array>
 #include <optional>
 #include <vector>
 
@@ -50,6 +51,14 @@ inline constexpr int kAgentInterfaceVersion = 6;
 // A peer that has not authenticated gets this many frames, in total, before the
 // decoder fails: pairing and authentication need two or three.
 inline constexpr int kMaxPreAuthFrames = 4;
+
+// The header of a frame whose payload is `payload_size` bytes. nullopt if the
+// payload would be empty or longer than `max_payload` (itself at most
+// kMaxPayload). For a sender that queues the header and the payload as two
+// buffers, so a large payload is not copied to put four bytes in front of it.
+std::optional<std::array<uint8_t, kFrameHeaderSize>> EncodeFrameHeader(
+    size_t payload_size,
+    size_t max_payload = kMaxPayload);
 
 // The frame for `payload`: the header and the payload. nullopt if the payload
 // is empty or longer than `max_payload` (itself at most kMaxPayload).

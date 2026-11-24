@@ -534,7 +534,9 @@ back-off). A connection the gateway closes for its own reasons says why in one f
 `Koan.peerUnresolved`; nothing is said to a foreign user or a blocked peer) and logs it, so that a lookup that is too
 slow is a log line and an error, not silence. Memory: 32 MB frames and a 64 MB reply queue per connection times eight
 is fine while only `Koan.status` exists; the forwarding PR adds a gateway-wide byte budget and stops reading from a
-connection whose queue is high. The dialog's answer may come from any thread (it is posted back to the gateway's
+connection whose queue is high. **Built (#450):** the gateway holds at most 96 MiB queued across all authenticated
+connections (`Gateway::kMaxQueuedBytesTotal`); the frame that would pass it drops its connection like the per-connection
+limit does, and an answer is queued as a 4-byte header plus the moved JSON string, not copied into a new frame. The dialog's answer may come from any thread (it is posted back to the gateway's
 sequence). Nothing starts the gateway yet (no preference, no window hook): that is the settings change.
 
 ### 5.3 Capabilities (per client, editable in settings)

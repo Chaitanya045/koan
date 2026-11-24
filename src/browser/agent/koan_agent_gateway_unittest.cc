@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <map>
@@ -141,6 +142,8 @@ struct Key {
 // A client of the gateway over a real unix socket.
 class TestClient {
  public:
+  static constexpr size_t kReadSize = 64 * 1024;
+
   explicit TestClient(const base::FilePath& path)
       : socket_(path.value(), /*use_abstract_namespace=*/false) {}
 
@@ -162,24 +165,54 @@ class TestClient {
                       callback.callback(), TRAFFIC_ANNOTATION_FOR_TESTS));
   }
 
-  // The next reply, or nullopt at the end of the stream.
-  std::optional<base::DictValue> Read() {
+  // The payload of the next frame, or nullopt at the end of the stream.
+  std::optional<std::vector<uint8_t>> ReadPayload() {
     while (true) {
       if (auto frame = decoder_.TakeFrame()) {
-        return base::JSONReader::ReadDict(
-            std::string_view(reinterpret_cast<const char*>(frame->data()),
-                             frame->size()),
-            base::JSON_PARSE_RFC);
+        return frame;
       }
-      auto buffer = base::MakeRefCounted<net::IOBufferWithSize>(4096);
+      auto buffer = base::MakeRefCounted<net::IOBufferWithSize>(kReadSize);
       net::TestCompletionCallback callback;
       const int result = callback.GetResult(
-          socket_.Read(buffer.get(), 4096, callback.callback()));
+          socket_.Read(buffer.get(), kReadSize, callback.callback()));
       if (result <= 0) {
         return std::nullopt;
       }
       EXPECT_TRUE(decoder_.Append(buffer->first(static_cast<size_t>(result))));
     }
+  }
+
+  // The next reply, or nullopt at the end of the stream.
+  std::optional<base::DictValue> Read() {
+    const std::optional<std::vector<uint8_t>> frame = ReadPayload();
+    if (!frame) {
+      return std::nullopt;
+    }
+    return base::JSONReader::ReadDict(
+        std::string_view(reinterpret_cast<const char*>(frame->data()),
+                         frame->size()),
+        base::JSON_PARSE_RFC);
+  }
+
+  // The next `count` bytes as they are on the wire, with nothing decoded:
+  // whole frames, so that Read() can follow.
+  std::vector<uint8_t> ReadRaw(size_t count) {
+    std::vector<uint8_t> bytes;
+    while (bytes.size() < count) {
+      const int want =
+          static_cast<int>(std::min(count - bytes.size(), kReadSize));
+      auto buffer = base::MakeRefCounted<net::IOBufferWithSize>(want);
+      net::TestCompletionCallback callback;
+      const int result = callback.GetResult(
+          socket_.Read(buffer.get(), want, callback.callback()));
+      if (result <= 0) {
+        break;
+      }
+      const base::span<const uint8_t> got =
+          buffer->first(static_cast<size_t>(result));
+      bytes.insert(bytes.end(), got.begin(), got.end());
+    }
+    return bytes;
   }
 
   // Whether the server closes the connection (reading until it does).
@@ -193,6 +226,13 @@ class TestClient {
   net::UnixDomainClientSocket socket_;
   FrameDecoder decoder_{kMaxPayload};
 };
+
+// A CDP answer of exactly `size` bytes, like a screenshot's: one big string.
+std::string AnswerOfSize(size_t size) {
+  const std::string head = R"({"id":7,"result":{"data":")";
+  const std::string tail = R"("}})";
+  return head + std::string(size - head.size() - tail.size(), 'a') + tail;
+}
 
 std::string ErrorCode(const std::optional<base::DictValue>& reply) {
   if (!reply) {
@@ -323,6 +363,20 @@ class KoanAgentGatewayTest : public testing::Test {
     EXPECT_TRUE(reply);
     EXPECT_EQ(reply->FindDict("result")->FindBool("authenticated"), true);
     return client;
+  }
+
+  // An authenticated connection of a paired client and the id the gateway
+  // knows it by (the one SendToClient() takes).
+  struct Peer {
+    std::unique_ptr<TestClient> client;
+    uint64_t id = 0;
+  };
+  Peer AuthenticatedPeer(const Key& key, const std::string& client_id) {
+    Peer peer;
+    peer.client = Authenticated(key, client_id);
+    // Ids only go up, and the observer has just been told of this one.
+    peer.id = observer_.connected.rbegin()->first;
+    return peer;
   }
 
   void TearDown() override { resolver_->Release(); }
@@ -793,6 +847,123 @@ TEST_F(KoanAgentGatewayTest, APeerThatLeavesWithAPromptOpenFreesThePromptSlot) {
   }
   ASSERT_TRUE(WaitForConnections(0));
   EXPECT_EQ(presenter_.cancelled.size(), 1u);
+}
+
+// What an answer looks like on the wire is what EncodeFrame() makes of it, and
+// what cannot be framed is not sent.
+TEST_F(KoanAgentGatewayTest, AnAnswerIsSentAsItsFrameHeaderAndPayload) {
+  Key key;
+  const std::string id = Pair(key);
+  Peer peer = AuthenticatedPeer(key, id);
+  const std::string answer = R"({"id":3,"result":{"ok":true}})";
+  gateway_->SendToClient(peer.id, answer);
+  EXPECT_EQ(peer.client->ReadRaw(kFrameHeaderSize + answer.size()),
+            *EncodeFrame(base::as_byte_span(answer)));
+  EXPECT_EQ(gateway_->connection_count(), 1u);
+
+  // An empty answer is refused by the codec, silently, and the connection and
+  // its order go on.
+  gateway_->SendToClient(peer.id, std::string());
+  gateway_->SendToClient(peer.id, R"({"id":4,"result":{}})");
+  auto reply = peer.client->Read();
+  ASSERT_TRUE(reply);
+  EXPECT_EQ(reply->FindInt("id"), 4);
+  // And so is one over the limit of a frame.
+  gateway_->SendToClient(peer.id, std::string(kMaxPayload + 1, 'a'));
+  EXPECT_EQ(gateway_->queued_bytes_for_testing(), 0u);
+  EXPECT_EQ(gateway_->connection_count(), 1u);
+}
+
+TEST_F(KoanAgentGatewayTest, ABigAnswerReachesAReadingClientWhole) {
+  Key key;
+  const std::string id = Pair(key);
+  Peer peer = AuthenticatedPeer(key, id);
+  const std::string answer = AnswerOfSize(20 * 1024 * 1024);
+  gateway_->SendToClient(peer.id, std::string(answer));
+  // Most of it is still queued: it was too big for the socket.
+  EXPECT_GT(gateway_->queued_bytes_for_testing(), 10u * 1024 * 1024);
+  const auto payload = peer.client->ReadPayload();
+  ASSERT_TRUE(payload);
+  EXPECT_EQ(std::string_view(reinterpret_cast<const char*>(payload->data()),
+                             payload->size()),
+            answer);
+  // Everything that was queued was written, and counted off.
+  EXPECT_TRUE(base::test::RunUntil(
+      [&] { return gateway_->queued_bytes_for_testing() == 0; }));
+
+  // The next answer finds the connection as it was.
+  gateway_->SendToClient(peer.id, R"({"id":8,"result":{}})");
+  auto reply = peer.client->Read();
+  ASSERT_TRUE(reply);
+  EXPECT_EQ(reply->FindInt("id"), 8);
+}
+
+// Clients that stop reading cannot make the browser hold, together, more than
+// the total limit: the one whose frame would pass it is dropped, and the ones
+// that read are not touched by that.
+TEST_F(KoanAgentGatewayTest, StalledClientsTogetherCannotPassTheTotalLimit) {
+  Key key;
+  const std::string id = Pair(key);
+  Peer first = AuthenticatedPeer(key, id);
+  Peer second = AuthenticatedPeer(key, id);
+  Peer reader = AuthenticatedPeer(key, id);
+  const size_t frame = 30 * 1024 * 1024;
+  // Two frames fit in one connection's limit (64 MiB), three do not fit in
+  // the total (96 MiB) with the first client's.
+  ASSERT_LT(2 * frame, Gateway::kMaxQueuedBytesAuthenticated);
+  ASSERT_GT(3 * frame, Gateway::kMaxQueuedBytesTotal);
+  ASSERT_LT(2 * frame, Gateway::kMaxQueuedBytesTotal);
+
+  gateway_->SendToClient(first.id, AnswerOfSize(frame));
+  gateway_->SendToClient(first.id, AnswerOfSize(frame));
+  const size_t held = gateway_->queued_bytes_for_testing();
+  EXPECT_GT(held, frame + frame / 2);
+  EXPECT_EQ(gateway_->connection_count(), 3u);
+
+  gateway_->SendToClient(second.id, AnswerOfSize(frame));
+  EXPECT_GT(gateway_->queued_bytes_for_testing(), held + frame / 2);
+  EXPECT_EQ(gateway_->connection_count(), 3u);
+  // This one would take the gateway past 96 MiB.
+  gateway_->SendToClient(second.id, AnswerOfSize(frame));
+  EXPECT_TRUE(second.client->WaitForClose());
+  EXPECT_TRUE(WaitForConnections(2));
+  // What the dropped connection still had queued is not held any more.
+  EXPECT_EQ(gateway_->queued_bytes_for_testing(), held);
+
+  // The client that reads is served, and the stalled one that stayed within
+  // the limits is kept.
+  const std::string answer = AnswerOfSize(20 * 1024 * 1024);
+  gateway_->SendToClient(reader.id, std::string(answer));
+  const auto payload = reader.client->ReadPayload();
+  ASSERT_TRUE(payload);
+  EXPECT_EQ(payload->size(), answer.size());
+  EXPECT_TRUE(base::test::RunUntil(
+      [&] { return gateway_->queued_bytes_for_testing() == held; }));
+  EXPECT_EQ(gateway_->connection_count(), 2u);
+}
+
+TEST_F(KoanAgentGatewayTest, WhatAGoneConnectionHadQueuedIsNotCountedAnyMore) {
+  Key key;
+  const std::string id = Pair(key);
+  const size_t frame = 30 * 1024 * 1024;
+  {
+    // The client leaves with the answer unread.
+    Peer peer = AuthenticatedPeer(key, id);
+    gateway_->SendToClient(peer.id, AnswerOfSize(frame));
+    EXPECT_GT(gateway_->queued_bytes_for_testing(), frame / 2);
+  }
+  EXPECT_TRUE(WaitForConnections(0));
+  EXPECT_EQ(gateway_->queued_bytes_for_testing(), 0u);
+
+  // And a gateway that is stopped with answers unread holds nothing either.
+  Peer first = AuthenticatedPeer(key, id);
+  Peer second = AuthenticatedPeer(key, id);
+  gateway_->SendToClient(first.id, AnswerOfSize(frame));
+  gateway_->SendToClient(second.id, AnswerOfSize(frame));
+  EXPECT_GT(gateway_->queued_bytes_for_testing(), frame);
+  gateway_->Stop();
+  EXPECT_EQ(gateway_->queued_bytes_for_testing(), 0u);
+  EXPECT_EQ(gateway_->connection_count(), 0u);
 }
 
 }  // namespace koan::agent

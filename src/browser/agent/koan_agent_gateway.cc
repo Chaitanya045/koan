@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <array>
 #include <deque>
 #include <string_view>
 #include <utility>
@@ -147,6 +148,7 @@ class Gateway::Connection final : public SessionDelegate {
     if (open_approval_ != 0) {
       gateway_->presenter_->Cancel(open_approval_);
     }
+    ReleaseQueued();
   }
 
   // Reads the peer's token while the descriptor is certainly this connection's,
@@ -234,16 +236,22 @@ class Gateway::Connection final : public SessionDelegate {
            observer->OnClientMessage(id_, std::move(message));
   }
 
-  // An answer or event from the facade.
-  void SendJson(std::string_view json) {
+  // An answer or event from the facade. The frame is queued as two buffers, the
+  // header and `json` itself, so a big answer is not copied.
+  void SendJson(std::string json) {
     if (dropped_ || close_after_flush_ || !authenticated_) {
       return;
     }
-    std::optional<std::vector<uint8_t>> frame =
-        EncodeFrame(base::as_byte_span(json));
-    if (frame) {
-      Enqueue(std::move(*frame));
+    const std::optional<std::array<uint8_t, kFrameHeaderSize>> header =
+        EncodeFrameHeader(json.size());
+    if (!header || !Reserve(kFrameHeaderSize + json.size())) {
+      return;
     }
+    Queue(base::MakeRefCounted<net::VectorIOBuffer>(base::span(*header)),
+          kFrameHeaderSize);
+    const size_t size = json.size();
+    Queue(base::MakeRefCounted<net::StringIOBuffer>(std::move(json)), size);
+    StartWriting();
   }
 
  private:
@@ -335,20 +343,42 @@ class Gateway::Connection final : public SessionDelegate {
   }
 
   void Enqueue(std::vector<uint8_t> frame) {
-    if (dropped_) {
+    const size_t size = frame.size();
+    if (!Reserve(size)) {
       return;
+    }
+    Queue(base::MakeRefCounted<net::VectorIOBuffer>(std::move(frame)), size);
+    StartWriting();
+  }
+
+  // Makes room in the queue for `bytes` more, or drops the connection and
+  // returns false. A peer that does not read cannot make the browser hold what
+  // it was sent: not more than the connection's own limit, and, once it has
+  // authenticated, not more than the gateway's limit for all of them.
+  bool Reserve(size_t bytes) {
+    if (dropped_) {
+      return false;
     }
     const size_t limit =
         authenticated_ ? kMaxQueuedBytesAuthenticated : kMaxQueuedBytesPreAuth;
-    // A peer that does not read cannot make the browser hold what it was sent.
-    if (queued_bytes_ + frame.size() > limit) {
+    if (queued_bytes_ + bytes > limit ||
+        (authenticated_ &&
+         gateway_->queued_bytes_total_ + bytes > kMaxQueuedBytesTotal)) {
       Drop();
-      return;
+      return false;
     }
-    queued_bytes_ += frame.size();
-    const size_t size = frame.size();
-    queue_.push_back(base::MakeRefCounted<net::DrainableIOBuffer>(
-        base::MakeRefCounted<net::VectorIOBuffer>(std::move(frame)), size));
+    queued_bytes_ += bytes;
+    gateway_->queued_bytes_total_ += bytes;
+    return true;
+  }
+
+  // Appends what Reserve() made room for.
+  void Queue(scoped_refptr<net::IOBuffer> data, size_t size) {
+    queue_.push_back(
+        base::MakeRefCounted<net::DrainableIOBuffer>(std::move(data), size));
+  }
+
+  void StartWriting() {
     if (!write_pending_) {
       WriteNext();
     }
@@ -389,6 +419,7 @@ class Gateway::Connection final : public SessionDelegate {
       return false;
     }
     queued_bytes_ -= static_cast<size_t>(result);
+    gateway_->queued_bytes_total_ -= static_cast<size_t>(result);
     queue_.front()->DidConsume(result);
     if (queue_.front()->BytesRemaining() == 0) {
       queue_.pop_front();
@@ -441,7 +472,17 @@ class Gateway::Connection final : public SessionDelegate {
     }
     dropped_ = true;
     socket_->Close();
+    // What was not written never will be: it does not count against the other
+    // connections while this one waits to be removed.
+    ReleaseQueued();
     gateway_->ScheduleRemoval(id_);
+  }
+
+  // Gives back what this connection still has queued to the gateway's total.
+  void ReleaseQueued() {
+    gateway_->queued_bytes_total_ -= queued_bytes_;
+    queued_bytes_ = 0;
+    queue_.clear();
   }
 
   const raw_ptr<Gateway> gateway_;
@@ -626,11 +667,11 @@ void Gateway::OnClientRevoked(std::string_view client_id) {
   }
 }
 
-void Gateway::SendToClient(uint64_t connection_id, std::string_view json) {
+void Gateway::SendToClient(uint64_t connection_id, std::string json) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   auto it = connections_.find(connection_id);
   if (it != connections_.end()) {
-    it->second->SendJson(json);
+    it->second->SendJson(std::move(json));
   }
 }
 
