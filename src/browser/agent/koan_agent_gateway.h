@@ -152,9 +152,16 @@ class Gateway {
   static constexpr base::TimeDelta kResolveDeadline = base::Seconds(5);
   static constexpr base::TimeDelta kFlushDeadline = base::Seconds(2);
   // The most a connection may have queued to send: tight before it has proved
-  // who it is, generous after (a screenshot is a few MB).
+  // who it is, generous after (one answer may be up to kMaxPayload, a
+  // screenshot is a few MB to some tens of MB).
   static constexpr size_t kMaxQueuedBytesPreAuth = 64 * 1024;
   static constexpr size_t kMaxQueuedBytesAuthenticated = 64 * 1024 * 1024;
+  // The most all the connections may have queued together: a few clients that
+  // stop reading cannot make the browser hold the per-connection limit eight
+  // times over. A frame that would take the total past it closes the
+  // connections holding the most until it fits (the one sent the frame only
+  // if it holds the most itself).
+  static constexpr size_t kMaxQueuedBytesTotal = 96 * 1024 * 1024;
 
   // The pointers must outlive the gateway. `resolver` is shared because its
   // Resolve() runs on thread-pool tasks that may outlast a Stop().
@@ -187,13 +194,17 @@ class Gateway {
   void OnClientRevoked(std::string_view client_id);
 
   // Sends one JSON message (an answer or an event) to an authenticated
-  // connection. Does nothing if the connection is gone or closing.
-  void SendToClient(uint64_t connection_id, std::string_view json);
+  // connection. Does nothing if the connection is gone or closing. The string
+  // is queued as it is (a big answer is not copied to put the frame header in
+  // front of it).
+  void SendToClient(uint64_t connection_id, std::string json);
 
   // Run by a once-a-second timer; public so that tests can drive the clock.
   void CheckTimeouts();
 
   size_t connection_count() const { return connections_.size(); }
+  // What every connection has queued and not yet written, in bytes.
+  size_t queued_bytes_for_testing() const { return queued_bytes_total_; }
   RateLimiter& limiter_for_testing() { return limiter_; }
 
  private:
@@ -235,6 +246,10 @@ class Gateway {
   // Where AcceptSocketDescriptor() writes while an accept is pending.
   int accepted_fd_ = -1;
   base::RepeatingTimer timer_;
+  // The sum of every connection's queued bytes (kMaxQueuedBytesTotal). A
+  // Connection adds what it queues and takes back what it writes, and
+  // everything it still holds when it is dropped or destroyed.
+  size_t queued_bytes_total_ = 0;
   std::map<ConnectionAdmission::Id, std::unique_ptr<Connection>> connections_;
 
   // Starting prepares the socket path on a worker, and takes the lock there.
