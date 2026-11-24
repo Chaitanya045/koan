@@ -35,6 +35,9 @@ Nothing about the Mac (host name, address, user, key path) goes into tracked fil
   enough while the lid is open. With the lid closed the Mac sleeps anyway, unless
   `sudo pmset -a disablesleep 1` is set. The user chose not to (2026-11-23: "I'm not going
   to close the lid"). Check with `pmset -g assertions | grep caffeinate`.
+- **Keep it on the charger.** `caffeinate` doesn't stop the low-battery sleep: during 0.0.2's official build, on
+  battery, the Mac went into "Low Power Sleep" at 1% (06:04) and was offline for 2 h. The build itself carried on
+  after it woke. Check `pmset -g batt` before a long job.
 - Run long jobs detached: `nohup /bin/bash <script> >/dev/null 2>&1 </dev/null & disown`.
   The scripts log under `~/work/koan-mac/logs/`. Poll the state file instead of holding
   ssh open.
@@ -70,7 +73,10 @@ Nothing about the Mac (host name, address, user, key path) goes into tracked fil
   **local identity** (`scripts/mac_sign.sh`), so the user's saved logins survive an
   install.
 - Incremental after a release: the changed objects plus the framework's ThinLTO link
-  (1-2 h, 4 threads on 16 GB). A first build takes ~10-16 h. Log in
+  (1-2 h, 4 threads on 16 GB). A first build takes ~10-16 h. **A patch to a widely included upstream header** (e.g.
+  `content/public/browser/web_contents_delegate.h`, #435) makes it nearly a full rebuild: 0.0.2's was 51.8k steps,
+  3 h 52 min at `-j 6` (`--away` picks 6 to 8 jobs from the free RAM), then the link. Look at
+  `git diff --stat v<prev> -- patches/` first to estimate. Log in
   `koan/logs/official-<stamp>.log`.
 - Check `Info.plist`: `KoanVersion` == `VERSION`, `CFBundleShortVersionString` ==
   `python3 -I src/version/koan_version.py show short`.
@@ -81,10 +87,14 @@ Nothing about the Mac (host name, address, user, key path) goes into tracked fil
   install needs. Copy it first:
   ```sh
   ditto chromium/src/out/KoanOfficial/Koan.app ~/work/koan-mac/release/<v>/stage/Koan.app
-  KOAN_RELEASE=1 KOAN_CI_APP=~/work/koan-mac/release/<v>/stage/Koan.app \
+  KOAN_CI_XCODE=/Applications/Xcode.app KOAN_RELEASE=1 \
+    KOAN_CI_APP=~/work/koan-mac/release/<v>/stage/Koan.app \
     scripts/ci/mac_package.sh ~/work/koan-mac/release/<v>
   ```
-  `KOAN_CI_APP` skips the script's Info.plist check, so do step 4's check by hand. The
+  `KOAN_CI_APP` skips the script's Info.plist check, so do step 4's check by hand. `KOAN_CI_XCODE`: the script
+  sources `scripts/ci/mac_env.sh`, whose default Xcode path is the CI runner's.
+- Before packaging, run a short `suite.sh --skip-cxx --skip-visual --only ...` on the **official** app (0.0.2: 10
+  e2e, all passed). The
   result is `Koan-<v>-arm64.dmg` and its `.sha256`.
 
 ## 6. Publish on GitHub
