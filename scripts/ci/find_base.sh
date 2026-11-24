@@ -19,8 +19,10 @@ PREFIX="${2:?usage: $0 <workflow file> <artifact prefix>}"
 
 output() { echo "base_run=$1"; [[ -z ${GITHUB_OUTPUT:-} ]] || echo "base_run=$1" >> "$GITHUB_OUTPUT"; }
 
-runs="$(gh api "repos/$GH_REPO/actions/workflows/$WORKFLOW/runs?status=success&per_page=30" \
-  --jq '.workflow_runs[].id' 2>/dev/null || true)"
+# Filtered here, not with ?status=success: that filter has left out a
+# successful run (tnfssc/koan 45281812693) for hours after it finished.
+runs="$(gh api "repos/$GH_REPO/actions/workflows/$WORKFLOW/runs?per_page=50" \
+  --jq '.workflow_runs[] | select(.conclusion == "success") | .id' 2>/dev/null || true)"
 for id in $runs; do
   [[ $id != "$RUN" ]] || continue
   names="$(gh api "repos/$GH_REPO/actions/runs/$id/artifacts?per_page=100" \
