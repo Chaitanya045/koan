@@ -95,6 +95,15 @@ doesn't: a tagged release is always a clean build):
 - 2026-11-24, tnfssc/koan run 45281812693 (a1141b7, no base: full): fetch
   35 min, then 3 build jobs (4 h 57 min, 4 h 57 min, 4 h 47 min), ~15 h
   15 min end to end. Kept: source 5.5 GB, out-final 1.5 GB; .dmg 186 MB.
+- 2026-11-25, tnfssc/koan run 45513425253 (2a7f638: develop merged in, 17
+  files changed incl. 12 under src/, 0 patches): incremental on
+  45281812693. Fetch 20 min (download 7 min, unpack 3 min, gn gen 30 s);
+  build 1 ran 38 steps and made the .dmg in 23 min; ~44 min end to end.
+  Cleanup deleted 45281812693's source and out-final.
+- `xcode-27` capacity: from 14:21 to 20:00 UTC on 2026-11-24, five jobs
+  on the fork waited 15 min for a runner and were cancelled ("The job was
+  not acquired by Runner of type hosted even after multiple attempts"),
+  while this repo's nightly got runners. The next try, at 23:51, got one.
 
 Concurrency: one group per ref for nightly and manual runs
 (`macos-<ref name>`; the nightly and a manual run of develop share
