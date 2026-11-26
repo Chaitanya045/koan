@@ -112,6 +112,14 @@ class KoanSwipeTracker {
   // no such tracker: the page keeps Chromium's swipe back and forward.
   bool OnScroll(float dx, float dy, SwipePhase phase, double seconds);
 
+  // Whether a scroll event of `phase` at `seconds` belongs to the swipe the
+  // tracker is following (fingers down), or to the momentum that follows its
+  // lift: what OnScroll() would take, without changing anything, for a caller
+  // that gets the gesture's events from somewhere other than the sidebar (see
+  // KoanScrollCapture). A momentum that doesn't start right after the lift is
+  // some other gesture's, and so is the first event of a gesture.
+  bool Owns(SwipePhase phase, double seconds) const;
+
   // Forgets the gesture in progress without telling the delegate (it has let
   // go of the swipe itself: the sidebar went away, compact mode toggled, the
   // window lost focus, a timeout). What follows starts a new gesture.
@@ -143,6 +151,8 @@ class KoanSwipeTracker {
   float velocity_ = 0;
   double last_move_seconds_ = 0;
   bool has_moved_ = false;
+  // When the fingers lifted.
+  double ended_seconds_ = 0;
   // The system's momentum has begun (so the next end is its end).
   bool in_momentum_ = false;
 };

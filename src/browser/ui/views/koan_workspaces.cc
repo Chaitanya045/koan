@@ -2451,6 +2451,7 @@ bool KoanWorkspaceController::IsLibraryOnScreenRight() const {
 
 void KoanWorkspaceController::BeginSwipe() {
   swipe_begun_ = true;
+  swipe_->ReleaseScrolls();
   KoanLibraryController* library = GetLibrary();
   const std::vector<SpaceInfo> spaces = GetSpaces();
   auto it = std::ranges::find(spaces, true, &SpaceInfo::active);
@@ -2476,6 +2477,11 @@ void KoanWorkspaceController::StartLibrarySwipe() {
   if (!library) {
     swipe_action_ = SwipeEdgeAction::kNone;
     return;
+  }
+  // The Library's window comes up under the fingers with the gesture going
+  // on, and AppKit may then send the rest of it anywhere (the page: #453).
+  if (views::Widget* widget = browser_view_->GetWidget()) {
+    swipe_->CaptureScrolls(widget->GetNativeWindow());
   }
   library_swipe_start_ = static_cast<float>(library->StartSwipe());
   // The Space goes back to rest while the Library moves (Zen puts the strip

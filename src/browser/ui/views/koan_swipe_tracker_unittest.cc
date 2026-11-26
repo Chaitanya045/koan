@@ -252,6 +252,82 @@ TEST(KoanSwipeTrackerTest, ALateEndAfterCancelIsNoSwipe) {
   EXPECT_EQ(0, delegate.ends);
 }
 
+// What a capture of the gesture's events (koan_scroll_capture.h) takes when
+// the system sends them past the sidebar (#453): the swipe's own, and nothing
+// of another gesture.
+
+TEST(KoanSwipeTrackerTest, OwnsTheFingersDownAndTheMomentumThatFollowsTheLift) {
+  RecordingDelegate delegate;
+  KoanSwipeTracker tracker(&delegate);
+  double now = 1;
+  // Not a swipe yet: nothing is owned.
+  EXPECT_FALSE(tracker.Owns(SwipePhase::kUpdate, now));
+  Drag(tracker, -8, 4, now);
+  EXPECT_TRUE(tracker.Owns(SwipePhase::kUpdate, now + 0.016));
+  EXPECT_TRUE(tracker.Owns(SwipePhase::kEnd, now + 0.016));
+  // The first event of a gesture is never another gesture's end.
+  EXPECT_FALSE(tracker.Owns(SwipePhase::kBegin, now + 0.016));
+
+  EXPECT_TRUE(tracker.OnScroll(0, 0, SwipePhase::kEnd, now + 0.016));
+  // The fingers are up: only the momentum is left, and the end that is not
+  // its own is no swipe's.
+  EXPECT_FALSE(tracker.Owns(SwipePhase::kUpdate, now + 0.03));
+  EXPECT_FALSE(tracker.Owns(SwipePhase::kEnd, now + 0.03));
+  EXPECT_TRUE(tracker.Owns(SwipePhase::kMomentum, now + 0.03));
+  EXPECT_TRUE(tracker.OnScroll(-3, 0, SwipePhase::kMomentum, now + 0.03));
+  // Once it goes on, its end is the swipe's, and then nothing is.
+  EXPECT_TRUE(tracker.Owns(SwipePhase::kMomentum, now + 0.5));
+  EXPECT_TRUE(tracker.Owns(SwipePhase::kEnd, now + 0.5));
+  EXPECT_TRUE(tracker.OnScroll(0, 0, SwipePhase::kEnd, now + 0.5));
+  EXPECT_FALSE(tracker.Owns(SwipePhase::kMomentum, now + 0.55));
+}
+
+TEST(KoanSwipeTrackerTest, AMomentumThatDoesNotFollowTheLiftIsNotTheSwipes) {
+  RecordingDelegate delegate;
+  KoanSwipeTracker tracker(&delegate);
+  double now = 1;
+  Drag(tracker, -8, 4, now);
+  EXPECT_TRUE(tracker.OnScroll(0, 0, SwipePhase::kEnd, now));
+  // The fingers lifted without momentum, and a page scrolled later does.
+  EXPECT_FALSE(tracker.Owns(SwipePhase::kMomentum, now + 2));
+}
+
+TEST(KoanSwipeTrackerTest, AMomentumThatNeverEndedIsNotOwnedForever) {
+  RecordingDelegate delegate;
+  KoanSwipeTracker tracker(&delegate);
+  double now = 1;
+  Drag(tracker, -8, 4, now);
+  EXPECT_TRUE(tracker.OnScroll(0, 0, SwipePhase::kEnd, now));
+  EXPECT_TRUE(tracker.OnScroll(-3, 0, SwipePhase::kMomentum, now + 0.05));
+  // Its end got lost: a page's momentum, much later, is not the swipe's.
+  EXPECT_FALSE(tracker.Owns(SwipePhase::kMomentum, now + 10));
+  EXPECT_FALSE(tracker.Owns(SwipePhase::kEnd, now + 10));
+}
+
+TEST(KoanSwipeTrackerTest, OwnsNothingOfAScrollThatWasNeverASwipe) {
+  RecordingDelegate delegate;
+  KoanSwipeTracker tracker(&delegate);
+  double now = 1;
+  EXPECT_FALSE(tracker.OnScroll(1, -4, SwipePhase::kBegin, now));
+  for (int i = 0; i < 6; ++i) {
+    now += 0.016;
+    EXPECT_FALSE(tracker.OnScroll(2, -6, SwipePhase::kUpdate, now));
+  }
+  EXPECT_FALSE(tracker.Owns(SwipePhase::kUpdate, now));
+  EXPECT_FALSE(tracker.Owns(SwipePhase::kEnd, now));
+  EXPECT_FALSE(tracker.Owns(SwipePhase::kMomentum, now));
+}
+
+TEST(KoanSwipeTrackerTest, OwnsNothingOfACancelledSwipe) {
+  RecordingDelegate delegate;
+  KoanSwipeTracker tracker(&delegate);
+  double now = 1;
+  Drag(tracker, -8, 4, now);
+  tracker.Cancel();
+  EXPECT_FALSE(tracker.Owns(SwipePhase::kUpdate, now));
+  EXPECT_FALSE(tracker.Owns(SwipePhase::kEnd, now));
+}
+
 TEST(SwipeDragTest, FollowsTheAmountAndSlidesOnFromWhereItWas) {
   SwipeDrag drag;
   EXPECT_FALSE(drag.live());
