@@ -23,8 +23,8 @@ Found by reading the tests (check titles in quotes), not by running them.
 
 ## Totals
 
-Hook table, 53 rows: guarded 31, partly 12, none 10. Runnable on the Mac now:
-7; Linux e2e only: 36; no guard: 10.
+Hook table, 54 rows: guarded 32, partly 12, none 10. Runnable on the Mac now:
+8; Linux e2e only: 36; no guard: 10.
 Issue #183's three examples: guarded 2, partly 1.
 
 ## The gaps, by what to add
@@ -103,6 +103,7 @@ Issue #183's three examples: guarded 2, partly 1.
 | Sidebar tab rows | Vertical layout places pinned container, separator, unpinned container top to bottom with a running `y`; without a Space the rows view is a direct `TabStripView` child | e2e/sidebar_tabs "The rows sit in the Space's tab list, scrolling with the tabs (Zen)", "Tab rows are 36px tall", "The separator (22px) with Clear at its end, above the New Tab row (36px)", "Back to vertical tabs: the rows are back" | guarded | no (Linux e2e) |
 | Sidebar tab rows after a Space's pinned tabs | Rows view is a child of the focused `TabGroupView`, laid out top to bottom with a running `height`; drag/link drops skip children with no collection node; group animation tolerates a child that leaves | e2e/pinned "...in that Space's pinned section, above its New Tab row", "...and its rows sit right below its header, with no pinned tabs"; e2e/sidebar_tabs "...right below the Space header (no pinned tabs)"; e2e/vertical_tabs_teardown "A close with the new-Space form open: alive". Drop targeting: none | guarded | no (Linux e2e) |
 | Sidebar tab rows snap into a Space | `ShouldSnapToTarget` is still consulted: the animating layout manager grows a child missing from its starting layout from height 0 unless the delegate says otherwise | none (no test looks at the tab rows' animation when a Space is switched) | none | - |
+| Containers: a proxy per Space (#445) | Every partition's network context gets its proxy pipe in `ConfigureNetworkContextParamsInternal` with `relative_partition_path` = `Storage/ext/<domain>/def`; net bypasses loopback unless `<-loopback>`; an empty `PROXY_LIST` fails with `ERR_NO_SUPPORTED_PROXIES` instead of going direct | koan_containers_unittests `ContainerProxyPathTest.ContentPutsAContainerWhereTheHookLooks`, `ContainerProxyTest.NetBypassesLoopbackUnlessTold`, `ContainerProxyTest.DisconnectedHasNothingToConnectThrough`; koan_browsertests `KoanContainerProxyBrowserTest.*` (live switch, never direct) | guarded | yes (unit tests; browser tests on request) |
 
 ## The three behaviours named in #183
 
