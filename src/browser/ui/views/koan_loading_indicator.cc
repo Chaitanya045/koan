@@ -102,7 +102,9 @@ END_METADATA
 
 KoanLoadingIndicator::KoanLoadingIndicator(BrowserView* browser_view)
     : browser_view_(browser_view) {
-  // A long load can take minutes: the frames run as long as it does.
+  // The frames stop once the bar is still (KoanLoadingBar::kLongLoadSweeps),
+  // but not while the window is hidden and its compositor makes none, which
+  // can be for longer than Chromium's guard for compositor animations allows.
   set_check_active_duration(false);
   browser_view_->browser()->GetTabStripModel()->AddObserver(this);
   pref_change_registrar_.Init(
@@ -231,7 +233,10 @@ void KoanLoadingIndicator::Update() {
   if (!widget_->IsVisible()) {
     widget_->ShowInactive();
   }
-  StartFrames();
+  // A still bar stays as drawn until the load state changes.
+  if (!bar_.IsStill(now)) {
+    StartFrames();
+  }
   Step(now);
 }
 
@@ -278,6 +283,9 @@ void KoanLoadingIndicator::Step(base::TimeTicks now) {
     // frame.
     StopFrames();
     widget_->Hide();
+  } else if (bar_.IsStill(now)) {
+    // This frame is the last until the load state changes.
+    StopFrames();
   }
 }
 

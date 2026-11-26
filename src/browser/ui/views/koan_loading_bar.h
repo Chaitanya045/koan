@@ -32,6 +32,8 @@ class KoanLoadingBar {
     // The long load's sweeping part, to be clipped to `bar`. Empty before it
     // starts.
     gfx::RectF sweep;
+
+    friend bool operator==(const Frame&, const Frame&) = default;
   };
 
   // Zen's sizes at 16px to the rem.
@@ -42,6 +44,12 @@ class KoanLoadingBar {
   static constexpr float kMaxWidth = kLongLoadWidth;
   // WAIT_BEFORE_SHOWING_LONG_LOAD.
   static constexpr base::TimeDelta kLongLoadDelay = base::Seconds(3);
+  // Koan's own bound, where Zen's CSS animation runs for as long as the page
+  // loads: the long load sweeps this many times, then rests with the sweep
+  // out of the track, and asks for no more frames until the load state
+  // changes (a page that never finishes loading would redraw about 60 times
+  // a second for ever). About 20 s after the long load starts.
+  static constexpr int kLongLoadSweeps = 20;
 
   KoanLoadingBar();
   KoanLoadingBar(const KoanLoadingBar&) = delete;
@@ -66,6 +74,9 @@ class KoanLoadingBar {
   // Shown, and not going.
   bool IsShowing() const { return shown_.has_value() && !hidden_.has_value(); }
   bool IsLongLoad() const { return long_load_.has_value(); }
+  // Loading, and at rest for good: FrameAt() no longer changes, so no more
+  // frames are needed until Hide(), Show() or Reset().
+  bool IsStill(base::TimeTicks now) const;
   // Nothing to draw (never shown, or gone).
   bool IsDone(base::TimeTicks now) const;
 
