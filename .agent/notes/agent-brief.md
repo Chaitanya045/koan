@@ -33,9 +33,9 @@ Zen's real source is at `~/work/koan/.cache/zen-src/` (read its README) More of 
 Other threads work in parallel, one per issue: #33 sidebar tab list, #34 Spaces, #35 compact mode/layout, #36 URL bar, #37 Glance/split view, #38 pinned tabs/Essentials, #39 settings page, #40 command palette, #41 theme picker, #42 tab folders, #43 Library panel, #44 media controller/toasts/welcome/window drag, #45 performance and power. When a related PR lands on develop first, rebase onto it and build on it rather than duplicating it (e.g. the command palette builds on the URL bar work, per-Space themes on Spaces). Stay within your issue. If you must change a shared file (e.g. koan_compact_mode_controller.cc, koan_sidebar_nav_view.cc, koan_workspaces.cc, koan_prefs.*, koan_features.*, BUILD.gn), keep the change small and self-contained so merges are easy. Never touch other worktrees or branches.
 
 ## Process
-1. Plan briefly (read the code and Zen's source first), then implement in small commits on your branch with clear messages.
+1. Plan briefly (read the code and Zen's source first), then implement in small commits on your branch, with Conventional Commits titles (`fix(urlbar): ...`; CONTRIBUTING.md, "Commits").
 2. Build/test with agent-build.sh until everything passes. Look at your screenshots: they must look like Zen.
-3. `git fetch origin && git rebase origin/develop`, rerun the tests, push, and open a PR against `develop`: `gh pr create --base develop` with a description of what changed, what Zen does, how you tested, screenshots (commit them under docs/screenshots/ if useful), and `Fixes #<number>`. Do not merge; the maintainer reviews and merges.
+3. `git fetch origin && git rebase origin/develop`, rerun the tests, push, and open a PR against `develop`: `gh pr create --base develop` with a Conventional Commits title, a type and an area label (`--label`; CONTRIBUTING.md, "Labels"), and a description in the template's order: the problem, the solution (including what Zen does), and how it's confirmed (what you built and ran, screenshots, committed under docs/screenshots/ if useful), with `Fixes #<number>`. Do not merge; the maintainer reviews and merges.
 4. Update docs/USAGE.md and docs/ZEN_PARITY.md for what you changed.
 5. Finish with a short report: PR URL, what's done, what isn't and why.
 
