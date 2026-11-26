@@ -58,7 +58,7 @@ usage() {
 # both show up: no -v, which only lists trusted identities).
 find_identity() {
   security find-identity -p codesigning "$1" |
-    sed -n 's/^ *[0-9]*) \([0-9A-F]\{40\}\) ".*/\1/p'
+    sed -n 's/^ *[0-9]*) \([0-9A-F]\{40\}\) ".*/\1/p' | sort -u
 }
 
 # Signs a copy of /usr/bin/true with the identity.
@@ -136,6 +136,8 @@ EOF
   # No auto-lock: the build job runs for minutes.
   security set-keychain-settings "$kc"
   security unlock-keychain -p "$kcpass" "$kc"
+  # `security` takes passwords only as arguments; acceptable on a single-use
+  # runner, where no other user's processes can read them.
   security import "$p12" -k "$kc" -f pkcs12 -P "$pass" -T /usr/bin/codesign > /dev/null
   rm -f "$p12"
   # So that codesign uses the key without asking (a dialog on a runner

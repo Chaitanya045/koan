@@ -146,9 +146,24 @@ def file_digest(path):
   return size, digest.hexdigest()
 
 
+# macOS's own openssl is LibreSSL, which has no Ed25519 signing: prefer
+# $KOAN_OPENSSL, then Homebrew's OpenSSL 3 (on GitHub's macOS runners).
+_OPENSSL_CANDIDATES = ('/opt/homebrew/opt/openssl@3/bin/openssl',
+                       '/usr/local/opt/openssl@3/bin/openssl')
+
+
+def openssl_path():
+  if os.environ.get('KOAN_OPENSSL'):
+    return os.environ['KOAN_OPENSSL']
+  for candidate in _OPENSSL_CANDIDATES:
+    if os.access(candidate, os.X_OK):
+      return candidate
+  return 'openssl'
+
+
 def _openssl(*args):
   try:
-    return subprocess.run(['openssl', *args], capture_output=True)
+    return subprocess.run([openssl_path(), *args], capture_output=True)
   except FileNotFoundError:
     raise ManifestError('openssl is not installed')
 

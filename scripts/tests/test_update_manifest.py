@@ -36,7 +36,8 @@ def run_main(args):
 
 def _generate_key(path):
   result = subprocess.run(
-      ['openssl', 'genpkey', '-algorithm', 'ED25519', '-out', str(path)],
+      [update_manifest.openssl_path(), 'genpkey', '-algorithm', 'ED25519',
+       '-out', str(path)],
       capture_output=True)
   return result.returncode == 0
 
