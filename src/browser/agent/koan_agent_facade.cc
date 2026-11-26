@@ -1997,7 +1997,11 @@ void CdpFacade::SendEvent(std::string_view method,
 void CdpFacade::Send(base::DictValue message, bool binary) {
   const SecretScrubber* secrets = backend_->Secrets();
   if (!secrets || secrets->empty()) {
-    if (std::optional<std::string> json = base::WriteJson(message)) {
+    std::optional<std::string> json = base::WriteJson(message);
+    // A big answer (a screenshot) is held once from here on: the message is
+    // not kept alive while the gateway queues the JSON.
+    message.clear();
+    if (json) {
       send_.Run(std::move(*json));
     }
     return;
@@ -2006,9 +2010,9 @@ void CdpFacade::Send(base::DictValue message, bool binary) {
   // shows is masked or refused instead.
   static constexpr std::string_view kBinaryPlaceholder = "\x01koan-binary\x01";
   std::string binary_data;
-  base::DictValue* holder = nullptr;
+  bool has_binary_data = false;
   if (binary) {
-    holder = message.FindDict("result");
+    base::DictValue* holder = message.FindDict("result");
     if (!holder) {
       holder = message.FindDict("params");
     }
@@ -2016,24 +2020,25 @@ void CdpFacade::Send(base::DictValue message, bool binary) {
     if (data) {
       binary_data = std::move(*data);
       holder->Set("data", kBinaryPlaceholder);
-    } else {
-      holder = nullptr;
+      has_binary_data = true;
     }
   }
   std::optional<std::string> json = base::WriteJson(message);
+  message.clear();
   if (!json) {
     return;
   }
   secrets->Scrub(*json);
-  if (holder) {
+  if (has_binary_data) {
     static constexpr std::string_view kQuotedPlaceholder =
         "\"\\u0001koan-binary\\u0001\"";
     const size_t at = json->find(kQuotedPlaceholder);
     if (at != std::string::npos) {
-      // base64 needs no JSON escape.
-      json->replace(at, kQuotedPlaceholder.size(),
-                    base::StrCat({"\"", binary_data, "\""}));
+      // base64 needs no JSON escape. Only what is between the quotes is
+      // replaced, so the data is not copied into a string of its own first.
+      json->replace(at + 1, kQuotedPlaceholder.size() - 2, binary_data);
     }
+    binary_data = std::string();
   }
   send_.Run(std::move(*json));
 }

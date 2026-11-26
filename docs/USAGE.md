@@ -370,8 +370,11 @@ it.
 
 While the selected tab loads, Zen's loading bar pulses at the top middle of
 the page (in the gap above it); after three seconds it turns into a wider
-track with a sweep. It isn't shown while a page is fullscreen. Tabs keep
-their favicon while loading, without Chromium's spinner, as in Zen.
+track with a sweep. Unlike Zen's, which goes on for as long as the page loads,
+the sweep stops after 20 sweeps (about 23 s into the load) and the track rests,
+so that a page that never finishes loading doesn't keep redrawing. It isn't
+shown while a page is fullscreen. Tabs keep their favicon while loading,
+without Chromium's spinner, as in Zen.
 
 A pinned tab or Essential keeps its site, as in Zen: a URL on another site
 typed in its URL bar (or a search) opens in a new tab, and a link in it that
@@ -1726,6 +1729,11 @@ waits. `koan skill` prints the guide
 agents follow; `skills/koan-browser/SKILL.md` is the entry for an agent's
 skills folder. The agent's tabs stay open between its commands, for as long as its
 task lasts: `koan end`, or 30 minutes without a command, closes them.
+Each task is one Space, and the guide tells an agent to keep one task for a
+whole job (reusing its tab for the next site, not opening a new Space per site)
+and to end it as soon as that work is done, before it answers you. It leaves a
+task open past its answer only when the page can't be opened again as it is (a
+half-filled form, a sign-in or a payment waiting for you), and says which.
 An agent-created Space disappears when its last tab closes. User tabs you
 opened in that Space stay open when the agent ends its task.
 `koan open --saved <name>` uses a saved container you allowed that agent;

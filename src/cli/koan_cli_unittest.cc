@@ -604,6 +604,11 @@ TEST(KoanCliSkillTest, TheGuideCoversPairingTakeOverAndSsh) {
            "HTTP 504",
            "Koan.timeout",
            "ControlMaster=auto",
+           // The 2026-11-24 agent: a new Space per site, the old one left
+           // open "in case".
+           "new task name means a new Space",
+           "reuse what is",
+           "leaving one open \"in case\"",
            // Auto-resume (design 9.2).
            "koan wait <tab> --resumed",
            "not from your old plan",

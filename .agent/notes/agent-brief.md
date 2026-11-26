@@ -33,9 +33,9 @@ Zen's real source is at `~/work/koan/.cache/zen-src/` (read its README) More of 
 Other threads work in parallel, one per issue: #33 sidebar tab list, #34 Spaces, #35 compact mode/layout, #36 URL bar, #37 Glance/split view, #38 pinned tabs/Essentials, #39 settings page, #40 command palette, #41 theme picker, #42 tab folders, #43 Library panel, #44 media controller/toasts/welcome/window drag, #45 performance and power. When a related PR lands on develop first, rebase onto it and build on it rather than duplicating it (e.g. the command palette builds on the URL bar work, per-Space themes on Spaces). Stay within your issue. If you must change a shared file (e.g. koan_compact_mode_controller.cc, koan_sidebar_nav_view.cc, koan_workspaces.cc, koan_prefs.*, koan_features.*, BUILD.gn), keep the change small and self-contained so merges are easy. Never touch other worktrees or branches.
 
 ## Process
-1. Plan briefly (read the code and Zen's source first), then implement in small commits on your branch with clear messages.
+1. Plan briefly (read the code and Zen's source first), then implement in small commits on your branch, with Conventional Commits titles (`fix(urlbar): ...`; CONTRIBUTING.md, "Commits").
 2. Build/test with agent-build.sh until everything passes. Look at your screenshots: they must look like Zen.
-3. `git fetch origin && git rebase origin/develop`, rerun the tests, push, and open a PR against `develop`: `gh pr create --base develop` with a description of what changed, what Zen does, how you tested, screenshots (commit them under docs/screenshots/ if useful), and `Fixes #<number>`. Do not merge; the maintainer reviews and merges.
+3. `git fetch origin && git rebase origin/develop`, rerun the tests, push, and open a PR against `develop`: `gh pr create --base develop` with a Conventional Commits title, a type and an area label (`--label`; CONTRIBUTING.md, "Labels"), and a description in the template's order: the problem, the solution (including what Zen does), and how it's confirmed (what you built and ran, screenshots, committed under docs/screenshots/ if useful), with `Fixes #<number>`. Do not merge; the maintainer reviews and merges.
 4. Update docs/USAGE.md and docs/ZEN_PARITY.md for what you changed.
 5. Finish with a short report: PR URL, what's done, what isn't and why.
 
@@ -60,8 +60,13 @@ Many threads share one build lock, so builds queue. Batch your changes and build
 - Nothing counts as done until it has passed on the Mac.
 - While the user is at the Mac, builds run at `-j 3` + nice and UI testing pauses. Full speed only when they're away.
 
-## Subagents (user, 2026-11-04)
-If you spawn subagents (the Agent tool) for reviews, searches or checks, use **Opus 5.5 at medium effort** (`model: "opus"`, `effort: "medium"`). Always pass both explicitly.
+## Subagents (user, 2026-11-06; replaces the 2026-11-04 Opus rule)
+If you spawn subagents (the Agent tool) for reviews, searches or checks, use **Sonnet or Haiku, at medium or high effort, chosen by how hard the task is**. Keep the total tokens for the task minimal, but never at the expense of Koan's quality.
+- Haiku/medium: mechanical work (greps, summaries, rebase-only checks).
+- Sonnet/medium: normal focused reviews and checks.
+- Sonnet/high: risky work (Chromium hook patches, lifetimes, crashes, security, upstream audits).
+
+Always pass `model` and `effort` explicitly. Keep prompts short: point at files instead of pasting them.
 
 ## Upstream audit first (user, 2026-11-04)
 Before building or changing any Koan feature that sits on top of an upstream Chromium feature (vertical tabs, tab groups/Spaces, omnibox/NTP, fullscreen/immersive, side panel, menus, settings, session restore, profiles/Incognito, bookmarks bar):
@@ -70,4 +75,24 @@ Before building or changing any Koan feature that sits on top of an upstream Chr
 3. Make sure no upstream state that breaks Zen's behaviour can be reached by a user, an old profile or an extension. Add a test for each.
 4. **Check what Zen suppresses in Firefox for the same feature (user, 2026-11-05).** Look at Zen's Firefox patches (`.cache/zen-desktop-1.24b/src/**/*.patch`), its pref overrides (`prefs/*/*.yaml`, plus the shipped `firefox.js` defaults), CSS that hides Firefox UI, and JS that wraps tabbrowser and urlbar methods. Each Firefox behaviour Zen turns off has a Chromium equivalent that Koan probably has to turn off too. The inventory is in `.agent/notes/upstream/zen-firefox-overrides.md`.
 
-Reviews check the PR against that file. The completed audits are in `.cache/reviews/vertical-tabs-audit.md` and `upstream-audit-2.md`.
+Reviews check the PR against that file.
+
+## Upgrade-safe code (user, 2026-11-06)
+Koan must keep taking Chromium Stable releases safely (docs/REBASE.md: point releases within days, a new milestone within about 2 weeks). Write every change so that the next rebase is mechanical, and so that a break is loud, not silent:
+1. **Prefer upstream extension points over patches:** observers, delegates, `KoanBrowserViewController` hooks, prefs, policies, feature overrides in `koan_feature_overrides.cc`, colour mixers and command handlers. Patch an upstream file only when no extension point exists, and say in the PR why none fits.
+2. **Keep patches tiny and boring:** a call into `//koan`, never copied or reimplemented upstream logic. Hunks must have stable context and no reformatting of upstream lines. Each patch gets a row in docs/REBASE.md saying what it hooks and why. Don't grow an existing patch when a new hook call would do.
+3. **Break loudly:** reference upstream features, prefs, commands and IDs by their C++ symbols (`features::kFoo`, `prefs::kBar`, `IDC_*`), never by string names, so a rename fails to compile. Where Koan depends on upstream *behaviour* rather than an API (the order of notifications, which state a view is in, that a CHECK holds), add a unit test or e2e/Mac step that fails if that behaviour changes, and name it in the REBASE row.
+4. **No private poking:** don't reach into upstream internals through friend declarations, casts, or by walking the view tree by class name, unless a test guards it. Prefer public accessors.
+5. **Same code on every milestone:** no `#if CHROMIUM_VERSION` forks. Fix the code for the new milestone at rebase time.
+6. **Reviews check this:** every review lists the new and changed patches and their size, and flags any of rules 1-5 that it breaks. The completed audits are in `.cache/reviews/vertical-tabs-audit.md` and `upstream-audit-2.md`.
+
+## Before you code and push (user, 2026-11-10)
+- **Research before coding, in this order:**
+  1. Pristine Chromium (`git -C ~/work/koan/chromium/src show HEAD:<path>`, `git grep` at HEAD). Find the upstream extension point, every state and the Mac path.
+  2. Zen 1.24b (`~/work/koan/.cache/zen-desktop-1.24b/`) for behaviour and values.
+  3. Brave (`gh api repos/brave/brave-core/contents/<path>`, read only) where Brave already solved the same Chromium problem (containers, partitions, permission or extension handling).
+
+  Zen and Brave are MPL-2.0: read them for design and behaviour, **never copy their code**, and re-implement. Put a short plan (what upstream offers, what Zen and Brave do, your design, the hooks and their size) at the top of the PR description before you push code.
+- **Compile in your head, then statically:** check every Chromium API against the 158 source, then run `~/work/koan/.cache/syn-check.sh <your worktree> <abs path of a changed .cc> [gn module]` on each changed .cc (default module `//koan/browser/ui/views:impl_Private`). It points //koan at your worktree, swaps in your file, takes the shared lock and fails loudly if it couldn't (the older `agent-syn.sh` copies checked another worktree's file). A deliberately broken file must fail. Errors about missing generated Koan icon names (`kKoan*Icon`) come from the shared out dir's stale generated headers: ignore those only. Mac-only `.mm` files can't be checked on Linux, so be extra careful there and say so in the PR.
+- **Tests:** write the unit tests that are *necessary* (logic, edge cases, regressions you're fixing, and the upstream-behaviour guards from "Upgrade-safe code" rule 3), not a dump. Add an e2e or Mac step to the PR's test plan for UI behaviour; they run in the Mac cycle. If your change needs a new CI check (a script, a policy list, a lint), add it to `.github/workflows/` + `scripts/ci/` and make it pass.
+- **Must pass before you push:** `scripts/ci/check_patches.sh`, `python3 -I scripts/ci/check_private_info.py`, `python -I -m unittest discover -s scripts/tests -p 'test_*.py'`, clang-format, gn format (`scripts/ci/check_gn_format.sh`), and the patch-report rules (every new or grown patch gets a docs/REBASE.md row).

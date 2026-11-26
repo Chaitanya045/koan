@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <deque>
 #include <functional>
 #include <map>
 #include <memory>
@@ -66,8 +67,11 @@
 #include "net/base/mime_util.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "services/data_decoder/public/cpp/data_decoder.h"
 #include "services/data_decoder/public/cpp/decode_image.h"
+#include "skia/ext/image_operations.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkRect.h"
 #include "ui/base/clipboard/file_info.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/l10n/time_format.h"
@@ -84,7 +88,6 @@
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
-#include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/vector_icons.h"
 #include "ui/views/view_utils.h"
@@ -105,6 +108,8 @@ constexpr base::TimeDelta kUpdateDelay = base::Milliseconds(250);
 constexpr int64_t kMaxPreviewBytes = 20 * 1024 * 1024;
 constexpr int kIconSize = 22;
 constexpr int kPreviewSize = 34;
+// How many pictures are read and decoded at once; the rest wait their turn.
+constexpr int kMaxPreviewsInFlight = 4;
 // A download coming in: an arrow inside a progress ring (Zen's 32px ring,
 // stroke 3 on a 32-unit grid).
 constexpr int kArrowSize = 14;
@@ -327,6 +332,26 @@ std::optional<std::string> ReadPreviewFile(const base::FilePath& path) {
     return std::nullopt;
   }
   return data;
+}
+
+// The decoded picture as a square of at most twice the preview's size (for
+// sharp drawing on a 2x display), cropped to cover it like object-fit: cover.
+// A new bitmap of its own: it shares no pixels with `bitmap`, so the full
+// decode can go once this returns. Null if it cannot be scaled.
+SkBitmap MakePreviewSquare(const SkBitmap& bitmap) {
+  const int side = std::min(bitmap.width(), bitmap.height());
+  SkBitmap square;
+  if (side < 1 || !bitmap.extractSubset(
+                      &square, SkIRect::MakeXYWH((bitmap.width() - side) / 2,
+                                                 (bitmap.height() - side) / 2,
+                                                 side, side))) {
+    return SkBitmap();
+  }
+  const int size = std::min(side, 2 * kPreviewSize);
+  SkBitmap preview = skia::ImageOperations::Resize(
+      square, skia::ImageOperations::RESIZE_GOOD, size, size);
+  preview.setImmutable();
+  return preview;
 }
 
 void OpenDownloadsPage(BrowserWindowInterface* browser) {
@@ -582,6 +607,12 @@ class KoanLibraryDownloadsSection
 
   using PreviewKey = std::pair<base::FilePath, base::Time>;
 
+  // A preview waiting for a free slot.
+  struct PreviewRequest {
+    std::string guid;
+    PreviewKey key;
+  };
+
   using ItemAction =
       void (KoanLibraryDownloadsSection::*)(download::DownloadItem*);
 
@@ -793,13 +824,12 @@ class KoanLibraryDownloadsSection
         SetIcon(item->GetGuid(), preview->second, /*preview=*/true);
         return;
       }
-      if (previews_pending_.insert(key).second) {
-        base::ThreadPool::PostTaskAndReplyWithResult(
-            FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-            base::BindOnce(&ReadPreviewFile, path),
-            base::BindOnce(&KoanLibraryDownloadsSection::OnPreviewRead,
-                           preview_weak_factory_.GetWeakPtr(), item->GetGuid(),
-                           key));
+      // A picture that could not be previewed keeps its file icon, without
+      // being read and decoded again on every rebuild.
+      if (!previews_failed_.contains(key) &&
+          previews_pending_.insert(key).second) {
+        previews_queued_.push_back({item->GetGuid(), key});
+        StartPreviews();
       }
     }
     IconManager* icons = g_browser_process->icon_manager();
@@ -824,16 +854,51 @@ class KoanLibraryDownloadsSection
                     &icon_tracker_);
   }
 
+  // Starts reading pictures while there are free slots.
+  void StartPreviews() {
+    while (previews_in_flight_ < kMaxPreviewsInFlight &&
+           !previews_queued_.empty()) {
+      PreviewRequest request = std::move(previews_queued_.front());
+      previews_queued_.pop_front();
+      // Its row is gone (filtered out or removed since): not worth reading.
+      // It is queued again if the row comes back.
+      if (!rows_.contains(request.guid)) {
+        previews_pending_.erase(request.key);
+        continue;
+      }
+      ++previews_in_flight_;
+      const base::FilePath path = request.key.first;
+      base::ThreadPool::PostTaskAndReplyWithResult(
+          FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+          base::BindOnce(&ReadPreviewFile, path),
+          base::BindOnce(&KoanLibraryDownloadsSection::OnPreviewRead,
+                         preview_weak_factory_.GetWeakPtr(),
+                         std::move(request.guid), std::move(request.key)));
+    }
+  }
+
+  // A preview is done, one way or the other: gives its slot to the next.
+  void FinishPreview(const PreviewKey& key, bool failed) {
+    previews_pending_.erase(key);
+    if (failed) {
+      previews_failed_.insert(key);
+    }
+    --previews_in_flight_;
+    StartPreviews();
+  }
+
   void OnPreviewRead(const std::string& guid,
                      const PreviewKey& key,
                      std::optional<std::string> data) {
     if (!data || data->empty()) {
-      previews_pending_.erase(key);
+      FinishPreview(key, /*failed=*/true);
       return;
     }
-    // Decoded out of process, like every picture from the web.
-    data_decoder::DecodeImageIsolated(
-        base::as_byte_span(*data), data_decoder::mojom::ImageCodec::kDefault,
+    // Decoded out of process, like every picture from the web, by the
+    // section's one decoder.
+    data_decoder::DecodeImage(
+        &preview_decoder_, base::as_byte_span(*data),
+        data_decoder::mojom::ImageCodec::kDefault,
         /*shrink_to_fit=*/true, kMaxPreviewBytes,
         gfx::Size(2 * kPreviewSize, 2 * kPreviewSize),
         base::BindOnce(&KoanLibraryDownloadsSection::OnPreviewDecoded,
@@ -843,18 +908,30 @@ class KoanLibraryDownloadsSection
   void OnPreviewDecoded(const std::string& guid,
                         const PreviewKey& key,
                         const SkBitmap& bitmap) {
-    previews_pending_.erase(key);
     if (bitmap.isNull()) {
+      FinishPreview(key, /*failed=*/true);
       return;
     }
-    // Cover the square, like object-fit: cover.
-    const int side = std::min(bitmap.width(), bitmap.height());
-    const gfx::ImageSkia image = gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
-    const gfx::ImageSkia square = gfx::ImageSkiaOperations::ExtractSubset(
-        image, gfx::Rect((bitmap.width() - side) / 2,
-                         (bitmap.height() - side) / 2, side, side));
-    previews_[key] = square;
-    SetIcon(guid, square, /*preview=*/true);
+    // Scaled off the UI thread. The full decode goes with that task; only
+    // the small preview is kept.
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, {base::TaskPriority::USER_VISIBLE},
+        base::BindOnce(&MakePreviewSquare, bitmap),
+        base::BindOnce(&KoanLibraryDownloadsSection::OnPreviewScaled,
+                       preview_weak_factory_.GetWeakPtr(), guid, key));
+  }
+
+  void OnPreviewScaled(const std::string& guid,
+                       const PreviewKey& key,
+                       const SkBitmap& preview) {
+    if (preview.isNull()) {
+      FinishPreview(key, /*failed=*/true);
+      return;
+    }
+    const gfx::ImageSkia image = gfx::ImageSkia::CreateFrom1xBitmap(preview);
+    previews_[key] = image;
+    SetIcon(guid, image, /*preview=*/true);
+    FinishPreview(key, /*failed=*/false);
   }
 
   void SetIcon(const std::string& guid,
@@ -1113,8 +1190,15 @@ class KoanLibraryDownloadsSection
   // The rows shown, by their download's GUID.
   std::map<std::string, Row> rows_;
   std::map<PreviewKey, gfx::ImageSkia> previews_;
-  // Previews being read or decoded.
+  // Previews waiting, being read or being decoded.
   std::set<PreviewKey> previews_pending_;
+  // Previews waiting for one of the kMaxPreviewsInFlight slots.
+  std::deque<PreviewRequest> previews_queued_;
+  int previews_in_flight_ = 0;
+  // Pictures that could not be read or decoded, not tried again.
+  std::set<PreviewKey> previews_failed_;
+  // Decodes the previews, all in one service process.
+  data_decoder::DataDecoder preview_decoder_;
   int limit_ = kPageSize;
   bool shown_ = false;
   bool rebuild_pending_ = false;

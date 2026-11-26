@@ -13,6 +13,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_reader.h"
+#include "base/strings/string_util.h"
 #include "base/values.h"
 #include "koan/cli/koan_cli_args.h"
 #include "koan/cli/koan_cli_batch.h"
@@ -161,8 +162,10 @@ TEST(KoanCliUploadArgsTest, TheCommandAndTheStep) {
     EXPECT_NE(help->find(text), std::string::npos) << text;
   }
   EXPECT_NE(HelpText("act")->find("upload <target>"), std::string::npos);
-  // The guide says how, and what may be sent.
-  const std::string guide = SkillGuide("");
+  // The guide says how, and what may be sent (its lines wrap: compared with
+  // the whitespace collapsed).
+  const std::string guide =
+      base::CollapseWhitespaceASCII(SkillGuide(""), false);
   for (const char* text : {"koan act <tab> upload @12", "koan upload <tab>",
                            "scp", "never a key"}) {
     EXPECT_NE(guide.find(text), std::string::npos) << text;

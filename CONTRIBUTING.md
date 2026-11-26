@@ -26,6 +26,9 @@ is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 - Check whether the problem goes away when you switch the Koan feature off
   in `chrome://flags`. If it doesn't, it's probably a Chromium bug and
   belongs on the [Chromium tracker](https://issues.chromium.org).
+- Give the issue a type label and an area label ([Labels](#labels)). The
+  templates add `bug` or `enhancement`; a maintainer adds the rest if you
+  can't.
 - Report security vulnerabilities privately, as described in
   [SECURITY.md](SECURITY.md), never in a public issue.
 
@@ -387,18 +390,31 @@ them. Keep platform code in them behind `BUILDFLAG(IS_MAC)` too.
 
 ## Commits
 
-- **Title:** one line that says what changed for the user, in plain words,
-  65 characters or fewer, so the squash-merged title with ` (#123)` stays
-  within 72. For example:
+Koan uses [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
+for commit titles and pull request titles, so the history and the pull
+request list can be filtered by type and area.
+
+- **Title:** `type(scope): summary`, 65 characters or fewer, so the
+  squash-merged title with ` (#123)` stays within 72.
+  - `type` is one of `feat`, `fix`, `perf`, `refactor`, `test`, `docs`,
+    `build`, `ci`, `chore`, `style` or `revert`.
+  - `scope` is the area it touches, in lower case: for example `sidebar`,
+    `urlbar`, `spaces`, `glance`, `settings`, `agent`, `cli`, `updates`,
+    `mac`, `e2e`, `patches`, `release`, `ci`, `notes` or `repo`.
+  - `summary` says what Koan now does, in plain lower-case words (names
+    keep their case), with no full stop.
+  - A change that breaks something users or scripts rely on adds `!`
+    (`feat(agent)!: ...`) and a `BREAKING CHANGE:` line in the body.
+
+  For example:
 
   ```
-  Open Glance on Alt+click, like Zen
-  Thin overlay scrollbars, like Zen
-  docs: Koan vs Zen parity matrix
+  feat(glance): open Glance on Alt+click, like Zen
+  fix(urlbar): restore the Cmd+L card after switching windows
+  ci(mac): nightlies rebuild only what changed
+  docs(parity): Koan vs Zen parity matrix
+  chore(release): 0.0.3-alpha.1
   ```
-
-  Use a `docs:`, `ci:`, `build:` or `notes:` prefix for changes that don't
-  touch the browser.
 - **Body:** if the title isn't enough, explain why the change was made and
   anything a reviewer or a future rebase needs to know.
 - **History:** keep it tidy. Fold fixes into the commit they fix
@@ -407,22 +423,48 @@ them. Keep platform code in them behind `BUILDFLAG(IS_MAC)` too.
 
 ## Pull requests
 
-- Branch from `develop` with a descriptive name (`feat/…`, `fix/…`,
-  `docs/…`, `build/…`, `ci/…`), and open the pull request against `develop`.
+- Branch from `develop` with a name that starts with the type (`feat/…`,
+  `fix/…`, `docs/…`, `build/…`, `ci/…`), and open the pull request against
+  `develop`.
+- **Title:** a Conventional Commits title, as in [Commits](#commits). It
+  becomes the commit on `develop` when the pull request is squash-merged.
 - Keep each pull request to one issue, and link it with `Fixes #123`. If an
   issue is only partly done, write `Part of #123` and list what's left.
-- Fill in the template:
-  - what changed;
-  - how Zen does it;
-  - how you tested it;
-  - screenshots or a short video for UI changes.
+- **Description:** fill in the template, in this order:
+  1. **Problem:** what was wrong or missing, and who it affects.
+  2. **Solution:** what the pull request changes to solve it, naming the
+     files and the behaviour. For behaviour or UI changes, also how Zen does
+     it, and where Koan differs and why.
+  3. **How it's confirmed:** the evidence that it works: what you built and
+     ran (Mac steps, e2e and unit tests, CI runs, with links), screenshots
+     or a short video for UI changes, and anything that failed or that you
+     couldn't test.
 
   Mark the pull request as a draft until it builds and its tests pass.
+- **Labels:** give it a type label and an area label (see [Labels](#labels)).
 - Update [docs/USAGE.md](docs/USAGE.md) for new features and shortcuts, and
   [docs/ZEN_PARITY.md](docs/ZEN_PARITY.md) when parity changes.
 - Rebase on `develop` before review. `develop` is protected: pull requests
   need passing CI and are reviewed by a maintainer before they're
   squash-merged.
+
+### Labels
+
+Every issue and pull request gets the labels that apply, so lists can be
+filtered and the release notes are sorted correctly
+([.github/release.yml](.github/release.yml); a pull request without a
+matching label ends up under "Other changes"). Use the existing labels
+(`gh label list`), and ask a maintainer before adding a new one.
+
+| Kind | Labels |
+|---|---|
+| Type (one) | `bug`, `enhancement`, `performance`, `docs`, `question` |
+| Area (one or more) | `ui`, `zen-parity`, `agents`, `accessibility`, `macos`, `linux`, `build`, `ci`, `release`, `repo` |
+| Status | `tracker`, `backlog`, `low-priority`, `user-test`, `good first issue`, `help wanted` |
+| Release notes | `skip-changelog` leaves a pull request out |
+
+Use `enhancement` and `docs`, not their older duplicates `feature` and
+`documentation`.
 
 ## Releases and Chromium updates
 

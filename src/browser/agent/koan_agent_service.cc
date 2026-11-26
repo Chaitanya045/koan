@@ -192,7 +192,7 @@ class AgentControlService::GatewayHost final : public ApprovalPresenter,
   // An answer or event for a connection, from the forwarder on the UI thread.
   void SendToClient(uint64_t connection_id, std::string json) {
     if (gateway_) {
-      gateway_->SendToClient(connection_id, json);
+      gateway_->SendToClient(connection_id, std::move(json));
     }
   }
 

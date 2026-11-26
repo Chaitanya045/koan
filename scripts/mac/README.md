@@ -124,5 +124,5 @@ every pointer event carries only its own modifiers), `hold down x y|to x y ms|up
 call, a person's pace, for `video/flows/essentials_drag.mjs`), `winid <pid>` (that pid's on-screen CGWindowIDs and bounds,
 for `screencapture -l`; `suite.sh` builds it into its run dir if it isn't there), `cover x y w h [secs]` (an opaque
 window of its own over that rectangle, brought to the front, for `scripts/e2e/agent_lease.mjs`'s covered-window case,
-which builds it; it quits when its stdin closes or after `secs`, 120 by default), `crashdlg list|dismiss`, `idle.sh`,
+which builds it; it quits when its stdin closes or after `secs`, 120 by default), `swipe <x> <y> <dx> [steps] [ms] [--info]` (a two-finger trackpad-like horizontal gesture: continuous scroll events with Began/Changed/Ended phases; `--info` prints how AppKit reads them, `isDirectionInvertedFromDevice` included; `scripts/mac/video/flows/uf_swipe.mjs`), `crashdlg list|dismiss`, `idle.sh`,
 `front.sh`, `frontpid.sh`.

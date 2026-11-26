@@ -21,19 +21,27 @@ constexpr size_t kRetainedCapacity = 64 * 1024;
 
 }  // namespace
 
+std::optional<std::array<uint8_t, kFrameHeaderSize>> EncodeFrameHeader(
+    size_t payload_size,
+    size_t max_payload) {
+  max_payload = std::min(max_payload, kMaxPayload);
+  if (payload_size == 0 || payload_size > max_payload ||
+      !base::IsValueInRangeForNumericType<uint32_t>(payload_size)) {
+    return std::nullopt;
+  }
+  return base::U32ToBigEndian(static_cast<uint32_t>(payload_size));
+}
+
 std::optional<std::vector<uint8_t>> EncodeFrame(
     base::span<const uint8_t> payload,
     size_t max_payload) {
-  max_payload = std::min(max_payload, kMaxPayload);
-  if (payload.empty() || payload.size() > max_payload ||
-      !base::IsValueInRangeForNumericType<uint32_t>(payload.size())) {
+  const auto header = EncodeFrameHeader(payload.size(), max_payload);
+  if (!header) {
     return std::nullopt;
   }
   std::vector<uint8_t> frame;
   frame.reserve(kFrameHeaderSize + payload.size());
-  const std::array<uint8_t, kFrameHeaderSize> header =
-      base::U32ToBigEndian(static_cast<uint32_t>(payload.size()));
-  frame.insert(frame.end(), header.begin(), header.end());
+  frame.insert(frame.end(), header->begin(), header->end());
   frame.insert(frame.end(), payload.begin(), payload.end());
   return frame;
 }

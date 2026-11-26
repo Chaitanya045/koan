@@ -112,10 +112,6 @@ constexpr int kFullscreenEdgeSize = 2;
 // Zen's flash popup (zen.view.compact.toolbar-flash-popup.duration).
 constexpr base::TimeDelta kFlashDuration = base::Milliseconds(800);
 
-// How often to look at where the pointer is while a hover lock was taken for a
-// hover the hot zone never reported (CheckHoverLock()). Koan's own.
-constexpr base::TimeDelta kHoverPollInterval = base::Milliseconds(100);
-
 // Zen's toolbar context menu (zen-vertical-tabs.ftl).
 enum ContextMenuCommand {
   kCommandCompactModeToggle = 1,
@@ -540,17 +536,25 @@ void KoanCompactModeController::OnSidebarCollapseSettled() {
     // pointer that doesn't move (the pointer rests at the edge as compact mode
     // goes on), and views sends an enter only with a move. Its "left" would
     // never come either, and the lock would stay. So the pointer's place is
-    // watched until it has left.
-    if (hover_lock_) {
-      hover_poll_timer_.Start(FROM_HERE, kHoverPollInterval, this,
-                              &KoanCompactModeController::CheckHoverLock);
-    }
+    // watched, by the pointer's events, until it has left.
+    SetWatchingHoverLock(hover_lock_ != nullptr);
   }
 }
 
+void KoanCompactModeController::SetWatchingHoverLock(bool watching) {
+  if (watching_hover_lock_ == watching) {
+    return;
+  }
+  watching_hover_lock_ = watching;
+  UpdatePointerMonitor();
+}
+
 void KoanCompactModeController::CheckHoverLock() {
+  if (!watching_hover_lock_) {
+    return;
+  }
   if (!hover_lock_ || IsClosing()) {
-    hover_poll_timer_.Stop();
+    SetWatchingHoverLock(false);
     return;
   }
   if (IsPointerAtSidebarEdge()) {
@@ -560,7 +564,7 @@ void KoanCompactModeController::CheckHoverLock() {
   // time, and upstream's hover tracking keeps the sidebar out while the
   // pointer is on it. (Not again if the hot zone told already: its keep-hover
   // timer would start over.)
-  hover_poll_timer_.Stop();
+  SetWatchingHoverLock(false);
   if (!hover_release_timer_.IsRunning()) {
     OnSidebarHotZoneHovered(false);
   }
@@ -998,6 +1002,7 @@ void KoanCompactModeController::OnEvent(const ui::Event& event) {
   CheckRevealedHides();
   CheckFullscreenEdges();
   CheckLightsHold();
+  CheckHoverLock();
 }
 
 void KoanCompactModeController::HoldSidebarForTabDrag() {
@@ -1449,6 +1454,7 @@ void KoanCompactModeController::ClearHoverStates() {
   // Nothing stays revealed from before the change (Zen's sizemodechange,
   // which also stops the outside tracking).
   edge_sidebar_hovered_ = false;
+  watching_hover_lock_ = false;
   if (outside_tracker_) {
     outside_tracker_->Stop();
   }
@@ -1801,7 +1807,7 @@ void KoanCompactModeController::Deactivate() {
   toolbar_hide_timer_.Stop();
   EndFlash();
   hover_release_timer_.Stop();
-  hover_poll_timer_.Stop();
+  watching_hover_lock_ = false;
   ReleaseLock(hover_lock_);
   ReleaseLock(empty_tab_lock_);
   ReleaseLock(peek_lock_);
@@ -1997,7 +2003,7 @@ void KoanCompactModeController::UpdatePointerMonitor() {
   const bool wanted =
       mode_ != Mode::kNone &&
       (toolbar_revealed_ || caption_strip_revealed_ || WantsFullscreenEdges() ||
-       WantsLightsHold() || lights_lock_);
+       WantsLightsHold() || lights_lock_ || watching_hover_lock_);
   // Otherwise, where compact mode hides the sidebar or the toolbar, only the
   // pointer leaving the window is heard (the outside tracker's).
   const bool exits_only = !wanted && WantsOutsideTracking();
@@ -2123,6 +2129,9 @@ void KoanCompactModeController::OnSidebarHotZoneHovered(bool hovered) {
   }
   VLOG(1) << "Koan: sidebar hot zone " << (hovered ? "hovered" : "left")
           << (hover_lock_ ? ", holding" : "");
+  // The hot zone tells of the pointer: what it does next will come too, so
+  // its events need no watching of their own.
+  SetWatchingHoverLock(false);
   if (hovered) {
     hover_release_timer_.Stop();
     if (!hover_lock_) {

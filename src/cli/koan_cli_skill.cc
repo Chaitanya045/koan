@@ -35,9 +35,17 @@ the way in, and it is the one the user approved.
    is used, so you never need --client unless several agents share it).
 2. `koan open <url>` opens a background tab and prints its id (the first 4+
    characters of it are enough later). `--task <name>` groups tabs into a
-   task; `--saved <name>` uses a saved container the user allowed you (it
-   keeps its own logins). If that is refused (Koan.notGranted), tell the
-   user: only they can allow it, in Settings > Agent Control.
+   task, and every task is a Space of its own in the user's sidebar, so a
+   new task name means a new Space. Keep one task for the user's whole
+   job, across sites and across their messages: before you open a tab,
+   run `koan status` (it lists your tasks and tabs) and reuse what is
+   there, by `koan act <tab> navigate <url>` in a tab you are done with,
+   or by `koan open <url>` with the same `--task` (or none). Start another
+   task only when the work must be kept apart: a saved container, or a
+   separate job the user asked to keep apart. `--saved <name>` uses a
+   saved container the user allowed you (it keeps its own logins). If
+   that is refused (Koan.notGranted), tell the user: only they can allow
+   it, in Settings > Agent Control.
 3. Look: `koan snapshot <tab> --interactive` prints what you can act on:
    controls, links, focusable and editable elements with their names,
    values and states in brackets ([checked], [selected], [expanded],
@@ -202,7 +210,14 @@ the way in, and it is the one the user approved.
    them to leave it on (Settings has no switch for it). `koan release <tab>`
    gives it back when you are done.
 6. When you are done: `koan end` closes your tabs and clears what they
-   stored. `koan end --task <name>` ends one task.
+   stored. `koan end --task <name>` ends one task. Done means the work
+   in that task is finished, even if the user may ask for more: end it
+   before you answer, and before you start other work. A later request
+   opens a tab again; leaving one open "in case" leaves it in the user's
+   sidebar. Keep a task open past your answer only when its page cannot
+   be opened again as it is (a half-filled form, a sign-in waiting for
+   the user, a payment ready for them), and say in your answer which tabs
+   you left open and why.
 
 If koan says Koan asks the user to approve it again (it was started by
 another program than the one that paired), tell the user to look in Koan,
