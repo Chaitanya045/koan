@@ -55,6 +55,7 @@ jobs:
       contents: read
     outputs:
       build: ${{ steps.plan.outputs.build }}
+      trusted: ${{ steps.plan.outputs.trusted }}
     steps:
       - name: Decide
         id: plan
@@ -65,7 +66,14 @@ jobs:
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           LABEL: ${{ github.event.label.name }}
           SHA: ${{ github.sha }}
+          # Built from develop itself, not from a pull request's or another
+          # ref's code: only such a run is published as nightly-linux and
+          # kept as a base for later incremental builds.
+          TRUSTED: >-
+            ${{ github.ref == 'refs/heads/develop' && github.event_name != 'pull_request' &&
+            (inputs.ref == '' || inputs.ref == 'develop' || inputs.ref == null) }}
         run: |
+          echo "trusted=$TRUSTED" >> "$GITHUB_OUTPUT"
           build=true
           if [[ $EVENT == pull_request && $LABEL != linux-build ]]; then
             build=false
@@ -103,15 +111,13 @@ jobs:
     with:
       # A labelled pull request builds its head, not the merge commit.
       ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
+      keep_base: ${{ needs.plan.outputs.trusted == 'true' }}
 
   release:
     name: Update the nightly-linux pre-release
-    needs: [build]
+    needs: [plan, build]
     # develop only: nightly runs, and manual runs on develop.
-    if: >-
-      ${{ !cancelled() && needs.build.result == 'success' &&
-      github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' &&
-      (inputs.ref == '' || inputs.ref == 'develop' || inputs.ref == null) }}
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.plan.outputs.trusted == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     concurrency:

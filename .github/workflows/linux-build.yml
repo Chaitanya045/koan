@@ -21,6 +21,11 @@ on:
         required: false
         default: false
         type: boolean
+      keep_base:
+        description: Keep the finished out/Release for later runs to build on (trusted runs only; see linux-chain.yml)
+        required: false
+        default: false
+        type: boolean
       base_run:
         description: Slice 1 only, the earlier run whose out/Release to build on
         required: false
@@ -163,13 +168,15 @@ jobs:
           KOAN_RELEASE: ${{ inputs.release && '1' || '0' }}
         run: scripts/ci/linux_package.sh "$KOAN_SCRATCH/flatpak-dist"
 
-      # Kept for the next runs to build on (linux_find_base.sh).
+      # Kept for the next runs to build on (scripts/ci/find_base.sh), only
+      # by a trusted run (keep_base): a pull request's objects never become
+      # a base.
       - name: Pack the finished build
-        if: steps.build.outputs.status == 'finished'
+        if: steps.build.outputs.status == 'finished' && inputs.keep_base
         run: scripts/ci/linux_archive.sh pack-out "$KOAN_SCRATCH/koan-linux-out-final.tar.zst"
 
       - name: Upload the finished build
-        if: steps.build.outputs.status == 'finished'
+        if: steps.build.outputs.status == 'finished' && inputs.keep_base
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           path: ${{ env.KOAN_SCRATCH }}/koan-linux-out-final.tar.zst
