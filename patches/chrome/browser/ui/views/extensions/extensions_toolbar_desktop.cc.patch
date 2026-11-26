@@ -10,7 +10,16 @@ diff --git a/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.cc b/
  #include "ui/base/dragdrop/drag_drop_types.h"
  #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
  #include "ui/base/l10n/l10n_util.h"
-@@ -1259,16 +1261,30 @@
+@@ -1251,6 +1253,8 @@
+ void ExtensionsToolbarDesktop::OnPopupClosed(
+     const extensions::ExtensionId& action_id) {
+   GetViewForId(action_id)->OnPopupClosed();
++  // Koan: the sidebar's buttons the popup kept shown may hide.
++  koan::OnExtensionPopupClosed(this);
+ }
+ 
+ views::FocusManager* ExtensionsToolbarDesktop::GetFocusManagerForAccelerator() {
+@@ -1259,16 +1263,30 @@
  
  views::BubbleAnchor ExtensionsToolbarDesktop::GetReferenceButtonForPopup(
      const extensions::ExtensionId& action_id) {
