@@ -1,0 +1,225 @@
+# One build job of the Linux chain in linux-chain.yml: unpacks the source
+# archive and the previous job's out/Release, builds until about an hour
+# before GitHub's 6 h job limit, then packs out/Release for the next job.
+# The job that finishes the build makes the Flatpak instead. The Linux
+# twin of macos-build.yml; see .agent/notes/linux-ci.md.
+name: Linux build slice
+
+on:
+  workflow_call:
+    inputs:
+      slice:
+        description: This job's number in the chain, from 1
+        required: true
+        type: number
+      sha:
+        description: The Koan commit being built
+        required: true
+        type: string
+      release:
+        description: Name the bundle Koan-<version>-x86_64.flatpak (no commit)
+        required: false
+        default: false
+        type: boolean
+      keep_base:
+        description: Keep the finished out/Release for later runs to build on (trusted runs only; see linux-chain.yml)
+        required: false
+        default: false
+        type: boolean
+      base_run:
+        description: Slice 1 only, the earlier run whose out/Release to build on
+        required: false
+        default: ""
+        type: string
+    outputs:
+      status:
+        description: finished, or running when the next job must go on
+        value: ${{ jobs.build.outputs.status }}
+      flatpak:
+        description: The Flatpak bundle's artifact name, from the job that finished
+        value: ${{ jobs.build.outputs.flatpak }}
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    name: Build ${{ inputs.slice }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    outputs:
+      status: ${{ steps.build.outputs.status }}
+      flatpak: ${{ steps.package.outputs.file_name }}
+    env:
+      KOAN_SHA: ${{ inputs.sha }}
+      SLICE: ${{ inputs.slice }}
+      # The 4-core, 16 GB runner: one compile job per core.
+      JOBS: "4"
+    steps:
+      - name: Plan the job
+        id: plan
+        run: |
+          now=$(date +%s)
+          {
+            echo "KOAN_CI_START=$now"
+            # Stop building 65 min before the 6 h limit: packing and
+            # uploading out/Release, or the Flatpak, takes up to ~30 min.
+            echo "KOAN_CI_DEADLINE=$((now + (360 - 65) * 60))"
+            echo "LOGS=$RUNNER_TEMP/koan-logs"
+          } >> "$GITHUB_ENV"
+          echo "previous=$((SLICE - 1))" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha }}
+          persist-credentials: false
+
+      - name: Prepare the runner
+        run: scripts/ci/linux_runner_setup.sh --package
+
+      - name: Download the source
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: koan-linux-source.tar.zst
+          path: ${{ env.KOAN_SCRATCH }}
+
+      - name: Unpack the source
+        run: |
+          scripts/ci/linux_archive.sh unpack "$KOAN_SCRATCH/koan-linux-source.tar.zst"
+          df -h / /mnt
+
+      - name: Download the previous job's build
+        if: inputs.slice > 1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: koan-linux-out-${{ steps.plan.outputs.previous }}.tar.zst
+          path: ${{ env.KOAN_SCRATCH }}
+
+      - name: Unpack the previous job's build
+        if: inputs.slice > 1
+        env:
+          PREVIOUS: ${{ steps.plan.outputs.previous }}
+        run: |
+          scripts/ci/linux_archive.sh unpack "$KOAN_SCRATCH/koan-linux-out-$PREVIOUS.tar.zst"
+          df -h / /mnt
+
+      # The base run's finished out/Release, matching the tree the fetch
+      # job built on. If it is gone (deleted by a newer run's cleanup), the
+      # build is still right, just full.
+      - name: Download the base run's build
+        id: base
+        if: inputs.slice == 1 && inputs.base_run != ''
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: koan-linux-out-final.tar.zst
+          path: ${{ env.KOAN_SCRATCH }}
+          run-id: ${{ inputs.base_run }}
+          repository: ${{ github.repository }}
+          github-token: ${{ github.token }}
+
+      - name: Unpack the base run's build
+        if: inputs.slice == 1 && inputs.base_run != '' && steps.base.outcome == 'success'
+        env:
+          BASE_RUN: ${{ inputs.base_run }}
+        run: |
+          scripts/ci/linux_archive.sh unpack "$KOAN_SCRATCH/koan-linux-out-final.tar.zst"
+          echo "Building on run $BASE_RUN's out/Release" >> "$GITHUB_STEP_SUMMARY"
+          df -h /
+
+      - name: Build
+        id: build
+        run: scripts/ci/linux_build_slice.sh "$LOGS"
+
+      - name: Pack the build for the next job
+        if: steps.build.outputs.status == 'running'
+        run: |
+          scripts/ci/linux_archive.sh pack-out "$KOAN_SCRATCH/koan-linux-out-$SLICE.tar.zst"
+          df -h / /mnt
+
+      - name: Upload the build for the next job
+        if: steps.build.outputs.status == 'running'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ env.KOAN_SCRATCH }}/koan-linux-out-${{ inputs.slice }}.tar.zst
+          archive: false
+          overwrite: true
+          retention-days: 2
+          if-no-files-found: error
+
+      # A warning, not a failure: the runner's own libraries, not the
+      # Flatpak runtime's, are what this exercises.
+      - name: Check that the browser starts
+        if: steps.build.outputs.status == 'finished'
+        run: |
+          out=chromium/src/out/Release
+          if "$out/chrome" --headless --no-sandbox --disable-gpu --dump-dom \
+              'data:text/html,<p>koan-ok</p>' 2> "$LOGS/headless.log" | grep -q koan-ok; then
+            echo "headless Koan rendered a page"
+          else
+            echo "::warning::headless Koan did not render a page (logs: headless.log)"
+          fi
+
+      - name: Make the Flatpak
+        id: package
+        if: steps.build.outputs.status == 'finished'
+        env:
+          KOAN_RELEASE: ${{ inputs.release && '1' || '0' }}
+        run: scripts/ci/linux_package.sh "$KOAN_SCRATCH/flatpak-dist"
+
+      # Kept for the next runs to build on (scripts/ci/find_base.sh), only
+      # by a trusted run (keep_base): a pull request's objects never become
+      # a base.
+      - name: Pack the finished build
+        if: steps.build.outputs.status == 'finished' && inputs.keep_base
+        run: scripts/ci/linux_archive.sh pack-out "$KOAN_SCRATCH/koan-linux-out-final.tar.zst"
+
+      - name: Upload the finished build
+        if: steps.build.outputs.status == 'finished' && inputs.keep_base
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ env.KOAN_SCRATCH }}/koan-linux-out-final.tar.zst
+          archive: false
+          overwrite: true
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Upload the Flatpak
+        if: steps.build.outputs.status == 'finished'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ env.KOAN_SCRATCH }}/flatpak-dist/${{ steps.package.outputs.file_name }}
+          archive: false
+          overwrite: true
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Summary
+        if: always()
+        env:
+          STATUS: ${{ steps.build.outputs.status || 'failed' }}
+          PROGRESS: ${{ steps.build.outputs.progress || 'unknown' }}
+          BUNDLE: ${{ steps.package.outputs.file_name }}
+        run: |
+          {
+            echo "### Build job $SLICE: $STATUS"
+            echo
+            echo "- Job time so far: $(( ($(date +%s) - KOAN_CI_START) / 60 )) min"
+            echo "- Build steps done: $PROGRESS"
+            if [[ -n $BUNDLE ]]; then
+              f="$KOAN_SCRATCH/flatpak-dist/$BUNDLE"
+              echo "- Flatpak: \`$BUNDLE\`, $(du -h "$f" | cut -f1)"
+              echo "- SHA-256: \`$(cut -d' ' -f1 "$f.sha256")\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: koan-linux-logs-${{ inputs.slice }}
+          path: ${{ env.LOGS }}
+          overwrite: true
+          retention-days: 7
+          if-no-files-found: ignore

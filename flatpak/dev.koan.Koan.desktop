@@ -1,0 +1,22 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Koan
+GenericName=Web Browser
+Comment=A calm, keyboard-first browser
+Exec=koan %U
+Icon=dev.koan.Koan
+Terminal=false
+StartupNotify=true
+Categories=Network;WebBrowser;
+Keywords=browser;web;internet;
+MimeType=text/html;text/xml;application/xhtml+xml;application/pdf;x-scheme-handler/http;x-scheme-handler/https;
+Actions=new-window;new-private-window;
+
+[Desktop Action new-window]
+Name=New Window
+Exec=koan
+
+[Desktop Action new-private-window]
+Name=New Private Window
+Exec=koan --incognito

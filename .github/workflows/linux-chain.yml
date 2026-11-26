@@ -1,0 +1,319 @@
+# The Linux (x86_64) build chain, the twin of macos-chain.yml: fetch
+# Chromium and apply Koan, then up to 8 chained build jobs (linux-build.yml)
+# on the free 4-core runners, each building out/Release for ~5 h and handing
+# it on to the next; the job that finishes makes the Flatpak, which stays an
+# artifact of the run under the name in the "flatpak" output. See
+# .agent/notes/linux-ci.md.
+#
+# Every run may build on the newest trusted run's tree and finished
+# out/Release (scripts/ci/find_base.sh), but only a run the caller marks
+# keep_base (develop's own, never a pull request's or another ref's code)
+# keeps its tree and finished build for later runs to build on: objects
+# from unmerged code must not end up in the published nightly-linux Flatpak.
+#
+# The caller decides whether to build, publishes the Flatpak, and grants the
+# jobs' permissions (contents: read; actions: write for the cleanup).
+name: Linux build chain
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Branch, tag or commit to build
+        required: true
+        type: string
+      release:
+        description: Name the bundle Koan-<version>-x86_64.flatpak (no commit)
+        required: false
+        default: false
+        type: boolean
+      keep_base:
+        description: Keep the source and the finished build 14 days for later runs to build on, and delete older runs' (trusted runs only)
+        required: false
+        default: false
+        type: boolean
+    outputs:
+      sha:
+        description: The Koan commit built
+        value: ${{ jobs.fetch.outputs.sha }}
+      chromium:
+        description: Its Chromium version (CHROMIUM_VERSION, line 1)
+        value: ${{ jobs.fetch.outputs.chromium }}
+      flatpak:
+        description: The Flatpak bundle's artifact name
+        value: ${{ jobs.check.outputs.flatpak }}
+
+permissions: {}
+
+jobs:
+  fetch:
+    name: Fetch Chromium and apply Koan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    permissions:
+      contents: read
+      # Reading an earlier run's artifacts (the tree to build on).
+      actions: read
+    outputs:
+      sha: ${{ steps.ref.outputs.sha }}
+      chromium: ${{ steps.ref.outputs.chromium }}
+      based_on: ${{ steps.fetch.outputs.based_on }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Resolve the commit
+        id: ref
+        run: |
+          sha=$(git rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "chromium=$(sed -n 1p CHROMIUM_VERSION)" >> "$GITHUB_OUTPUT"
+          echo "Building Koan $sha on Chromium $(paste -sd' ' CHROMIUM_VERSION)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Prepare the runner
+        run: scripts/ci/linux_runner_setup.sh
+
+      # The newest successful develop run that kept its tree and
+      # out/Release (only keep_base runs do): when it can be built on, this
+      # run rebuilds only what changed since.
+      - name: Find a build to build on
+        id: base
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN: ${{ github.run_id }}
+          BRANCH: develop
+        run: scripts/ci/find_base.sh linux.yml koan-linux
+
+      - name: Fetch Chromium, apply patches and branding, gn gen
+        id: fetch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          KOAN_BASE_RUN: ${{ steps.base.outputs.base_run }}
+        run: |
+          scripts/ci/linux_fetch.sh
+          based_on=$(sed -n 's/^based_on=//p' "$GITHUB_OUTPUT" | tail -n 1)
+          if [[ -n $based_on ]]; then
+            echo "Incremental: built on run $based_on's tree and out/Release" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Full build: fresh Chromium checkout" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Pack the source
+        run: |
+          scripts/ci/linux_archive.sh pack-source "$KOAN_SCRATCH/koan-linux-source.tar.zst"
+          df -h / /mnt
+
+      - name: Upload the source
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ env.KOAN_SCRATCH }}/koan-linux-source.tar.zst
+          archive: false
+          overwrite: true
+          # A keep_base run's next runs build on it (find_base.sh).
+          retention-days: ${{ inputs.keep_base && 14 || 3 }}
+          if-no-files-found: error
+
+  # Packaging only runs at the end of a run, many hours later: check the
+  # manifest and the Flathub runtime downloads on a fake build now.
+  flatpak-check:
+    name: Check the Flatpak packaging
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - name: Prepare the runner
+        run: scripts/ci/linux_runner_setup.sh --package
+      - name: Package a fake build
+        env:
+          KOAN_CI_DUMMY: "1"
+        run: scripts/ci/linux_package.sh "$RUNNER_TEMP/flatpak-check"
+
+  build-01:
+    needs: [fetch, flatpak-check]
+    uses: ./.github/workflows/linux-build.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      slice: 1
+      sha: ${{ needs.fetch.outputs.sha }}
+      base_run: ${{ needs.fetch.outputs.based_on }}
+      release: ${{ inputs.release }}
+      keep_base: ${{ inputs.keep_base }}
+
+  build-02:
+    needs: [fetch, build-01]
+    if: needs.build-01.outputs.status == 'running'
+    uses: ./.github/workflows/linux-build.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      slice: 2
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+      keep_base: ${{ inputs.keep_base }}
+
+  build-03:
+    needs: [fetch, build-02]
+    if: needs.build-02.outputs.status == 'running'
+    uses: ./.github/workflows/linux-build.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      slice: 3
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+      keep_base: ${{ inputs.keep_base }}
+
+  build-04:
+    needs: [fetch, build-03]
+    if: needs.build-03.outputs.status == 'running'
+    uses: ./.github/workflows/linux-build.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      slice: 4
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+      keep_base: ${{ inputs.keep_base }}
+
+  build-05:
+    needs: [fetch, build-04]
+    if: needs.build-04.outputs.status == 'running'
+    uses: ./.github/workflows/linux-build.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      slice: 5
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+      keep_base: ${{ inputs.keep_base }}
+
+  build-06:
+    needs: [fetch, build-05]
+    if: needs.build-05.outputs.status == 'running'
+    uses: ./.github/workflows/linux-build.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      slice: 6
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+      keep_base: ${{ inputs.keep_base }}
+
+  build-07:
+    needs: [fetch, build-06]
+    if: needs.build-06.outputs.status == 'running'
+    uses: ./.github/workflows/linux-build.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      slice: 7
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+      keep_base: ${{ inputs.keep_base }}
+
+  build-08:
+    needs: [fetch, build-07]
+    if: needs.build-07.outputs.status == 'running'
+    uses: ./.github/workflows/linux-build.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      slice: 8
+      sha: ${{ needs.fetch.outputs.sha }}
+      release: ${{ inputs.release }}
+      keep_base: ${{ inputs.keep_base }}
+
+  # Fails the run when a build job failed or the last one ran out of time
+  # unfinished.
+  check:
+    name: Build finished
+    needs: [fetch, flatpak-check, build-01, build-02, build-03, build-04, build-05, build-06, build-07, build-08]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      flatpak: ${{ steps.check.outputs.flatpak }}
+    steps:
+      - name: Check
+        id: check
+        env:
+          FAILED: ${{ contains(needs.*.result, 'failure') || needs.fetch.result != 'success' }}
+          FINISHED: ${{ contains(needs.*.outputs.status, 'finished') }}
+          FLATPAK: ${{ join(needs.*.outputs.flatpak, '') }}
+        run: |
+          if [[ $FAILED == true ]]; then
+            echo "a job failed; re-run the failed jobs to carry on" >&2
+            exit 1
+          fi
+          if [[ $FINISHED != true ]]; then
+            echo "not finished after 8 build jobs; add jobs to linux-chain.yml" >&2
+            exit 1
+          fi
+          echo "flatpak=$FLATPAK" >> "$GITHUB_OUTPUT"
+
+  # A run that finished doesn't need its out/Release hand-over archives any
+  # more (a failed one keeps them, for "Re-run failed jobs", until they
+  # expire: source 3 days, out 2). Without keep_base, its source goes too.
+  # With it, its source and finished out/Release stay 14 days for later
+  # runs to build on, and older runs' copies go (only develop's: a run on
+  # another ref never deletes them). The Flatpak and the logs stay.
+  cleanup:
+    name: Delete build archives
+    needs: [check]
+    if: ${{ !cancelled() && needs.check.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN: ${{ github.run_id }}
+      KEEP_BASE: ${{ inputs.keep_base }}
+      BRANCH: ${{ github.ref_name }}
+    steps:
+      - name: Delete
+        run: |
+          # This run's own archives matching the pattern.
+          delete_own() {
+            gh api --paginate "repos/$GH_REPO/actions/runs/$RUN/artifacts" \
+              --jq ".artifacts[] | select(.name | test(\"$1\")) | \"\(.id) \(.name)\"" |
+              while read -r id name; do
+                echo "deleting $name"
+                gh api -X DELETE "repos/$GH_REPO/actions/artifacts/$id"
+              done
+          }
+          if [[ $KEEP_BASE != true ]]; then
+            delete_own '^koan-linux-(source\\.|out-)'
+            exit 0
+          fi
+          delete_own '^koan-linux-out-[0-9]+\\.'
+          for name in koan-linux-source.tar.zst koan-linux-out-final.tar.zst; do
+            gh api --paginate "repos/$GH_REPO/actions/artifacts?name=$name" \
+              --jq ".artifacts[] | select(.workflow_run.id < $RUN and .workflow_run.head_branch == \"$BRANCH\") | \"\(.id) \(.workflow_run.id)\"" |
+              while read -r id run; do
+                # Only finished runs: a running chain still needs its source.
+                [[ $(gh api "repos/$GH_REPO/actions/runs/$run" --jq .status) == completed ]] || continue
+                echo "deleting $name of run $run"
+                gh api -X DELETE "repos/$GH_REPO/actions/artifacts/$id"
+              done
+          done

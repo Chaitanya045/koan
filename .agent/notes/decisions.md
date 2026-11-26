@@ -20,11 +20,15 @@
   milestone within about 2 weeks of it reaching Stable. A daily-driver
   browser needs Chrome's weekly security fixes. The M158 move, the routine and
   the checkout switch: [chromium-releases.md](chromium-releases.md).
-- **macOS only, no official releases** (2026-11-02). Koan is built for
-  Apple Silicon Macs for the user's own use. The app comes from the macOS CI
-  `.dmg` (#69) or a local Mac build. Linux is only the agents' build and test
-  bench. There's no Linux or Windows packaging (PR #13 closed, #5 not
-  planned).
+- **macOS and Linux x86_64, no official releases** (2026-11-02, Linux
+  added 2026-11-26). Koan is built for Apple Silicon Macs for the user's own
+  use. The app comes from the macOS CI `.dmg` (#69) or a local Mac build. Linux
+  x86_64 ships as a Flatpak nightly built by CI (`linux.yml`, the
+  `nightly-linux` pre-release, [linux-ci.md](linux-ci.md); the owner decided
+  on 2026-11-26, taking over PR #442 as #466), which replaces the earlier
+  "Linux is only the agents' build and test bench": the development build
+  there is unchanged. There's still no Windows packaging (PR #13, packaging and
+  the release process, closed; #5 not planned).
 - **Keep the native Views architecture** (architecture review, 2026-11-02,
   [architecture-review.md](architecture-review.md)). Use C++ Views for
   anything always visible, animated, or used per click or keystroke. WebUI

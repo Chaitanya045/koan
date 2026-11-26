@@ -94,8 +94,10 @@ page gets it first, as in every browser.
 
 ### Linux development builds
 
-Koan is developed, and its off-screen e2e tests run, on Linux. There is no
-Linux release, but the development build there uses Zen's non-Mac keys:
+Koan is developed, and its off-screen e2e tests run, on Linux. The
+development build there, and the Flatpak
+([Installing the Linux build](#installing-the-linux-build)), use Zen's
+non-Mac keys:
 Ctrl where the Mac uses ⌘, and a few keys of their own:
 
 | Action | Keys | Chrome had |
@@ -1428,6 +1430,41 @@ signature, so macOS asks again for access to the "Koan Safe Storage"
 keychain item (where saved passwords and cookies are encrypted) after you
 install a new nightly. Click **Always Allow**. The profile is in
 `~/Library/Application Support/Koan`.
+
+## Installing the Linux build
+
+A Flatpak for x86_64 Linux, built every night from `develop` (when
+something that goes into the app changed): the
+`nightly-linux` pre-release on the
+[Releases page](https://github.com/koan-browser/koan/releases/tag/nightly-linux),
+`Koan-<version>-<commit>-x86_64.flatpak` and its `.sha256`. Any run of the
+[Linux nightly workflow](https://github.com/koan-browser/koan/actions/workflows/linux.yml)
+also has it under "Artifacts" for 7 days (the file is the bundle itself, not
+a zip; fetch it from a terminal as in [Installing the macOS
+build](#installing-the-macos-build), with `.flatpak` for `.dmg`). Only
+`develop`'s nightly is published as the pre-release: the bundle of a pull
+request's build (a maintainer labels it `linux-build`) holds that pull
+request's unreviewed code.
+
+Install it for your user and start it:
+
+```sh
+flatpak install --user ./Koan-*.flatpak
+flatpak run dev.koan.Koan
+```
+
+Flatpak fetches the Freedesktop runtime and the Chromium base app from
+Flathub the first time. Koan then shows up in your app menu. To update,
+install the newer file the same way. To remove it, `flatpak uninstall
+dev.koan.Koan` (add `--delete-data` to remove the profile too).
+
+- The profile is in `~/.var/app/dev.koan.Koan/config/koan`.
+- Extra command-line flags go in
+  `~/.var/app/dev.koan.Koan/config/koan-flags.conf`, one per line (for
+  example `--ozone-platform=wayland`).
+- Koan sees your Downloads, Documents, Pictures, Music and Videos folders,
+  not the rest of your home folder. `flatpak override --user
+  --filesystem=home dev.koan.Koan` gives it more.
 
 ## Agent control
 

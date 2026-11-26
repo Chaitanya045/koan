@@ -1,0 +1,100 @@
+# Flatpak of a Koan release build (out/Release), made by
+# scripts/ci/linux_package.sh, which stages the browser into koan/ next to
+# this file first. Not built from source here: like Flathub's
+# com.google.Chrome, it wraps a ready Chromium binary, and runs it through
+# cobalt (the launcher in org.chromium.Chromium.BaseApp) and zypak, which
+# makes Chromium's sandbox work inside Flatpak's.
+#
+# finish-args follow com.google.Chrome's on Flathub (camera, FIDO keys,
+# printing, notifications, keyrings, media keys, the usual XDG folders),
+# without its dconf module for GNOME proxy settings.
+app-id: dev.koan.Koan
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+base: org.chromium.Chromium.BaseApp
+base-version: '25.08'
+command: koan
+separate-locales: false
+build-options:
+  no-debuginfo: true
+  strip: false
+finish-args:
+  - --require-version=1.8.2
+  - --device=all
+  - --share=ipc
+  - --share=network
+  - --socket=cups
+  - --socket=pcsc
+  - --socket=pulseaudio
+  - --socket=x11
+  - --socket=wayland
+  - --system-talk-name=org.bluez
+  - --system-talk-name=org.freedesktop.Avahi
+  - --system-talk-name=org.freedesktop.UPower
+  - --talk-name=com.canonical.AppMenu.Registrar
+  - --talk-name=org.freedesktop.FileManager1
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.freedesktop.ScreenSaver
+  - --talk-name=org.freedesktop.secrets
+  - --talk-name=org.gnome.SessionManager
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --talk-name=org.kde.kwalletd5
+  - --talk-name=org.kde.kwalletd6
+  - --own-name=org.mpris.MediaPlayer2.chromium.*
+  - --filesystem=/run/.heim_org.h5l.kcm-socket
+  - --filesystem=xdg-run/pipewire-0
+  - --filesystem=xdg-documents
+  - --filesystem=xdg-download
+  - --filesystem=xdg-music
+  - --filesystem=xdg-pictures
+  - --filesystem=xdg-videos
+modules:
+  # Same version as com.google.Chrome on Flathub.
+  - name: zypak
+    sources:
+      - type: git
+        url: https://github.com/refi64/zypak
+        tag: v2025.09
+        commit: 693a71c5ffa80ec9c9ce2ae03b1ccc493c698e53
+
+  - name: koan
+    buildsystem: simple
+    build-commands:
+      - cp -a koan /app/koan
+      # zypak starts the sandboxed processes itself; Chromium only checks
+      # that a sandbox binary exists (com.google.Chrome does the same).
+      - install -Dm 755 stub_sandbox.sh /app/koan/chrome-sandbox
+      - install -Dm 755 koan.sh /app/bin/koan
+      - install -Dm 644 -t /app/etc cobalt.ini
+      - install -Dm 644 -t /app/share/applications dev.koan.Koan.desktop
+      - install -Dm 644 -t /app/share/metainfo dev.koan.Koan.metainfo.xml
+      - install -Dm 644 dev.koan.Koan.svg /app/share/icons/hicolor/scalable/apps/dev.koan.Koan.svg
+      - for s in 64 128 256 512; do install -Dm 644 icon-$s.png /app/share/icons/hicolor/${s}x${s}/apps/dev.koan.Koan.png; done
+    sources:
+      - type: dir
+        path: koan
+        dest: koan
+      - type: script
+        dest-filename: stub_sandbox.sh
+        commands:
+          - 'echo "Stub sandbox ignoring command: $@"'
+          - exit 1
+      - type: file
+        path: koan.sh
+      - type: file
+        path: cobalt.ini
+      - type: file
+        path: dev.koan.Koan.desktop
+      - type: file
+        path: dev.koan.Koan.metainfo.xml
+      - type: file
+        path: dev.koan.Koan.svg
+      - type: file
+        path: icon-64.png
+      - type: file
+        path: icon-128.png
+      - type: file
+        path: icon-256.png
+      - type: file
+        path: icon-512.png
