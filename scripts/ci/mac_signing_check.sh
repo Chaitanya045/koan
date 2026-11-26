@@ -14,9 +14,10 @@
 #   SHA-1 it also requires the app, nested code included, to be signed by
 #   that certificate (codesign -R 'certificate leaf = H"<sha1>"'), and its
 #   designated requirement to name it, so every release is the same app to
-#   macOS. A self-signed certificate with a subject key identifier, like
-#   the release one, gives `certificate root = H"<sha1>"`; one without gives
-#   `certificate leaf`. Both pin the same certificate.
+#   macOS. codesign writes `certificate root = H"<sha1>"` for the release
+#   certificate and `certificate leaf = H"<sha1>"` for the throwaway one
+#   (both self-signed, so the root is the leaf): both pin the same
+#   certificate.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
