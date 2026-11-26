@@ -11,9 +11,12 @@
 #   writes it to $GITHUB_OUTPUT when set).
 # check-image: mounts the .dmg read-only and runs the checks users' Macs
 #   would: codesign --verify --deep --strict on the app in it. With a
-#   SHA-1 it also requires the app's designated requirement to be that
-#   certificate's (certificate leaf = H"<sha1>"), so every release is the
-#   same app to macOS.
+#   SHA-1 it also requires the app, nested code included, to be signed by
+#   that certificate (codesign -R 'certificate leaf = H"<sha1>"'), and its
+#   designated requirement to name it, so every release is the same app to
+#   macOS. A self-signed certificate with a subject key identifier, like
+#   the release one, gives `certificate root = H"<sha1>"`; one without gives
+#   `certificate leaf`. Both pin the same certificate.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -63,8 +66,11 @@ check_image() {
   printf '%s\n' "$req"
   if ((rc == 0)) && [[ -n $want ]]; then
     want="$(printf '%s' "$want" | tr '[:upper:]' '[:lower:]')"
-    if ! printf '%s\n' "$req" | grep -q "certificate leaf = H\"$want\""; then
-      echo "the app's designated requirement is not certificate leaf = H\"$want\"" >&2
+    if ! codesign --verify --deep --strict -R="certificate leaf = H\"$want\"" "$app"; then
+      echo "the app is not signed by the certificate $want" >&2
+      rc=1
+    elif ! printf '%s\n' "$req" | grep -Eq "certificate (leaf|root) = H\"$want\""; then
+      echo "the app's designated requirement does not name the certificate $want" >&2
       rc=1
     fi
   fi

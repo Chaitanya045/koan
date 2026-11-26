@@ -104,6 +104,9 @@ CN = Koan Throwaway Signing
 basicConstraints = critical,CA:false
 keyUsage = critical,digitalSignature
 extendedKeyUsage = critical,codeSigning
+# As in the real one, which changes the designated requirement to
+# `certificate root` (mac_signing_check.sh).
+subjectKeyIdentifier = hash
 EOF
     openssl req -x509 -newkey rsa:3072 -nodes -days 2 \
       -config "$STATE/openssl.cnf" \

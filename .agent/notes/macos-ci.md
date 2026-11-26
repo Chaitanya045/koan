@@ -80,7 +80,8 @@ Review of PR #70: [reviews/pr70-review.md](https://github.com/Chaitanya045/koan/
 - **One fixed identity:** self-signed "Koan Release Signing", SHA-1
   `41C53B537255BA68D030856528BDACCD559E0B50` (`scripts/ci/codesign_identity.txt`;
   `setup` fails on any other). The designated requirement is then
-  `identifier "<bundle id>" and certificate leaf = H"41c5..."`, the same in
+  `identifier "<bundle id>" and certificate root = H"41c5..."` (`root`, not
+  `leaf`: the self-signed certificate has a subject key identifier), the same in
   every release, so keychain items and in-app updates see one app. No
   Developer ID, no notarization: Gatekeeper still asks the user.
 - **Secrets** (environment `release`): `KOAN_CODESIGN_P12` (base64 of the
