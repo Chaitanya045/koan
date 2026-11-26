@@ -62,8 +62,15 @@ bool KoanSpaceSwipe::IsCapturing() const {
 }
 
 bool KoanSpaceSwipe::TakeScroll(const ui::ScrollEvent& event) {
-  return tracker_.Owns(GetPhase(event), GetSeconds(event)) &&
-         OnScrollEvent(event);
+  const SwipePhase phase = GetPhase(event);
+  // Fingers down again: whatever the swipe was, it is over (even if its end was
+  // lost), and this gesture goes where the system sends it, so that a page's
+  // scroll is never taken for the swipe.
+  if (phase == SwipePhase::kBegin) {
+    capturing_ = false;
+    return false;
+  }
+  return tracker_.Owns(phase, GetSeconds(event)) && OnScrollEvent(event);
 }
 
 void KoanSpaceSwipe::UpdateSwipe(float amount) {
