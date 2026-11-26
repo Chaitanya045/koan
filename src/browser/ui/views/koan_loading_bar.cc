@@ -49,6 +49,12 @@ double CycleFraction(base::TimeDelta elapsed, base::TimeDelta period) {
   return std::fmod(std::max(0.0, elapsed / period), 1.0);
 }
 
+// How long after the long load starts the bar comes to rest: the settle and a
+// whole number of sweeps, so that the sweep ends where it began.
+base::TimeDelta StillAfterLongLoad() {
+  return kSettle + KoanLoadingBar::kLongLoadSweeps * kSweep;
+}
+
 float Lerp(float from, float to, double t) {
   return from + (to - from) * static_cast<float>(t);
 }
@@ -92,6 +98,12 @@ void KoanLoadingBar::Reset() {
   hidden_.reset();
 }
 
+bool KoanLoadingBar::IsStill(base::TimeTicks now) const {
+  return IsShowing() && long_load_ &&
+         now - *long_load_ >=
+             (reduced_motion_ ? base::TimeDelta() : StillAfterLongLoad());
+}
+
 bool KoanLoadingBar::IsDone(base::TimeTicks now) const {
   if (!shown_) {
     return true;
@@ -112,7 +124,8 @@ KoanLoadingBar::Frame KoanLoadingBar::LoadingFrameAt(
     // The settle starts from the bar's own style (scale 0 at its top left
     // corner, 5rem wide) and ends centred, 10rem wide, opaque. Its translate
     // is of the growing width, unscaled; the scale is about the top left.
-    const base::TimeDelta elapsed = now - *long_load_;
+    const base::TimeDelta elapsed =
+        std::min(now - *long_load_, StillAfterLongLoad());
     const double settle = reduced_motion_ ? 1.0 : EaseOut(elapsed / kSettle);
     const float width = Lerp(kWidth, kLongLoadWidth, settle);
     const float scale = static_cast<float>(settle);
