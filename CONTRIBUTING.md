@@ -50,11 +50,12 @@ is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ### Requirements
 
-- Koan ships for macOS on Apple Silicon only, and the app is built on a
-  Mac (see [macOS](#macos) below). Day-to-day development, the static checks
+- Koan ships for macOS on Apple Silicon, built on a Mac (see
+  [macOS](#macos) below), and as a nightly Flatpak for Linux x86-64, built by
+  CI (`.agent/notes/linux-ci.md`). Day-to-day development, the static checks
   and the off-screen e2e tests run on Linux x86-64 (X11 or Wayland): Koan
   is developed on an Arch-based distribution, and any distribution that can
-  build Chromium should work. There are no Linux releases.
+  build Chromium should work. There is no Windows build.
 - 16 GB of RAM (more is better), and 100 GB or more of free disk space.
 - The tools Chromium's
   [Linux build instructions](https://chromium.googlesource.com/chromium/src/+/main/docs/linux/build_instructions.md)
@@ -305,9 +306,10 @@ pull request. It checks that:
 - the Python unit tests (the branding rules) pass;
 - clang-format, shellcheck and `node --check` find no problems.
 
-CI doesn't build Chromium on Linux, so the C++ tests (`koan_unittests` and
-`koan_browsertests`) run on your build instead, and the macOS CI can compile
-them (see below).
+CI builds Chromium on Linux only for the nightly Flatpak and for a pull
+request a maintainer labels `linux-build`, and doesn't run the C++ tests
+there. So the C++ tests (`koan_unittests` and `koan_browsertests`) run on
+your build instead, and the macOS CI can compile them (see below).
 
 Run the same checks locally before pushing:
 

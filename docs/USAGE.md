@@ -1433,14 +1433,18 @@ install a new nightly. Click **Always Allow**. The profile is in
 
 ## Installing the Linux build
 
-A Flatpak for x86_64 Linux, built every night from `develop`: the
+A Flatpak for x86_64 Linux, built every night from `develop` (when
+something that goes into the app changed): the
 `nightly-linux` pre-release on the
 [Releases page](https://github.com/koan-browser/koan/releases/tag/nightly-linux),
 `Koan-<version>-<commit>-x86_64.flatpak` and its `.sha256`. Any run of the
 [Linux nightly workflow](https://github.com/koan-browser/koan/actions/workflows/linux.yml)
-also has it under "Artifacts" (the file is the bundle itself, not a zip;
-fetch it from a terminal as in [Installing the macOS
-build](#installing-the-macos-build), with `.flatpak` for `.dmg`).
+also has it under "Artifacts" for 7 days (the file is the bundle itself, not
+a zip; fetch it from a terminal as in [Installing the macOS
+build](#installing-the-macos-build), with `.flatpak` for `.dmg`). Only
+`develop`'s nightly is published as the pre-release: the bundle of a pull
+request's build (a maintainer labels it `linux-build`) holds that pull
+request's unreviewed code.
 
 Install it for your user and start it:
 
