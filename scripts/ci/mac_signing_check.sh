@@ -6,7 +6,8 @@
 #
 # dummy-app: makes <dest dir>/Koan.app, a copy of /usr/bin/true with an
 #   Info.plist that carries the version VERSION wants, so mac_package.sh
-#   (KOAN_PACKAGE_APP) passes its version check on it. Prints app=<path> (and
+#   (KOAN_PACKAGE_APP) passes its version check on it, and a nested
+#   "Koan Framework.framework" like the real app's. Prints app=<path> (and
 #   writes it to $GITHUB_OUTPUT when set).
 # check-image: mounts the .dmg read-only and runs the checks users' Macs
 #   would: codesign --verify --deep --strict on the app in it. With a
@@ -34,6 +35,19 @@ dummy_app() {
     "$(python3 -I "$ROOT/src/version/koan_version.py" show short)" "$plist"
   plutil -insert CFBundleVersion -string \
     "$(python3 -I "$ROOT/src/version/koan_version.py" show bundle --chromium "$chromium")" "$plist"
+  # A nested framework laid out like the real one (Versions/A, Current and
+  # the top-level links): the Widevine VMP step looks for its binary, and
+  # codesign --deep has to sign it with the same identity.
+  local fw="$app/Contents/Frameworks/Koan Framework.framework"
+  mkdir -p "$fw/Versions/A/Resources"
+  cp /usr/bin/true "$fw/Versions/A/Koan Framework"
+  plutil -create xml1 "$fw/Versions/A/Resources/Info.plist"
+  plutil -insert CFBundleExecutable -string "Koan Framework" "$fw/Versions/A/Resources/Info.plist"
+  plutil -insert CFBundleIdentifier -string dev.koan.Koan.ci-check.framework "$fw/Versions/A/Resources/Info.plist"
+  plutil -insert CFBundlePackageType -string FMWK "$fw/Versions/A/Resources/Info.plist"
+  ln -s A "$fw/Versions/Current"
+  ln -s "Versions/Current/Koan Framework" "$fw/Koan Framework"
+  ln -s Versions/Current/Resources "$fw/Resources"
   echo "app=$app"
   [[ -z ${GITHUB_OUTPUT:-} ]] || echo "app=$app" >> "$GITHUB_OUTPUT"
 }
