@@ -177,6 +177,15 @@ class ReleaseInfoTest(unittest.TestCase):
     self.assertEqual(release_info.previous_tag(tags, p('0.1.0')),
                      'v0.0.3-alpha.1')
 
+  def test_is_latest(self):
+    p = koan_version.parse
+    tags = ['v0.0.1-alpha.1', 'v0.0.2-alpha.1', 'nightly', 'vbogus']
+    self.assertTrue(release_info.is_latest(tags, p('0.0.3-alpha.1')))
+    self.assertTrue(release_info.is_latest(tags, p('0.0.2-alpha.1')))
+    # A fix on an older line, tagged after a newer release.
+    self.assertFalse(release_info.is_latest(tags, p('0.0.1')))
+    self.assertTrue(release_info.is_latest([], p('0.0.1')))
+
   def test_bundle_must_go_up(self):
     before_version = release_info.bundle_at(None, '158.0.8127.18\nabc\n')
     self.assertEqual(before_version, '8127.18')

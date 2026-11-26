@@ -1,0 +1,176 @@
+# Proves the release signing works before a 16 h release build depends on it
+# (.agent/notes/macos-ci.md, "Release signing"). On a dummy Koan.app:
+#
+# - throwaway (pull requests that touch the signing, and by hand): a made-up
+#   certificate in a temporary keychain (scripts/ci/mac_codesign.sh setup
+#   --throwaway), mac_package.sh signs the app and makes the .dmg, the app in
+#   the mounted .dmg must verify (codesign --verify --deep --strict) and
+#   carry the certificate in its designated requirement; then the update
+#   manifest (scripts/ci/update_manifest.py make and verify) with an ed25519
+#   key made in the job. No secrets.
+# - real (workflow_dispatch with real=true, from develop or a v* tag, which
+#   the "release" environment allows; the owner approves the job): the same
+#   with the real certificate (its SHA-1 must be scripts/ci/
+#   codesign_identity.txt) and the real update key, whose manifest must
+#   verify against the committed public key.
+name: macOS signing check
+
+on:
+  pull_request:
+    paths:
+      - scripts/ci/mac_codesign.sh
+      - scripts/ci/codesign_identity.txt
+      - scripts/ci/mac_package.sh
+      - scripts/ci/mac_signing_check.sh
+      - scripts/ci/update_manifest.py
+      - src/browser/updates/koan_update_public_key.txt
+      - .github/workflows/release.yml
+      - .github/workflows/mac-signing-check.yml
+  workflow_dispatch:
+    inputs:
+      real:
+        description: Also sign with the real certificate and update key (needs the owner's approval)
+        required: false
+        default: false
+        type: boolean
+
+permissions: {}
+
+concurrency:
+  group: mac-signing-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  throwaway:
+    name: Sign a dummy app with a throwaway certificate
+    runs-on: xcode-27
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Make a dummy app
+        id: app
+        run: scripts/ci/mac_signing_check.sh dummy-app "$RUNNER_TEMP/dummy"
+
+      - name: Make a throwaway signing keychain
+        id: signing
+        run: scripts/ci/mac_codesign.sh setup --throwaway
+
+      - name: Sign the app and make the disk image
+        env:
+          KOAN_PACKAGE_APP: ${{ steps.app.outputs.app }}
+          KOAN_RELEASE: "1"
+          KOAN_CODESIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
+          KOAN_CODESIGN_KEYCHAIN: ${{ steps.signing.outputs.keychain }}
+        run: scripts/ci/mac_package.sh "$RUNNER_TEMP/dist"
+
+      - name: Check the app in the disk image
+        env:
+          IDENTITY: ${{ steps.signing.outputs.identity }}
+        run: |
+          dmgs=("$RUNNER_TEMP"/dist/*.dmg)
+          scripts/ci/mac_signing_check.sh check-image "${dmgs[0]}" "$IDENTITY"
+
+      - name: Make and verify an update manifest with a throwaway key
+        run: |
+          # OpenSSL 3 (Homebrew) when there is one: the system openssl is
+          # LibreSSL.
+          openssl=/opt/homebrew/opt/openssl@3/bin/openssl
+          [[ -x $openssl ]] || openssl=openssl
+          dist="$RUNNER_TEMP/dist"
+          dmgs=("$dist"/*.dmg)
+          dmg="$(basename "${dmgs[0]}")"
+          (umask 077 && "$openssl" genpkey -algorithm ed25519 -out "$RUNNER_TEMP/update-key.pem")
+          # The public key file holds the raw 32-byte key in base64.
+          "$openssl" pkey -in "$RUNNER_TEMP/update-key.pem" -pubout -outform DER |
+            tail -c 32 | base64 > "$RUNNER_TEMP/update-key.pub"
+          python3 -I scripts/ci/update_manifest.py make --platform mac-arm64 \
+            --file "$dist/$dmg" \
+            --url "https://github.com/$GITHUB_REPOSITORY/releases/download/v0.0.0-check/$dmg" \
+            --version "$(tr -d '[:space:]' < VERSION)" \
+            --chromium "$(sed -n 1p CHROMIUM_VERSION)" \
+            --notes-url "https://github.com/$GITHUB_REPOSITORY/releases/tag/v0.0.0-check" \
+            --key-file "$RUNNER_TEMP/update-key.pem" --output "$dist/koan-update.json"
+          python3 -I scripts/ci/update_manifest.py verify \
+            --manifest "$dist/koan-update.json" --file "$dist/$dmg" \
+            --platform mac-arm64 --public-key-file "$RUNNER_TEMP/update-key.pub"
+          rm -f "$RUNNER_TEMP/update-key.pem"
+
+      - name: Remove the keychain
+        if: always()
+        run: |
+          scripts/ci/mac_codesign.sh teardown
+          rm -f "$RUNNER_TEMP/update-key.pem"
+
+  real:
+    name: Sign a dummy app with the release certificate
+    if: github.event_name == 'workflow_dispatch' && inputs.real
+    runs-on: xcode-27
+    timeout-minutes: 30
+    # Holds the signing secrets; waits for the owner and only runs for
+    # develop and v* tags.
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Make a dummy app
+        id: app
+        run: scripts/ci/mac_signing_check.sh dummy-app "$RUNNER_TEMP/dummy"
+
+      - name: Import the signing certificate
+        id: signing
+        env:
+          KOAN_CODESIGN_P12: ${{ secrets.KOAN_CODESIGN_P12 }}
+          KOAN_CODESIGN_P12_PASSWORD: ${{ secrets.KOAN_CODESIGN_P12_PASSWORD }}
+        run: scripts/ci/mac_codesign.sh setup
+
+      - name: Sign the app and make the disk image
+        env:
+          KOAN_PACKAGE_APP: ${{ steps.app.outputs.app }}
+          KOAN_RELEASE: "1"
+          KOAN_CODESIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
+          KOAN_CODESIGN_KEYCHAIN: ${{ steps.signing.outputs.keychain }}
+        run: scripts/ci/mac_package.sh "$RUNNER_TEMP/dist"
+
+      - name: Check the app in the disk image
+        env:
+          IDENTITY: ${{ steps.signing.outputs.identity }}
+        run: |
+          dmgs=("$RUNNER_TEMP"/dist/*.dmg)
+          scripts/ci/mac_signing_check.sh check-image "${dmgs[0]}" "$IDENTITY"
+
+      - name: Make an update manifest with the real key and verify it
+        env:
+          KOAN_UPDATE_SIGNING_KEY: ${{ secrets.KOAN_UPDATE_SIGNING_KEY }}
+        run: |
+          dist="$RUNNER_TEMP/dist"
+          dmgs=("$dist"/*.dmg)
+          dmg="$(basename "${dmgs[0]}")"
+          key="$RUNNER_TEMP/update-key.pem"
+          (umask 077 && printf '%s\n' "$KOAN_UPDATE_SIGNING_KEY" > "$key")
+          python3 -I scripts/ci/update_manifest.py make --platform mac-arm64 \
+            --file "$dist/$dmg" \
+            --url "https://github.com/$GITHUB_REPOSITORY/releases/download/v0.0.0-check/$dmg" \
+            --version "$(tr -d '[:space:]' < VERSION)" \
+            --chromium "$(sed -n 1p CHROMIUM_VERSION)" \
+            --notes-url "https://github.com/$GITHUB_REPOSITORY/releases/tag/v0.0.0-check" \
+            --key-file "$key" --output "$dist/koan-update.json"
+          rm -f "$key"
+          python3 -I scripts/ci/update_manifest.py verify \
+            --manifest "$dist/koan-update.json" --file "$dist/$dmg" \
+            --platform mac-arm64 \
+            --public-key-file src/browser/updates/koan_update_public_key.txt
+
+      - name: Remove the keychain and the update key
+        if: always()
+        run: |
+          scripts/ci/mac_codesign.sh teardown
+          rm -f "$RUNNER_TEMP/update-key.pem"
