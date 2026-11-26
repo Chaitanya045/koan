@@ -104,6 +104,8 @@ CN = Koan Throwaway Signing
 basicConstraints = critical,CA:false
 keyUsage = critical,digitalSignature
 extendedKeyUsage = critical,codeSigning
+# As in the real one.
+subjectKeyIdentifier = hash
 EOF
     openssl req -x509 -newkey rsa:3072 -nodes -days 2 \
       -config "$STATE/openssl.cnf" \
