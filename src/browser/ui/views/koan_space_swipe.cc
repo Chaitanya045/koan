@@ -16,32 +16,61 @@ KoanSpaceSwipe::KoanSpaceSwipe(KoanWorkspaceController* controller)
 
 KoanSpaceSwipe::~KoanSpaceSwipe() = default;
 
-bool KoanSpaceSwipe::OnScrollEvent(const ui::ScrollEvent& event) {
-  SwipePhase phase = SwipePhase::kUpdate;
+namespace {
+
+SwipePhase GetPhase(const ui::ScrollEvent& event) {
   switch (event.momentum_phase()) {
     case ui::EventMomentumPhase::BEGAN:
     case ui::EventMomentumPhase::MAY_BEGIN:
-      phase = SwipePhase::kBegin;
-      break;
+      return SwipePhase::kBegin;
     case ui::EventMomentumPhase::INERTIAL_UPDATE:
-      phase = SwipePhase::kMomentum;
-      break;
+      return SwipePhase::kMomentum;
     case ui::EventMomentumPhase::END:
     case ui::EventMomentumPhase::BLOCKED:
-      phase = SwipePhase::kEnd;
-      break;
+      return SwipePhase::kEnd;
     case ui::EventMomentumPhase::NONE:
-      phase = SwipePhase::kUpdate;
-      break;
+      return SwipePhase::kUpdate;
   }
+  return SwipePhase::kUpdate;
+}
+
+double GetSeconds(const ui::ScrollEvent& event) {
+  return (event.time_stamp() - base::TimeTicks()).InSecondsF();
+}
+
+}  // namespace
+
+bool KoanSpaceSwipe::OnScrollEvent(const ui::ScrollEvent& event) {
   // The swipe follows the fingers, not the system's natural scrolling setting
   // (as Gecko's swipe tracker, and Zen with it, and Chromium's own swipe back
   // and forward do): the offsets are turned round when the system had.
   const float dx =
       ScrollFollowsFingers(event) ? event.x_offset() : -event.x_offset();
-  return tracker_.OnScroll(
-      dx, event.y_offset(), phase,
-      (event.time_stamp() - base::TimeTicks()).InSecondsF());
+  return tracker_.OnScroll(dx, event.y_offset(), GetPhase(event),
+                           GetSeconds(event));
+}
+
+void KoanSpaceSwipe::CaptureScrolls(gfx::NativeWindow window) {
+  if (!capture_) {
+    capture_ = KoanScrollCapture::Create(window, this);
+  }
+  capturing_ = true;
+}
+
+bool KoanSpaceSwipe::IsCapturing() const {
+  return capturing_;
+}
+
+bool KoanSpaceSwipe::TakeScroll(const ui::ScrollEvent& event) {
+  const SwipePhase phase = GetPhase(event);
+  // Fingers down again: whatever the swipe was, it is over (even if its end was
+  // lost), and this gesture goes where the system sends it, so that a page's
+  // scroll is never taken for the swipe.
+  if (phase == SwipePhase::kBegin) {
+    capturing_ = false;
+    return false;
+  }
+  return tracker_.Owns(phase, GetSeconds(event)) && OnScrollEvent(event);
 }
 
 void KoanSpaceSwipe::UpdateSwipe(float amount) {

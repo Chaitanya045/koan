@@ -1,5 +1,6 @@
 // User flow: the two-finger swipe between Spaces over the sidebar (#91, the
-// direction fixed in #436). Test cases UF-SW-* in .agent/notes/user-flows.md.
+// direction fixed in #436, the Library's swipe with the sidebar on the right
+// #453). Test cases UF-SW-* in .agent/notes/user-flows.md.
 // Three Spaces; a trackpad-like gesture (tools/swipe.m: continuous scroll
 // events with Began/Changed/Ended phases, posted at the sidebar) the way a
 // person's fingers move:
@@ -8,7 +9,10 @@
 // - a short, slow drag springs back;
 // - past the last Space, a long swipe brings in the + badge and opens the
 //   Create-a-Space form;
-// - past the first Space, towards the Library (on the left), the Library.
+// - past the first Space, towards the Library (on the left), the Library;
+// - with the sidebar on the right, past the last Space, one swipe right to
+//   left opens the Library (the first swipe used to go to the page instead),
+//   and one left to right closes it.
 // The strip following the fingers is checked in the recording's contact
 // sheets (the marks of each step), not here. swipe.m prints how AppKit reads
 // its events (isDirectionInvertedFromDevice), so the flow posts the deltas a
@@ -17,7 +21,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createSpace } from '../../../e2e/lib/koan.mjs';
+import { createSpace, setKoanPref } from '../../../e2e/lib/koan.mjs';
 import { TOOLS } from './common.mjs';
 import { begin, clickView, end, keyPress, openAnchor, parkPointer, pointer, skipFlow, sleep, step, viewRect,
          viewTree, waitFor } from './uf_lib.mjs';
@@ -152,6 +156,32 @@ await step('UF-SW-6', 'Past the first Space, towards the Library: the Library op
   t.check('swiping back right to left closes it', !s.libraryOpen, say(s));
   t.check('...on the first Space still', s.active === 0, say(s));
   await t.shot('library-closed');
+}, { needs: ['real input'] });
+
+await step('UF-SW-7', 'Sidebar on the right: one swipe right to left opens the Library, one left to right closes it', async t => {
+  t.check('koan.tabs.on_right set', await setKoanPref('koan.tabs.on_right', true) !== false);
+  await sleep(1500);  // the sidebar moves over
+  const s0 = await spaces();
+  const c = await clickView(s0.buttons[s0.buttons.length - 1], s0.vs, 1000);
+  t.check('a real click on the last Space\'s button', c.ok, c.why);
+  let s = await spaces();
+  t.check('on the last Space (the Library is past it, on the right)', s.active === s.buttons.length - 1, say(s));
+  t.check('the Library is shut', !s.libraryOpen, say(s));
+  await t.shot('right-sidebar');
+  // One swipe only: the first one used to be lost (the Library's window came up
+  // under the fingers and the rest of the gesture went to the page).
+  await fingers(-300);
+  s = await waitFor(async () => { const x = await spaces(); return x.libraryOpen && x; }, 3000) ?? await spaces();
+  t.check('one swipe, fingers right to left, opens the Library (on the right)', s.libraryOpen, say(s));
+  t.check('...on the last Space still', s.active === s.buttons.length - 1, say(s));
+  await t.shot('library-right');
+  await fingers(300);
+  s = await waitFor(async () => { const x = await spaces(); return !x.libraryOpen && x; }, 3000) ?? await spaces();
+  t.check('one swipe back, left to right, closes it', !s.libraryOpen, say(s));
+  t.check('...on the last Space still', s.active === s.buttons.length - 1, say(s));
+  await t.shot('library-right-closed');
+  await setKoanPref('koan.tabs.on_right', false);
+  await sleep(1000);
 }, { needs: ['real input'] });
 
 end();

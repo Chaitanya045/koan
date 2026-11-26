@@ -42,6 +42,13 @@ constexpr double kMinElapsedSeconds = 0.008;
 // ours.
 constexpr float kAxisLockDistance = 10.f;
 
+// How long after the fingers lift the system's momentum may begin (it follows
+// at once: the same frame, or the next), and how long it may last (a long
+// swipe's runs for about a second): beyond that an event is another gesture's,
+// whatever the tracker still thinks.
+constexpr double kMomentumStartSeconds = 0.3;
+constexpr double kMomentumMaxSeconds = 3;
+
 }  // namespace
 
 float SwipeGestureAmount(float travel_right) {
@@ -122,6 +129,7 @@ bool KoanSwipeTracker::OnScroll(float dx,
       // The fingers lifting, and, after the momentum, its end.
       const bool lifted = state_ == State::kSwiping;
       if (lifted) {
+        ended_seconds_ = seconds;
         delegate_->EndSwipe(SwipeGestureAmount(total_x_), velocity_);
         state_ = State::kEnded;
       }
@@ -131,6 +139,26 @@ bool KoanSwipeTracker::OnScroll(float dx,
       }
       return ours;
     }
+  }
+  return false;
+}
+
+bool KoanSwipeTracker::Owns(SwipePhase phase, double seconds) const {
+  const double since_lift = seconds - ended_seconds_;
+  switch (phase) {
+    case SwipePhase::kBegin:
+      return false;
+    case SwipePhase::kUpdate:
+      return state_ == State::kSwiping;
+    case SwipePhase::kMomentum:
+      return state_ == State::kEnded &&
+             since_lift <=
+                 (in_momentum_ ? kMomentumMaxSeconds : kMomentumStartSeconds);
+    case SwipePhase::kEnd:
+      // The lift, or the momentum's end.
+      return state_ == State::kSwiping ||
+             (state_ == State::kEnded && in_momentum_ &&
+              since_lift <= kMomentumMaxSeconds);
   }
   return false;
 }

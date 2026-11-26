@@ -219,6 +219,7 @@ A trackpad-like gesture (`scripts/mac/tools/swipe.m`: continuous scroll events w
 | UF-SW-4 | Drags 60 pt slowly and lifts | It springs back; the same Space | UF-SW-4 | real |
 | UF-SW-5 | On the last Space, swipes on right to left, far | The + badge comes in, then the Create-a-Space form opens; no Space is made by itself; Esc closes it | UF-SW-5 | real, rec |
 | UF-SW-6 | On the first Space, swipes left to right (towards the Library on the left), then back | The Library opens, following the fingers; swiping back closes it | UF-SW-6 | real, rec |
+| UF-SW-7 | With the sidebar on the right, on the last Space, swipes right to left (towards the Library on the right) once, then left to right once (#453) | The first swipe opens the Library, following the fingers; one swipe back closes it | UF-SW-7 | real, rec |
 
 ## Agent usage across the flows
 

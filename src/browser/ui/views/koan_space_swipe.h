@@ -5,9 +5,13 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_SPACE_SWIPE_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_SPACE_SWIPE_H_
 
+#include <memory>
+
 #include "base/memory/raw_ptr.h"
+#include "koan/browser/ui/views/koan_scroll_capture.h"
 #include "koan/browser/ui/views/koan_swipe_tracker.h"
 #include "ui/events/event.h"
+#include "ui/gfx/native_ui_types.h"
 
 namespace koan {
 
@@ -15,7 +19,8 @@ class KoanWorkspaceController;
 
 // KoanWorkspaceController's side of Zen's two-finger swipe between Spaces
 // (koan_swipe_tracker.h): translates the touchpad's ui::ScrollEvents.
-class KoanSpaceSwipe final : public KoanSwipeTracker::Delegate {
+class KoanSpaceSwipe final : public KoanSwipeTracker::Delegate,
+                             public KoanScrollCapture::Delegate {
  public:
   explicit KoanSpaceSwipe(KoanWorkspaceController* controller);
   KoanSpaceSwipe(const KoanSpaceSwipe&) = delete;
@@ -30,15 +35,31 @@ class KoanSpaceSwipe final : public KoanSwipeTracker::Delegate {
   bool OnScrollEvent(const ui::ScrollEvent& event);
 
   // Forgets the gesture in progress (see KoanSwipeTracker::Cancel()).
-  void Cancel() { tracker_.Cancel(); }
+  void Cancel() {
+    tracker_.Cancel();
+    capturing_ = false;
+  }
+
+  // The swipe that is under way, and the momentum that follows it, gets all of
+  // its scroll events, whichever of `window`'s views or child windows the
+  // system sends them to (KoanScrollCapture), until the next swipe begins or
+  // Cancel(). For a swipe that puts a window of its own under the fingers.
+  void CaptureScrolls(gfx::NativeWindow window);
+  void ReleaseScrolls() { capturing_ = false; }
 
   // KoanSwipeTracker::Delegate:
   void UpdateSwipe(float amount) override;
   void EndSwipe(float amount, float velocity) override;
 
+  // KoanScrollCapture::Delegate:
+  bool IsCapturing() const override;
+  bool TakeScroll(const ui::ScrollEvent& event) override;
+
  private:
   const raw_ptr<KoanWorkspaceController> controller_;
   KoanSwipeTracker tracker_{this};
+  std::unique_ptr<KoanScrollCapture> capture_;
+  bool capturing_ = false;
 };
 
 }  // namespace koan
