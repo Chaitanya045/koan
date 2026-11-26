@@ -25,7 +25,12 @@ on:
         default: false
         type: boolean
       incremental:
-        description: Keep the finished out/Koan for the next nightly to build on
+        description: This run may build on an earlier run's out/Koan (slice 1 gets it with base_run)
+        required: false
+        default: false
+        type: boolean
+      keep_base:
+        description: Keep the finished out/Koan for later runs to build on (only for a run of develop itself)
         required: false
         default: false
         type: boolean
@@ -120,7 +125,7 @@ jobs:
       # build is still right, just full.
       - name: Download the base run's build
         id: base
-        if: inputs.slice == 1 && inputs.base_run != ''
+        if: inputs.incremental && inputs.slice == 1 && inputs.base_run != ''
         continue-on-error: true
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -131,7 +136,7 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Unpack the base run's build
-        if: inputs.slice == 1 && inputs.base_run != '' && steps.base.outcome == 'success'
+        if: inputs.incremental && inputs.slice == 1 && inputs.base_run != '' && steps.base.outcome == 'success'
         env:
           BASE_RUN: ${{ inputs.base_run }}
         run: |
@@ -159,17 +164,19 @@ jobs:
           retention-days: 2
           if-no-files-found: error
 
-      # Kept for the next nightly to build on (scripts/ci/find_base.sh).
+      # Kept for later runs to build on (scripts/ci/find_base.sh), only from
+      # a run that built develop itself: objects built from unmerged code
+      # must never be linked into what users install.
       # Before packaging, which signs Koan.app in place (and adds the VMP
       # signature): the next build starts from the build's own output.
       - name: Pack the finished build
-        if: steps.build.outputs.status == 'finished' && inputs.incremental
+        if: steps.build.outputs.status == 'finished' && inputs.keep_base
         run: |
           scripts/ci/mac_archive.sh pack-out "$ARTIFACTS/koan-mac-out-final.tar.zst"
           df -h /
 
       - name: Upload the finished build
-        if: steps.build.outputs.status == 'finished' && inputs.incremental
+        if: steps.build.outputs.status == 'finished' && inputs.keep_base
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           path: ${{ env.ARTIFACTS }}/koan-mac-out-final.tar.zst

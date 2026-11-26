@@ -4,8 +4,14 @@
 # rebuilds only that.
 #
 #   GH_TOKEN=... GH_REPO=owner/repo KOAN_TOOLCHAIN=<id> \
+#     KOAN_FULL_BUILD_INPUTS="<space-separated repo paths>" \
 #     scripts/ci/incremental.sh <base run id> <artifact prefix> <scratch dir>
 #   e.g. scripts/ci/incremental.sh 123 koan-mac "$RUNNER_TEMP"
+#
+# KOAN_FULL_BUILD_INPUTS lists the files and directories (relative to the
+# repository root) whose change since the base means a full build: what the
+# fetch bakes into the tree, that the tree has no .git to undo. The caller
+# (mac_fetch.sh) owns the list. CHROMIUM_VERSION is always checked too.
 #
 # KOAN_BASE_ARCHIVE=<file> takes the base's source archive from a file
 # instead of the run's artifact (tests).
@@ -17,10 +23,11 @@
 # 1. deletes the checkout's tracked files and unpacks the base run's source
 #    archive (the patched, branded Chromium tree, depot_tools and caches,
 #    with their mtimes) in their place;
-# 2. gives up (exit 3) if CHROMIUM_VERSION, the branding inputs or the
-#    toolchain (KOAN_TOOLCHAIN, e.g. the Xcode and SDK; stored in
-#    .cache/ci-toolchain by the fetch) differ: the tree has no .git to undo
-#    branding with, and a new Chromium or SDK is a full build anyway;
+# 2. gives up (exit 3) if CHROMIUM_VERSION or any KOAN_FULL_BUILD_INPUTS path
+#    differs from this commit's, or the toolchain (KOAN_TOOLCHAIN, e.g. the
+#    Xcode and SDK; stored in .cache/ci-toolchain by the fetch) does: the
+#    tree has no .git to undo branding or the fetch's steps with, and a new
+#    Chromium or SDK is a full build anyway;
 # 3. lets git restore what differs from this commit (git status against
 #    the checkout's index), so only those files get a new mtime, and
 #    deletes the base's files this commit doesn't have;
@@ -36,7 +43,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BASE="${1:?usage: $0 <base run id> <artifact prefix> <scratch dir>}"
 PREFIX="${2:?usage: $0 <base run id> <artifact prefix> <scratch dir>}"
 SCRATCH="${3:?usage: $0 <base run id> <artifact prefix> <scratch dir>}"
-: "${KOAN_TOOLCHAIN:?set KOAN_TOOLCHAIN}"
+: "${KOAN_TOOLCHAIN:?set KOAN_TOOLCHAIN}" "${KOAN_FULL_BUILD_INPUTS:?set KOAN_FULL_BUILD_INPUTS}"
 cd "$ROOT"
 mkdir -p "$SCRATCH"
 
@@ -69,8 +76,13 @@ if ! git diff --quiet -- CHROMIUM_VERSION; then
   echo "CHROMIUM_VERSION moved since run $BASE: a full build" >&2
   exit 3
 fi
-if ! git diff --quiet -- branding scripts/branding.py scripts/apply_branding.sh; then
-  echo "the branding changed since run $BASE: a full build" >&2
+# git status, not git diff: it also sees files only the base has. Word-split
+# on purpose (the paths have no spaces).
+# shellcheck disable=SC2086
+changed_inputs="$(git status --porcelain=v1 --untracked-files=all --no-renames -- $KOAN_FULL_BUILD_INPUTS)"
+if [[ -n $changed_inputs ]]; then
+  echo "inputs of the fetch changed since run $BASE: a full build" >&2
+  echo "$changed_inputs" >&2
   exit 3
 fi
 if [[ "$(cat .cache/ci-toolchain 2>/dev/null)" != "$KOAN_TOOLCHAIN" ]]; then

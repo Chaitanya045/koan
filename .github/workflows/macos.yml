@@ -10,10 +10,13 @@
 # the .dmg; the release job publishes it. The chain is macos-chain.yml,
 # which release.yml (tagged releases) shares. See .agent/notes/macos-ci.md.
 #
-# Runs here are incremental: they start from the last successful run's
-# tree and out/Koan and rebuild only what changed, so a full ~16 h build
-# happens only for a new Chromium, branding or Xcode (or when no recent
-# run is left to build on). Tagged releases always build from scratch.
+# Runs here are incremental: they start from the last successful develop
+# run's tree and out/Koan and rebuild only what changed, so a full ~16 h
+# build happens only for a new Chromium, new fetch inputs or a new Xcode (or
+# when no recent develop run is left to build on). Only runs that built
+# develop itself leave such a base; labelled pull requests and manual runs
+# of other refs build on it but never become one. Tagged releases always
+# build from scratch.
 #
 # The plan job skips the whole chain for other labels, for forks, and for
 # a nightly when nothing that goes into the app changed since the commit
@@ -63,6 +66,14 @@ jobs:
       contents: read
     outputs:
       build: ${{ steps.plan.outputs.build }}
+      # This run builds develop itself (nightly, or a manual run on develop
+      # without another ref): the only kind of run that publishes the
+      # nightly, and the only kind whose build later runs may build on.
+      # Never a pull request, a branch or a ref input, whose code isn't
+      # merged: their objects must not end up in what users install.
+      develop: >-
+        ${{ github.ref == 'refs/heads/develop' && github.event_name != 'pull_request' &&
+        (inputs.ref == '' || inputs.ref == 'develop' || inputs.ref == null) }}
     steps:
       - name: Decide
         id: plan
@@ -112,20 +123,19 @@ jobs:
     with:
       # A labelled pull request builds its head, not the merge commit.
       ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
-      # Rebuild only what changed since the last successful run.
+      # Rebuild only what changed since the last successful develop run.
       incremental: true
+      # Only a run of develop itself leaves a base for later runs.
+      keep_base: ${{ needs.plan.outputs.develop == 'true' }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
 
   release:
     name: Update the nightly pre-release
-    needs: [build]
+    needs: [plan, build]
     # develop only: nightly runs, and manual runs on develop.
-    if: >-
-      ${{ !cancelled() && needs.build.result == 'success' &&
-      github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' &&
-      (inputs.ref == '' || inputs.ref == 'develop' || inputs.ref == null) }}
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.plan.outputs.develop == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # Belt and braces: never two release updates at once.
