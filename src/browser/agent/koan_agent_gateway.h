@@ -60,9 +60,13 @@ class UnixDomainServerSocket;
 //   4. A Session reads and writes the connection. The session asks the gateway
 //      to look at the peer again (PeerResolver::Unchanged) before it verifies a
 //      proof and before it applies the user's approval.
-//   5. Once a second every connection is checked: the session's own timeouts,
-//      the pre-authentication deadline (30 s, not counting a prompt) and, for a
-//      connection that is closing, how long it may take to flush.
+//   5. While there are connections, once a second every one is checked: the
+//      session's own timeouts, the pre-authentication deadline (30 s, not
+//      counting a prompt) and, for a connection that is closing, how long it
+//      may take to flush. With no connection the timer does not run (an idle
+//      browser wakes for nothing); the deadlines are measured on the tick clock
+//      from when each connection arrived, so a timer started by the first one
+//      misses none.
 //
 // Threads. A Gateway is created on any thread and then used, and destroyed, on
 // one sequence (the IO thread in production; destroy it with DeleteSoon there).
@@ -199,13 +203,15 @@ class Gateway {
   // front of it).
   void SendToClient(uint64_t connection_id, std::string json);
 
-  // Run by a once-a-second timer; public so that tests can drive the clock.
+  // Run by a once-a-second timer that runs only while there are connections;
+  // public so that tests can drive the clock.
   void CheckTimeouts();
 
   size_t connection_count() const { return connections_.size(); }
   // What every connection has queued and not yet written, in bytes.
   size_t queued_bytes_for_testing() const { return queued_bytes_total_; }
   RateLimiter& limiter_for_testing() { return limiter_; }
+  bool timer_running_for_testing() const { return timer_.IsRunning(); }
 
  private:
   class Connection;
