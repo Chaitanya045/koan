@@ -88,6 +88,12 @@ fi
 # frameworks, helper apps and libraries too, and --verify --deep --strict
 # fails if any nested code is unsigned or its seal doesn't match.
 identity="${KOAN_CODESIGN_IDENTITY:--}"
+# release.yml re-signs the build's app for users: an empty identity there
+# must fail, not fall back to ad hoc.
+if [[ -n ${KOAN_PACKAGE_APP:-} && ${KOAN_RELEASE:-0} == 1 && $identity == - ]]; then
+  echo "KOAN_PACKAGE_APP with KOAN_RELEASE=1 needs KOAN_CODESIGN_IDENTITY" >&2
+  exit 1
+fi
 sign=(codesign --force --sign "$identity" --timestamp=none)
 if [[ -n ${KOAN_CODESIGN_KEYCHAIN:-} ]]; then
   sign+=(--keychain "$KOAN_CODESIGN_KEYCHAIN")

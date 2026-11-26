@@ -73,6 +73,7 @@ jobs:
       title: ${{ steps.info.outputs.title }}
       notes: ${{ steps.info.outputs.notes }}
       previous_tag: ${{ steps.info.outputs.previous_tag }}
+      latest: ${{ steps.info.outputs.latest }}
     steps:
       - name: Resolve the tag
         id: tag
@@ -85,8 +86,25 @@ jobs:
             echo "'$TAG' is not a release tag (v<version>)" >&2
             exit 1
           fi
-          # The commit the tag points at (an annotated tag's too).
-          sha=$(gh api "repos/$GH_REPO/commits/$TAG" --jq .sha)
+          # The commit the tag points at (an annotated tag's too). Only a
+          # real tag: the commits API also takes a branch of that name, and
+          # only org admins may create v* tags (the "release tags (v*)"
+          # ruleset), so a branch would let anyone with write access choose
+          # the scripts the publish job runs with the signing secrets.
+          if ! ref=$(gh api "repos/$GH_REPO/git/ref/tags/$TAG" \
+              --jq '.object.type + " " + .object.sha'); then
+            echo "there is no tag $TAG" >&2
+            exit 1
+          fi
+          read -r type sha <<< "$ref"
+          if [[ $type == tag ]]; then
+            read -r type sha <<< "$(gh api "repos/$GH_REPO/git/tags/$sha" \
+              --jq '.object.type + " " + .object.sha')"
+          fi
+          if [[ $type != commit || ! $sha =~ ^[0-9a-f]{40}$ ]]; then
+            echo "tag $TAG does not point at a commit" >&2
+            exit 1
+          fi
           if gh release view "$TAG" > /dev/null 2>&1; then
             echo "a release of $TAG exists already; delete it first to redo it" >&2
             exit 1
@@ -103,6 +121,24 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
           persist-credentials: false
+
+      # Releases are tagged on develop, or on a release/<major> branch for a
+      # fix to an older line (docs/RELEASING.md, "Branches").
+      - name: Check that the tag is on develop or a release branch
+        env:
+          SHA: ${{ steps.tag.outputs.sha }}
+        run: |
+          git fetch -q --no-tags origin '+refs/heads/develop:refs/remotes/origin/develop' \
+            '+refs/heads/release/*:refs/remotes/origin/release/*'
+          for branch in $(git for-each-ref --format='%(refname)' \
+              refs/remotes/origin/develop 'refs/remotes/origin/release/*'); do
+            if git merge-base --is-ancestor "$SHA" "$branch"; then
+              echo "$SHA is on ${branch#refs/remotes/origin/}"
+              exit 0
+            fi
+          done
+          echo "$SHA is on neither develop nor a release/* branch" >&2
+          exit 1
 
       - name: Check
         id: info
@@ -143,8 +179,9 @@ jobs:
     environment: release
     permissions:
       contents: write
+    # GH_TOKEN (contents: write) only goes to the steps that call gh, not to
+    # the ones that run the signing scripts.
     env:
-      GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       TAG: ${{ needs.prepare.outputs.tag }}
       SHA: ${{ needs.prepare.outputs.sha }}
@@ -153,6 +190,7 @@ jobs:
       VERSION: ${{ needs.prepare.outputs.version }}
       CHROMIUM: ${{ needs.build.outputs.chromium }}
       PREVIOUS: ${{ needs.prepare.outputs.previous_tag }}
+      LATEST: ${{ needs.prepare.outputs.latest }}
       DRAFT: ${{ inputs.draft && 'true' || 'false' }}
       DMG: ${{ needs.build.outputs.dmg }}
     steps:
@@ -210,6 +248,14 @@ jobs:
             exit 1
           fi
 
+      # The certificate the app must be signed with, whatever the steps above
+      # did: an ad hoc or other signature would never reach users through
+      # the manifest below.
+      - name: Check the signer
+        run: |
+          scripts/ci/mac_signing_check.sh check-image "dist/$DMG" \
+            "$(tr -d '[:space:]' < scripts/ci/codesign_identity.txt)"
+
       # The update manifest the app fetches from releases/latest/download.
       - name: Make the update manifest
         env:
@@ -230,6 +276,8 @@ jobs:
             --public-key-file src/browser/updates/koan_update_public_key.txt
 
       - name: Checksum and notes
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           cat "dist/$DMG.sha256"
           # GitHub's notes: the pull requests since the previous release tag
@@ -243,9 +291,14 @@ jobs:
             --generated "$RUNNER_TEMP/generated.md" --output "$RUNNER_TEMP/body.md"
 
       - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # Never --prerelease: see the top of this file.
-          args=(--verify-tag --latest --title "$TITLE" --notes-file "$RUNNER_TEMP/body.md")
+          # Never --prerelease: see the top of this file. Latest only for the
+          # highest version: a fix on a release/<major> branch must not
+          # become what releases/latest (and so the in-app updater) serves.
+          if [[ $LATEST == true ]]; then latest=--latest; else latest=--latest=false; fi
+          args=(--verify-tag "$latest" --title "$TITLE" --notes-file "$RUNNER_TEMP/body.md")
           if [[ $DRAFT == true ]]; then args+=(--draft); fi
           gh release create "$TAG" "dist/$DMG" "dist/$DMG.sha256" \
             dist/koan-update.json "${args[@]}"

@@ -35,7 +35,8 @@
 # it signs a copy of /usr/bin/true, and only if that fails does it trust the
 # certificate for code signing (security add-trusted-cert -p codeSign: in the
 # admin domain through `sudo -n`, which CI runners allow and which needs no
-# dialog, else in the user domain), and probes again. teardown removes that
+# dialog; without sudo it fails rather than wait on a dialog), and probes
+# again. GitHub's runners sign without it (mac-signing-check.yml). teardown removes that
 # trust. A signed app verifies (codesign --verify --strict) without any
 # trust: that only checks the seal.
 #
@@ -171,15 +172,23 @@ EOF
   # Unverified: whether this works without trusting the certificate.
   if ! probe_sign "$identity" "$kc"; then
     echo "==> codesign refused the untrusted identity; trusting it for code signing"
-    security find-certificate -a -p "$kc" > "$STATE/cert.pem"
-    if sudo -n true 2> /dev/null; then
-      sudo -n security add-trusted-cert -d -r trustRoot -p codeSign \
-        -k "$kc" "$STATE/cert.pem"
-      echo admin > "$STATE/trust"
-    else
-      security add-trusted-cert -r trustRoot -p codeSign -k "$kc" "$STATE/cert.pem"
-      echo user > "$STATE/trust"
+    # Only the identity's own certificate, never anything else the .p12
+    # brought along.
+    security find-certificate -a -Z -p "$kc" | awk -v want="$identity" '
+      /^SHA-1 hash:/ { keep = ($3 == want); next }
+      /-----BEGIN CERTIFICATE-----/ { inside = 1 }
+      inside && keep { print }
+      /-----END CERTIFICATE-----/ { inside = 0 }' > "$STATE/cert.pem"
+    [[ -s $STATE/cert.pem ]] || { echo "no certificate $identity in the keychain" >&2; exit 1; }
+    # The user domain would ask in a dialog, which hangs a CI job: admin
+    # only, through sudo -n (GitHub's runners allow it).
+    if ! sudo -n true 2> /dev/null; then
+      echo "codesign needs the certificate trusted, and sudo -n is not available" >&2
+      exit 1
     fi
+    sudo -n security add-trusted-cert -d -r trustRoot -p codeSign \
+      -k "$kc" "$STATE/cert.pem"
+    echo admin > "$STATE/trust"
     probe_sign "$identity" "$kc" || { echo "codesign cannot use $identity" >&2; exit 1; }
   fi
 
