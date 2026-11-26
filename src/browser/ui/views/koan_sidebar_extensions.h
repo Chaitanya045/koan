@@ -93,6 +93,11 @@ class KoanSidebarExtensionsView : public views::View,
   base::CallbackListSubscription AddSidebarHoverCallback(
       base::RepeatingClosure callback);
 
+  // A popup of one of the extensions closed (ExtensionsToolbarDesktop::
+  // OnPopupClosed(), through OnExtensionPopupClosed() in
+  // koan_extensions_hooks.h): the buttons it kept shown may hide.
+  void OnPopupClosed();
+
   base::WeakPtr<KoanSidebarExtensionsView> GetWeakPtr();
 
   // views::View:
@@ -161,7 +166,8 @@ class KoanSidebarExtensionsView : public views::View,
   // How many buttons fit in Zen's share of the pill.
   void UpdateFit();
   // Shown while the sidebar is hovered, a button has focus or its context
-  // menu is open, or one of their popups is open; faded like Zen's.
+  // menu is open, or one of their popups is open; faded like Zen's. Called
+  // as each of those changes.
   void UpdateReveal();
   bool ShouldReveal() const;
 
@@ -194,10 +200,9 @@ class KoanSidebarExtensionsView : public views::View,
   // watches it.
   raw_ptr<views::View> region_ = nullptr;
   std::unique_ptr<SidebarHoverHandler> hover_handler_;
-  // While a popup of these buttons is open: watches for it to close.
-  base::RepeatingTimer popup_timer_;
-  // After a click, until the popup is up.
-  base::TimeTicks press_hold_until_;
+  // After a click, until the popup is up: the one state that has no event to
+  // tell it is over.
+  base::OneShotTimer press_hold_timer_;
   // The extensions menu where kExtensionsMenuAccessControl is on.
   std::unique_ptr<ExtensionsMenuCoordinator> menu_coordinator_;
   bool rebuild_pending_ = false;
