@@ -52,8 +52,78 @@ fetch ──► build-01 ──► build-02 ──► … ──► build-16 ─
 Re-running: every job reads only artifacts earlier jobs left under fixed
 names and uploads with `overwrite: true`, so "Re-run failed jobs" on a run
 carries on from the last good job. Retention (after the #70 review): source
-3 days, out slices 2 days, logs 7 days, .dmg 7 days (the `nightly` release
-keeps the latest). So a failed job can be re-run for 2 days.
+3 days (14 for a run that keeps a base, see "Incremental builds", which
+also keeps out-final 14 days), out slices 2 days, logs 7 days, .dmg 7 days
+(the `nightly` release keeps the latest). So a failed job can be re-run for 2 days.
+
+## Incremental builds
+
+A full build is ~16 h, but most nightlies change a few files. Runs of
+`macos.yml` pass `incremental: true` to `macos-chain.yml` (release.yml
+passes neither input: a tagged release is always a clean build).
+
+**Only trusted runs become bases.** Once Nightly auto-updates users, objects
+built from unmerged PR code must never be linked into what they install. So
+`keep_base` is true only for a run that built develop itself: the nightly,
+or a manual run on develop without a `ref` input (the `develop` output of
+macos.yml's plan job, the same condition as the release job's). Only such a
+run uploads `koan-mac-out-final.tar.zst`, keeps its source 14 days and
+deletes older runs' bases. Runs without it (a labelled PR, a manual run of
+another ref) may still build on a base, but leave none: their source lives 3
+days, they upload no out-final, and their cleanup deletes only their own
+source and out slices, as before incremental builds. `find_base.sh`
+only accepts a successful run on `$BRANCH` (develop) whose event is
+`schedule` or `workflow_dispatch`, with both archives unexpired; the missing
+out-final of any other run is the second lock.
+
+- The fetch job finds that run (`scripts/ci/find_base.sh`).
+  `scripts/ci/incremental.sh` then:
+  - deletes the checkout's tracked files and unpacks that run's source
+    archive in their place, mtimes and all;
+  - lets `git status` against this commit's index say what differs, and
+    restores just those files, so only they get new mtimes;
+  - reverses the base's version of each changed patch and applies this
+    commit's, with `git apply` as `apply_patches.sh` does.
+    `GIT_CEILING_DIRECTORIES` keeps git from using Koan's repo for
+    `chromium/src`, which has no `.git` by then. Without it, `git apply`
+    run from a subdirectory of Koan's repo silently skips every path.
+- It falls back to the full fetch (workspace wiped) when `CHROMIUM_VERSION`
+  or any path in `KOAN_FULL_BUILD_INPUTS` (set by `mac_fetch.sh`: branding,
+  the scripts that branch, patch, bootstrap, prune and check the tree, and
+  `mac_fetch.sh` itself, which holds the `.gclient`) differs between the
+  base's tree and this commit, or the toolchain does. The fetch writes
+  `.cache/ci-toolchain` (`xcodebuild -version` plus the SDK version), so a
+  runner image with a new Xcode or SDK gets a clean build. It also falls
+  back when a patch won't reverse or apply, or when the archive is gone.
+- Build 1 downloads the base's `out/Koan` (`koan-mac-out-final`) before
+  building. If that download fails, the build is full but still correct.
+- The job that finishes packs `out/Koan` as `koan-mac-out-final` **before**
+  `mac_package.sh`, which signs `Koan.app` in place and adds the VMP
+  signature. The next build then starts from the build's own output.
+- With `keep_base`, source and out-final are kept 14 days. A successful
+  run deletes its own out-N slices, and the source and out-final of older
+  `macos.yml` runs whose own status (`gh api .../runs/<id> --jq .status`,
+  not the list's `status=completed` filter, which has missed runs) is
+  `completed`. A running chain keeps its archives.
+- Why `git status` and `git apply` rather than rsync and GNU patch (the
+  first Linux version): macOS ships openrsync and BSD patch, which lack the
+  needed options.
+- Tested by `scripts/tests/test_incremental.py` on a throwaway repository
+  (patches added, changed and removed; files added, changed and deleted;
+  unchanged files keep their mtimes; a changed fetch input, Chromium or
+  toolchain falls back).
+- 2026-11-24, tnfssc/koan run 45281812693 (a1141b7, no base: full): fetch
+  35 min, then 3 build jobs (4 h 57 min, 4 h 57 min, 4 h 47 min), ~15 h
+  15 min end to end. Kept: source 5.5 GB, out-final 1.5 GB; .dmg 186 MB.
+- 2026-11-25, tnfssc/koan run 45513425253 (2a7f638: develop merged in, 17
+  files changed incl. 12 under src/, 0 patches): incremental on
+  45281812693. Fetch 20 min (download 7 min, unpack 3 min, gn gen 30 s);
+  build 1 ran 38 steps and made the .dmg in 23 min; ~44 min end to end.
+  Cleanup deleted 45281812693's source and out-final.
+- `xcode-27` capacity: from 14:21 to 20:00 UTC on 2026-11-24, five jobs
+  on the fork waited 15 min for a runner and were cancelled ("The job was
+  not acquired by Runner of type hosted even after multiple attempts"),
+  while this repo's nightly got runners. The next try, at 23:51, got one.
 
 Concurrency: one group per ref for nightly and manual runs
 (`macos-<ref name>`; the nightly and a manual run of develop share

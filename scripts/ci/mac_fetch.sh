@@ -24,6 +24,16 @@
 # 5. scripts/build.sh --gen: gn gen, so a broken build file fails here and
 #    not hours into the build.
 #
+# With KOAN_BASE_RUN=<run id> (scripts/ci/find_base.sh), it first tries
+# scripts/ci/incremental.sh: that run's tree, brought up to this commit
+# with only the changed files touched, so the build jobs rebuild only those
+# on top of that run's out/Koan. If that can't be done (new Chromium, a
+# changed fetch input, a new Xcode, an expired archive), the workspace is
+# wiped and the full fetch below runs. Writes based_on=<run id or empty> to $GITHUB_OUTPUT.
+#
+# Either way, .cache/ci-toolchain records the Xcode and SDK, which a later
+# incremental build checks.
+#
 # Runs with scripts/ci/mac_env.sh sourced. Prints disk use as it goes.
 set -euo pipefail
 
@@ -33,6 +43,40 @@ source "$ROOT/scripts/ci/mac_env.sh"
 cd "$ROOT"
 
 step() { echo "==> $* ($(date -u +%H:%M:%S), $(df -h / | awk 'NR == 2 { print $4 }') free)"; }
+output() { echo "$1=$2"; [[ -z ${GITHUB_OUTPUT:-} ]] || echo "$1=$2" >> "$GITHUB_OUTPUT"; }
+
+KOAN_TOOLCHAIN="$(xcodebuild -version | paste -sd' ' -), SDK $(xcrun --show-sdk-version)"
+export KOAN_TOOLCHAIN
+echo "Toolchain: $KOAN_TOOLCHAIN"
+
+if [[ -n ${KOAN_BASE_RUN:-} ]]; then
+  step "Building on run $KOAN_BASE_RUN"
+  status=0
+  # What the fetch below bakes into the tree: if any of these changed since
+  # the base, the base's tree is wrong and the build is a full one.
+  # mac_fetch.sh itself is in the list: it holds the .gclient, and decides
+  # what is pruned and fetched.
+  KOAN_FULL_BUILD_INPUTS="CHROMIUM_VERSION branding scripts/branding.py scripts/apply_branding.sh scripts/apply_patches.sh scripts/bootstrap.sh scripts/ci/mac_fetch.sh scripts/ci/mac_check_deps.py scripts/ci/prune_chromium_source.py" \
+    scripts/ci/incremental.sh "$KOAN_BASE_RUN" koan-mac "${RUNNER_TEMP:-$KOAN_MAC/tmp}/incremental" ||
+    status=$?
+  if ((status == 0)); then
+    # shellcheck source=scripts/ci/mac_env.sh
+    source "$ROOT/scripts/ci/mac_env.sh"
+    step "gn gen"
+    JOBS=1 scripts/build.sh --gen
+    printf '%s\n' "$KOAN_TOOLCHAIN" > .cache/ci-toolchain
+    output based_on "$KOAN_BASE_RUN"
+    step "Done (incremental)"
+    exit 0
+  fi
+  step "Can't build on run $KOAN_BASE_RUN (exit $status): a full fetch"
+  rm -rf chromium depot_tools .cache
+  git clean -ffdxq
+  git reset -q --hard
+  # shellcheck source=scripts/ci/mac_env.sh
+  source "$ROOT/scripts/ci/mac_env.sh"
+fi
+output based_on ""
 
 mkdir -p chromium
 cat > chromium/.gclient <<'EOF'
@@ -75,6 +119,8 @@ find chromium -name .git -prune -exec rm -rf {} +
 
 step "gn gen"
 JOBS=1 scripts/build.sh --gen
+
+printf '%s\n' "$KOAN_TOOLCHAIN" > .cache/ci-toolchain
 
 step "Done"
 du -sh chromium/src depot_tools "$KOAN_MAC" 2>/dev/null || true
