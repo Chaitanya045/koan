@@ -8,6 +8,8 @@
 
 #include "base/check.h"
 #include "base/functional/bind.h"
+#include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 
 namespace koan::remote {
 
@@ -114,6 +116,17 @@ FakeSshTunnelPlatform::Launched& FakeSshTunnelPlatform::current() {
 
 void FakeSshTunnelPlatform::EmitStderr(std::string line) {
   current().callbacks.on_stderr_line.Run(std::move(line));
+}
+
+void FakeSshTunnelPlatform::EmitListening() {
+  EmitStderr(
+      base::StrCat({"debug1: Local forwarding listening on 127.0.0.1 "
+                    "port ",
+                    base::NumberToString(current().port), ".\r"}));
+  EmitStderr(
+      "debug1: channel 0: new port-listener [port listener] "
+      "(inactive timeout: 0)\r");
+  EmitStderr("debug1: Entering interactive session.\r");
 }
 
 void FakeSshTunnelPlatform::EmitPrompt(SshPrompt prompt) {

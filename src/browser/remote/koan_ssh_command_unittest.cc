@@ -5,7 +5,12 @@
 #include "koan/browser/remote/koan_ssh_command.h"
 
 #include <algorithm>
+#include <map>
+#include <optional>
+#include <string>
+#include <utility>
 
+#include "base/strings/cstring_view.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -14,6 +19,37 @@ namespace {
 
 using ::testing::ElementsAre;
 using ::testing::Optional;
+
+// Koan's own environment, as the test sets it.
+class FakeEnvironment : public base::Environment {
+ public:
+  explicit FakeEnvironment(std::map<std::string, std::string> vars)
+      : vars_(std::move(vars)) {}
+
+  std::optional<std::string> GetVar(base::cstring_view name) override {
+    const auto it = vars_.find(std::string(name));
+    if (it == vars_.end()) {
+      return std::nullopt;
+    }
+    return it->second;
+  }
+  bool SetVar(base::cstring_view name, const std::string& value) override {
+    vars_[std::string(name)] = value;
+    return true;
+  }
+  bool UnSetVar(base::cstring_view name) override {
+    vars_.erase(std::string(name));
+    return true;
+  }
+
+ private:
+  std::map<std::string, std::string> vars_;
+};
+
+base::EnvironmentMap SshEnvironment(std::map<std::string, std::string> vars) {
+  FakeEnvironment current(std::move(vars));
+  return BuildSshEnvironment(base::FilePath("/tmp/koan-x/askpass"), current);
+}
 
 SshDestination Destination(std::string user,
                            std::string host,
@@ -95,12 +131,12 @@ TEST(KoanSshCommandTest, BuildsTheTunnelCommand) {
   EXPECT_THAT(
       argv, ElementsAre(
                 "/usr/bin/ssh", "-N", "-n", "-T", "-D", "127.0.0.1:41234", "-o",
-                "ExitOnForwardFailure=yes", "-o", "ServerAliveInterval=10",
-                "-o", "ServerAliveCountMax=3", "-o", "ConnectTimeout=15", "-o",
+                "ExitOnForwardFailure=no", "-o", "ServerAliveInterval=10", "-o",
+                "ServerAliveCountMax=3", "-o", "ConnectTimeout=15", "-o",
                 "ControlMaster=no", "-o", "ControlPath=none", "-o",
                 "ForkAfterAuthentication=no", "-o", "RemoteCommand=none", "-o",
                 "RequestTTY=no", "-o", "PermitLocalCommand=no", "-o",
-                "LogLevel=INFO", "-p", "2222", "-l", "me", "--", "box"));
+                "LogLevel=DEBUG1", "-p", "2222", "-l", "me", "--", "box"));
 }
 
 TEST(KoanSshCommandTest, TheHostIsAlwaysLastAfterDoubleDash) {
@@ -124,13 +160,42 @@ TEST(KoanSshCommandTest, SupervisesSsh) {
 
 TEST(KoanSshCommandTest, ForcesTheAskpassHelper) {
   const base::EnvironmentMap environment =
-      BuildSshEnvironment(base::FilePath("/tmp/koan-x/askpass"));
+      SshEnvironment({{"SSH_ASKPASS_PROMPT", "confirm"}});
   EXPECT_EQ(environment.at("SSH_ASKPASS"), "/tmp/koan-x/askpass");
   EXPECT_EQ(environment.at("SSH_ASKPASS_REQUIRE"), "force");
   // Empty unsets it for the child.
   EXPECT_EQ(environment.at("SSH_ASKPASS_PROMPT"), "");
   // The agent comes from Koan's own environment.
   EXPECT_FALSE(environment.contains("SSH_AUTH_SOCK"));
+}
+
+// A GUI app's PATH is launchd's: Homebrew's tools for a ProxyCommand
+// (cloudflared, tailscale) come after the system's.
+TEST(KoanSshCommandTest, PathFindsHomebrewToolsAfterTheSystemOnes) {
+  EXPECT_EQ(
+      SshEnvironment({{"PATH", "/usr/bin:/bin:/usr/sbin:/sbin"}}).at("PATH"),
+      "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin");
+  EXPECT_EQ(SshEnvironment({}).at("PATH"),
+            "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin");
+  EXPECT_EQ(SshEnvironment({{"PATH", ""}}).at("PATH"),
+            "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin");
+  // Started from a terminal: the user's order stays, nothing is repeated.
+  EXPECT_EQ(
+      SshEnvironment({{"PATH", "/opt/homebrew/bin:/usr/bin:/bin"}}).at("PATH"),
+      "/opt/homebrew/bin:/usr/bin:/bin:/usr/local/bin");
+  EXPECT_EQ(
+      SshEnvironment({{"PATH", "/usr/local/bin:/usr/bin:/opt/homebrew/bin"}})
+          .at("PATH"),
+      "/usr/local/bin:/usr/bin:/opt/homebrew/bin");
+}
+
+TEST(KoanSshCommandTest, SetsAUtf8LocaleOnlyWhenThereIsNone) {
+  EXPECT_EQ(SshEnvironment({}).at("LC_CTYPE"), "UTF-8");
+  EXPECT_EQ(SshEnvironment({{"LANG", ""}}).at("LC_CTYPE"), "UTF-8");
+  for (const char* name : {"LC_ALL", "LC_CTYPE", "LANG"}) {
+    EXPECT_FALSE(SshEnvironment({{name, "de_DE.UTF-8"}}).contains("LC_CTYPE"))
+        << name;
+  }
 }
 
 }  // namespace

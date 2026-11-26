@@ -4,7 +4,13 @@
 
 #include "koan/browser/remote/koan_ssh_command.h"
 
+#include <algorithm>
+#include <array>
+
+#include "base/strings/cstring_view.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 
@@ -14,6 +20,10 @@ namespace {
 
 constexpr size_t kMaxHostLength = 253;
 constexpr size_t kMaxUserLength = 64;
+
+// Any of these set means ssh has a locale (utf8.c msetlocale()).
+constexpr auto kLocaleVariables =
+    std::to_array<base::cstring_view>({"LC_ALL", "LC_CTYPE", "LANG"});
 
 bool IsHostNameChar(char c) {
   return base::IsAsciiAlphaNumeric(c) || c == '.' || c == '-' || c == '_';
@@ -190,8 +200,14 @@ std::vector<std::string> BuildSshTunnelArgv(const base::FilePath& ssh,
       base::StringPrintf("127.0.0.1:%u", port),
       // Command-line options take precedence over the config files, so these
       // hold whatever the user's config says.
+      //
+      // The user's own LocalForward, RemoteForward and DynamicForward for the
+      // host apply too (ClearAllForwardings would also clear -D), and one of
+      // them often fails: the same forward is up in a terminal. That must not
+      // end the tunnel. The tunnel watches for its own -D instead
+      // (ReadSshForwardLine()).
       "-o",
-      "ExitOnForwardFailure=yes",
+      "ExitOnForwardFailure=no",
       "-o",
       base::StringPrintf("ServerAliveInterval=%d",
                          kSshServerAliveIntervalSeconds),
@@ -214,10 +230,15 @@ std::vector<std::string> BuildSshTunnelArgv(const base::FilePath& ssh,
       "RequestTTY=no",
       "-o",
       "PermitLocalCommand=no",
-      // Koan reads ssh's errors to tell the user what went wrong; a config's
-      // LogLevel QUIET would hide them.
+      // Koan reads ssh's errors to tell the user what went wrong (a config's
+      // LogLevel QUIET would hide them), and debug1's "Local forwarding
+      // listening on" and "Entering interactive session." to know that the
+      // -D listener is ssh's. The tunnel drops the other debug lines
+      // (IsSshChatterLine()); ssh never logs a password or an answer. Set
+      // with -o, not -v, so a ProxyJump's ssh doesn't inherit it (ssh.c
+      // passes only -v on).
       "-o",
-      "LogLevel=INFO",
+      "LogLevel=DEBUG1",
   };
   if (destination.port) {
     argv.push_back("-p");
@@ -248,8 +269,33 @@ std::string_view SshSupervisorScript() {
   return kSupervisorScript;
 }
 
-base::EnvironmentMap BuildSshEnvironment(const base::FilePath& askpass_helper) {
+base::EnvironmentMap BuildSshEnvironment(const base::FilePath& askpass_helper,
+                                         base::Environment& current) {
   base::EnvironmentMap environment;
+  // A GUI app on macOS gets launchd's PATH, so a ProxyCommand such as
+  // `cloudflared` or `tailscale nc` from Homebrew wouldn't be found. Its
+  // directories go after the system ones, which keep precedence.
+  std::string path = current.GetVar("PATH").value_or(std::string());
+  if (path.empty()) {
+    path = kSshDefaultPath;
+  }
+  const std::vector<std::string_view> dirs = base::SplitStringPiece(
+      path, ":", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  for (std::string_view extra : kSshExtraPathDirs) {
+    if (!std::ranges::contains(dirs, extra)) {
+      path = base::StrCat({path, ":", extra});
+    }
+  }
+  environment["PATH"] = path;
+  // Without a locale ssh shows non-ASCII text (a server's prompt, a path) as
+  // \ooo escapes (utf8.c msetlocale()). "UTF-8" is macOS's UTF-8 LC_CTYPE.
+  bool has_locale = false;
+  for (base::cstring_view name : kLocaleVariables) {
+    has_locale |= !current.GetVar(name).value_or(std::string()).empty();
+  }
+  if (!has_locale) {
+    environment["LC_CTYPE"] = "UTF-8";
+  }
   environment["SSH_ASKPASS"] = askpass_helper.value();
   environment["SSH_ASKPASS_REQUIRE"] = "force";
   // ssh sets this for each helper it starts; a stale value from Koan's own

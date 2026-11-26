@@ -68,8 +68,9 @@ class SshTunnelPlatform {
       std::optional<uint16_t> preferred,
       base::OnceCallback<void(std::optional<uint16_t>)> callback) = 0;
 
-  // Whether a SOCKS5 server answers on 127.0.0.1:`port` (ssh's -D listener
-  // is up only once ssh has authenticated and set up the forward).
+  // Whether a SOCKS5 server answers on 127.0.0.1:`port`. Asked only once ssh
+  // has said its -D listener is up (ReadSshForwardLine()): before that,
+  // whoever answers there isn't ssh.
   virtual void ProbeSocks(uint16_t port,
                           base::OnceCallback<void(bool)> callback) = 0;
 };
@@ -81,7 +82,8 @@ enum class SshTunnelState {
   kConnecting,
   // ssh waits for the user (status().prompt).
   kNeedsInput,
-  // The SOCKS proxy is up on 127.0.0.1:status().port.
+  // ssh's SOCKS proxy is up on 127.0.0.1:status().port: ssh said it listens
+  // there, and it answers.
   kConnected,
   // ssh ended (status().failure); the next attempt is at
   // status().next_attempt.
@@ -128,7 +130,7 @@ class SshTunnel {
   static constexpr base::TimeDelta kFirstRetryDelay = base::Seconds(1);
   static constexpr base::TimeDelta kMaxRetryDelay = base::Seconds(60);
   static constexpr int kMaxImmediatePortRetries = 3;
-  // How often the SOCKS port is probed while ssh connects.
+  // How often the SOCKS port is probed once ssh listens on it.
   static constexpr base::TimeDelta kProbeInterval = base::Milliseconds(250);
   // A connection that lasted this long resets the backoff when it drops.
   static constexpr base::TimeDelta kStableConnection = base::Seconds(30);
@@ -168,6 +170,16 @@ class SshTunnel {
   void OnNetworkChanged();
 
  private:
+  // How far ssh's output has got with Koan's -D listener on port_.
+  enum class ForwardState {
+    kWaiting,
+    // "Local forwarding listening on 127.0.0.1 port <port_>." (before bind).
+    kBinding,
+    // ssh entered its session after that with no bind error: the listener on
+    // port_ is ssh's, and only now is it probed.
+    kListening,
+  };
+
   void SetState(SshTunnelState state);
   void Notify();
   void BeginAttempt();
@@ -183,6 +195,7 @@ class SshTunnel {
   void ScheduleProbe();
   void Probe();
   void OnProbeResult(int attempt, bool ready);
+  void OnForwardLine(SshForwardLine line);
   void EndAttempt(SshFailure failure, std::string detail);
   void CancelPrompts();
   void RestartIfStale();
@@ -203,6 +216,7 @@ class SshTunnel {
   uint16_t port_ = 0;
   std::optional<uint16_t> last_port_;
   std::vector<std::string> stderr_lines_;
+  ForwardState forward_ = ForwardState::kWaiting;
   // Prompts shown to the delegate in this attempt.
   std::vector<int> shown_prompts_;
   int next_prompt_id_ = 1;

@@ -5,13 +5,14 @@
 #ifndef KOAN_BROWSER_REMOTE_KOAN_SSH_FAILURE_H_
 #define KOAN_BROWSER_REMOTE_KOAN_SSH_FAILURE_H_
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
 
-// Why a tunnel's ssh ended, read from what it printed (OpenSSH's messages;
-// .agent/notes/upstream/remote-spaces.md lists where each comes from) and its
-// exit status. Pure.
+// What a tunnel's ssh printed: whether Koan's own SOCKS forward is listening,
+// and why ssh ended (OpenSSH's messages and its exit status;
+// .agent/notes/upstream/remote-spaces.md lists where each comes from). Pure.
 namespace koan::remote {
 
 enum class SshFailure {
@@ -33,7 +34,8 @@ enum class SshFailure {
   // The host's key couldn't be verified: the user said no, or strict checking
   // has no key for it. Never retried.
   kHostKeyNotVerified,
-  // The SOCKS port was taken between Koan picking it and ssh binding it.
+  // ssh couldn't listen on the SOCKS port: it was taken between Koan picking
+  // it and ssh binding it.
   kPortInUse,
   // An established connection died (keepalive timeout, closed by the server).
   kConnectionLost,
@@ -59,10 +61,36 @@ SshFailure ClassifySshExit(const std::vector<std::string>& stderr_lines,
 std::string SshFailureDetail(const std::vector<std::string>& stderr_lines);
 
 // Appends `line` to `lines`, keeping the last kMaxSshStderrLines, each cut to
-// kMaxSshStderrLineLength bytes and with control characters replaced.
+// kMaxSshStderrLineLength bytes and with control characters replaced. ssh's
+// debug and verbose chatter (IsSshChatterLine()) is dropped, so it can't push
+// the errors out or become the failure's detail.
 inline constexpr size_t kMaxSshStderrLines = 40;
 inline constexpr size_t kMaxSshStderrLineLength = 512;
 void AddSshStderrLine(std::vector<std::string>& lines, std::string_view line);
+
+// Whether `line` is one of the debug1-3 lines (or the verbose-level notes)
+// that ssh prints only because Koan runs it at LogLevel=DEBUG1. They can quote
+// paths, commands from the user's config and the server's text, so Koan never
+// keeps them.
+bool IsSshChatterLine(std::string_view line);
+
+// What a stderr line says about Koan's -D listener on 127.0.0.1:`port`.
+// ssh sets up its forwards right after authenticating, one by one, and only
+// then enters its session (ssh.c ssh_session2(), channels.c
+// channel_setup_fwd_listener_tcpip(), clientloop.c client_loop()):
+//   debug1: Local forwarding listening on 127.0.0.1 port <port>.   kBinding
+//   bind [127.0.0.1]:<port>: Address already in use                kFailed
+//   ... (the user's own forwards) ...
+//   debug1: Entering interactive session.                  kSessionStarted
+// kBinding is printed just before bind(), so only kSessionStarted after it,
+// with no kFailed between, means the port is ssh's.
+enum class SshForwardLine {
+  kOther,
+  kBinding,
+  kFailed,
+  kSessionStarted,
+};
+SshForwardLine ReadSshForwardLine(std::string_view line, uint16_t port);
 
 // A debug name for logs and tests (never ssh's text).
 std::string_view SshFailureName(SshFailure failure);

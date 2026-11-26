@@ -45,11 +45,11 @@ class KoanSshTunnelTest : public testing::Test {
 
   const SshTunnelStatus& status() { return tunnel_->status(); }
 
-  // Starts and lets the SOCKS port answer.
+  // Starts, and ssh listens.
   void Connect() {
     tunnel_->Start();
     platform_.set_socks_ready(true);
-    task_environment_.FastForwardBy(SshTunnel::kProbeInterval);
+    platform_.EmitListening();
     ASSERT_EQ(status().state, SshTunnelState::kConnected);
   }
 
@@ -63,7 +63,7 @@ class KoanSshTunnelTest : public testing::Test {
       &recorder_};
 };
 
-TEST_F(KoanSshTunnelTest, ConnectsOnceTheSocksPortAnswers) {
+TEST_F(KoanSshTunnelTest, ConnectsOnceSshListensAndThePortAnswers) {
   platform_.set_free_ports({41000});
   tunnel_->Start();
   EXPECT_EQ(status().state, SshTunnelState::kConnecting);
@@ -71,11 +71,16 @@ TEST_F(KoanSshTunnelTest, ConnectsOnceTheSocksPortAnswers) {
   EXPECT_EQ(platform_.launched()[0].destination.host, "box");
   EXPECT_EQ(platform_.launched()[0].port, 41000);
 
-  // ssh authenticates: no answer yet.
-  task_environment_.FastForwardBy(SshTunnel::kProbeInterval * 4);
+  // ssh authenticates: nothing is probed yet.
+  platform_.EmitStderr("debug1: Connecting to box [192.0.2.10] port 22.\r");
+  task_environment_.FastForwardBy(base::Seconds(10));
   EXPECT_EQ(status().state, SshTunnelState::kConnecting);
-  EXPECT_EQ(platform_.probes(), 4);
+  EXPECT_EQ(platform_.probes(), 0);
 
+  // ssh listens, but the SOCKS greeting isn't answered yet: probe again.
+  platform_.EmitListening();
+  EXPECT_EQ(platform_.probes(), 1);
+  EXPECT_EQ(status().state, SshTunnelState::kConnecting);
   platform_.set_socks_ready(true);
   task_environment_.FastForwardBy(SshTunnel::kProbeInterval);
   EXPECT_EQ(status().state, SshTunnelState::kConnected);
@@ -83,9 +88,76 @@ TEST_F(KoanSshTunnelTest, ConnectsOnceTheSocksPortAnswers) {
   EXPECT_EQ(status().failure, SshFailure::kNone);
   // No more probes once connected.
   task_environment_.FastForwardBy(base::Minutes(1));
-  EXPECT_EQ(platform_.probes(), 5);
+  EXPECT_EQ(platform_.probes(), 2);
   EXPECT_THAT(recorder_.states, ElementsAre(SshTunnelState::kConnecting,
                                             SshTunnelState::kConnected));
+}
+
+// Something else answering on the port (another user's process that took it
+// before ssh could bind it) must never count.
+TEST_F(KoanSshTunnelTest, AnAnswerWithoutSshListeningNeverConnects) {
+  platform_.set_free_ports({41000});
+  platform_.set_socks_ready(true);
+  tunnel_->Start();
+  task_environment_.FastForwardBy(base::Minutes(1));
+  // A ProxyJump's ssh entering its session, or ssh's own without the line.
+  platform_.EmitStderr("debug1: Entering interactive session.\r");
+  task_environment_.FastForwardBy(base::Minutes(1));
+  EXPECT_EQ(status().state, SshTunnelState::kConnecting);
+  EXPECT_EQ(platform_.probes(), 0);
+}
+
+TEST_F(KoanSshTunnelTest, OnlyTheLineForItsOwnPortCounts) {
+  platform_.set_free_ports({41000});
+  platform_.set_socks_ready(true);
+  tunnel_->Start();
+  for (const char* line :
+       {"debug1: Local forwarding listening on 127.0.0.1 port 41001.",
+        "debug1: Local forwarding listening on 127.0.0.1 port 4100.",
+        "debug1: Local forwarding listening on 127.0.0.1 port 410000.",
+        "debug1: Local forwarding listening on ::1 port 41000.",
+        "debug1: Local forwarding listening on 0.0.0.0 port 41000.",
+        "debug1: Local forwarding listening on 127.0.0.2 port 41000.",
+        "Local forwarding listening on 127.0.0.1 port 41000.",
+        "debug1: Entering interactive session."}) {
+    platform_.EmitStderr(line);
+  }
+  task_environment_.FastForwardBy(base::Minutes(1));
+  EXPECT_EQ(status().state, SshTunnelState::kConnecting);
+  EXPECT_EQ(platform_.probes(), 0);
+}
+
+// The user's config has "LocalForward 3000 localhost:3000", and a terminal's
+// ssh holds port 3000: ssh carries on without it (as verified with OpenSSH
+// 10.4), and so does the tunnel.
+TEST_F(KoanSshTunnelTest, TheUsersOwnFailingForwardIsHarmless) {
+  platform_.set_free_ports({41000});
+  platform_.set_socks_ready(true);
+  tunnel_->Start();
+  for (const char* line : {
+           "debug1: Local forwarding listening on 127.0.0.1 port 41000.\r",
+           "debug1: channel 0: new port-listener [port listener] (inactive "
+           "timeout: 0)\r",
+           "debug1: Local connections to LOCALHOST:3000 forwarded to remote "
+           "address localhost:3000\r",
+           "debug1: Local forwarding listening on ::1 port 3000.\r",
+           "bind [::1]:3000: Address already in use\r",
+           "debug1: Local forwarding listening on 127.0.0.1 port 3000.\r",
+           "bind [127.0.0.1]:3000: Address already in use\r",
+           "channel_setup_fwd_listener_tcpip: cannot listen to port: 3000\r",
+           "debug1: Requesting no-more-sessions@openssh.com\r",
+           "debug1: Entering interactive session.\r",
+       }) {
+    platform_.EmitStderr(line);
+  }
+  EXPECT_EQ(status().state, SshTunnelState::kConnected);
+  EXPECT_EQ(status().port, 41000);
+  // Its bind error doesn't make a later drop a port clash.
+  platform_.EmitStderr("Timeout, server box not responding.\r");
+  platform_.Exit(255);
+  EXPECT_EQ(status().state, SshTunnelState::kRetrying);
+  EXPECT_EQ(status().failure, SshFailure::kConnectionLost);
+  EXPECT_EQ(status().detail, "Timeout, server box not responding.");
 }
 
 TEST_F(KoanSshTunnelTest, PromptsGoToTheDelegateAndBack) {
@@ -188,11 +260,15 @@ TEST_F(KoanSshTunnelTest, APortClashIsRetriedAtOnceOnANewPort) {
   EXPECT_EQ(platform_.preferred_ports().back(), 41000);
   EXPECT_EQ(platform_.launched()[1].port, 41000);
 
-  platform_.EmitStderr("bind [127.0.0.1]:41000: Address already in use");
-  platform_.EmitStderr("Could not request local forwarding.");
-  platform_.Exit(255);
+  // Someone took the port: ssh would run on without it, so the tunnel ends
+  // the attempt itself.
+  platform_.EmitStderr(
+      "debug1: Local forwarding listening on 127.0.0.1 port 41000.\r");
+  platform_.EmitStderr("bind [127.0.0.1]:41000: Address already in use\r");
+  EXPECT_FALSE(platform_.launched()[1].alive);
   EXPECT_EQ(status().state, SshTunnelState::kRetrying);
   EXPECT_EQ(status().failure, SshFailure::kPortInUse);
+  EXPECT_EQ(status().detail, "bind [127.0.0.1]:41000: Address already in use");
   EXPECT_EQ(status().next_attempt, base::TimeTicks::Now());
   task_environment_.RunUntilIdle();
   ASSERT_EQ(platform_.launched().size(), 3u);
@@ -208,7 +284,7 @@ TEST_F(KoanSshTunnelTest, ALongConnectionResetsTheBackoff) {
   EXPECT_EQ(status().failed_attempts, 2);
   task_environment_.FastForwardBy(base::Seconds(2));
   platform_.set_socks_ready(true);
-  task_environment_.FastForwardBy(SshTunnel::kProbeInterval);
+  platform_.EmitListening();
   ASSERT_EQ(status().state, SshTunnelState::kConnected);
   task_environment_.FastForwardBy(SshTunnel::kStableConnection);
   platform_.Exit(255);
@@ -223,7 +299,7 @@ TEST_F(KoanSshTunnelTest, AFlappingConnectionKeepsBackingOff) {
   platform_.Exit(255);
   task_environment_.FastForwardBy(base::Seconds(2));
   platform_.set_socks_ready(true);
-  task_environment_.FastForwardBy(SshTunnel::kProbeInterval);
+  platform_.EmitListening();
   ASSERT_EQ(status().state, SshTunnelState::kConnected);
   EXPECT_EQ(status().failed_attempts, 0);
   task_environment_.FastForwardBy(base::Seconds(1));
@@ -249,7 +325,7 @@ TEST_F(KoanSshTunnelTest, ANetworkChangeKeepsATunnelThatNeededAPassword) {
   platform_.EmitPrompt(Prompt(SshPromptKind::kSecret, "password: "));
   prompts_.Answer(SshPromptReply::WithSecret(SshSecret("pw")));
   platform_.set_socks_ready(true);
-  task_environment_.FastForwardBy(SshTunnel::kProbeInterval);
+  platform_.EmitListening();
   ASSERT_EQ(status().state, SshTunnelState::kConnected);
   tunnel_->OnNetworkChanged();
   tunnel_->OnResume();
@@ -309,7 +385,7 @@ TEST_F(KoanSshTunnelTest, ANoticeEndsWhenTheTunnelConnects) {
   EXPECT_TRUE(prompts_.shown()[0].reply.is_null());
   EXPECT_EQ(status().state, SshTunnelState::kNeedsInput);
   platform_.set_socks_ready(true);
-  task_environment_.FastForwardBy(SshTunnel::kProbeInterval);
+  platform_.EmitListening();
   EXPECT_EQ(status().state, SshTunnelState::kConnected);
   EXPECT_THAT(prompts_.cancelled(), ElementsAre(prompts_.shown()[0].id));
 }

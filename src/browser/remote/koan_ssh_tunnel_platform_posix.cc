@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "base/containers/span.h"
+#include "base/environment.h"
 #include "base/files/file_descriptor_watcher_posix.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
@@ -194,7 +195,8 @@ class SshProcessIo {
                             {dev_null.get(), STDOUT_FILENO},
                             {stderr_write.get(), STDERR_FILENO}};
     options.new_process_group = true;
-    options.environment = BuildSshEnvironment(askpass_->helper_path());
+    options.environment = BuildSshEnvironment(askpass_->helper_path(),
+                                              *base::Environment::Create());
     process_ = base::LaunchProcess(
         BuildSupervisedArgv(sh, BuildSshTunnelArgv(ssh, destination_, port_)),
         options);

@@ -8,6 +8,8 @@
 #include <initializer_list>
 
 #include "base/containers/adapters.h"
+#include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "koan/browser/remote/koan_ssh_text.h"
 
@@ -72,13 +74,9 @@ SshFailure ClassifyLines(const std::vector<std::string>& lines,
               {"Could not resolve hostname", "Could not resolve host"})) {
     return SshFailure::kHostNotFound;
   }
-  if (AnyLine(lines, {"Could not request local forwarding."}) ||
-      std::ranges::any_of(lines, [](const std::string& line) {
-        return line.starts_with("bind [127.0.0.1]:") &&
-               Contains(line, "Address already in use");
-      })) {
-    return SshFailure::kPortInUse;
-  }
+  // No kPortInUse: a failed forward doesn't end ssh (ExitOnForwardFailure=no),
+  // and the tunnel ends the attempt itself when Koan's own one fails
+  // (ReadSshForwardLine()). A bind error here is the user's own forward's.
   if (AnyLine(lines, {"Timeout, server ", "closed by remote host",
                       "client_loop: send disconnect", "Disconnected from "})) {
     return SshFailure::kConnectionLost;
@@ -144,7 +142,49 @@ std::string SshFailureDetail(const std::vector<std::string>& stderr_lines) {
   return stderr_lines.empty() ? std::string() : stderr_lines.back();
 }
 
+bool IsSshChatterLine(std::string_view line) {
+  line = base::TrimWhitespaceASCII(line, base::TRIM_LEADING);
+  // log.c do_log() prefixes debug lines with their level. The rest are
+  // verbose() notes (sshconnect2.c, clientloop.c) that LogLevel=INFO hides.
+  return line.starts_with("debug1: ") || line.starts_with("debug2: ") ||
+         line.starts_with("debug3: ") ||
+         line.starts_with("Authenticated to ") ||
+         line.starts_with("Authenticated using ") ||
+         line.starts_with("Transferred: sent ") ||
+         line.starts_with("Bytes per second: ");
+}
+
+SshForwardLine ReadSshForwardLine(std::string_view line, uint16_t port) {
+  // ssh ends its lines with "\r\n".
+  line = base::TrimWhitespaceASCII(line, base::TRIM_TRAILING);
+  const std::string port_text = base::NumberToString(port);
+  if (line == "debug1: Entering interactive session.") {
+    return SshForwardLine::kSessionStarted;
+  }
+  if (line ==
+      base::StrCat({"debug1: Local forwarding listening on 127.0.0.1 port ",
+                    port_text, "."})) {
+    return SshForwardLine::kBinding;
+  }
+  // error() and verbose() lines of channel_setup_fwd_listener_tcpip(), and
+  // ssh_init_forwarding()'s when no local forward at all could be set up.
+  if (line.starts_with(base::StrCat({"bind [127.0.0.1]:", port_text, ": "})) ||
+      line.starts_with(
+          base::StrCat({"listen [127.0.0.1]:", port_text, ": "})) ||
+      line.starts_with(
+          base::StrCat({"socket [127.0.0.1]:", port_text, ": "})) ||
+      line.ends_with(base::StrCat({"cannot listen to port: ", port_text})) ||
+      Contains(line, "getaddrinfo(127.0.0.1): ") ||
+      line == "Could not request local forwarding.") {
+    return SshForwardLine::kFailed;
+  }
+  return SshForwardLine::kOther;
+}
+
 void AddSshStderrLine(std::vector<std::string>& lines, std::string_view line) {
+  if (IsSshChatterLine(line)) {
+    return;
+  }
   std::string clean = std::string(base::TrimWhitespaceASCII(
       SanitizeSshText(line, kMaxSshStderrLineLength, /*keep_newlines=*/false),
       base::TRIM_ALL));

@@ -55,7 +55,8 @@ class FakeSshPromptDelegate : public SshPromptDelegate {
 };
 
 // The system: launches are recorded and driven by the test; ports and SOCKS
-// probes answer at once.
+// probes answer at once. A tunnel connects only after EmitListening() and a
+// probe that finds the port ready.
 class FakeSshTunnelPlatform : public SshTunnelPlatform {
  public:
   struct Launched {
@@ -100,6 +101,9 @@ class FakeSshTunnelPlatform : public SshTunnelPlatform {
 
   // Drive the newest launch, which must be alive.
   void EmitStderr(std::string line);
+  // What ssh prints once its -D listener is up: "Local forwarding listening
+  // on 127.0.0.1 port <port>." and "Entering interactive session.".
+  void EmitListening();
   // A kNotice comes without a reply callback.
   void EmitPrompt(SshPrompt prompt);
   void Exit(int exit_code);

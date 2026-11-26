@@ -37,14 +37,16 @@ No upstream patch.
   everything but remote forwards (`!remotefwd && fwd->listen_port == 0` → fail). "Allocated port
   %u" exists only for `-R` (`ssh.c ssh_confirm_remote_forward`). So Koan binds `127.0.0.1:0`
   itself, reads the port, closes the socket and passes the port on. A clash shows as
-  `bind [127.0.0.1]:N: Address already in use` plus `Could not request local forwarding.`
-  (`channels.c channel_setup_fwd_listener_tcpip`, `ssh.c ssh_init_forwarding`), which is fatal with
-  `ExitOnForwardFailure=yes`. Koan then retries at once on a new port (verified).
+  `bind [127.0.0.1]:N: Address already in use` and
+  `channel_setup_fwd_listener_tcpip: cannot listen to port: N` (`channels.c`), plus
+  `Could not request local forwarding.` when no local forward at all came up
+  (`ssh.c ssh_init_forwarding`). With `ExitOnForwardFailure=no` ssh carries on without it, so the
+  tunnel ends the attempt itself and retries at once on a new port (below).
 - **Forwards come up only after authentication** (`ssh_init_forwarding` runs in `ssh_session2`,
-  after `ssh_login`; verified: the bind error came after both prompts). So the `-D` listener
-  answering the SOCKS5 greeting (`05 01 00` → `05 00`) means "connected". Koan polls it every
-  250 ms and never sleeps blindly. The debug line "Local forwarding listening on" is printed
-  before `bind()`, so it is not a ready signal.
+  after `ssh_login`). Verified with a passphrase askpass that took 2 s: `read_passphrase:
+  requested to askpass` at 0.115 s, then at 2.289 s `Authenticated to …`, the listening line and
+  `Entering interactive session.` in the same millisecond. So the port is free for anyone to take
+  for as long as the user takes to answer a prompt. See "Is the listener ssh's?".
 - **ssh can't watch Koan.** With `-N` there is no session channel, so stdin is never read, and EOF
   on stdin does nothing. `ssh.c main` also `closefrom(STDERR_FILENO + 1)`s, so an inherited fd
   can't reach the askpass helper. Hence the supervisor (below).
@@ -104,31 +106,162 @@ No upstream patch.
   | `Timeout, server … not responding.` | `clientloop.c` | `kConnectionLost` |
   | `Connection to … closed by remote host.` | `clientloop.c` | `kConnectionLost` |
   | `Connection closed by …`, `Connection reset by …` | `packet.c` | `kConnectionLost` (`kHostUnreachable` if never connected) |
+  | `bind [127.0.0.1]:N: …`, `cannot listen to port: N` (Koan's N only, while ssh runs) | `channels.c` | `kPortInUse` (`ReadSshForwardLine()`) |
+
+## Is the listener ssh's?
+
+Koan picks the port, releases it, and ssh binds it only after authenticating, which can take as
+long as a password, a 2FA code or a host key question. Any local process (another user's, or a
+sandboxed app allowed to listen) can bind `127.0.0.1:N` in between. A SOCKS5 answer on the port
+therefore proves nothing on its own: before this fix, Koan would have sent the Space's traffic
+(cookies, dev-site sessions) to that process.
+
+**The proof Koan uses: ssh's own debug1 lines, in order** (`SshForwardLine`,
+`ReadSshForwardLine()`, `SshTunnel::OnForwardLine()`). ssh sets up its local forwards one after
+another, synchronously, right after authenticating, and only then enters `client_loop()`. Koan's
+`-D` is always the first local forward: command-line forwards are added while the options are
+parsed, before any config is read (verified: it is `channel 0`, ahead of a config's
+`LocalForward`). For each forward, `channel_setup_fwd_listener_tcpip()` (`channels.c` ~3888)
+prints the listening line *before* `bind()`, then either an error (`bind …`, `listen …`) or
+nothing:
+
+```
+debug1: Local forwarding listening on 127.0.0.1 port <N>.     kBinding (before bind)
+bind [127.0.0.1]:<N>: Address already in use                  kFailed
+channel_setup_fwd_listener_tcpip: cannot listen to port: <N>  kFailed
+... the user's own forwards ...
+debug1: Entering interactive session.                         kSessionStarted (clientloop.c)
+```
+
+- `kSessionStarted` after `kBinding` for exactly `127.0.0.1 port <N>`, with no `kFailed` for `<N>`
+  between, means ssh holds a listening socket on `127.0.0.1:N`. Only then is the port probed,
+  and a SOCKS5 answer means "connected".
+- Nobody else can hold the same address and port at that point. ssh sets `SO_REUSEADDR` but not
+  `SO_REUSEPORT` (`set_reuseaddr()`), so an exact duplicate bind fails both on Linux and on
+  macOS/BSD, where sharing needs `SO_REUSEPORT` on every socket. A wildcard (`0.0.0.0:N`) listener
+  can coexist on macOS, but a connection to `127.0.0.1` goes to the more specific socket, ssh's.
+- The listening line alone is no proof: it comes before `bind()`, and Koan could probe between
+  it and the bind error. Neither is `Entering interactive session.` alone: a ProxyJump's ssh
+  prints it too if the user's config gives that hop `LogLevel DEBUG`, and it comes before ours.
+  So a session line without the listening line first is ignored. A ProxyJump's ssh has no
+  forwards at all (`-W` implies `ClearAllForwardings`, `readconf.c fill_default_options()`), so
+  every forward line is the main ssh's.
+- `kFailed` (a bind, listen or socket error for `127.0.0.1:N`, `cannot listen to port: N`,
+  `getaddrinfo(127.0.0.1)`, or `Could not request local forwarding.`) before that ends the
+  attempt as `kPortInUse`: ssh is killed and Koan retries at once on a new port.
+- The lines need `-o LogLevel=DEBUG1`. It is set with `-o`, not `-v`: ssh passes only `-v` on to a
+  ProxyJump's ssh (`ssh.c`, "Optional -v arguments if -v set"; verified, the jump's command has
+  no `-v`).
+- No timeout: if the lines never come, the tunnel stays `kConnecting` and fails closed. A
+  timeout would need a start point, and ssh prompts for as long as the user takes.
+- Unit tests: an answer without the listening line never connects; the line for another port,
+  `::1`, `0.0.0.0`, `127.0.0.2` or without `debug1: ` doesn't count; our bind error retries on a
+  new port; the user's failing forward doesn't stop us.
+
+Verified with OpenSSH 10.4p1 against a private `sshd` on 127.0.0.1 (throwaway keys, `-F` config).
+Each line is ssh's, ending `\r\n` (`log.c do_log()`):
+
+- **Plain key login:** `Authenticated to 127.0.0.1 ([127.0.0.1]:2299) using "publickey".`,
+  `debug1: Local connections to 127.0.0.1:41234 forwarded to remote address socks:0`,
+  `debug1: Local forwarding listening on 127.0.0.1 port 41234.`,
+  `debug1: channel 0: new port-listener [port listener] (inactive timeout: 0)`,
+  `debug1: Requesting no-more-sessions@openssh.com`, `debug1: Entering interactive session.`, all
+  at 0.130 s. The SOCKS5 probe then answered `05 00`.
+- **Another process already listening on our port:** the listening line, then
+  `bind [127.0.0.1]:41235: Address already in use`,
+  `channel_setup_fwd_listener_tcpip: cannot listen to port: 41235`,
+  `Could not request local forwarding.`, and then ssh went on to `Entering interactive
+  session.` and kept running. That is the hijack: with only a SOCKS probe, that listener would
+  have been "connected".
+- **ProxyJump:** `Setting implicit ProxyCommand from ProxyJump: /usr/bin/ssh -F … -W
+  '[%h]:%p' lab` (no `-v`), then the same sequence for our port.
+
+A Python mirror of `ReadSshForwardLine()` and the tunnel's state, run over the raw stderr of four
+runs (another listener on our port, a busy user `LocalForward`, ProxyJump, plain), gave
+`kPortInUse`, then "listening" for the other three. After the chatter filter, the lines kept were
+only the bind errors (and `Permission denied (publickey).` or `connect to host … Connection
+refused` in two failing runs).
+
+**Residual risk.** The lines share stderr with text that the remote side controls: the
+pre-authentication banner (`sshconnect2.c input_userauth_banner`, `fmprintf`) and a
+keyboard-interactive name or instruction (`logit()`, `VIS_SAFE` keeps newlines). A host could
+print a fake listening line and session line for `<N>`. Only a host whose key the user has
+already accepted can do this, since the banner comes after the key exchange. The destination
+host gains nothing: it is the SOCKS exit and sees all of the Space's traffic anyway. A malicious
+*jump* host could, if a local process also wins the bind race on an unpredictable port. Both
+are accepted.
+
+**Alternatives considered.**
+- On macOS, `libproc` (`proc_listpgrppids()` over the tunnel's process group, then
+  `PROC_PIDLISTFDS` and `PROC_PIDFDSOCKETINFO`, looking for a TCP listener on `127.0.0.1:N`)
+  would prove ownership in the kernel. It is Mac-only code that can't be compiled or tested on
+  Linux, it needs a different implementation per OS (`/proc/net/tcp` plus fd inodes on Linux),
+  and it polls. It could be added on top later.
+- `-E <fifo>` would send ssh's log away from stderr and the banner, but keyboard-interactive
+  text would still reach it, and Koan would read two streams.
+- A Unix-socket `-D` doesn't exist (`DynamicForward` takes only `[address:]port`).
 
 ## The command
 
 ```
 /bin/sh -c <supervisor> koan-ssh-tunnel \
   /usr/bin/ssh -N -n -T -D 127.0.0.1:<port> \
-    -o ExitOnForwardFailure=yes -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
+    -o ExitOnForwardFailure=no -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
     -o ConnectTimeout=15 -o ControlMaster=no -o ControlPath=none \
     -o ForkAfterAuthentication=no -o RemoteCommand=none -o RequestTTY=no \
-    -o PermitLocalCommand=no -o LogLevel=INFO [-p port] [-l user] -- <host>
-env: inherited (SSH_AUTH_SOCK, HOME, PATH) + SSH_ASKPASS=<dir>/askpass
+    -o PermitLocalCommand=no -o LogLevel=DEBUG1 [-p port] [-l user] -- <host>
+env: inherited (SSH_AUTH_SOCK, HOME) + SSH_ASKPASS=<dir>/askpass
      SSH_ASKPASS_REQUIRE=force, SSH_ASKPASS_PROMPT unset
+     PATH=<inherited, or /usr/bin:/bin:/usr/sbin:/sbin>:/opt/homebrew/bin:/usr/local/bin
+     LC_CTYPE=UTF-8 if none of LC_ALL, LC_CTYPE, LANG is set
 ```
 
 - **Binaries.** Only `/usr/bin/ssh` and `/bin/sh` are used. Each must be a regular executable
   owned by root and writable by nobody else (on macOS both sit on the SIP-protected system
-  volume). PATH is never searched.
+  volume). PATH is never searched for them.
+- **PATH.** A GUI app on macOS gets launchd's `/usr/bin:/bin:/usr/sbin:/sbin`, so a
+  `ProxyCommand` such as `cloudflared access ssh …` or `tailscale nc %h %p` (installed by Homebrew
+  in `/opt/homebrew/bin` on Apple Silicon, `/usr/local/bin` on Intel) would fail with "command not
+  found". ssh runs it through the user's shell with this PATH. Koan appends both directories
+  after whatever PATH it has (the system's, if none), unless they are already there, so system
+  tools keep precedence. Both directories belong to the user, and so does every process that can
+  write to them, which is out of scope as for `~/.ssh`. The askpass helper sets its own
+  `PATH=/usr/bin:/bin`.
+- **Locale.** A GUI app usually has no `LANG`, so ssh's `msetlocale()` (`utf8.c`) leaves the C
+  locale, and non-ASCII text (a server's prompt, a name) is shown as `\ooo` escapes. When none of
+  `LC_ALL`, `LC_CTYPE` and `LANG` is set (or all are empty), Koan sets `LC_CTYPE=UTF-8`.
+  `UTF-8` is a valid macOS `LC_CTYPE` name: `/usr/share/locale/UTF-8/LC_CTYPE` exists, and
+  Terminal sets `LC_CTYPE=UTF-8` itself (from macOS's locale layout, not checked on the bench;
+  Linux has no such locale, so there the variable does nothing). With `-N` ssh opens no session
+  channel, so the `SendEnv LANG LC_*` in macOS's `/etc/ssh/ssh_config` sends nothing to the
+  server.
+- **Debug output.** At `LogLevel=DEBUG1` ssh prints about 60 lines for a plain login. The tunnel
+  reads its two lines (above). `AddSshStderrLine()` drops every `debug1:`/`debug2:`/`debug3:`
+  line, plus the verbose notes that `INFO` hides (`Authenticated to …`, `Transferred: …`,
+  `Bytes per second: …`), so they can't push real errors out of the 40-line cap or become a
+  failure's detail. That way the failure is classified from the same lines as at `INFO`. A
+  `debug1:` line can name a `ProxyCommand` (`Executing proxy command: exec …`), paths and the
+  server's `Remote:` notes, and it is never kept. No log line has a secret in it: passwords,
+  passphrases and keyboard-interactive answers are never logged (`readpass.c` logs only
+  `read_passphrase: requested to askpass`, and `sshconnect2.c` logs the number of prompts at
+  debug2, never a response).
 - **No connection sharing.** A ControlMaster would make this ssh a mux client of another process,
   or a master that outlives it. ForkAfterAuthentication (`-f`) would daemonize out of the process
   group.
 - **The user's config** still applies: keys, `IdentityAgent`, `ProxyJump`/`ProxyCommand`
   (their children stay in the group), `User`, `Port`, `HostName`, known_hosts.
   - Accepting a new host key adds it to `~/.ssh/known_hosts`, as in a terminal.
-  - A `LocalForward`/`RemoteForward`/`DynamicForward` in the config also applies, and a failing
-    one ends the tunnel (`ExitOnForwardFailure`). This is an open question.
+  - A `LocalForward`/`RemoteForward`/`DynamicForward` in the config also applies to Koan's ssh.
+    `ClearAllForwardings=yes` would clear Koan's `-D` too, so they stay. With
+    `ExitOnForwardFailure=yes`, one that failed (very often the case: a terminal's ssh already
+    holds `LocalForward 3000 localhost:3000`) would end the tunnel and make it retry forever.
+    So Koan passes `ExitOnForwardFailure=no` and watches only its own `-D` (above). Verified: with
+    port 3999 taken and `LocalForward 3999 localhost:22` in the config, ssh printed
+    `bind [127.0.0.1]:3999: Address already in use`, went on to
+    `Entering interactive session.`, and our port answered `05 00`. The failed user forward's
+    line stays in the stderr lines, but it is never read as a port clash
+    (`ClassifySshExit()` no longer returns `kPortInUse`; only the tunnel does, by port).
+  - A user forward that works is opened by Koan's ssh too, as by any ssh to that host.
 
 ## Process lifetime
 
@@ -239,7 +372,8 @@ Retry and recovery:
 
 - **Backoff.** Retries back off at 1, 2, 4, … up to 60 s. A connection that lasts 30 s resets the
   backoff; one that flaps keeps growing it.
-- **Port clashes** are retried at once, up to 3 times, on a new port. Otherwise the last port is
+- **Port clashes** (ssh's bind error for Koan's own port, read while it runs) are retried at
+  once, up to 3 times, on a new port. Otherwise the last port is
   reused, so PR 1's proxy setting usually stays the same.
 - **Never retried:** `kHostKeyChanged`, `kHostKeyNotVerified` (rejected, or strict checking),
   `kAuthFailed`, `kCancelled`, `kBadConfig`, `kSshTooOld` and `kSshNotFound`. Only
@@ -285,12 +419,10 @@ Retry and recovery:
 - **The macOS 15+ Local Network privacy prompt.** ssh connecting to a LAN address is attributed
   to Koan (the responsible process), so the first connection shows "Koan would like to find
   devices on your local network". That is expected. `disclaim_responsibility` is left off.
-- **Forwards in the user's config** (`LocalForward` and the like) apply to Koan's ssh too, and a
-  failing one ends the tunnel. `ClearAllForwardings` would also clear Koan's `-D`, so there is no
-  clean fix. The UI could show the stderr detail.
-- **The locale.** A GUI app's environment usually has no `LANG`, so ssh may print non-ASCII prompt
-  text as `\ooo` escapes (`utf8.c`). Setting `LC_CTYPE=UTF-8` for ssh would fix that. It isn't
-  set yet.
+- **Apple's ssh messages.** The listening and session lines are checked against OpenSSH 9.9
+  sources and 10.4 runs. Apple's `/usr/bin/ssh` is OpenSSH 9.x with Apple's patches. The Mac test
+  plan has to confirm a real connection; if Apple's text differed, the tunnel would stay
+  `kConnecting` (fail closed) and the unit tests that pin the strings would need updating.
 - **A Homebrew ssh** (`/opt/homebrew/bin/ssh`) is ignored on purpose. A pref could allow it later.
 - **ServerAlive** is 10 s × 3. It could be shorter for faster detection, at the cost of more
   keepalive traffic.

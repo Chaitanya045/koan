@@ -47,11 +47,14 @@ TEST(KoanSshFailureTest, ClassifiesOpenSshMessages) {
             SshFailure::kHostUnreachable);
   EXPECT_EQ(Classify({"Connection timed out during banner exchange"}),
             SshFailure::kHostUnreachable);
-  EXPECT_EQ(Classify({"bind [127.0.0.1]:41234: Address already in use",
+  // The tunnel itself notices its own forward failing (ReadSshForwardLine());
+  // when ssh exits, a bind error is the user's own forward's.
+  EXPECT_EQ(Classify({"bind [127.0.0.1]:3000: Address already in use",
                       "channel_setup_fwd_listener_tcpip: cannot listen to "
-                      "port: 41234",
-                      "Could not request local forwarding."}),
-            SshFailure::kPortInUse);
+                      "port: 3000",
+                      "Connection to box closed by remote host."},
+                     255, true),
+            SshFailure::kConnectionLost);
   EXPECT_EQ(Classify({"Timeout, server box not responding."}, 255, true),
             SshFailure::kConnectionLost);
   EXPECT_EQ(Classify({"Connection to box closed by remote host."}, 255, true),
@@ -103,6 +106,81 @@ TEST(KoanSshFailureTest, KeepsTheLastSanitizedLines) {
   }
   EXPECT_EQ(lines.size(), kMaxSshStderrLines);
   EXPECT_EQ(lines.back().size(), kMaxSshStderrLineLength);
+}
+
+// LogLevel=DEBUG1 prints a hundred lines or more: none of them is kept, so
+// the errors stay, and so does the detail.
+TEST(KoanSshFailureTest, DropsDebugChatter) {
+  std::vector<std::string> lines;
+  AddSshStderrLine(lines,
+                   "ssh: connect to host box port 22: Connection "
+                   "refused\r");
+  for (int i = 0; i < 100; ++i) {
+    AddSshStderrLine(lines,
+                     "debug1: Reading configuration data "
+                     "/Users/me/.ssh/config\r");
+    AddSshStderrLine(lines,
+                     "debug1: Executing proxy command: exec "
+                     "cloudflared access ssh --hostname box\r");
+    AddSshStderrLine(lines, "debug2: channel 0: open confirm rwindow 0\r");
+    AddSshStderrLine(lines, "debug3: send packet: type 5\r");
+    AddSshStderrLine(lines, "debug1: Remote: Agent forwarding disabled.\r");
+  }
+  AddSshStderrLine(lines,
+                   "Authenticated to box ([192.0.2.10]:22) using "
+                   "\"publickey\".\r");
+  AddSshStderrLine(lines,
+                   "Transferred: sent 2928, received 2580 bytes, in "
+                   "0.1 seconds\r");
+  AddSshStderrLine(lines,
+                   "Bytes per second: sent 22834.8, received "
+                   "20121.0\r");
+  EXPECT_THAT(lines, ElementsAre("ssh: connect to host box port 22: Connection "
+                                 "refused"));
+  EXPECT_EQ(SshFailureDetail(lines),
+            "ssh: connect to host box port 22: Connection refused");
+  EXPECT_TRUE(IsSshChatterLine("debug1: Entering interactive session."));
+  EXPECT_FALSE(IsSshChatterLine("Timeout, server box not responding."));
+  EXPECT_FALSE(
+      IsSshChatterLine("bind [127.0.0.1]:41000: Address already in "
+                       "use"));
+}
+
+// As OpenSSH 9.9 (channels.c, ssh.c, clientloop.c) and 10.4 print them.
+TEST(KoanSshFailureTest, ReadsItsOwnForwardsLines) {
+  constexpr uint16_t kPort = 41000;
+  EXPECT_EQ(ReadSshForwardLine(
+                "debug1: Local forwarding listening on 127.0.0.1 port 41000.\r",
+                kPort),
+            SshForwardLine::kBinding);
+  EXPECT_EQ(
+      ReadSshForwardLine("debug1: Entering interactive session.\r", kPort),
+      SshForwardLine::kSessionStarted);
+  for (const char* line :
+       {"bind [127.0.0.1]:41000: Address already in use\r",
+        "listen [127.0.0.1]:41000: Invalid argument",
+        "socket [127.0.0.1]:41000: Too many open files",
+        "channel_setup_fwd_listener_tcpip: cannot listen to port: 41000",
+        "channel_setup_fwd_listener_tcpip: getaddrinfo(127.0.0.1): Address "
+        "family for hostname not supported",
+        "Could not request local forwarding."}) {
+    EXPECT_EQ(ReadSshForwardLine(line, kPort), SshForwardLine::kFailed) << line;
+  }
+  for (const char* line :
+       {"debug1: Local forwarding listening on 127.0.0.1 port 41001.",
+        "debug1: Local forwarding listening on 127.0.0.1 port 410001.",
+        "debug1: Local forwarding listening on ::1 port 41000.",
+        "debug1: Local forwarding listening on 127.0.0.10 port 41000.",
+        "Local forwarding listening on 127.0.0.1 port 41000.",
+        "x debug1: Entering interactive session.",
+        "bind [127.0.0.1]:4100: Address already in use",
+        "bind [127.0.0.1]:410001: Address already in use",
+        "bind [::1]:41000: Address already in use",
+        "channel_setup_fwd_listener_tcpip: cannot listen to port: 410001",
+        "channel_setup_fwd_listener_tcpip: cannot listen to port: 1000",
+        "Timeout, server box not responding."}) {
+    EXPECT_EQ(ReadSshForwardLine(line, kPort), SshForwardLine::kOther) << line;
+  }
 }
 
 TEST(KoanSshFailureTest, DetailIsTheLastErrorLine) {

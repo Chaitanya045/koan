@@ -155,6 +155,7 @@ void SshTunnel::BeginAttempt() {
   probe_timer_.Stop();
   CancelPrompts();
   stderr_lines_.clear();
+  forward_ = ForwardState::kWaiting;
   needed_input_ = false;
   cancelled_ = false;
   connected_at_ = base::TimeTicks();
@@ -194,13 +195,40 @@ void SshTunnel::OnPortPicked(int attempt, std::optional<uint16_t> port) {
   callbacks.on_exit =
       base::BindOnce(&SshTunnel::OnExit, weak_factory_.GetWeakPtr(), attempt);
   process_ = platform_->Launch(destination_, port_, std::move(callbacks));
-  ScheduleProbe();
 }
 
 void SshTunnel::OnStderrLine(int attempt, std::string line) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (attempt == attempt_) {
-    AddSshStderrLine(stderr_lines_, line);
+  if (attempt != attempt_) {
+    return;
+  }
+  AddSshStderrLine(stderr_lines_, line);
+  OnForwardLine(ReadSshForwardLine(line, port_));
+}
+
+void SshTunnel::OnForwardLine(SshForwardLine line) {
+  if (!process_ || forward_ == ForwardState::kListening) {
+    return;
+  }
+  switch (line) {
+    case SshForwardLine::kOther:
+      return;
+    case SshForwardLine::kBinding:
+      forward_ = ForwardState::kBinding;
+      return;
+    case SshForwardLine::kFailed:
+      // ssh would carry on without the forward (ExitOnForwardFailure=no, so
+      // that the user's own forwards can fail harmlessly).
+      EndAttempt(SshFailure::kPortInUse, SshFailureDetail(stderr_lines_));
+      return;
+    case SshForwardLine::kSessionStarted:
+      // Without kBinding first, this is another ssh's (a ProxyJump's at the
+      // user's LogLevel), or Koan's -D wasn't set up: wait.
+      if (forward_ == ForwardState::kBinding) {
+        forward_ = ForwardState::kListening;
+        Probe();
+      }
+      return;
   }
 }
 
@@ -277,7 +305,8 @@ void SshTunnel::ScheduleProbe() {
 }
 
 void SshTunnel::Probe() {
-  if (!process_ || status_.state == SshTunnelState::kConnected) {
+  if (!process_ || forward_ != ForwardState::kListening ||
+      status_.state == SshTunnelState::kConnected) {
     return;
   }
   platform_->ProbeSocks(port_,

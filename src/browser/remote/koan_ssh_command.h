@@ -5,6 +5,7 @@
 #ifndef KOAN_BROWSER_REMOTE_KOAN_SSH_COMMAND_H_
 #define KOAN_BROWSER_REMOTE_KOAN_SSH_COMMAND_H_
 
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -76,11 +77,19 @@ std::vector<std::string> BuildSupervisedArgv(
 // The supervisor script itself (for tests and the design note).
 std::string_view SshSupervisorScript();
 
-// The environment changes for ssh: Koan's own environment is inherited
-// (SSH_AUTH_SOCK, HOME, PATH), plus the askpass helper, forced even without a
-// display (SSH_ASKPASS_REQUIRE=force, OpenSSH 8.4+). An empty value unsets a
-// variable (base::LaunchOptions::environment).
-base::EnvironmentMap BuildSshEnvironment(const base::FilePath& askpass_helper);
+// The PATH ssh gets when Koan has none, and the directories appended to it
+// (Homebrew's on Apple Silicon and Intel) for a ProxyCommand's tools.
+inline constexpr char kSshDefaultPath[] = "/usr/bin:/bin:/usr/sbin:/sbin";
+inline constexpr std::array<std::string_view, 2> kSshExtraPathDirs = {
+    "/opt/homebrew/bin", "/usr/local/bin"};
+
+// The environment changes for ssh, given Koan's `current` one, which is
+// inherited (SSH_AUTH_SOCK, HOME): the askpass helper, forced even without a
+// display (SSH_ASKPASS_REQUIRE=force, OpenSSH 8.4+); PATH with
+// kSshExtraPathDirs after the rest; and LC_CTYPE=UTF-8 when no locale is set.
+// An empty value unsets a variable (base::LaunchOptions::environment).
+base::EnvironmentMap BuildSshEnvironment(const base::FilePath& askpass_helper,
+                                         base::Environment& current);
 
 }  // namespace koan::remote
 
