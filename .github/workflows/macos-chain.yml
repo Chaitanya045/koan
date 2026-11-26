@@ -6,8 +6,10 @@
 # .agent/notes/macos-ci.md.
 #
 # With incremental (the nightly), the fetch job starts from the newest
-# successful nightly's tree and build 1 from its finished out/Koan, so only
-# what changed since is rebuilt; releases always build from scratch.
+# successful develop run's tree and build 1 from its finished out/Koan, so
+# only what changed since is rebuilt; releases always build from scratch.
+# Only a keep_base run (develop built by develop, never unmerged code) leaves
+# its source and out/Koan for later runs to build on.
 #
 # The caller decides whether to build, publishes the .dmg, and grants the
 # jobs' permissions (contents: read; actions: write for the cleanup).
@@ -26,7 +28,12 @@ on:
         default: false
         type: boolean
       incremental:
-        description: Build on the last successful macos.yml run's tree and out/Koan when it can
+        description: Build on the last trusted macos.yml run's tree and out/Koan when it can
+        required: false
+        default: false
+        type: boolean
+      keep_base:
+        description: Keep this run's source and finished out/Koan as a base for later runs (only for a run of develop itself)
         required: false
         default: false
         type: boolean
@@ -84,6 +91,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RUN: ${{ github.run_id }}
+          BRANCH: develop
         run: scripts/ci/find_base.sh macos.yml koan-mac
 
       - name: Fetch Chromium, apply patches and branding, gn gen
@@ -134,8 +142,8 @@ jobs:
           path: ${{ runner.temp }}/koan-mac-source.tar.zst
           archive: false
           overwrite: true
-          # An incremental chain's next nightly builds on it.
-          retention-days: ${{ inputs.incremental && 14 || 3 }}
+          # A keep_base run's next build builds on it.
+          retention-days: ${{ inputs.keep_base && 14 || 3 }}
           if-no-files-found: error
 
   build-01:
@@ -150,6 +158,7 @@ jobs:
       release: ${{ inputs.release }}
       base_run: ${{ needs.fetch.outputs.based_on }}
       incremental: ${{ inputs.incremental }}
+      keep_base: ${{ inputs.keep_base }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -166,6 +175,7 @@ jobs:
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
       incremental: ${{ inputs.incremental }}
+      keep_base: ${{ inputs.keep_base }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -182,6 +192,7 @@ jobs:
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
       incremental: ${{ inputs.incremental }}
+      keep_base: ${{ inputs.keep_base }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -198,6 +209,7 @@ jobs:
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
       incremental: ${{ inputs.incremental }}
+      keep_base: ${{ inputs.keep_base }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -214,6 +226,7 @@ jobs:
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
       incremental: ${{ inputs.incremental }}
+      keep_base: ${{ inputs.keep_base }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -230,6 +243,7 @@ jobs:
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
       incremental: ${{ inputs.incremental }}
+      keep_base: ${{ inputs.keep_base }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -246,6 +260,7 @@ jobs:
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
       incremental: ${{ inputs.incremental }}
+      keep_base: ${{ inputs.keep_base }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -262,6 +277,7 @@ jobs:
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
       incremental: ${{ inputs.incremental }}
+      keep_base: ${{ inputs.keep_base }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -278,6 +294,7 @@ jobs:
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
       incremental: ${{ inputs.incremental }}
+      keep_base: ${{ inputs.keep_base }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -294,6 +311,7 @@ jobs:
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
       incremental: ${{ inputs.incremental }}
+      keep_base: ${{ inputs.keep_base }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -310,6 +328,7 @@ jobs:
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
       incremental: ${{ inputs.incremental }}
+      keep_base: ${{ inputs.keep_base }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -326,6 +345,7 @@ jobs:
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
       incremental: ${{ inputs.incremental }}
+      keep_base: ${{ inputs.keep_base }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -342,6 +362,7 @@ jobs:
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
       incremental: ${{ inputs.incremental }}
+      keep_base: ${{ inputs.keep_base }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -358,6 +379,7 @@ jobs:
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
       incremental: ${{ inputs.incremental }}
+      keep_base: ${{ inputs.keep_base }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -374,6 +396,7 @@ jobs:
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
       incremental: ${{ inputs.incremental }}
+      keep_base: ${{ inputs.keep_base }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -390,6 +413,7 @@ jobs:
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
       incremental: ${{ inputs.incremental }}
+      keep_base: ${{ inputs.keep_base }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -425,10 +449,10 @@ jobs:
 
   # A run that finished doesn't need its out/Koan hand-over archives any
   # more (a failed one keeps them, for "Re-run failed jobs", until they
-  # expire: source 3 days, out 2). Without incremental, its source goes
-  # too. With it, its source and finished out/Koan stay for the next
-  # nightly to build on, and older runs' copies go. The .dmg and the logs
-  # stay.
+  # expire: source 3 days, out 2). Its source goes too, unless it is a
+  # keep_base run: its source and finished out/Koan stay for later runs to
+  # build on, and the copies of older keep_base runs go. A run that is not
+  # one only ever deletes its own archives. The .dmg and the logs stay.
   cleanup:
     name: Delete build archives
     needs: [check]
@@ -441,7 +465,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       RUN: ${{ github.run_id }}
-      INCREMENTAL: ${{ inputs.incremental }}
+      KEEP_BASE: ${{ inputs.keep_base }}
     steps:
       - name: Delete
         run: |
@@ -453,13 +477,18 @@ jobs:
                 gh api -X DELETE "repos/$GH_REPO/actions/artifacts/$id"
               done
           }
-          if [[ $INCREMENTAL != true ]]; then
+          if [[ $KEEP_BASE != true ]]; then
             delete "$RUN" '^koan-mac-(source|out-)'
             exit 0
           fi
-          delete "$RUN" '^koan-mac-out-[0-9]+\\.'
-          # Only finished runs: a running chain still needs its source.
-          gh api "repos/$GH_REPO/actions/workflows/macos.yml/runs?status=completed&per_page=50" --jq '.workflow_runs[].id' |
+          delete "$RUN" '^koan-mac-out-[0-9]+[.]'
+          # Older runs' bases go, but only runs that are over: a running
+          # chain still needs its source. The list's status filter has
+          # missed runs, so each run's own status decides.
+          gh api "repos/$GH_REPO/actions/workflows/macos.yml/runs?per_page=50" --jq '.workflow_runs[].id' |
             while read -r id; do
-              if ((id < RUN)); then delete "$id" '^koan-mac-(source|out-final)\\.'; fi
+              ((id < RUN)) || continue
+              status="$(gh api "repos/$GH_REPO/actions/runs/$id" --jq .status 2>/dev/null || true)"
+              [[ $status == completed ]] || continue
+              delete "$id" '^koan-mac-(source|out-final)[.]'
             done
