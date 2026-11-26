@@ -10,9 +10,9 @@ build, the packaging and the release workflow all use.
 
 | Channel | What it is | Where |
 |---|---|---|
-| **Nightly** | An unsigned dev build of `develop`, every night that something changed. Replaced each time. | The rolling [`nightly`](https://github.com/koan-browser/koan/releases/tag/nightly) pre-release (`macos.yml`) |
+| **Nightly** | An ad hoc signed dev build of `develop`, every night that something changed. Replaced each time. | The rolling [`nightly`](https://github.com/koan-browser/koan/releases/tag/nightly) pre-release (`macos.yml`) |
 | **Alpha** | Tagged releases for early testers: `vX.Y.Z-alpha.N`. | [Releases](https://github.com/koan-browser/koan/releases), marked **Latest** |
-| Beta, Stable | Later, once there is a signed, auto-updating app. | |
+| Beta, Stable | Later. Alphas update in the app first ([Signing and updates](#signing-and-updates)). | |
 
 Every tagged release, alphas included, is a full GitHub release marked
 **Latest**, never a GitHub pre-release. The stage is carried by the title
@@ -39,8 +39,8 @@ GitHub showed none in the repository's sidebar and `/releases/latest` was a
     e.g. `8127.18.2101`. The counter is
     `((MAJOR × 100 + MINOR) × 100 + PATCH) × 1000 + stage × 100 + N`, with
     stage 1 for alpha, 2 beta, 3 rc, and 900 for a final release, so it grows
-    with SemVer. The whole value only goes up, which a future Sparkle updater
-    needs, as long as no release moves to an older Chromium than the one
+    with SemVer. The whole value only goes up, which the in-app updater
+    relies on, as long as no release moves to an older Chromium than the one
     before it: the release workflow checks that against the previous release
     tag. It is also above 0.0.1's `8127.18` (Chromium's own), so
     LaunchServices prefers the newer copy of `Koan.app` when an old one is
@@ -87,7 +87,8 @@ GitHub showed none in the repository's sidebar and `/releases/latest` was a
    (a mismatch fails there, not a day later), then builds for about 16 hours
    (the nightly's chain, `macos-chain.yml`), then publishes the release: the
    title, the notes followed by GitHub's generated notes since the previous
-   release tag, the `.dmg` and its `.sha256`. Publishing waits for the
+   release tag, the `.dmg`, its `.sha256` and `koan-update.json` (see
+   [Signing and updates](#signing-and-updates)). Publishing waits for the
    owner's approval in the `release` environment (the run's page shows
    **Review deployments**); the environment only accepts `v*` tags and
    `develop`.
@@ -108,13 +109,78 @@ their first matching label: Features (`enhancement`, `feature`), Fixes
 everything else. `skip-changelog`, `duplicate`, `invalid`, `wontfix`, `repo`
 and `tracker` are left out.
 
+## Signing and updates
+
+**The app's signature.** Releases (a tag, through `release.yml`) are signed
+with one fixed, self-signed certificate, "Koan Release Signing" (SHA-1
+`41C53B537255BA68D030856528BDACCD559E0B50`, valid until 2056). macOS ties the
+"Koan Safe Storage" keychain item, which holds the key to cookies and
+passwords, to the signing identity. A fixed identity means an update doesn't
+bring the keychain prompt back. It is not a Developer ID certificate and the
+app isn't notarised, so Gatekeeper still warns on the first install.
+Nightlies stay ad hoc signed.
+
+**The update manifest.** Each release carries `koan-update.json`, made by
+[`scripts/ci/update_manifest.py`](../scripts/ci/update_manifest.py). The app
+reads it from the fixed address
+`https://github.com/koan-browser/koan/releases/latest/download/koan-update.json`,
+downloads the disk image it names, and installs it only if the signature
+verifies with the public key built into the app
+([`src/browser/updates/koan_update_public_key.txt`](../src/browser/updates/koan_update_public_key.txt),
+a raw Ed25519 key in base64).
+
+```json
+{
+  "chromium": "158.0.8127.18",
+  "notes_url": "https://github.com/koan-browser/koan/releases/tag/v0.0.3-alpha.1",
+  "platforms": {
+    "mac-arm64": {
+      "sha256": "<64 hex digits>",
+      "signature": "<base64, 64 bytes>",
+      "size": 123456789,
+      "url": "https://github.com/koan-browser/koan/releases/download/v0.0.3-alpha.1/Koan-0.0.3-alpha.1-arm64.dmg"
+    }
+  },
+  "schema": 1,
+  "version": "0.0.3-alpha.1"
+}
+```
+
+The signature covers the UTF-8 bytes of
+`"koan-update-v1\n" + platform + "\n" + version + "\n" + sha256 + "\n" + size + "\n"`
+(`update_manifest.py message` prints them). The version is part of it, so an
+older, genuinely signed disk image can't be served as a newer version.
+`update_manifest.py verify` checks a manifest against a file and a public key.
+
+- `latest/download` finds the newest release that is not a pre-release and
+  not a draft. Alphas must therefore stay full releases (see
+  [Channels](#channels)), or updates stop finding them.
+- Publishing a release replaces what `latest` points at, so a bad release is
+  fixed by publishing a newer one (or by deleting it, which makes `latest`
+  point at the one before).
+
+**The secrets** live in the `release` environment of the repository:
+
+| Secret | What |
+|---|---|
+| `KOAN_CODESIGN_P12` | The "Koan Release Signing" certificate and its private key, as a base64 `.p12` |
+| `KOAN_CODESIGN_P12_PASSWORD` | The password of that `.p12` |
+| `KOAN_UPDATE_SIGNING_KEY` | The Ed25519 private key (PEM) that signs `koan-update.json` |
+
+The maintainer keeps an offline backup of all three. The app only trusts the
+public key it shipped with, so **losing `KOAN_UPDATE_SIGNING_KEY` means every
+user has to reinstall by hand**: never rotate it casually. Never commit a
+private key or a `.p12`, or paste one into a log, an issue or a pull request.
+
 ## What "Alpha" promises
 
 - Settings and profile formats may change between alphas, without a
   migration.
 - Chromium's security fixes are taken on a best-effort basis, not on
   Chrome's schedule.
-- No automatic updater: testers install new versions by hand.
+- Updates: until the in-app updater ships, testers install new versions by
+  hand. It will only ever install releases signed with Koan's update key
+  (see [Signing and updates](#signing-and-updates)).
 - The known issues are listed in every release's notes.
 
 ## Branches
@@ -169,9 +235,9 @@ margin before the deadline for the bigger archive.
 ## Future work
 
 - **Developer ID signing and notarisation:** no more "Apple could not
-  verify" dialog, and no keychain prompt after each update. Needs an Apple
-  Developer account; the signing identity and notarisation credentials go
-  into the release workflow's secrets.
-- **Sparkle 2** for updates: EdDSA-signed updates, an appcast published with
-  each release (`sparkle:version` is `CFBundleVersion`, which only goes up),
-  separate feeds for Alpha and later Beta/Stable. Nightlies stay outside it.
+  verify" dialog on the first install. Needs an Apple Developer account; the
+  signing identity and notarisation credentials go into the release
+  workflow's secrets. Changing the signing identity brings the keychain
+  prompt back once, so it would come with an update.
+- **Beta and Stable update feeds,** next to the Alpha one. Nightlies stay
+  outside updates.
