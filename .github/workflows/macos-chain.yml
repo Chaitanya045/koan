@@ -5,6 +5,10 @@
 # an artifact of the run under the name in the "dmg" output. See
 # .agent/notes/macos-ci.md.
 #
+# With incremental (the nightly), the fetch job starts from the newest
+# successful nightly's tree and build 1 from its finished out/Koan, so only
+# what changed since is rebuilt; releases always build from scratch.
+#
 # The caller decides whether to build, publishes the .dmg, and grants the
 # jobs' permissions (contents: read; actions: write for the cleanup).
 name: macOS build chain
@@ -18,6 +22,11 @@ on:
         type: string
       release:
         description: Name the .dmg Koan-<version>-arm64.dmg (no commit)
+        required: false
+        default: false
+        type: boolean
+      incremental:
+        description: Build on the last successful macos.yml run's tree and out/Koan when it can
         required: false
         default: false
         type: boolean
@@ -46,9 +55,11 @@ jobs:
     timeout-minutes: 300
     permissions:
       contents: read
+      actions: read
     outputs:
       sha: ${{ steps.ref.outputs.sha }}
       chromium: ${{ steps.ref.outputs.chromium }}
+      based_on: ${{ steps.fetch.outputs.based_on }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -66,8 +77,29 @@ jobs:
       - name: Prepare the runner
         run: scripts/ci/mac_runner_setup.sh
 
+      - name: Find a build to build on
+        id: base
+        if: inputs.incremental
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN: ${{ github.run_id }}
+        run: scripts/ci/find_base.sh macos.yml koan-mac
+
       - name: Fetch Chromium, apply patches and branding, gn gen
-        run: scripts/ci/mac_fetch.sh
+        id: fetch
+        env:
+          KOAN_BASE_RUN: ${{ steps.base.outputs.base_run }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          scripts/ci/mac_fetch.sh
+          based_on=$(sed -n 's/^based_on=//p' "$GITHUB_OUTPUT" | tail -1)
+          if [[ -n $based_on ]]; then
+            echo "Incremental: building on run $based_on" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Full build" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       # Packaging only runs at the end of a run, a day or more later: check
       # codesign and hdiutil, ad hoc and with a throwaway certificate, on a
@@ -102,7 +134,8 @@ jobs:
           path: ${{ runner.temp }}/koan-mac-source.tar.zst
           archive: false
           overwrite: true
-          retention-days: 3
+          # An incremental chain's next nightly builds on it.
+          retention-days: ${{ inputs.incremental && 14 || 3 }}
           if-no-files-found: error
 
   build-01:
@@ -110,10 +143,13 @@ jobs:
     uses: ./.github/workflows/macos-build.yml
     permissions:
       contents: read
+      actions: read
     with:
       slice: 1
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
+      base_run: ${{ needs.fetch.outputs.based_on }}
+      incremental: ${{ inputs.incremental }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -124,10 +160,12 @@ jobs:
     uses: ./.github/workflows/macos-build.yml
     permissions:
       contents: read
+      actions: read
     with:
       slice: 2
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
+      incremental: ${{ inputs.incremental }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -138,10 +176,12 @@ jobs:
     uses: ./.github/workflows/macos-build.yml
     permissions:
       contents: read
+      actions: read
     with:
       slice: 3
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
+      incremental: ${{ inputs.incremental }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -152,10 +192,12 @@ jobs:
     uses: ./.github/workflows/macos-build.yml
     permissions:
       contents: read
+      actions: read
     with:
       slice: 4
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
+      incremental: ${{ inputs.incremental }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -166,10 +208,12 @@ jobs:
     uses: ./.github/workflows/macos-build.yml
     permissions:
       contents: read
+      actions: read
     with:
       slice: 5
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
+      incremental: ${{ inputs.incremental }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -180,10 +224,12 @@ jobs:
     uses: ./.github/workflows/macos-build.yml
     permissions:
       contents: read
+      actions: read
     with:
       slice: 6
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
+      incremental: ${{ inputs.incremental }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -194,10 +240,12 @@ jobs:
     uses: ./.github/workflows/macos-build.yml
     permissions:
       contents: read
+      actions: read
     with:
       slice: 7
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
+      incremental: ${{ inputs.incremental }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -208,10 +256,12 @@ jobs:
     uses: ./.github/workflows/macos-build.yml
     permissions:
       contents: read
+      actions: read
     with:
       slice: 8
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
+      incremental: ${{ inputs.incremental }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -222,10 +272,12 @@ jobs:
     uses: ./.github/workflows/macos-build.yml
     permissions:
       contents: read
+      actions: read
     with:
       slice: 9
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
+      incremental: ${{ inputs.incremental }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -236,10 +288,12 @@ jobs:
     uses: ./.github/workflows/macos-build.yml
     permissions:
       contents: read
+      actions: read
     with:
       slice: 10
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
+      incremental: ${{ inputs.incremental }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -250,10 +304,12 @@ jobs:
     uses: ./.github/workflows/macos-build.yml
     permissions:
       contents: read
+      actions: read
     with:
       slice: 11
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
+      incremental: ${{ inputs.incremental }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -264,10 +320,12 @@ jobs:
     uses: ./.github/workflows/macos-build.yml
     permissions:
       contents: read
+      actions: read
     with:
       slice: 12
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
+      incremental: ${{ inputs.incremental }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -278,10 +336,12 @@ jobs:
     uses: ./.github/workflows/macos-build.yml
     permissions:
       contents: read
+      actions: read
     with:
       slice: 13
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
+      incremental: ${{ inputs.incremental }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -292,10 +352,12 @@ jobs:
     uses: ./.github/workflows/macos-build.yml
     permissions:
       contents: read
+      actions: read
     with:
       slice: 14
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
+      incremental: ${{ inputs.incremental }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -306,10 +368,12 @@ jobs:
     uses: ./.github/workflows/macos-build.yml
     permissions:
       contents: read
+      actions: read
     with:
       slice: 15
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
+      incremental: ${{ inputs.incremental }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -320,10 +384,12 @@ jobs:
     uses: ./.github/workflows/macos-build.yml
     permissions:
       contents: read
+      actions: read
     with:
       slice: 16
       sha: ${{ needs.fetch.outputs.sha }}
       release: ${{ inputs.release }}
+      incremental: ${{ inputs.incremental }}
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
@@ -357,9 +423,12 @@ jobs:
           fi
           echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
 
-  # A run that finished doesn't need its source and out/Koan archives any
+  # A run that finished doesn't need its out/Koan hand-over archives any
   # more (a failed one keeps them, for "Re-run failed jobs", until they
-  # expire: source 3 days, out 2). The .dmg and the logs stay.
+  # expire: source 3 days, out 2). Without incremental, its source goes
+  # too. With it, its source and finished out/Koan stay for the next
+  # nightly to build on, and older runs' copies go. The .dmg and the logs
+  # stay.
   cleanup:
     name: Delete build archives
     needs: [check]
@@ -372,12 +441,25 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       RUN: ${{ github.run_id }}
+      INCREMENTAL: ${{ inputs.incremental }}
     steps:
       - name: Delete
         run: |
-          gh api --paginate "repos/$GH_REPO/actions/runs/$RUN/artifacts" \
-            --jq '.artifacts[] | select(.name | test("^koan-mac-(source|out-)")) | "\(.id) \(.name)"' |
-            while read -r id name; do
-              echo "deleting $name"
-              gh api -X DELETE "repos/$GH_REPO/actions/artifacts/$id"
+          delete() {
+            gh api --paginate "repos/$GH_REPO/actions/runs/$1/artifacts" \
+              --jq ".artifacts[] | select(.name | test(\"$2\")) | \"\(.id) \(.name)\"" |
+              while read -r id name; do
+                echo "deleting $name of run $1"
+                gh api -X DELETE "repos/$GH_REPO/actions/artifacts/$id"
+              done
+          }
+          if [[ $INCREMENTAL != true ]]; then
+            delete "$RUN" '^koan-mac-(source|out-)'
+            exit 0
+          fi
+          delete "$RUN" '^koan-mac-out-[0-9]+\\.'
+          # Only finished runs: a running chain still needs its source.
+          gh api "repos/$GH_REPO/actions/workflows/macos.yml/runs?status=completed&per_page=50" --jq '.workflow_runs[].id' |
+            while read -r id; do
+              if ((id < RUN)); then delete "$id" '^koan-mac-(source|out-final)\\.'; fi
             done
