@@ -58,8 +58,58 @@ source_set("user_containers") {
   ]
   public_deps = [
     ":partition",
+    ":proxy",
     "//base",
     "//components/tab_groups",
+  ]
+}
+
+# A proxy per Space (#445): a user container's proxy setting, its runtime
+# state, the proxy configuration they make, and which partition is a user
+# container's (koan_container_proxy.h). Pure logic.
+source_set("proxy") {
+  sources = [
+    "koan_container_proxy.cc",
+    "koan_container_proxy.h",
+  ]
+  public_deps = [
+    ":partition",
+    "//base",
+    "//net",
+  ]
+}
+
+# The hook in chrome/browser/net/profile_network_context_service.cc
+# (koan_container_proxy_hook.h). Header-only, with no dependencies, so the
+# upstream target can depend on it without a cycle; the definition is in
+# :proxies.
+source_set("proxy_hook") {
+  sources = [ "koan_container_proxy_hook.h" ]
+}
+
+# The proxies of a profile's user containers between upstream's
+# ProxyConfigMonitor and their network contexts (koan_container_proxies.h),
+# and the API the SSH tunnel manager and the UI call. Linked through :impl.
+source_set("proxies") {
+  sources = [
+    "koan_container_proxies.cc",
+    "koan_container_proxies.h",
+  ]
+  public_deps = [
+    ":partition",
+    ":proxy",
+    "//base",
+    "//chrome/browser/profiles:profile",
+    "//components/prefs",
+  ]
+  deps = [
+    ":proxy_hook",
+    ":user_containers",
+    "//koan/browser:features",
+    "//koan/browser:prefs",
+    "//mojo/public/cpp/bindings",
+    "//net",
+    "//services/network/public/mojom",
   ]
 }
 
@@ -106,6 +156,7 @@ source_set("impl") {
     ":containers",
     ":grants",
     ":partition",
+    ":proxies",
     ":user_containers",
     "//base",
     "//chrome/browser:browser_process",
@@ -144,12 +195,14 @@ test("koan_containers_unittests") {
     "koan_agent_access_unittest.cc",
     "koan_container_grants_unittest.cc",
     "koan_container_partition_unittest.cc",
+    "koan_container_proxy_unittest.cc",
     "koan_container_restore_unittest.cc",
     "koan_user_containers_unittest.cc",
   ]
   deps = [
     ":grants",
     ":partition",
+    ":proxy",
     ":user_containers",
     "//base",
     "//base/test:test_support",
@@ -159,6 +212,7 @@ test("koan_containers_unittests") {
     "//content/public/browser",
     "//content/test:run_all_unittests",
     "//content/test:test_support",
+    "//net",
     "//testing/gtest",
     "//url",
   ]

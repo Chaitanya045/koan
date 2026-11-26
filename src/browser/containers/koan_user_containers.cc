@@ -18,6 +18,7 @@ namespace {
 constexpr char kIdKey[] = "id";
 constexpr char kNameKey[] = "name";
 constexpr char kColorKey[] = "color";
+constexpr char kProxyKey[] = "proxy";
 
 // Names are what the user types in a prompt: short, printable.
 constexpr size_t kMaxNameLength = 64;
@@ -67,9 +68,36 @@ std::vector<UserContainer> ParseUserContainers(const base::ListValue& list) {
         {.id = {.kind = ContainerKind::kUser, .id = *id},
          .name = *name,
          .color = ColorFromInt(dict->FindInt(kColorKey).value_or(-1))
-                      .value_or(tab_groups::TabGroupColorId::kBlue)});
+                      .value_or(tab_groups::TabGroupColorId::kBlue),
+         .proxy = ProxySettingFromValue(dict->Find(kProxyKey))});
   }
   return containers;
+}
+
+bool SetUserContainerProxy(base::ListValue& list,
+                           const ContainerId& id,
+                           const std::optional<ProxySetting>& proxy) {
+  if (id.kind != ContainerKind::kUser || !IsValidContainerId(id.id) ||
+      !id.persistent()) {
+    return false;
+  }
+  // The first entry ParseUserContainers() reads as `id`; a repeated one is
+  // dropped there anyway.
+  for (base::Value& entry : list) {
+    base::DictValue* dict = entry.GetIfDict();
+    const std::string* entry_id = dict ? dict->FindString(kIdKey) : nullptr;
+    const std::string* name = dict ? dict->FindString(kNameKey) : nullptr;
+    if (!entry_id || *entry_id != id.id || !name || name->empty()) {
+      continue;
+    }
+    if (proxy) {
+      dict->Set(kProxyKey, ProxySettingToValue(*proxy));
+    } else {
+      dict->Remove(kProxyKey);
+    }
+    return true;
+  }
+  return false;
 }
 
 std::optional<UserContainer> AddUserContainer(base::ListValue& list,

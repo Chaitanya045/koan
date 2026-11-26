@@ -87,6 +87,53 @@ TEST(UserContainersTest, AddRefusesBadNames) {
   EXPECT_TRUE(AddUserContainer(list, std::u16string(64, u'x')));
 }
 
+TEST(UserContainersTest, ProxyIsReadValidated) {
+  base::ListValue list;
+  list.Append(base::DictValue()
+                  .Set("id", "swork")
+                  .Set("name", "Work")
+                  .Set("proxy", base::DictValue().Set(
+                                    "server", "socks5://127.0.0.1:1080")));
+  // An invalid proxy reads as none; the container stays.
+  list.Append(
+      base::DictValue()
+          .Set("id", "shome")
+          .Set("name", "Home")
+          .Set("proxy", base::DictValue().Set("server", "socks4://h:1")));
+  const std::vector<UserContainer> parsed = ParseUserContainers(list);
+  ASSERT_EQ(2u, parsed.size());
+  EXPECT_EQ((ProxySetting{.server = "socks5://127.0.0.1:1080"}),
+            parsed[0].proxy);
+  EXPECT_FALSE(parsed[1].proxy);
+}
+
+TEST(UserContainersTest, SetProxySavesAndRemoves) {
+  base::ListValue list;
+  const std::optional<UserContainer> work = AddUserContainer(list, u"Work");
+  const std::optional<UserContainer> home = AddUserContainer(list, u"Home");
+  ASSERT_TRUE(work && home);
+  const ProxySetting setting{.server = "socks5://127.0.0.1:1080"};
+
+  EXPECT_TRUE(SetUserContainerProxy(list, work->id, setting));
+  std::vector<UserContainer> parsed = ParseUserContainers(list);
+  EXPECT_EQ(setting, parsed[0].proxy);
+  EXPECT_FALSE(parsed[1].proxy);
+  // The rest of the entry is kept.
+  EXPECT_EQ("Work", parsed[0].name);
+  EXPECT_EQ(work->color, parsed[0].color);
+
+  EXPECT_TRUE(SetUserContainerProxy(list, work->id, std::nullopt));
+  EXPECT_FALSE(ParseUserContainers(list)[0].proxy);
+  EXPECT_FALSE(list[0].GetDict().contains("proxy"));
+
+  // Not one of the user's containers.
+  EXPECT_FALSE(SetUserContainerProxy(list, kHome, setting));
+  EXPECT_FALSE(SetUserContainerProxy(
+      list, {.kind = ContainerKind::kAgent, .id = work->id.id}, setting));
+  EXPECT_FALSE(SetUserContainerProxy(
+      list, {.kind = ContainerKind::kUser, .id = "twork"}, setting));
+}
+
 // The rules of .agent/notes/upstream/space-containers.md, by number.
 TEST(NewTabContainerTest, Rules) {
   const std::string work = "user:swork";
