@@ -10,3 +10,7 @@ test_key_ed25519
 /Users/Shared
 # A fixture's fake home folder in scripts/tests/test_branding.py.
 /Users/me
+# OpenSSH's standard config and known-hosts files (not keys), for the remote
+# Spaces tunnel (src/browser/remote, #445).
+.ssh/config
+.ssh/known_hosts

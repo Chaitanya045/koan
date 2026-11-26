@@ -1,0 +1,72 @@
+# Copyright 2026 The Koan Authors
+# Use of this source code is governed by the MIT license that can be
+# found in the LICENSE file.
+
+# Remote Spaces (#445): a Space's SSH tunnel. The system ssh runs as a SOCKS5
+# proxy on loopback, with the user's own config, keys and agent; its prompts
+# come to Koan through an askpass helper. Design and OpenSSH facts:
+# .agent/notes/upstream/remote-spaces.md. Unit tested in
+# //koan/test:koan_unittests.
+
+# The host list, destinations, ssh's command line, failure reasons, the
+# askpass protocol and the tunnel's state machine: //base only, the system
+# behind an interface (SshTunnelPlatform).
+source_set("remote") {
+  sources = [
+    "koan_ssh_askpass.cc",
+    "koan_ssh_askpass.h",
+    "koan_ssh_command.cc",
+    "koan_ssh_command.h",
+    "koan_ssh_config.cc",
+    "koan_ssh_config.h",
+    "koan_ssh_failure.cc",
+    "koan_ssh_failure.h",
+    "koan_ssh_text.cc",
+    "koan_ssh_text.h",
+    "koan_ssh_tunnel.cc",
+    "koan_ssh_tunnel.h",
+  ]
+  public_deps = [ "//base" ]
+  deps = [ "//third_party/boringssl" ]
+}
+
+# The real SshTunnelPlatform: processes, FIFOs and sockets (POSIX; Koan ships
+# on macOS).
+source_set("platform") {
+  sources = [
+    "koan_ssh_askpass_server.cc",
+    "koan_ssh_askpass_server.h",
+    "koan_ssh_tunnel_platform_posix.cc",
+    "koan_ssh_tunnel_platform_posix.h",
+  ]
+  public_deps = [
+    ":remote",
+    "//base",
+  ]
+}
+
+# Sleep, wake and network changes for a tunnel.
+source_set("system_events") {
+  sources = [
+    "koan_ssh_tunnel_system_events.cc",
+    "koan_ssh_tunnel_system_events.h",
+  ]
+  public_deps = [
+    "//base",
+    "//net",
+  ]
+  deps = [ ":remote" ]
+}
+
+# Fakes of the platform and the prompt UI, for the tunnel's tests and PR 3's.
+source_set("test_support") {
+  testonly = true
+  sources = [
+    "koan_ssh_test_fakes.cc",
+    "koan_ssh_test_fakes.h",
+  ]
+  public_deps = [
+    ":remote",
+    "//base",
+  ]
+}
