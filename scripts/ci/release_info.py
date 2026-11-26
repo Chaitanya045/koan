@@ -11,8 +11,10 @@
         - docs/releases/<VERSION>.md exists and has no TODO(release) left;
         - the app's CFBundleVersion goes up from the previous release's
           (the highest v* tag below this one).
-      Prints version, short, label, title, chromium, bundle,
-      notes and previous_tag as key=value lines, also to $GITHUB_OUTPUT.
+      Prints version, short, label, title, chromium, bundle, notes,
+      previous_tag and latest (true unless a v* tag has a higher version,
+      e.g. a fix on a release/<major> branch) as key=value lines, also to
+      $GITHUB_OUTPUT.
 
   release_info.py notes --notes docs/releases/<v>.md --dmg <file>
       --sha256 <hex> [--generated <file>] --output <file>
@@ -89,6 +91,19 @@ def previous_tag(tags, version):
   return best
 
 
+def is_latest(tags, version):
+  """Whether no v<SemVer> tag is above `version` (others are ignored)."""
+  current = koan_version.counter(version)
+  for tag in tags:
+    try:
+      other = version_from_tag(tag.strip())
+    except ReleaseError:
+      continue
+    if koan_version.counter(other) > current:
+      return False
+  return True
+
+
 def bundle_at(version_text, pin_text):
   """The CFBundleVersion a release had, from its VERSION and CHROMIUM_VERSION.
 
@@ -116,7 +131,7 @@ def title(version, chromium):
   return koan_version.title(version, chromium)
 
 
-def info(version, chromium, notes, previous):
+def info(version, chromium, notes, previous, latest=True):
   return {
       'version': version.text,
       'short': koan_version.short(version),
@@ -126,6 +141,7 @@ def info(version, chromium, notes, previous):
       'bundle': koan_version.bundle_version(version, chromium),
       'notes': notes,
       'previous_tag': previous,
+      'latest': 'true' if latest else 'false',
   }
 
 
@@ -153,14 +169,16 @@ def _check(args):
   chromium = koan_version.read_pin(root / 'CHROMIUM_VERSION')
   path = notes_path(root, version)
   check_notes(path)
-  previous = previous_tag(_git(root, 'tag', '--list', 'v*').split(), version)
+  tags = _git(root, 'tag', '--list', 'v*').split()
+  previous = previous_tag(tags, version)
   if previous:
     previous_bundle = bundle_at(
         _git(root, 'show', previous + ':VERSION', check=False),
         _git(root, 'show', previous + ':CHROMIUM_VERSION'))
     check_bundle_goes_up(koan_version.bundle_version(version, chromium),
                          previous_bundle, previous)
-  return info(version, chromium, str(path.relative_to(root)), previous)
+  return info(version, chromium, str(path.relative_to(root)), previous,
+              is_latest(tags, version))
 
 
 def main(argv):

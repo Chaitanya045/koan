@@ -637,7 +637,6 @@ void Gateway::OnPrepared(uint64_t generation, PreparedSocket prepared) {
   lock_ = std::move(prepared.lock);
   socket_identity_ = identity;
   state_ = State::kStarted;
-  timer_.Start(FROM_HERE, base::Seconds(1), this, &Gateway::CheckTimeouts);
   DoAccept();
   FinishStart(StartResult::kOk);
 }
@@ -770,6 +769,13 @@ void Gateway::AddConnection(int fd) {
   auto connection = std::make_unique<Connection>(this, id, std::move(socket));
   Connection* raw = connection.get();
   connections_[id] = std::move(connection);
+  // Nothing needs checking while no connection exists, so the timer runs only
+  // while there is one. Every deadline is measured on the tick clock from the
+  // moment its connection arrived (or its event happened), never from a tick of
+  // this timer, so starting it now does not let this connection outlive them.
+  if (!timer_.IsRunning()) {
+    timer_.Start(FROM_HERE, base::Seconds(1), this, &Gateway::CheckTimeouts);
+  }
   raw->Start();
 }
 
@@ -783,6 +789,9 @@ void Gateway::Remove(ConnectionAdmission::Id id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   connections_.erase(id);
   admission_.Release(id);
+  if (connections_.empty()) {
+    timer_.Stop();
+  }
 }
 
 void Gateway::SetLimits(const RateLimiter::Limits& limits) {

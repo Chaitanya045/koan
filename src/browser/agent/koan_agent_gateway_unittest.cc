@@ -552,6 +552,71 @@ TEST_F(KoanAgentGatewayTest,
   resolver_->Release();  // the lookup finally returns, to nobody
 }
 
+// The timer only enforces deadlines, so with nothing connected it must not
+// wake the browser once a second.
+TEST_F(KoanAgentGatewayTest, NoTimerRunsWhileThereIsNoConnection) {
+  EXPECT_TRUE(gateway_->started());
+  EXPECT_FALSE(gateway_->timer_running_for_testing());
+  // Nor does it after a restart, or after a peer that was refused.
+  gateway_->Stop();
+  EXPECT_FALSE(gateway_->timer_running_for_testing());
+  ASSERT_EQ(StartAndWait(*gateway_), Gateway::StartResult::kOk);
+  EXPECT_FALSE(gateway_->timer_running_for_testing());
+  resolver_->no_token = true;
+  auto refused = Connect();
+  EXPECT_EQ(ErrorCode(refused->Read()), "Koan.peerUnresolved");
+  ASSERT_TRUE(WaitForConnections(0));
+  EXPECT_FALSE(gateway_->timer_running_for_testing());
+}
+
+TEST_F(KoanAgentGatewayTest, TheTimerRunsWhileThereAreConnectionsAndNoLonger) {
+  auto first = LiveConnection();
+  EXPECT_TRUE(gateway_->timer_running_for_testing());
+  auto second = LiveConnection("/tmp/second");
+  ASSERT_TRUE(WaitForConnections(2));
+  EXPECT_TRUE(gateway_->timer_running_for_testing());
+
+  first.reset();
+  ASSERT_TRUE(WaitForConnections(1));
+  EXPECT_TRUE(gateway_->timer_running_for_testing());
+  second.reset();
+  ASSERT_TRUE(WaitForConnections(0));
+  EXPECT_FALSE(gateway_->timer_running_for_testing());
+
+  // A later connection starts it again.
+  auto third = LiveConnection();
+  EXPECT_TRUE(gateway_->timer_running_for_testing());
+}
+
+TEST_F(KoanAgentGatewayTest, StoppingStopsTheTimer) {
+  auto client = LiveConnection();
+  ASSERT_TRUE(gateway_->timer_running_for_testing());
+  gateway_->Stop();
+  EXPECT_FALSE(gateway_->timer_running_for_testing());
+}
+
+// The deadlines run from the connection's arrival, and the timer that started
+// with it enforces them without anyone calling CheckTimeouts().
+TEST_F(KoanAgentGatewayTest, TheTimerClosesASilentConnectionByItself) {
+  auto client = LiveConnection();
+  ticks_.Advance(Session::kPreAuthDeadline + base::Seconds(1));
+  EXPECT_TRUE(client->WaitForClose());
+  EXPECT_TRUE(WaitForConnections(0));
+  EXPECT_FALSE(gateway_->timer_running_for_testing());
+}
+
+TEST_F(KoanAgentGatewayTest, TheTimerClosesAConnectionThatIsNeverResolved) {
+  resolver_->block = true;
+  auto client = Connect();
+  ASSERT_TRUE(WaitForConnections(1));
+  ASSERT_TRUE(gateway_->timer_running_for_testing());
+  ticks_.Advance(Gateway::kResolveDeadline + base::Seconds(1));
+  EXPECT_EQ(ErrorCode(client->Read()), "Koan.peerUnresolved");
+  EXPECT_TRUE(WaitForConnections(0));
+  EXPECT_FALSE(gateway_->timer_running_for_testing());
+  resolver_->Release();
+}
+
 TEST_F(KoanAgentGatewayTest, AStalledFrameClosesTheConnection) {
   auto client = Connect();
   // A whole request and, in the same write, the start of another: once the

@@ -75,9 +75,6 @@ constexpr base::TimeDelta kFadeDuration = base::Milliseconds(150);
 // first pop the extension out), the button stays for its popup to point at.
 constexpr base::TimeDelta kPressHold = base::Seconds(1);
 
-// How often to look whether the popup that keeps the buttons shown is gone.
-constexpr base::TimeDelta kPopupPollInterval = base::Milliseconds(200);
-
 const gfx::Size& ButtonSize() {
   static const gfx::Size size(kUrlPillButtonSize, kUrlPillButtonSize);
   return size;
@@ -96,7 +93,9 @@ class KoanSidebarExtensionsView::Button
  public:
   Button(KoanSidebarExtensionsView* owner,
          ToolbarActionsModel::ActionId action_id)
-      : owner_(owner), action_id_(std::move(action_id)) {
+      : owner_(owner),
+        owner_weak_(owner->GetWeakPtr()),
+        action_id_(std::move(action_id)) {
     SetCallback(base::BindRepeating(&KoanSidebarExtensionsView::OnButtonPressed,
                                     base::Unretained(owner_),
                                     base::Unretained(this)));
@@ -162,6 +161,21 @@ class KoanSidebarExtensionsView::Button
     views::MenuButton::OnDragDone();
     owner_->OnButtonDragDone();
   }
+  // A button that has focus keeps the buttons shown. (Through the weak
+  // pointer: the focus goes as the buttons are removed, which includes the
+  // owner's destruction, when its members are gone.)
+  void OnFocus() override {
+    views::MenuButton::OnFocus();
+    if (owner_weak_) {
+      owner_weak_->UpdateReveal();
+    }
+  }
+  void OnBlur() override {
+    views::MenuButton::OnBlur();
+    if (owner_weak_) {
+      owner_weak_->UpdateReveal();
+    }
+  }
 
   // ExtensionContextMenuController::Observer:
   void OnContextMenuShown() override { owner_->UpdateReveal(); }
@@ -169,6 +183,7 @@ class KoanSidebarExtensionsView::Button
 
  private:
   const raw_ptr<KoanSidebarExtensionsView> owner_;
+  const base::WeakPtr<KoanSidebarExtensionsView> owner_weak_;
   const ToolbarActionsModel::ActionId action_id_;
   // Only to tell whether the subscription is for the current model; never
   // dereferenced (the container owns the models).
@@ -571,6 +586,10 @@ void KoanSidebarExtensionsView::OnTabStripModelChanged(
   }
 }
 
+void KoanSidebarExtensionsView::OnPopupClosed() {
+  UpdateReveal();
+}
+
 void KoanSidebarExtensionsView::OnSidebarHovered(bool hovered) {
   sidebar_hovered_ = hovered;
   UpdateReveal();
@@ -640,11 +659,14 @@ void KoanSidebarExtensionsView::Rebuild() {
     ReorderChildView(button, i);
     buttons.push_back(button);
   }
-  for (Button* gone : buttons_) {
-    gone->ResetMenu();
-    RemoveChildViewT(gone);
-  }
+  // (The buttons that go lose their focus as they are removed, which looks at
+  // `buttons_`: only the ones that stay are in it by then.)
+  std::vector<Button*> gone(buttons_.begin(), buttons_.end());
   buttons_ = std::move(buttons);
+  for (Button* button : gone) {
+    button->ResetMenu();
+    RemoveChildViewT(button);
+  }
   if (dragged_id_ && std::ranges::find(ids, *dragged_id_) == ids.end()) {
     dragged_id_.reset();
   }
@@ -680,8 +702,7 @@ bool KoanSidebarExtensionsView::ShouldReveal() const {
   if (fitting_ == 0) {
     return false;
   }
-  if (sidebar_hovered_ || dragged_id_ ||
-      base::TimeTicks::Now() < press_hold_until_) {
+  if (sidebar_hovered_ || dragged_id_ || press_hold_timer_.IsRunning()) {
     return true;
   }
   for (Button* button : buttons_) {
@@ -698,15 +719,6 @@ bool KoanSidebarExtensionsView::ShouldReveal() const {
 
 void KoanSidebarExtensionsView::UpdateReveal() {
   const bool reveal = ShouldReveal();
-  // Kept by a popup or a click (not the pointer): look again until it's gone.
-  if (reveal && !sidebar_hovered_) {
-    if (!popup_timer_.IsRunning()) {
-      popup_timer_.Start(FROM_HERE, kPopupPollInterval, this,
-                         &KoanSidebarExtensionsView::UpdateReveal);
-    }
-  } else {
-    popup_timer_.Stop();
-  }
   if (reveal == revealed_) {
     return;
   }
@@ -746,7 +758,8 @@ void KoanSidebarExtensionsView::OnButtonPressed(Button* button) {
   }
   // The popup points at the button: keep it (and, in compact mode, the
   // peeked sidebar) there while it opens.
-  press_hold_until_ = base::TimeTicks::Now() + kPressHold;
+  press_hold_timer_.Start(FROM_HERE, kPressHold, this,
+                          &KoanSidebarExtensionsView::UpdateReveal);
   UpdateReveal();
   if (KoanBrowserViewController* controller =
           KoanBrowserViewController::From(browser_view_)) {
@@ -767,13 +780,13 @@ void KoanSidebarExtensionsView::OnButtonPressed(Button* button) {
 BEGIN_METADATA(KoanSidebarExtensionsView)
 END_METADATA
 
-views::View* GetExtensionsAnchorView(const views::View* container,
-                                     std::string_view action_id) {
-  // Also where the toolbar is there (null), and to have compact mode look
-  // at what is open.
-  views::View* fallback = GetBubbleAnchorView(container);
-  if (!fallback || action_id.empty() || !container->GetWidget()) {
-    return fallback;
+namespace {
+
+// The sidebar's extension buttons of the window the toolbar's extensions
+// container `container` is in, if there are any.
+KoanSidebarExtensionsView* GetSidebarExtensions(const views::View* container) {
+  if (!container->GetWidget()) {
+    return nullptr;
   }
   auto* browser_view =
       views::AsViewClass<BrowserView>(container->GetWidget()->client_view());
@@ -781,10 +794,29 @@ views::View* GetExtensionsAnchorView(const views::View* container,
       browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
   KoanSidebarNavView* nav =
       controller ? controller->compact_mode()->sidebar_nav() : nullptr;
-  views::View* button = nav && nav->extensions()
-                            ? nav->extensions()->GetButtonForAction(action_id)
-                            : nullptr;
+  return nav ? nav->extensions() : nullptr;
+}
+
+}  // namespace
+
+views::View* GetExtensionsAnchorView(const views::View* container,
+                                     std::string_view action_id) {
+  // Also where the toolbar is there (null), and to have compact mode look
+  // at what is open.
+  views::View* fallback = GetBubbleAnchorView(container);
+  if (!fallback || action_id.empty()) {
+    return fallback;
+  }
+  KoanSidebarExtensionsView* extensions = GetSidebarExtensions(container);
+  views::View* button =
+      extensions ? extensions->GetButtonForAction(action_id) : nullptr;
   return button ? button : fallback;
+}
+
+void OnExtensionPopupClosed(const views::View* container) {
+  if (KoanSidebarExtensionsView* extensions = GetSidebarExtensions(container)) {
+    extensions->OnPopupClosed();
+  }
 }
 
 }  // namespace koan

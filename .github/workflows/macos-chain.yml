@@ -102,7 +102,8 @@ jobs:
           fi
 
       # Packaging only runs at the end of a run, a day or more later: check
-      # codesign and hdiutil on a dummy app now.
+      # codesign and hdiutil, ad hoc and with a throwaway certificate, on a
+      # dummy app now.
       - name: Check the packaging
         run: |
           app="$RUNNER_TEMP/dummy/Koan.app"
@@ -113,6 +114,13 @@ jobs:
           plutil -insert CFBundleIdentifier -string dev.koan.Koan.ci-check "$app/Contents/Info.plist"
           plutil -insert CFBundlePackageType -string APPL "$app/Contents/Info.plist"
           KOAN_CI_APP="$app" scripts/ci/mac_package.sh "$RUNNER_TEMP/dummy/dmg"
+          # Releases sign with a certificate in a temporary keychain
+          # (release.yml); check that part with a made-up one.
+          trap 'scripts/ci/mac_codesign.sh teardown' EXIT
+          out="$(scripts/ci/mac_codesign.sh setup --throwaway)"
+          KOAN_CODESIGN_IDENTITY="$(printf '%s\n' "$out" | sed -n 's/^identity=//p')" \
+            KOAN_CODESIGN_KEYCHAIN="$(printf '%s\n' "$out" | sed -n 's/^keychain=//p')" \
+            KOAN_CI_APP="$app" scripts/ci/mac_package.sh "$RUNNER_TEMP/dummy/dmg-signed"
           rm -rf "$RUNNER_TEMP/dummy"
 
       - name: Pack the source

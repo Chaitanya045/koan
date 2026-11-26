@@ -368,8 +368,11 @@ it.
 
 While the selected tab loads, Zen's loading bar pulses at the top middle of
 the page (in the gap above it); after three seconds it turns into a wider
-track with a sweep. It isn't shown while a page is fullscreen. Tabs keep
-their favicon while loading, without Chromium's spinner, as in Zen.
+track with a sweep. Unlike Zen's, which goes on for as long as the page loads,
+the sweep stops after 20 sweeps (about 23 s into the load) and the track rests,
+so that a page that never finishes loading doesn't keep redrawing. It isn't
+shown while a page is fullscreen. Tabs keep their favicon while loading,
+without Chromium's spinner, as in Zen.
 
 A pinned tab or Essential keeps its site, as in Zen: a URL on another site
 typed in its URL bar (or a search) opens in a new tab, and a link in it that

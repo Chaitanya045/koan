@@ -27,6 +27,12 @@ namespace koan {
 views::View* GetExtensionsAnchorView(const views::View* container,
                                      std::string_view action_id);
 
+// A popup of an extension closed: the sidebar's buttons that it kept shown
+// may hide (there is no observer for it, and polling for it wakes the
+// browser up while it is idle). Called from
+// ExtensionsToolbarDesktop::OnPopupClosed(), after the popup's state is gone.
+void OnExtensionPopupClosed(const views::View* container);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_EXTENSIONS_HOOKS_H_

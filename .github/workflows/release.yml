@@ -12,16 +12,29 @@
 #    macos-build.yml slices) on the tag's commit, with the nightly's dev
 #    config (build/koan-mac.gn). An official ThinLTO + PGO build doesn't fit
 #    GitHub's hosted 7 GB runners: docs/RELEASING.md, "Official builds".
-# 3. publish: the .dmg and its .sha256; title "Koan <x.y.z> (<Label>) ·
-#    Chromium <version>"; always a full release marked Latest, alphas too
-#    (the "(Alpha)" in the title and the notes' warning carry the stage; only
-#    the rolling Nightly is a GitHub pre-release, so /releases/latest and the
-#    repository's sidebar always show the newest tagged release); the body is
-#    the notes, then GitHub's generated notes since the previous release tag
-#    (.github/release.yml sorts them by label). Published at once, or a draft
-#    with draft=true.
+# 3. publish (macOS, the only job with the "release" environment, so one
+#    approval): takes Koan.app out of the build's ad hoc .dmg, signs it with
+#    the self-signed "Koan Release Signing" certificate (scripts/ci/
+#    mac_codesign.sh, mac_package.sh; the same app identity in every release,
+#    so the keychain items survive in-app updates), redoes the Widevine VMP
+#    signature that the new seal needs, and makes the final .dmg with the
+#    build's file name. koan-update.json, the update manifest (the .dmg's
+#    URL, size and SHA-256, signed with the ed25519 update key;
+#    scripts/ci/update_manifest.py), is verified against the committed public
+#    key. The release has the .dmg, its .sha256 and koan-update.json. Title
+#    "Koan <x.y.z> (<Label>) · Chromium <version>"; always a full release
+#    marked Latest, alphas too (the "(Alpha)" in the title and the notes'
+#    warning carry the stage; only the rolling Nightly is a GitHub
+#    pre-release, so /releases/latest and the repository's sidebar always
+#    show the newest tagged release); the body is the notes, then GitHub's
+#    generated notes since the previous release tag (.github/release.yml
+#    sorts them by label). Published at once, or a draft with draft=true.
 #
-# Signed ad hoc, as the nightly (no Developer ID yet).
+# Signing: the release's secrets (KOAN_CODESIGN_P12, KOAN_CODESIGN_P12_PASSWORD,
+# KOAN_UPDATE_SIGNING_KEY) belong to the "release" environment and are only
+# readable in the publish job. There is no Developer ID and no notarization,
+# so Gatekeeper still asks the user to allow the app. The nightly stays ad
+# hoc (macos.yml). .agent/notes/macos-ci.md, "Release signing".
 name: Release
 
 on:
@@ -60,6 +73,7 @@ jobs:
       title: ${{ steps.info.outputs.title }}
       notes: ${{ steps.info.outputs.notes }}
       previous_tag: ${{ steps.info.outputs.previous_tag }}
+      latest: ${{ steps.info.outputs.latest }}
     steps:
       - name: Resolve the tag
         id: tag
@@ -72,8 +86,25 @@ jobs:
             echo "'$TAG' is not a release tag (v<version>)" >&2
             exit 1
           fi
-          # The commit the tag points at (an annotated tag's too).
-          sha=$(gh api "repos/$GH_REPO/commits/$TAG" --jq .sha)
+          # The commit the tag points at (an annotated tag's too). Only a
+          # real tag: the commits API also takes a branch of that name, and
+          # only org admins may create v* tags (the "release tags (v*)"
+          # ruleset), so a branch would let anyone with write access choose
+          # the scripts the publish job runs with the signing secrets.
+          if ! ref=$(gh api "repos/$GH_REPO/git/ref/tags/$TAG" \
+              --jq '.object.type + " " + .object.sha'); then
+            echo "there is no tag $TAG" >&2
+            exit 1
+          fi
+          read -r type sha <<< "$ref"
+          if [[ $type == tag ]]; then
+            read -r type sha <<< "$(gh api "repos/$GH_REPO/git/tags/$sha" \
+              --jq '.object.type + " " + .object.sha')"
+          fi
+          if [[ $type != commit || ! $sha =~ ^[0-9a-f]{40}$ ]]; then
+            echo "tag $TAG does not point at a commit" >&2
+            exit 1
+          fi
           if gh release view "$TAG" > /dev/null 2>&1; then
             echo "a release of $TAG exists already; delete it first to redo it" >&2
             exit 1
@@ -90,6 +121,24 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
           persist-credentials: false
+
+      # Releases are tagged on develop, or on a release/<major> branch for a
+      # fix to an older line (docs/RELEASING.md, "Branches").
+      - name: Check that the tag is on develop or a release branch
+        env:
+          SHA: ${{ steps.tag.outputs.sha }}
+        run: |
+          git fetch -q --no-tags origin '+refs/heads/develop:refs/remotes/origin/develop' \
+            '+refs/heads/release/*:refs/remotes/origin/release/*'
+          for branch in $(git for-each-ref --format='%(refname)' \
+              refs/remotes/origin/develop 'refs/remotes/origin/release/*'); do
+            if git merge-base --is-ancestor "$SHA" "$branch"; then
+              echo "$SHA is on ${branch#refs/remotes/origin/}"
+              exit 0
+            fi
+          done
+          echo "$SHA is on neither develop nor a release/* branch" >&2
+          exit 1
 
       - name: Check
         id: info
@@ -118,24 +167,30 @@ jobs:
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
 
   publish:
-    name: Publish the release
+    name: Sign and publish the release
     needs: [prepare, build]
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The runner the build used: signing needs macOS (codesign, hdiutil).
+    runs-on: xcode-27
+    timeout-minutes: 90
     # The "release" environment (Settings > Environments) waits for the
-    # owner's approval before anything is published, and only runs for v*
-    # tags and develop (a tag push, or a dispatch from develop).
+    # owner's approval before anything is signed or published, holds the
+    # signing secrets, and only runs for v* tags and develop (a tag push, or
+    # a dispatch from develop).
     environment: release
     permissions:
       contents: write
+    # GH_TOKEN (contents: write) only goes to the steps that call gh, not to
+    # the ones that run the signing scripts.
     env:
-      GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       TAG: ${{ needs.prepare.outputs.tag }}
       SHA: ${{ needs.prepare.outputs.sha }}
       TITLE: ${{ needs.prepare.outputs.title }}
       NOTES: ${{ needs.prepare.outputs.notes }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      CHROMIUM: ${{ needs.build.outputs.chromium }}
       PREVIOUS: ${{ needs.prepare.outputs.previous_tag }}
+      LATEST: ${{ needs.prepare.outputs.latest }}
       DRAFT: ${{ inputs.draft && 'true' || 'false' }}
       DMG: ${{ needs.build.outputs.dmg }}
     steps:
@@ -150,9 +205,81 @@ jobs:
           name: ${{ needs.build.outputs.dmg }}
           path: dist
 
-      - name: Checksum and notes
+      # The build's .dmg is signed ad hoc. Its app is signed again below with
+      # the release certificate, in a new .dmg of the same name.
+      - name: Take Koan.app out of the disk image
+        id: adhoc
         run: |
-          (cd dist && shasum -a 256 "$DMG" > "$DMG.sha256" && cat "$DMG.sha256")
+          mnt="$RUNNER_TEMP/adhoc-mnt"
+          mkdir -p "$mnt" "$RUNNER_TEMP/app"
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" "dist/$DMG" > /dev/null
+          apps=("$mnt"/*.app)
+          if [[ ${#apps[@]} != 1 || ! -d ${apps[0]} ]]; then
+            echo "expected one .app in $DMG, found: ${apps[*]}" >&2
+            exit 1
+          fi
+          ditto "${apps[0]}" "$RUNNER_TEMP/app/$(basename "${apps[0]}")"
+          hdiutil detach "$mnt" > /dev/null
+          echo "app=$RUNNER_TEMP/app/$(basename "${apps[0]}")" >> "$GITHUB_OUTPUT"
+          rm -f "dist/$DMG" "dist/$DMG.sha256"
+
+      - name: Import the signing certificate
+        id: signing
+        env:
+          KOAN_CODESIGN_P12: ${{ secrets.KOAN_CODESIGN_P12 }}
+          KOAN_CODESIGN_P12_PASSWORD: ${{ secrets.KOAN_CODESIGN_P12_PASSWORD }}
+        run: scripts/ci/mac_codesign.sh setup
+
+      # Signs, redoes the Widevine VMP signature (the seal covers it), makes
+      # dist/<the same .dmg name> and its .sha256, and checks the app in it.
+      - name: Sign and make the disk image
+        env:
+          KOAN_PACKAGE_APP: ${{ steps.adhoc.outputs.app }}
+          KOAN_RELEASE: "1"
+          KOAN_SHA: ${{ needs.prepare.outputs.sha }}
+          KOAN_CODESIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
+          KOAN_CODESIGN_KEYCHAIN: ${{ steps.signing.outputs.keychain }}
+          EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+          EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
+        run: |
+          scripts/ci/mac_package.sh dist
+          if [[ $(sed -n 's/^file_name=//p' "$GITHUB_OUTPUT" | tail -n 1) != "$DMG" ]]; then
+            echo "the signed disk image is not named $DMG" >&2
+            exit 1
+          fi
+
+      # The certificate the app must be signed with, whatever the steps above
+      # did: an ad hoc or other signature would never reach users through
+      # the manifest below.
+      - name: Check the signer
+        run: |
+          scripts/ci/mac_signing_check.sh check-image "dist/$DMG" \
+            "$(tr -d '[:space:]' < scripts/ci/codesign_identity.txt)"
+
+      # The update manifest the app fetches from releases/latest/download.
+      - name: Make the update manifest
+        env:
+          KOAN_UPDATE_SIGNING_KEY: ${{ secrets.KOAN_UPDATE_SIGNING_KEY }}
+        run: |
+          key="$RUNNER_TEMP/update-key.pem"
+          (umask 077 && printf '%s\n' "$KOAN_UPDATE_SIGNING_KEY" > "$key")
+          python3 -I scripts/ci/update_manifest.py make --platform mac-arm64 \
+            --file "dist/$DMG" \
+            --url "https://github.com/$GH_REPO/releases/download/$TAG/$DMG" \
+            --version "$VERSION" --chromium "$CHROMIUM" \
+            --notes-url "https://github.com/$GH_REPO/releases/tag/$TAG" \
+            --key-file "$key" --output dist/koan-update.json
+          rm -f "$key"
+          python3 -I scripts/ci/update_manifest.py verify \
+            --manifest dist/koan-update.json --file "dist/$DMG" \
+            --platform mac-arm64 \
+            --public-key-file src/browser/updates/koan_update_public_key.txt
+
+      - name: Checksum and notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat "dist/$DMG.sha256"
           # GitHub's notes: the pull requests since the previous release tag
           # (never the rolling "nightly" tag), sorted by .github/release.yml.
           args=(-f "tag_name=$TAG" -f "target_commitish=$SHA")
@@ -164,11 +291,17 @@ jobs:
             --generated "$RUNNER_TEMP/generated.md" --output "$RUNNER_TEMP/body.md"
 
       - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # Never --prerelease: see the top of this file.
-          args=(--verify-tag --latest --title "$TITLE" --notes-file "$RUNNER_TEMP/body.md")
+          # Never --prerelease: see the top of this file. Latest only for the
+          # highest version: a fix on a release/<major> branch must not
+          # become what releases/latest (and so the in-app updater) serves.
+          if [[ $LATEST == true ]]; then latest=--latest; else latest=--latest=false; fi
+          args=(--verify-tag "$latest" --title "$TITLE" --notes-file "$RUNNER_TEMP/body.md")
           if [[ $DRAFT == true ]]; then args+=(--draft); fi
-          gh release create "$TAG" "dist/$DMG" "dist/$DMG.sha256" "${args[@]}"
+          gh release create "$TAG" "dist/$DMG" "dist/$DMG.sha256" \
+            dist/koan-update.json "${args[@]}"
           {
             echo "### $TITLE"
             echo
@@ -176,3 +309,10 @@ jobs:
             echo "- \`$(cat "dist/$DMG.sha256")\`"
             [[ $DRAFT != true ]] || echo "- Draft: publish it from the release page"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Even when a step failed: the certificate must not stay on the runner.
+      - name: Remove the signing keychain and the update key
+        if: always()
+        run: |
+          scripts/ci/mac_codesign.sh teardown
+          rm -f "$RUNNER_TEMP/update-key.pem"

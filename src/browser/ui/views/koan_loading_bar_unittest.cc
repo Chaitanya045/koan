@@ -109,4 +109,70 @@ TEST(KoanLoadingBarTest, ReducedMotionIsStillAndGoesAtOnce) {
   EXPECT_TRUE(bar.IsDone(At(4000)));
 }
 
+TEST(KoanLoadingBarTest, LongLoadComesToRestAfterItsSweeps) {
+  KoanLoadingBar bar;
+  bar.Show(At(0));
+  bar.StartLongLoad(At(3000));
+  // 300 ms of settle, then the sweeps.
+  const int still_ms = 3000 + 300 + KoanLoadingBar::kLongLoadSweeps * 1000;
+  // Before the bound, it still animates.
+  EXPECT_FALSE(bar.IsStill(At(3300)));
+  EXPECT_FALSE(bar.IsStill(At(still_ms - 1)));
+  EXPECT_NE(bar.FrameAt(At(still_ms - 500)).sweep,
+            bar.FrameAt(At(still_ms - 400)).sweep);
+  // At it, the frame no longer changes, for however long the load goes on.
+  EXPECT_TRUE(bar.IsStill(At(still_ms)));
+  const KoanLoadingBar::Frame rest = bar.FrameAt(At(still_ms));
+  EXPECT_EQ(rest, bar.FrameAt(At(still_ms + 1)));
+  EXPECT_EQ(rest, bar.FrameAt(At(still_ms + 12345)));
+  EXPECT_EQ(rest, bar.FrameAt(At(still_ms + 3600 * 1000)));
+  // A track at full size, with the sweep out of it (no half-swept bar).
+  EXPECT_TRUE(rest.long_load);
+  EXPECT_FLOAT_EQ(KoanLoadingBar::kLongLoadWidth, rest.bar.width());
+  EXPECT_FLOAT_EQ(1, rest.opacity);
+  EXPECT_LE(rest.sweep.right(), rest.bar.x());
+}
+
+TEST(KoanLoadingBarTest, PulseIsNotStillBeforeTheLongLoad) {
+  KoanLoadingBar bar;
+  bar.Show(At(0));
+  EXPECT_FALSE(bar.IsStill(At(2500)));
+  EXPECT_FALSE(bar.IsStill(At(3600 * 1000)));
+}
+
+TEST(KoanLoadingBarTest, HidingFromStillAnimatesOut) {
+  KoanLoadingBar bar;
+  bar.Show(At(0));
+  bar.StartLongLoad(At(3000));
+  const int still_ms = 3000 + 300 + KoanLoadingBar::kLongLoadSweeps * 1000;
+  ASSERT_TRUE(bar.IsStill(At(still_ms + 5000)));
+  bar.Hide(At(still_ms + 5000));
+  EXPECT_FALSE(bar.IsStill(At(still_ms + 5100)));
+  EXPECT_FALSE(bar.IsDone(At(still_ms + 5150)));
+  EXPECT_FLOAT_EQ(0.5f, bar.FrameAt(At(still_ms + 5150)).opacity);
+  EXPECT_NE(bar.FrameAt(At(still_ms + 5000)).bar,
+            bar.FrameAt(At(still_ms + 5150)).bar);
+  EXPECT_TRUE(bar.IsDone(At(still_ms + 5300)));
+}
+
+TEST(KoanLoadingBarTest, NewLoadAfterStillAnimatesAgain) {
+  KoanLoadingBar bar;
+  bar.Show(At(0));
+  bar.StartLongLoad(At(3000));
+  bar.Hide(At(60000));
+  bar.Show(At(61000));
+  EXPECT_FALSE(bar.IsStill(At(61000)));
+  EXPECT_FALSE(bar.IsStill(At(62000)));
+}
+
+TEST(KoanLoadingBarTest, ReducedMotionLongLoadIsStillAtOnce) {
+  KoanLoadingBar bar;
+  bar.set_reduced_motion(true);
+  bar.Show(At(0));
+  EXPECT_FALSE(bar.IsStill(At(1000)));
+  bar.StartLongLoad(At(3000));
+  EXPECT_TRUE(bar.IsStill(At(3000)));
+  EXPECT_EQ(bar.FrameAt(At(3000)), bar.FrameAt(At(9000)));
+}
+
 }  // namespace koan
