@@ -63,6 +63,46 @@ push. The release job also has its own `macos-nightly-release` group.
 
 Review of PR #70: [reviews/pr70-review.md](https://github.com/Chaitanya045/koan/blob/ac644383c4884c21aaa7a2a7fc23694e5a5859e0/.agent/notes/reviews/pr70-review.md).
 
+## Release signing
+
+- **Nightly:** ad hoc (`codesign -s -`, `mac_package.sh` without
+  `KOAN_CODESIGN_IDENTITY`), unchanged.
+- **Tagged release:** `release.yml`'s `publish` job (macOS, `xcode-27`, the
+  only job with `environment: release`, so one approval) takes Koan.app out
+  of the build's ad hoc .dmg, imports the certificate into a temporary
+  keychain (`scripts/ci/mac_codesign.sh setup`), and runs `mac_package.sh`
+  with `KOAN_PACKAGE_APP` (real app: Info.plist check and Widevine VMP step
+  run, the product name is the bundle's), `KOAN_CODESIGN_IDENTITY` and
+  `KOAN_CODESIGN_KEYCHAIN`. It prints the signing authority and designated
+  requirement; the final .dmg has the build's file name. Then the update
+  manifest (`koan-update.json`, `scripts/ci/update_manifest.py`) and the
+  upload. An `if: always()` step deletes the keychain and the update key.
+- **One fixed identity:** self-signed "Koan Release Signing", SHA-1
+  `41C53B537255BA68D030856528BDACCD559E0B50` (`scripts/ci/codesign_identity.txt`;
+  `setup` fails on any other). The designated requirement is then
+  `identifier "<bundle id>" and certificate leaf = H"41c5..."`, the same in
+  every release, so keychain items and in-app updates see one app. No
+  Developer ID, no notarization: Gatekeeper still asks the user.
+- **Secrets** (environment `release`): `KOAN_CODESIGN_P12` (base64 of the
+  .p12), `KOAN_CODESIGN_P12_PASSWORD`, `KOAN_UPDATE_SIGNING_KEY` (ed25519
+  private key, PEM; the manifest's signature). The .p12 **must be 3DES/SHA-1**:
+  `openssl pkcs12 -export -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES
+  -macalg sha1`; macOS `security import` can't read OpenSSL 3's default AES
+  files.
+- **Check before a 16 h build:** `mac-signing-check.yml` (on pull requests
+  that touch the signing files, and by hand): job `throwaway` signs a dummy
+  app with a made-up certificate and verifies the .dmg and a manifest made
+  with a throwaway key (no secrets); job `real` (`workflow_dispatch` with
+  `real=true`, from develop or a v* tag, owner approves) does it with the
+  real secrets and checks the committed public key. `macos-chain.yml`'s
+  "Check the packaging" also signs its dummy app with a throwaway
+  certificate.
+- **Untrusted certificate:** `mac_codesign.sh` probes that `codesign -s <sha1>
+  --keychain <kc>` signs with it; if not, it trusts the certificate for code
+  signing (`security add-trusted-cert -p codeSign`, admin domain through
+  `sudo -n`) and `teardown` removes that. Whether the fallback is ever
+  needed is only known from the check's first run.
+
 ## How ungoogled-chromium-macos does it (checked 2026-11-02)
 
 - `.github/workflows/building.yml`: `retrieve-resources` job, then 20

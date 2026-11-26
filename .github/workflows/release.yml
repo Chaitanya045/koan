@@ -12,16 +12,29 @@
 #    macos-build.yml slices) on the tag's commit, with the nightly's dev
 #    config (build/koan-mac.gn). An official ThinLTO + PGO build doesn't fit
 #    GitHub's hosted 7 GB runners: docs/RELEASING.md, "Official builds".
-# 3. publish: the .dmg and its .sha256; title "Koan <x.y.z> (<Label>) ·
-#    Chromium <version>"; always a full release marked Latest, alphas too
-#    (the "(Alpha)" in the title and the notes' warning carry the stage; only
-#    the rolling Nightly is a GitHub pre-release, so /releases/latest and the
-#    repository's sidebar always show the newest tagged release); the body is
-#    the notes, then GitHub's generated notes since the previous release tag
-#    (.github/release.yml sorts them by label). Published at once, or a draft
-#    with draft=true.
+# 3. publish (macOS, the only job with the "release" environment, so one
+#    approval): takes Koan.app out of the build's ad hoc .dmg, signs it with
+#    the self-signed "Koan Release Signing" certificate (scripts/ci/
+#    mac_codesign.sh, mac_package.sh; the same app identity in every release,
+#    so the keychain items survive in-app updates), redoes the Widevine VMP
+#    signature that the new seal needs, and makes the final .dmg with the
+#    build's file name. koan-update.json, the update manifest (the .dmg's
+#    URL, size and SHA-256, signed with the ed25519 update key;
+#    scripts/ci/update_manifest.py), is verified against the committed public
+#    key. The release has the .dmg, its .sha256 and koan-update.json. Title
+#    "Koan <x.y.z> (<Label>) · Chromium <version>"; always a full release
+#    marked Latest, alphas too (the "(Alpha)" in the title and the notes'
+#    warning carry the stage; only the rolling Nightly is a GitHub
+#    pre-release, so /releases/latest and the repository's sidebar always
+#    show the newest tagged release); the body is the notes, then GitHub's
+#    generated notes since the previous release tag (.github/release.yml
+#    sorts them by label). Published at once, or a draft with draft=true.
 #
-# Signed ad hoc, as the nightly (no Developer ID yet).
+# Signing: the release's secrets (KOAN_CODESIGN_P12, KOAN_CODESIGN_P12_PASSWORD,
+# KOAN_UPDATE_SIGNING_KEY) belong to the "release" environment and are only
+# readable in the publish job. There is no Developer ID and no notarization,
+# so Gatekeeper still asks the user to allow the app. The nightly stays ad
+# hoc (macos.yml). .agent/notes/macos-ci.md, "Release signing".
 name: Release
 
 on:
@@ -118,13 +131,15 @@ jobs:
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
 
   publish:
-    name: Publish the release
+    name: Sign and publish the release
     needs: [prepare, build]
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The runner the build used: signing needs macOS (codesign, hdiutil).
+    runs-on: xcode-27
+    timeout-minutes: 90
     # The "release" environment (Settings > Environments) waits for the
-    # owner's approval before anything is published, and only runs for v*
-    # tags and develop (a tag push, or a dispatch from develop).
+    # owner's approval before anything is signed or published, holds the
+    # signing secrets, and only runs for v* tags and develop (a tag push, or
+    # a dispatch from develop).
     environment: release
     permissions:
       contents: write
@@ -135,6 +150,8 @@ jobs:
       SHA: ${{ needs.prepare.outputs.sha }}
       TITLE: ${{ needs.prepare.outputs.title }}
       NOTES: ${{ needs.prepare.outputs.notes }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      CHROMIUM: ${{ needs.build.outputs.chromium }}
       PREVIOUS: ${{ needs.prepare.outputs.previous_tag }}
       DRAFT: ${{ inputs.draft && 'true' || 'false' }}
       DMG: ${{ needs.build.outputs.dmg }}
@@ -150,9 +167,71 @@ jobs:
           name: ${{ needs.build.outputs.dmg }}
           path: dist
 
+      # The build's .dmg is signed ad hoc. Its app is signed again below with
+      # the release certificate, in a new .dmg of the same name.
+      - name: Take Koan.app out of the disk image
+        id: adhoc
+        run: |
+          mnt="$RUNNER_TEMP/adhoc-mnt"
+          mkdir -p "$mnt" "$RUNNER_TEMP/app"
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" "dist/$DMG" > /dev/null
+          apps=("$mnt"/*.app)
+          if [[ ${#apps[@]} != 1 || ! -d ${apps[0]} ]]; then
+            echo "expected one .app in $DMG, found: ${apps[*]}" >&2
+            exit 1
+          fi
+          ditto "${apps[0]}" "$RUNNER_TEMP/app/$(basename "${apps[0]}")"
+          hdiutil detach "$mnt" > /dev/null
+          echo "app=$RUNNER_TEMP/app/$(basename "${apps[0]}")" >> "$GITHUB_OUTPUT"
+          rm -f "dist/$DMG" "dist/$DMG.sha256"
+
+      - name: Import the signing certificate
+        id: signing
+        env:
+          KOAN_CODESIGN_P12: ${{ secrets.KOAN_CODESIGN_P12 }}
+          KOAN_CODESIGN_P12_PASSWORD: ${{ secrets.KOAN_CODESIGN_P12_PASSWORD }}
+        run: scripts/ci/mac_codesign.sh setup
+
+      # Signs, redoes the Widevine VMP signature (the seal covers it), makes
+      # dist/<the same .dmg name> and its .sha256, and checks the app in it.
+      - name: Sign and make the disk image
+        env:
+          KOAN_PACKAGE_APP: ${{ steps.adhoc.outputs.app }}
+          KOAN_RELEASE: "1"
+          KOAN_SHA: ${{ needs.prepare.outputs.sha }}
+          KOAN_CODESIGN_IDENTITY: ${{ steps.signing.outputs.identity }}
+          KOAN_CODESIGN_KEYCHAIN: ${{ steps.signing.outputs.keychain }}
+          EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
+          EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
+        run: |
+          scripts/ci/mac_package.sh dist
+          if [[ $(sed -n 's/^file_name=//p' "$GITHUB_OUTPUT" | tail -n 1) != "$DMG" ]]; then
+            echo "the signed disk image is not named $DMG" >&2
+            exit 1
+          fi
+
+      # The update manifest the app fetches from releases/latest/download.
+      - name: Make the update manifest
+        env:
+          KOAN_UPDATE_SIGNING_KEY: ${{ secrets.KOAN_UPDATE_SIGNING_KEY }}
+        run: |
+          key="$RUNNER_TEMP/update-key.pem"
+          (umask 077 && printf '%s\n' "$KOAN_UPDATE_SIGNING_KEY" > "$key")
+          python3 -I scripts/ci/update_manifest.py make --platform mac-arm64 \
+            --file "dist/$DMG" \
+            --url "https://github.com/$GH_REPO/releases/download/$TAG/$DMG" \
+            --version "$VERSION" --chromium "$CHROMIUM" \
+            --notes-url "https://github.com/$GH_REPO/releases/tag/$TAG" \
+            --key-file "$key" --output dist/koan-update.json
+          rm -f "$key"
+          python3 -I scripts/ci/update_manifest.py verify \
+            --manifest dist/koan-update.json --file "dist/$DMG" \
+            --platform mac-arm64 \
+            --public-key-file src/browser/updates/koan_update_public_key.txt
+
       - name: Checksum and notes
         run: |
-          (cd dist && shasum -a 256 "$DMG" > "$DMG.sha256" && cat "$DMG.sha256")
+          cat "dist/$DMG.sha256"
           # GitHub's notes: the pull requests since the previous release tag
           # (never the rolling "nightly" tag), sorted by .github/release.yml.
           args=(-f "tag_name=$TAG" -f "target_commitish=$SHA")
@@ -168,7 +247,8 @@ jobs:
           # Never --prerelease: see the top of this file.
           args=(--verify-tag --latest --title "$TITLE" --notes-file "$RUNNER_TEMP/body.md")
           if [[ $DRAFT == true ]]; then args+=(--draft); fi
-          gh release create "$TAG" "dist/$DMG" "dist/$DMG.sha256" "${args[@]}"
+          gh release create "$TAG" "dist/$DMG" "dist/$DMG.sha256" \
+            dist/koan-update.json "${args[@]}"
           {
             echo "### $TITLE"
             echo
@@ -176,3 +256,10 @@ jobs:
             echo "- \`$(cat "dist/$DMG.sha256")\`"
             [[ $DRAFT != true ]] || echo "- Draft: publish it from the release page"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Even when a step failed: the certificate must not stay on the runner.
+      - name: Remove the signing keychain and the update key
+        if: always()
+        run: |
+          scripts/ci/mac_codesign.sh teardown
+          rm -f "$RUNNER_TEMP/update-key.pem"

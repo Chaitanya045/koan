@@ -11,11 +11,23 @@
 # (KoanVersion, CFBundleShortVersionString: //koan/version), or nothing is
 # packed.
 #
-# The app is signed ad hoc (codesign -s -): Apple Silicon only runs signed
-# code, but nothing here has a Developer ID, so Gatekeeper still blocks it
-# until the user allows it (docs/USAGE.md). Prints file_name=<dmg> to
-# $GITHUB_OUTPUT when set. KOAN_CI_APP packs another bundle instead (the
-# fetch job checks the packaging on a dummy app that way).
+# The app is signed ad hoc (codesign -s -) unless KOAN_CODESIGN_IDENTITY
+# names an identity (a SHA-1 or a name; KOAN_CODESIGN_KEYCHAIN, the keychain
+# it is in): Apple Silicon only runs signed code, but nothing here has a
+# Developer ID, so Gatekeeper still blocks it until the user allows it
+# (docs/USAGE.md). Releases are signed with the self-signed "Koan Release
+# Signing" certificate (scripts/ci/mac_codesign.sh, release.yml); the
+# signing authority and designated requirement are printed afterwards.
+# Prints file_name=<dmg> to $GITHUB_OUTPUT when set.
+#
+# Two ways to pack a bundle that isn't the build's:
+#   KOAN_CI_APP=<app>       a dummy app (the fetch job checks the packaging
+#                           that way): no Info.plist check, no VMP step.
+#   KOAN_PACKAGE_APP=<app>  a real Koan.app, e.g. the one in the build's ad
+#                           hoc .dmg, re-signed by release.yml's publish job,
+#                           which has no chromium/ checkout: the product name
+#                           is the bundle's name, the Info.plist check and the
+#                           Widevine VMP step still run.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -30,8 +42,17 @@ else
   version="$(sed -n 1p CHROMIUM_VERSION)"
 fi
 sha="${KOAN_SHA:-$(git rev-parse HEAD)}"
-name="$(sed -n 's/^PRODUCT_FULLNAME=//p' chromium/src/chrome/app/theme/chromium/BRANDING)"
-app="${KOAN_CI_APP:-chromium/src/out/Koan/$name.app}"
+if [[ -n ${KOAN_CI_APP:-} && -n ${KOAN_PACKAGE_APP:-} ]]; then
+  echo "KOAN_CI_APP and KOAN_PACKAGE_APP are exclusive" >&2
+  exit 1
+fi
+if [[ -n ${KOAN_PACKAGE_APP:-} ]]; then
+  app="$KOAN_PACKAGE_APP"
+  name="$(basename "$app" .app)"
+else
+  name="$(sed -n 's/^PRODUCT_FULLNAME=//p' chromium/src/chrome/app/theme/chromium/BRANDING)"
+  app="${KOAN_CI_APP:-chromium/src/out/Koan/$name.app}"
+fi
 [[ -d $app ]] || { echo "no $app" >&2; exit 1; }
 if [[ ${KOAN_RELEASE:-0} == 1 ]]; then
   [[ -f VERSION ]] || { echo "KOAN_RELEASE=1 needs a VERSION file" >&2; exit 1; }
@@ -66,17 +87,30 @@ fi
 # Last, after everything that changes the bundle: --deep signs the nested
 # frameworks, helper apps and libraries too, and --verify --deep --strict
 # fails if any nested code is unsigned or its seal doesn't match.
-echo "==> Signing $app (ad hoc)"
+identity="${KOAN_CODESIGN_IDENTITY:--}"
+sign=(codesign --force --sign "$identity" --timestamp=none)
+if [[ -n ${KOAN_CODESIGN_KEYCHAIN:-} ]]; then
+  sign+=(--keychain "$KOAN_CODESIGN_KEYCHAIN")
+fi
+if [[ $identity == - ]]; then
+  echo "==> Signing $app (ad hoc)"
+else
+  echo "==> Signing $app with $identity"
+fi
 # The agent's `koan` and `koan-relay` sit in Resources/bin, where --deep does
 # not look for code: each is signed on its own first, so the pairing dialog
 # can name it.
 for tool in koan koan-relay; do
   if [[ -f $app/Contents/Resources/bin/$tool ]]; then
-    codesign --force --sign - --timestamp=none "$app/Contents/Resources/bin/$tool"
+    "${sign[@]}" "$app/Contents/Resources/bin/$tool"
   fi
 done
-codesign --force --deep --sign - --timestamp=none "$app"
+"${sign[@]}" --deep "$app"
 codesign --verify --deep --strict --verbose=2 "$app"
+# Who signed it, and the requirement a later update must meet (for a
+# certificate: identifier plus the certificate's SHA-1).
+codesign -d --verbose=2 "$app" 2>&1 | grep -E '^(Identifier|Authority|TeamIdentifier|Signature|CDHash)' || true
+codesign -d -r- "$app" 2>&1 | grep -F 'designated =>' || true
 lipo -archs "$app/Contents/MacOS/$name"
 
 echo "==> Making $dmg"
