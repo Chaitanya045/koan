@@ -10,34 +10,45 @@
 // Koan starts it while it terminates with an update ready (or, to roll back,
 // when the new version failed to start too often). It
 // 1. waits for that process (its parent) to exit, then for every other
-//    process running from the app (helpers, another profile's Koan) to go:
-//    the app is never replaced while it runs;
-// 2. swaps the installed app and the staged copy with one
+//    process running from the app (another profile's Koan, its helpers; not
+//    another koan-update-helper) to go: the app is never replaced while it
+//    runs;
+// 2. checks the marker (koan_update_install_logic.h's HelperRefusal(): it
+//    must name the app this helper is part of) and, right before the swap,
+//    the staged copy's signature against the release certificate again
+//    (the marker and the copy are in folders the user can write);
+// 3. swaps the installed app and the staged copy with one
 //    renamex_np(RENAME_SWAP), so the old app is at the staged path
-//    afterwards, and records that in the marker (koan_update_install_logic.h);
-// 3. with --relaunch, opens the app again with Koan's arguments (Chromium's
+//    afterwards, and records that in the marker;
+// 4. runs the new version's `Koan --version`: one that can't start at all
+//    (dyld, the wrong architecture) would never get as far as counting its
+//    launches, so it is swapped back at once;
+// 5. with --relaunch, opens the app again with Koan's arguments (Chromium's
 //    relaunch command line, so the session comes back), and watches the new
 //    version: if it exits before it has confirmed itself in the marker,
 //    the old copy is swapped back and opened instead.
-// With --roll-back, step 2 swaps the old copy back.
+// With --roll-back, step 3 swaps the old copy back.
 //
-// It logs to helper.log next to the marker. It runs from the old app's
-// bundle, which stays whole at the staged path after the swap.
+// With --relaunch Koan has left its relaunch to the helper, so the helper
+// opens the app on every way out, whatever failed.
+//
+// It logs to helper.log next to the marker (started again past 1 MB). It
+// runs from the old app's bundle, which stays whole at the staged path after
+// the swap.
 
 #import <AppKit/AppKit.h>
 #include <errno.h>
-#include <libproc.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/event.h>
 #include <unistd.h>
 
-#include <algorithm>
-#include <array>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "base/apple/foundation_util.h"
 #include "base/at_exit.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
@@ -46,15 +57,18 @@
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/mac/launch_application.h"
+#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/path_service.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "koan/browser/updates/koan_update_install_logic.h"
 #include "koan/browser/updates/koan_update_platform.h"
+#include "koan/browser/updates/koan_update_source.h"
 
 namespace koan::updates {
 namespace {
@@ -65,6 +79,10 @@ constexpr base::TimeDelta kIdleTimeout = base::Seconds(30);
 // confirmed itself (kConfirmDelay after its first window).
 constexpr base::TimeDelta kWatchTimeout = base::Minutes(2);
 constexpr base::TimeDelta kPollInterval = base::Milliseconds(250);
+// How long LaunchServices gets to open the app.
+constexpr base::TimeDelta kOpenTimeout = base::Seconds(30);
+// How long the new version gets to print its version.
+constexpr base::TimeDelta kSmokeTestTimeout = base::Minutes(1);
 
 std::optional<InstallMarker> ReadMarker(const base::FilePath& path) {
   std::string json;
@@ -76,14 +94,27 @@ std::optional<InstallMarker> ReadMarker(const base::FilePath& path) {
 
 bool WriteMarker(const base::FilePath& path, const InstallMarker& marker) {
   const base::FilePath temp = path.AddExtension(FILE_PATH_LITERAL("tmp"));
-  return base::WriteFile(temp, SerializeMarker(marker)) &&
-         base::ReplaceFile(temp, path, nullptr);
+  const bool ok = base::WriteFile(temp, SerializeMarker(marker)) &&
+                  base::ReplaceFile(temp, path, nullptr);
+  if (!ok) {
+    PLOG(ERROR) << "Couldn't write " << path;
+  }
+  return ok;
+}
+
+// Keeps helper.log and the one before it, at about kMaxHelperLogSize each.
+void RotateLog(const base::FilePath& log_path) {
+  const std::optional<int64_t> size = base::GetFileSize(log_path);
+  if (size && *size > kMaxHelperLogSize) {
+    base::ReplaceFile(log_path, log_path.DirName().Append(kHelperOldLogName),
+                      nullptr);
+  }
 }
 
 // Waits for `pid`, this process's parent, to exit. Its parent having changed
 // means it exited already (launchd took the helper over).
 void WaitForParentExit(pid_t pid) {
-  if (getppid() != pid) {
+  if (pid <= 1 || getppid() != pid) {
     return;
   }
   base::ScopedFD queue(kqueue());
@@ -101,33 +132,15 @@ void WaitForParentExit(pid_t pid) {
   HANDLE_EINTR(kevent(queue.get(), nullptr, 0, &event, 1, nullptr));
 }
 
-// Whether a process other than this one runs an executable inside `app`
-// (proc_pidpath() gives resolved paths).
-bool AnyProcessRunsFrom(const base::FilePath& app) {
+// Whether a process other than this one keeps the helper from replacing
+// `app` (BlocksSwap(); proc_pidpath() gives resolved paths).
+bool AnyProcessBlocksSwap(const base::FilePath& app) {
   const base::FilePath resolved = base::MakeAbsoluteFilePath(app);
-  const std::string prefix = (resolved.empty() ? app : resolved).value() + "/";
-  const int count = proc_listallpids(nullptr, 0);
-  if (count <= 0) {
-    return false;
-  }
-  std::vector<pid_t> pids(static_cast<size_t>(count) + 64);
-  const int listed = proc_listallpids(
-      pids.data(), static_cast<int>(pids.size() * sizeof(pid_t)));
-  if (listed <= 0) {
-    return false;
-  }
-  pids.resize(std::min(pids.size(), static_cast<size_t>(listed)));
-  std::array<char, PROC_PIDPATHINFO_MAXSIZE> path;
-  for (pid_t pid : pids) {
-    if (pid == getpid()) {
-      continue;
-    }
-    const int length =
-        proc_pidpath(pid, path.data(), static_cast<uint32_t>(path.size()));
-    const std::string_view running(path.data(),
-                                   static_cast<size_t>(std::max(length, 0)));
-    if (base::StartsWith(running, prefix)) {
-      LOG(INFO) << "Still running from the app: " << pid << " " << running;
+  const base::FilePath& running_from = resolved.empty() ? app : resolved;
+  for (const RunningProcess& process : ListProcesses()) {
+    if (process.pid != getpid() && BlocksSwap(running_from, process.path)) {
+      LOG(INFO) << "Still running from the app: " << process.pid << " "
+                << process.path;
       return true;
     }
   }
@@ -136,7 +149,7 @@ bool AnyProcessRunsFrom(const base::FilePath& app) {
 
 bool WaitUntilNothingRunsFrom(const base::FilePath& app) {
   const base::TimeTicks deadline = base::TimeTicks::Now() + kIdleTimeout;
-  while (AnyProcessRunsFrom(app)) {
+  while (AnyProcessBlocksSwap(app)) {
     if (base::TimeTicks::Now() > deadline) {
       return false;
     }
@@ -158,26 +171,121 @@ int Swap(const InstallMarker& marker) {
   return error;
 }
 
+// Checks the copy at `marker.staged` against `requirement` again (it may
+// have changed since Koan checked it), then swaps. Empty, or why not.
+std::string CheckAndSwap(const InstallMarker& marker,
+                         const std::string& requirement) {
+  std::string output;
+  if (VerifyCodeSignature(marker.staged, requirement, &output) !=
+      ToolResult::kOk) {
+    return base::StrCat({"codesign: ", output});
+  }
+  if (const int error = Swap(marker)) {
+    return base::StrCat({"renamex_np: ", strerror(error)});
+  }
+  return std::string();
+}
+
+// Whether the app at `app` starts as far as printing its version. A build
+// that dyld can't load (a missing framework, the wrong architecture) exits
+// before any of Koan's code could count its launches.
+bool SmokeTest(const base::FilePath& app) {
+  // Info.plist itself: NSBundle would cache what it read of the old app.
+  NSDictionary* plist =
+      [NSDictionary dictionaryWithContentsOfURL:base::apple::FilePathToNSURL(
+                                                    app.Append("Contents")
+                                                        .Append("Info.plist"))
+                                          error:nil];
+  const std::string name = base::SysNSStringToUTF8(
+      base::apple::ObjCCast<NSString>(plist[@"CFBundleExecutable"]));
+  if (name.empty() || base::FilePath(name).BaseName().value() != name) {
+    LOG(ERROR) << app << " has no executable";
+    return false;
+  }
+  std::string output;
+  if (RunTool({app.Append("Contents").Append("MacOS").Append(name).value(),
+               "--version"},
+              kSmokeTestTimeout, &output) != ToolResult::kOk) {
+    return false;
+  }
+  LOG(INFO) << "Starts: " << output;
+  return true;
+}
+
+// What LaunchApplication() reports, which may come after Open() has given
+// up waiting for it.
+struct OpenResult : public base::RefCountedThreadSafe<OpenResult> {
+  pid_t pid = 0;
+  bool done = false;
+
+ private:
+  friend class base::RefCountedThreadSafe<OpenResult>;
+  ~OpenResult() = default;
+};
+
 // Opens `app` as the Dock would, with `args`; its pid, or 0.
 pid_t Open(const base::FilePath& app, const std::vector<std::string>& args) {
-  pid_t pid = 0;
+  if (app.empty()) {
+    LOG(ERROR) << "No app to open";
+    return 0;
+  }
+  LOG(INFO) << "Opening " << app;
+  auto result = base::MakeRefCounted<OpenResult>();
   base::mac::LaunchApplication(
       app, args, /*url_specs=*/{},
       {.activate = true, .create_new_instance = true},
       base::BindOnce(
-          [](pid_t* out, NSRunningApplication* running, NSError* error) {
+          [](scoped_refptr<OpenResult> result, NSRunningApplication* running,
+             NSError* error) {
             if (error) {
               LOG(ERROR) << "Couldn't open the app: "
                          << base::SysNSStringToUTF8(error.description);
             } else {
-              *out = running.processIdentifier;
+              result->pid = running.processIdentifier;
             }
-            CFRunLoopStop(CFRunLoopGetMain());
+            result->done = true;
           },
-          base::Unretained(&pid)));
-  CFRunLoopRun();
-  return pid;
+          result));
+  // The callback comes on the main queue, which the main run loop serves.
+  const base::TimeTicks deadline = base::TimeTicks::Now() + kOpenTimeout;
+  while (!result->done && base::TimeTicks::Now() < deadline) {
+    CFRunLoopRunInMode(kCFRunLoopDefaultMode, kPollInterval.InSecondsF(),
+                       /*returnAfterSourceHandled=*/true);
+  }
+  if (!result->done) {
+    LOG(ERROR) << "LaunchServices didn't open " << app << " in time";
+  }
+  return result->pid;
 }
+
+// With --relaunch, opens the app once the helper is done, whichever way it
+// ends, unless it was opened already (Relaunch()).
+class Relauncher {
+ public:
+  Relauncher(bool enabled, base::FilePath app, std::vector<std::string> args)
+      : enabled_(enabled), app_(std::move(app)), args_(std::move(args)) {}
+  Relauncher(const Relauncher&) = delete;
+  Relauncher& operator=(const Relauncher&) = delete;
+  ~Relauncher() {
+    if (enabled_ && !opened_) {
+      Open(app_, args_);
+    }
+  }
+
+  // Opens it now; its pid, or 0.
+  pid_t Relaunch() {
+    opened_ = true;
+    return Open(app_, args_);
+  }
+  // What was opened didn't last: open the app again on the way out.
+  void OpenAgainOnExit() { opened_ = false; }
+
+ private:
+  const bool enabled_;
+  const base::FilePath app_;
+  const std::vector<std::string> args_;
+  bool opened_ = false;
+};
 
 // Whether the new version has confirmed itself: the marker says so, or is
 // gone (Koan removes it once it has cleaned up).
@@ -214,89 +322,131 @@ bool WatchNewVersion(pid_t pid, const base::FilePath& marker_path) {
   return !exited || Confirmed(marker_path);
 }
 
+// Puts the old copy back after the new version was swapped in (`marker` is
+// kSwapped). Whether it did.
+bool SwapBack(InstallMarker marker,
+              const std::string& requirement,
+              const base::FilePath& marker_path) {
+  if (!WaitUntilNothingRunsFrom(marker.app)) {
+    LOG(ERROR) << marker.app << " still runs; can't put " << marker.from_version
+               << " back";
+    return false;
+  }
+  const std::string error = CheckAndSwap(marker, requirement);
+  if (!error.empty()) {
+    LOG(ERROR) << "Couldn't put " << marker.from_version << " back: " << error;
+    return false;
+  }
+  marker.state = MarkerState::kRolledBack;
+  WriteMarker(marker_path, marker);
+  LOG(INFO) << "Put " << marker.from_version << " back";
+  return true;
+}
+
 int HelperMain() {
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
-  const base::FilePath marker_path =
-      command_line.GetSwitchValuePath(kHelperMarkerSwitch);
-  if (marker_path.empty() || !marker_path.IsAbsolute()) {
-    fprintf(stderr, "usage: %s --pid=<pid> --marker=<path> ...\n", kHelperName);
-    return 2;
-  }
-  logging::LoggingSettings logging;
-  logging.logging_dest = logging::LOG_TO_FILE | logging::LOG_TO_STDERR;
-  const base::FilePath log_path = marker_path.DirName().Append(kHelperLogName);
-  logging.log_file_path = log_path.value().c_str();
-  logging.delete_old = logging::APPEND_TO_OLD_LOG_FILE;
-  logging::InitLogging(logging);
+  const bool relaunch = command_line.HasSwitch(kHelperRelaunchSwitch);
+  const bool roll_back = command_line.HasSwitch(kHelperRollBackSwitch);
+  // Koan's own bundle: the only app this helper replaces, and the one it
+  // opens again.
+  base::FilePath executable;
+  base::PathService::Get(base::FILE_EXE, &executable);
+  const base::FilePath own_app = HelperBundle(executable);
+  Relauncher relauncher(relaunch, own_app, command_line.GetArgs());
 
   int pid = 0;
   if (!base::StringToInt(command_line.GetSwitchValueASCII(kHelperPidSwitch),
                          &pid) ||
       pid <= 1) {
-    LOG(ERROR) << "No --" << kHelperPidSwitch;
+    pid = getppid();
+  }
+  const base::FilePath marker_path =
+      command_line.GetSwitchValuePath(kHelperMarkerSwitch);
+  if (marker_path.empty() || !marker_path.IsAbsolute()) {
+    fprintf(stderr, "usage: %s --pid=<pid> --marker=<path> ...\n", kHelperName);
+    WaitForParentExit(pid);
     return 2;
   }
-  const bool relaunch = command_line.HasSwitch(kHelperRelaunchSwitch);
-  const bool roll_back = command_line.HasSwitch(kHelperRollBackSwitch);
-  const std::vector<std::string> args = command_line.GetArgs();
+  const base::FilePath log_path = marker_path.DirName().Append(kHelperLogName);
+  RotateLog(log_path);
+  logging::LoggingSettings logging;
+  logging.logging_dest = logging::LOG_TO_FILE | logging::LOG_TO_STDERR;
+  logging.log_file_path = log_path.value().c_str();
+  logging.delete_old = logging::APPEND_TO_OLD_LOG_FILE;
+  logging::InitLogging(logging);
+
   LOG(INFO) << "Waiting for " << pid << " to exit"
             << (roll_back ? " to roll back" : " to install")
-            << (relaunch ? ", then relaunching" : "");
+            << (relaunch ? ", then relaunching " : " ") << own_app;
   WaitForParentExit(pid);
 
   std::optional<InstallMarker> marker = ReadMarker(marker_path);
-  if (!marker ||
-      !IsStagedPathFor(marker->app, marker->staged, marker_path.DirName()) ||
-      marker->state !=
-          (roll_back ? MarkerState::kSwapped : MarkerState::kReady)) {
-    LOG(ERROR) << "No install to do in " << marker_path;
+  if (const std::optional<std::string> refusal = HelperRefusal(
+          marker, roll_back ? HelperTask::kRollBack : HelperTask::kInstall,
+          own_app, marker_path.DirName())) {
+    LOG(ERROR) << "Nothing swapped for " << marker_path << ": " << *refusal;
+    // A roll-back that can't happen mustn't be asked for at every launch.
+    if (roll_back && marker && marker->state == MarkerState::kSwapped) {
+      marker->state = MarkerState::kFailed;
+      marker->error = *refusal;
+      WriteMarker(marker_path, *marker);
+    }
     return 1;
   }
   const base::FilePath app = marker->app;
+  const std::string requirement =
+      GetUpdateSource(command_line).code_requirement;
   if (!WaitUntilNothingRunsFrom(app)) {
-    // Another Koan still runs from it: try again at the next quit.
+    // Another Koan still runs from it: an install is tried again at the
+    // next quit; a roll-back is given up (the new version does start).
     LOG(ERROR) << app << " still runs; nothing swapped";
-    if (relaunch) {
-      Open(app, args);
+    if (roll_back) {
+      marker->state = MarkerState::kFailed;
+      marker->error = "the app still ran";
+      WriteMarker(marker_path, *marker);
     }
     return 1;
   }
-  if (const int error = Swap(*marker)) {
+  if (const std::string error = CheckAndSwap(*marker, requirement);
+      !error.empty()) {
     marker->state = MarkerState::kFailed;
-    marker->error = base::StrCat({"renamex_np: ", strerror(error)});
+    marker->error = error;
     WriteMarker(marker_path, *marker);
-    if (relaunch) {
-      Open(app, args);
-    }
     return 1;
   }
   marker->state = roll_back ? MarkerState::kRolledBack : MarkerState::kSwapped;
   marker->launches = 0;
-  if (!WriteMarker(marker_path, *marker)) {
-    PLOG(ERROR) << "Couldn't write " << marker_path;
-  }
+  WriteMarker(marker_path, *marker);
   LOG(INFO) << (roll_back ? "Rolled back to " : "Installed ")
             << (roll_back ? marker->from_version : marker->version);
+  if (roll_back) {
+    return 0;
+  }
+  if (!SmokeTest(app)) {
+    LOG(ERROR) << marker->version << " doesn't start; putting "
+               << marker->from_version << " back";
+    return SwapBack(*marker, requirement, marker_path) ? 0 : 1;
+  }
   if (!relaunch) {
     return 0;
   }
-  const pid_t new_pid = Open(app, args);
-  if (roll_back || new_pid == 0 || WatchNewVersion(new_pid, marker_path)) {
+
+  const pid_t new_pid = relauncher.Relaunch();
+  if (new_pid != 0 && WatchNewVersion(new_pid, marker_path)) {
     return 0;
   }
-
-  // The new version died before it confirmed itself: put the old one back.
-  LOG(ERROR) << marker->version << " exited before it started; rolling back";
+  // The new version didn't open, or died before it confirmed itself: put the
+  // old one back, and open whichever is installed then.
+  LOG(ERROR) << marker->version
+             << (new_pid ? " exited before it started" : " didn't open")
+             << "; rolling back";
+  relauncher.OpenAgainOnExit();
   marker = ReadMarker(marker_path);
-  if (!marker || marker->state != MarkerState::kSwapped ||
-      !WaitUntilNothingRunsFrom(app) || Swap(*marker) != 0) {
+  if (!marker || marker->state != MarkerState::kSwapped) {
     return 1;
   }
-  marker->state = MarkerState::kRolledBack;
-  WriteMarker(marker_path, *marker);
-  Open(app, args);
-  return 0;
+  return SwapBack(*marker, requirement, marker_path) ? 0 : 1;
 }
 
 }  // namespace

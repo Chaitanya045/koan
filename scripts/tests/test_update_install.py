@@ -41,14 +41,18 @@ class UpdateInstallTest(unittest.TestCase):
     self.assertRegex(pinned, r'^[0-9a-f]{40}$')
 
   def test_bundles_and_signs_the_helper(self):
-    platform = (UPDATES / 'koan_update_platform.h').read_text()
-    helper = _cpp_string(platform, 'kHelperName')
+    logic = (UPDATES / 'koan_update_install_logic.h').read_text()
+    helper = _cpp_string(logic, 'kHelperName')
     self.assertEqual(helper, 'koan-update-helper')
     self.assertIn('executable("%s")' % helper,
                   (UPDATES / 'BUILD.gn').read_text())
-    # Where StartHelper() looks for it.
+    # Where StartHelper() looks for it (HelperPathIn()), and where the helper
+    # finds the app it may replace (HelperBundle()).
+    logic_cc = (UPDATES / 'koan_update_install_logic.cc').read_text()
+    self.assertIn('.Append("Resources")\n      .Append("bin")\n'
+                  '      .Append(kHelperName)', logic_cc)
     mac = (UPDATES / 'koan_update_platform_mac.mm').read_text()
-    self.assertIn('.Append("Resources")\n            .Append("bin")', mac)
+    self.assertIn('HelperPathIn(base::apple::OuterBundlePath())', mac)
     cli = _read('src/cli/BUILD.gn')
     bundle = cli[cli.index('bundle_data("koan_bundle_data")'):]
     bundle = bundle[:bundle.index('\n  }\n')]

@@ -97,6 +97,7 @@ source_set("install_platform") {
   ]
   if (is_mac) {
     sources += [ "koan_update_platform_mac.mm" ]
+    deps = [ ":update_source" ]
     frameworks = [ "Foundation.framework" ]
   }
 }
@@ -110,6 +111,7 @@ if (is_mac) {
     deps = [
       ":install_logic",
       ":install_platform",
+      ":update_source",
       "//base",
     ]
     frameworks = [
