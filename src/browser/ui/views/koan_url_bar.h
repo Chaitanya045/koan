@@ -203,7 +203,8 @@ void AdjustOmniboxPopupBounds(views::View* location_bar,
 // The colour the location bar of `location_bar` (a LocationBarView) paints and
 // gives its omnibox as its background: clear, while a glass URL bar card (Zen's
 // acrylic-urlbar) is open in its window, over the card's translucent fill;
-// else `color`. Called from LocationBarView::RefreshBackground().
+// in a quick window the colour of its top row; else `color`. Called from
+// LocationBarView::RefreshBackground().
 SkColor AdjustLocationBarBackground(views::View* location_bar, SkColor color);
 
 // Whether `browser_view`'s floating URL bar is open as a glass card: the

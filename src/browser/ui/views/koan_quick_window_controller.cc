@@ -27,6 +27,8 @@
 #include "chrome/browser/ui/tabs/tab_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+#include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/webui_url_constants.h"
@@ -56,6 +58,7 @@
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/background.h"
+#include "ui/views/border.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/image_button_factory.h"
 #include "ui/views/controls/menu/menu_runner.h"
@@ -87,8 +90,20 @@ constexpr int kButtonIconSize = 14;
 constexpr int kButtonGap = 6;
 constexpr int kTrailingInset = 8;
 
+#if BUILDFLAG(IS_MAC)
+// Room for the traffic lights at the row's start: they end at x = 74 on every
+// macOS version, plus the gap upstream keeps after them on macOS 26
+// (BrowserFrameViewMac::GetCaptionButtonBounds(), MacTabStripInsets, which
+// popups don't get).
+constexpr int kRowLeadingInset = 86;
+#else
+constexpr int kRowLeadingInset = 0;
+#endif
+
 constexpr char16_t kMoveLabel[] = u"Move to Space";
+#if !BUILDFLAG(IS_MAC)
 constexpr char16_t kCloseLabel[] = u"Close (Esc)";
+#endif
 
 // Menu commands.
 constexpr int kMoveToWindowCommand = 1;
@@ -169,6 +184,11 @@ views::ImageButton* AddButton(
 
 }  // namespace
 
+int QuickWindowRowHeight(const BrowserView* browser_view) {
+  const ToolbarView* toolbar = browser_view ? browser_view->toolbar() : nullptr;
+  return toolbar ? toolbar->GetPreferredSize().height() : 0;
+}
+
 bool IsQuickWindow(const BrowserView* browser_view) {
   return browser_view && browser_view->GetProperty(kKoanQuickWindowKey);
 }
@@ -181,6 +201,10 @@ bool IsQuickWindow(BrowserWindowInterface* browser) {
 void MarkQuickWindowIfRequested(BrowserView* browser_view) {
   if (g_creating_quick_window && !browser_view->GetIsNormalType()) {
     browser_view->SetProperty(kKoanQuickWindowKey, true);
+    // Before the frame exists: no window icon in the frame either (it would
+    // keep room for itself above the row, as an app icon does), like the
+    // title (OwnsWindowTopRow()).
+    browser_view->SetShowIcon(false);
   }
 }
 
@@ -382,7 +406,48 @@ void KoanQuickWindowController::OnAddedToWidget() {
       ui::Accelerator(ui::VKEY_O, ui::EF_PLATFORM_ACCELERATOR),
       ui::AcceleratorManager::kNormalPriority, this);
   CreateButtons();
+  StyleRow();
   OnBrowserViewLayout();
+}
+
+void KoanQuickWindowController::StyleRow() {
+  ToolbarView* toolbar = browser_view_->toolbar();
+  if (!toolbar || !buttons_) {
+    return;
+  }
+  // The window's colour, as the main window's sidebar around its card; the
+  // address takes it too (AdjustLocationBarBackground()).
+  toolbar->SetBackground(views::CreateSolidBackground(kColorToolbar));
+  // The popup row is a FlexLayout, which keeps to its host's insets: the
+  // address ends where the buttons start, so they cover neither a long
+  // address nor its page actions, and on macOS it starts after the lights.
+  toolbar->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(
+      0, kRowLeadingInset, 0,
+      buttons_->GetContentsView()->GetPreferredSize().width())));
+}
+
+bool KoanQuickWindowController::IsCaptionAt(const gfx::Point& point) {
+  ToolbarView* toolbar = browser_view_->toolbar();
+  if (destroying_ || !toolbar || !toolbar->GetVisible() ||
+      !browser_view_->parent()) {
+    return false;
+  }
+  gfx::Point in_toolbar(point);
+  views::View::ConvertPointToTarget(browser_view_->parent(), toolbar,
+                                    &in_toolbar);
+  if (!toolbar->HitTestPoint(in_toolbar)) {
+    return false;
+  }
+  const views::View* target = toolbar->GetEventHandlerForPoint(in_toolbar);
+  if (target == toolbar) {
+    return true;
+  }
+  // The address is read-only in a popup: it drags the window, as a title
+  // would. Its security chip and page actions keep their clicks.
+  LocationBarView* location_bar = toolbar->location_bar_view();
+  return location_bar && (target == location_bar ||
+                          (location_bar->omnibox_view() &&
+                           location_bar->omnibox_view()->Contains(target)));
 }
 
 void KoanQuickWindowController::CreateButtons() {
@@ -406,7 +471,7 @@ void KoanQuickWindowController::CreateButtons() {
   row->SetBetweenChildSpacing(kButtonGap);
   row->SetInsideBorderInsets(
       gfx::Insets::TLBR(0, kButtonGap, 0, kTrailingInset));
-  // Over the trailing end of the address row, in its colour.
+  // At the trailing end of the row, in its colour (StyleRow()).
   row->SetBackground(views::CreateSolidBackground(kColorToolbar));
   // Posted: the menu and the move outlive the press that starts them.
   move_button_ = AddButton(
@@ -422,10 +487,14 @@ void KoanQuickWindowController::CreateButtons() {
           },
           weak_factory_.GetWeakPtr()),
       button_subscriptions_);
+#if !BUILDFLAG(IS_MAC)
+  // The window's only close: the frame shows none of its buttons
+  // (OwnsWindowTopRow()). On macOS the red traffic light is the close.
   AddButton(row.get(), vector_icons::kCloseIcon, kCloseLabel,
             base::BindRepeating(&KoanQuickWindowController::Close,
                                 weak_factory_.GetWeakPtr()),
             button_subscriptions_);
+#endif
   buttons_->SetContentsView(std::move(row));
   buttons_->ShowInactive();
 }

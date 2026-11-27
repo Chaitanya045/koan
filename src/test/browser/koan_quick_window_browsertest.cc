@@ -23,9 +23,15 @@
 #include "chrome/browser/ui/browser_init_state.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
+#include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/multi_contents_view.h"
+#include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+#include "chrome/browser/ui/views/location_bar/location_icon_view.h"
+#include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
+#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/prefs/pref_service.h"
@@ -37,13 +43,21 @@
 #include "koan/browser/containers/koan_user_containers.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_browser_view_hooks.h"
+#include "koan/browser/ui/views/koan_content_card.h"
 #include "koan/browser/ui/views/koan_quick_window_controller.h"
+#include "koan/browser/ui/views/koan_url_bar.h"
+#include "koan/browser/ui/views/koan_window_controls.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "ui/base/accelerators/accelerator.h"
+#include "ui/base/hit_test.h"
+#include "ui/color/color_provider.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/views/test/views_test_utils.h"
+#include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 
 namespace koan {
@@ -207,6 +221,86 @@ IN_PROC_BROWSER_TEST_F(KoanQuickWindowBrowserTest, TakesTheSpacesProfile) {
       quick->GetTabStripModel()->GetActiveWebContents());
   ASSERT_TRUE(id);
   EXPECT_EQ(containers::Serialize(*id), container);
+}
+
+// The look (the review of #524): one row drawn by Koan, no title bar, one
+// close, the page as a card below the row.
+IN_PROC_BROWSER_TEST_F(KoanQuickWindowBrowserTest, OneRowDrawnByKoan) {
+  ChooseQuickWindow();
+  ui_test_utils::BrowserCreatedObserver created;
+  OpenFromOtherApp(PageUrl());
+  BrowserWindowInterface* quick = created.Wait();
+  ASSERT_TRUE(quick);
+  BrowserView* view = BrowserView::GetBrowserViewForBrowser(quick);
+  BrowserView* main_view = BrowserView::GetBrowserViewForBrowser(browser());
+  KoanBrowserViewController* controller = KoanBrowserViewController::From(view);
+  ASSERT_TRUE(controller && controller->quick_window());
+  views::test::RunScheduledLayout(view->GetWidget());
+
+  // No title bar: no title, no icon (the frame's hooks).
+  EXPECT_TRUE(OwnsWindowTopRow(view));
+  EXPECT_FALSE(OwnsWindowTopRow(main_view));
+  EXPECT_FALSE(view->ShouldShowWindowTitle());
+  EXPECT_FALSE(view->ShouldShowWindowIcon());
+#if BUILDFLAG(IS_LINUX)
+  // None of the frame's caption buttons: Koan's Close is the only one.
+  EXPECT_TRUE(GetCaptionButtonAreaSize(view).IsEmpty());
+#endif
+
+  // The row: upstream's popup toolbar, in the window's colour, the address
+  // ending where Koan's buttons start.
+  ToolbarView* toolbar = view->toolbar();
+  ASSERT_TRUE(toolbar && toolbar->GetVisible());
+  LocationBarView* location_bar = toolbar->location_bar_view();
+  ASSERT_TRUE(location_bar);
+  views::Widget* buttons = controller->quick_window()->buttons_widget();
+  ASSERT_TRUE(buttons && buttons->IsVisible());
+#if BUILDFLAG(IS_MAC)
+  // Move to Space; the red traffic light is the close.
+  EXPECT_EQ(buttons->GetContentsView()->children().size(), 1u);
+#else
+  // Move to Space and Close.
+  EXPECT_EQ(buttons->GetContentsView()->children().size(), 2u);
+#endif
+  const int buttons_width =
+      buttons->GetContentsView()->GetPreferredSize().width();
+  EXPECT_EQ(toolbar->GetInsets().right(), buttons_width);
+  EXPECT_LE(location_bar->bounds().right(), toolbar->width() - buttons_width);
+  EXPECT_EQ(buttons->GetWindowBoundsInScreen().right(),
+            toolbar->GetBoundsInScreen().right());
+  EXPECT_EQ(AdjustLocationBarBackground(location_bar, SK_ColorRED),
+            location_bar->GetColorProvider()->GetColor(kColorToolbar));
+
+  // The row is the window's caption: its read-only address drags the window,
+  // its security chip doesn't, and the page is client area.
+  views::View* frame = view->parent();
+  gfx::Point address =
+      location_bar->omnibox_view()->GetLocalBounds().CenterPoint();
+  views::View::ConvertPointToTarget(location_bar->omnibox_view(), frame,
+                                    &address);
+  EXPECT_TRUE(IsWindowCaptionAt(view, address));
+  EXPECT_EQ(view->NonClientHitTest(address), HTCAPTION);
+  gfx::Point chip =
+      location_bar->location_icon_view()->GetLocalBounds().CenterPoint();
+  views::View::ConvertPointToTarget(location_bar->location_icon_view(), frame,
+                                    &chip);
+  EXPECT_FALSE(IsWindowCaptionAt(view, chip));
+  gfx::Point page = view->multi_contents_view()->GetLocalBounds().CenterPoint();
+  views::View::ConvertPointToTarget(view->multi_contents_view(), frame, &page);
+  EXPECT_FALSE(IsWindowCaptionAt(view, page));
+  EXPECT_EQ(view->NonClientHitTest(page), HTCLIENT);
+  // The main window's toolbar is no caption of Koan's.
+  EXPECT_FALSE(IsWindowCaptionAt(main_view, address));
+
+  // The page is the content card: inset and rounded, but none of the rest of
+  // Koan's window layout (compact mode, the sidebar).
+  EXPECT_TRUE(DrawsContentCard(view));
+  EXPECT_FALSE(UseContentCard(view));
+  EXPECT_EQ(ContentCardInsets(view),
+            gfx::Insets::TLBR(0, kContentCardMargin, kContentCardMargin,
+                              kContentCardMargin));
+  EXPECT_EQ(ActiveContentsRadii(view, gfx::RoundedCornersF()),
+            gfx::RoundedCornersF(ContentCardCornerRadius()));
 }
 
 // Esc closes it.

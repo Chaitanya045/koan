@@ -605,9 +605,13 @@ belongs to a Space, and new tabs open in the active one.
 - **Quick window** (Arc's Little Arc). Settings > Tab Management >
   Workspaces > **Links from other apps open in: A quick window** (the
   default is A Space). A link from another app then opens in a small window
-  of its own, centred, over the app you clicked it in: the page, its address
-  and two buttons, without a sidebar, so the main window keeps what it
-  shows. Read it and close it (Esc, ⌘W, the Close button), or keep it:
+  of its own, centred, over the app you clicked it in, without a sidebar, so
+  the main window keeps what it shows. It has one top row and no title bar:
+  the site's address (drag it to move the window, double-click it to
+  maximize), Move to Space and Close; on a Mac the window buttons sit at the
+  row's start and the red one is the close. The page is below it, inset with
+  rounded corners like the main window's. Read it and close it (Esc, ⌘W,
+  Close or the red button), or keep it:
   **Move to Space** lists your Spaces (the one you used last first) and
   moves the page there as a tab, as it is (no reload, the scroll position
   and what you typed stay); ⌘O moves it to the Space you used last at once.

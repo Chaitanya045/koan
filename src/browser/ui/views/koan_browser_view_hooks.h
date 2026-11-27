@@ -49,6 +49,28 @@ bool IsWindowCoveredAt(BrowserView* browser_view, const gfx::Point& point);
 // BrowserView, so the window's top edge wouldn't resize (#574).
 int ClientAreaTopForHitTest(int client_area_top);
 
+// Called next in BrowserView::NonClientHitTest(), with the same `point`:
+// whether it is the window's caption, so that dragging there moves the window
+// (and a double click maximizes it): the empty part of a quick window's top
+// row and its read-only address, not the security chip or a page action
+// (KoanQuickWindowController::IsCaptionAt()). Upstream makes everything below
+// a popup's title bar client area, and a quick window has no title bar.
+bool IsWindowCaptionAt(BrowserView* browser_view, const gfx::Point& point);
+
+// Whether Koan draws the window's whole top row itself, so that the frame
+// draws none of its own: a quick window (koan_quick_window_controller.h),
+// whose one row holds the site, Move to Space and Close. Hooks:
+// - BrowserView::ShouldShowWindowTitle(): no title (on Linux the frame's
+//   title bar with the icon and title, on macOS AppKit's title text);
+// - OpaqueBrowserFrameView::ShouldShowCaptionButtons() (Linux): none of the
+//   frame's caption buttons, Koan's Close being the window's one close; the
+//   frame keeps its border and so its resize edges;
+// - BrowserNativeWidgetMac::PopulateCreateWindowParams(): a transparent title
+//   bar over the full-size content, as a normal window's, so that the traffic
+//   lights sit at the start of the row (GetTrafficLightsTitlebarHeight()
+//   centres them in it).
+bool OwnsWindowTopRow(const BrowserView* browser_view);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_BROWSER_VIEW_HOOKS_H_

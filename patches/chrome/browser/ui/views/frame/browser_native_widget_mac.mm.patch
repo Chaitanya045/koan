@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
-index fd4cc9a..97fc8a8 100644
+index fd4cc9a121ef9a7bf20e1269bcb381eabf6fa055..93a348053166e66fb6475aca530bcb32e3c46818 100644
 --- a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
 +++ b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
 @@ -47,6 +47,7 @@
@@ -10,16 +10,17 @@ index fd4cc9a..97fc8a8 100644
  #include "chrome/browser/ui/web_applications/app_browser_controller.h"
  #include "chrome/common/pref_names.h"
  #include "chrome/grit/generated_resources.h"
-@@ -65,6 +66,8 @@
+@@ -65,6 +66,9 @@
  #include "components/remote_cocoa/common/native_widget_ns_window_host.mojom.h"
  #include "components/viz/common/frame_timing_details.h"
  #include "components/web_modal/web_contents_modal_dialog_host.h"
++#include "koan/browser/ui/views/koan_browser_view_hooks.h"
 +#include "koan/browser/ui/views/koan_command_policy.h"
 +#include "koan/browser/ui/views/koan_traffic_lights.h"
  #include "ui/accessibility/platform/ax_platform_node.h"
  #include "ui/actions/actions.h"
  #include "ui/base/accelerators/global_accelerator_listener/global_accelerator_listener.h"
-@@ -111,24 +114,6 @@ bool ShouldHandleKeyboardEvent(const input::NativeWebKeyboardEvent& event) {
+@@ -111,24 +115,6 @@ bool ShouldHandleKeyboardEvent(const input::NativeWebKeyboardEvent& event) {
    return event.os_event && event.os_event.Get().type == NSEventTypeKeyDown;
  }
  
@@ -44,7 +45,7 @@ index fd4cc9a..97fc8a8 100644
  bool IsCommandTriggeredFromMacMenu(NSInteger parent_menu_tag, int command_id) {
    NSEvent* current_event = [NSApp currentEvent];
    const bool is_mouse_click =
-@@ -288,6 +273,11 @@ void BrowserNativeWidgetMac::GetWindowFrameTitlebarHeight(
+@@ -288,6 +274,11 @@ void BrowserNativeWidgetMac::GetWindowFrameTitlebarHeight(
      if (!browser_view_->ShouldDrawTabStrip()) {
        *titlebar_height += kWebAppMenuMargin * 2;
      }
@@ -56,7 +57,7 @@ index fd4cc9a..97fc8a8 100644
    } else {
      *override_titlebar_height = false;
      *titlebar_height = 0;
-@@ -614,6 +604,28 @@ void BrowserNativeWidgetMac::ValidateUserInterfaceItem(
+@@ -614,6 +605,28 @@ void BrowserNativeWidgetMac::ValidateUserInterfaceItem(
        break;
      }
    }
@@ -85,7 +86,18 @@ index fd4cc9a..97fc8a8 100644
  }
  
  bool BrowserNativeWidgetMac::WillExecuteCommand(
-@@ -1081,13 +1093,10 @@ void BrowserNativeWidgetMac::UpdateGlassEligibility(bool is_glass_eligible) {
+@@ -737,7 +750,9 @@ void BrowserNativeWidgetMac::PopulateCreateWindowParams(
+                          NSWindowStyleMaskTitled | NSWindowStyleMaskResizable;
+     params->window_title_hidden = true;
+   } else if (browser_view_->GetIsNormalType() ||
+-             browser_view_->GetIsWebAppType()) {
++             browser_view_->GetIsWebAppType() ||
++             // Koan: a quick window's top row is the title bar's.
++             koan::OwnsWindowTopRow(browser_view_)) {
+     params->window_class = remote_cocoa::mojom::WindowClass::kBrowser;
+     params->style_mask |= NSWindowStyleMaskFullSizeContentView;
+ 
+@@ -1081,13 +1096,10 @@ void BrowserNativeWidgetMac::UpdateGlassEligibility(bool is_glass_eligible) {
      if (!glass_background_view_) {
        NSView* const content_view = [ns_window contentView];
  
@@ -102,7 +114,7 @@ index fd4cc9a..97fc8a8 100644
  
        NSView* tint_view = [[NSView alloc] initWithFrame:glass_view.bounds];
        tint_view.wantsLayer = YES;
-@@ -1107,6 +1116,12 @@ void BrowserNativeWidgetMac::UpdateGlassEligibility(bool is_glass_eligible) {
+@@ -1107,6 +1119,12 @@ void BrowserNativeWidgetMac::UpdateGlassEligibility(bool is_glass_eligible) {
            remote_cocoa::kOpaqueFrameBackgroundViewIdentifier;
        opaque_view.wantsLayer = YES;
        opaque_view.layer.opaque = YES;
@@ -115,7 +127,7 @@ index fd4cc9a..97fc8a8 100644
        opaque_background_view_ = opaque_view;
        [content_view addSubview:opaque_background_view_
                      positioned:NSWindowBelow
-@@ -1133,8 +1148,10 @@ void BrowserNativeWidgetMac::UpdateBackgroundGeometry() {
+@@ -1133,8 +1151,10 @@ void BrowserNativeWidgetMac::UpdateBackgroundGeometry() {
    const int content_width = static_cast<int>(content_view.bounds.size.width);
    const int content_height = static_cast<int>(content_view.bounds.size.height);
  
@@ -128,7 +140,7 @@ index fd4cc9a..97fc8a8 100644
  
    int glass_x = 0;
    int glass_y = 0;
-@@ -1200,9 +1217,12 @@ void BrowserNativeWidgetMac::UpdateBackgroundColor() {
+@@ -1200,9 +1220,12 @@ void BrowserNativeWidgetMac::UpdateBackgroundColor() {
      return;
    }
  
@@ -144,7 +156,7 @@ index fd4cc9a..97fc8a8 100644
  
    const bool is_vertical_tabs = browser_view_->ShouldDrawVerticalTabStrip();
  
-@@ -1222,9 +1242,7 @@ void BrowserNativeWidgetMac::UpdateBackgroundColor() {
+@@ -1222,9 +1245,7 @@ void BrowserNativeWidgetMac::UpdateBackgroundColor() {
    last_is_vertical_tabs_ = is_vertical_tabs;
    has_multiple_profiles_open_ = are_multiple_profiles_open;
  

@@ -14,6 +14,7 @@
 #include "koan/browser/koan_features.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_lights_geometry.h"
+#include "koan/browser/ui/views/koan_quick_window_controller.h"
 #include "koan/browser/ui/views/koan_sidebar_header.h"
 #include "koan/browser/ui/views/koan_window_controls.h"
 #include "ui/display/screen.h"
@@ -46,6 +47,11 @@ bool OwnsTitlebar(const BrowserView* browser_view) {
 std::optional<int> GetTrafficLightsTitlebarHeight(
     const views::View* browser_view) {
   const auto* view = views::AsViewClass<BrowserView>(browser_view);
+  // A quick window's one row (koan_quick_window_controller.h): its lights sit
+  // at the row's start (OwnsWindowTopRow()), centred in it.
+  if (IsQuickWindow(view)) {
+    return QuickWindowRowHeight(view);
+  }
   // Where Koan hides the toolbar and keeps the sidebar, its top row is the
   // lights' row, at the top of the window (tabs on the left) or, while the
   // strip for them is open, above the page (tabs on the right; see

@@ -2034,6 +2034,14 @@ bool AdjustLocationIcon(const views::View* icon_view,
 }
 
 SkColor AdjustLocationBarBackground(views::View* location_bar, SkColor color) {
+  // A quick window's address is part of its one row, in the row's colour
+  // (KoanQuickWindowController::StyleRow()).
+  if (const views::Widget* widget = location_bar->GetWidget();
+      widget && location_bar->GetColorProvider() &&
+      IsQuickWindow(BrowserView::GetBrowserViewForNativeWindow(
+          widget->GetTopLevelWidget()->GetNativeWindow()))) {
+    return location_bar->GetColorProvider()->GetColor(kColorToolbar);
+  }
   const KoanUrlBarController* url_bar = UrlBarOf(location_bar);
   return url_bar && url_bar->IsGlassCard() ? SK_ColorTRANSPARENT : color;
 }
