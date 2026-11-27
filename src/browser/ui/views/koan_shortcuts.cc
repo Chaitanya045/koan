@@ -253,7 +253,8 @@ bool KoanShortcutController::CanRun(Action action) const {
     case Action::kNewPrivateWindow:
       return chrome::IsCommandEnabled(browser, IDC_NEW_INCOGNITO_WINDOW);
     case Action::kQuit:
-      return chrome::IsCommandEnabled(browser, IDC_EXIT);
+      // As Run(): a Koan key quits on Linux only.
+      return BUILDFLAG(IS_LINUX) && chrome::IsCommandEnabled(browser, IDC_EXIT);
     case Action::kMuteSite:
       return chrome::IsCommandEnabled(browser, IDC_WINDOW_MUTE_SITE);
     case Action::kBookmarks:
