@@ -304,7 +304,7 @@ Comparison (Zen left, Koan right): `screenshots/palette-zen-vs-koan-typed.png` (
 | Opens on the last section used | Same | |
 | "Open Library" in the command palette | Same | |
 | History: search, when / sort / source filters, grouped by day or site | Same | Default range 120 days, 100 rows at a time, like Zen. Koan adds a profile filter (#474, see Spaces). |
-| History: closed tabs as a source | Same | From Chromium's recently closed tabs (all windows, tabs only). Zen renames the tab "Archive" then; Koan keeps "History". |
+| History: closed tabs as a source | Same | From Chromium's recently closed tabs (all windows, tabs only), and the tabs Koan closed because they weren't used (Performance above). Zen renames the tab "Archive" then; Koan keeps "History". |
 | History: open, open in background (Ctrl/middle click), forget, reopen | Same | Forgetting is off where policy forbids deleting history (AllowDeletingBrowserHistory), as on Chrome's History page. |
 | History: Forget About This Site | Koan addition | Firefox's sidebar has it; Zen's Library menu has only Reopen Page and Forget This Page. Removes the site's history, cookies, site data and cache after asking. |
 | History: clear by range from the tab's menu | Same | Last hour / 12 hours / today (since midnight, as the Today filter) / week / month / everything. The confirmation names the range ("Clear history from the last hour?"). |
@@ -363,6 +363,7 @@ Details, measurements and the reasoning for each default: `PERFORMANCE.md`.
 | Tab unloading under memory pressure only (Firefox's low-memory unloader) | Different | Chromium's Memory Saver, on by default: tabs hidden for 4 h are discarded until opened (Settings > Performance). |
 | Unload Space / Unload all other Spaces (Space menu) | Different | In the Space menu; tabs in use stay loaded (see Spaces above). Memory Saver also discards a Space's tabs once they've been hidden for 4 h. |
 | Background tabs throttled (Firefox timer budgets) | Different | Chromium's timer throttling, plus freezing of all but the 5 most recently used background tabs; pinned tabs (Essentials) and tabs that played audio are never frozen. Switch in Koan's settings (Tab Management > Performance). |
+| No automatic closing of unused tabs (zen-browser/desktop discussions #2326, #5414) | Koan addition | Arc's auto-archive (#482): Tab Management > Performance > "Close tabs I haven't used for" (Never by default, 12 h, 24 h, 7 days, 30 days). Never closes Essentials, pinned tabs, tabs in a folder, the tab each Space shows, a Space's empty tab, agent tabs, a split view with a tab that stays, or tabs in use (Memory Saver's tests, downloads, beforeunload). The time is from when the tab was last on screen and runs while Koan is closed. A one-time notice comes before the first close. Closed tabs go to the Library's closed tabs (120 days, up to 500, not ⌘⇧T's list). Not yet: a per-Space "Keep this Space's tabs". Design: `.agent/notes/upstream/tab-auto-close.md`. |
 | No energy saver | Different | Chromium's energy saver, as in Chrome: on a MacBook it turns on below 20 % battery (Settings > Performance). |
 
 ## Smaller pieces

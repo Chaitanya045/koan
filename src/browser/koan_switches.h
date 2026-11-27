@@ -31,6 +31,11 @@ inline constexpr char kTestWindowGlass[] = "koan-test-window-glass";
 // Keychain/ folder, never from the keychain.
 inline constexpr char kImportTestRoot[] = "koan-import-test-root";
 
+// For testing "Close tabs I haven't used for" (koan_tab_auto_close.h): tabs
+// close after this many seconds unused instead of the setting's hours, and
+// windows check more often. Only while the setting isn't Never.
+inline constexpr char kAutoCloseTabsAfter[] = "koan-auto-close-tabs-after";
+
 }  // namespace koan::switches
 
 #endif  // KOAN_BROWSER_KOAN_SWITCHES_H_

@@ -59,6 +59,7 @@
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
 #include "koan/browser/ui/views/koan_split_header.h"
 #include "koan/browser/ui/views/koan_tab_activation.h"
+#include "koan/browser/ui/views/koan_tab_auto_closer.h"
 #include "koan/browser/ui/views/koan_theme_controller.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_updates.h"
@@ -168,6 +169,7 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
       library_(std::make_unique<KoanLibraryController>(browser_view)),
       tab_activation_(std::make_unique<KoanTabActivationTracker>(
           browser_view->browser()->GetTabStripModel())),
+      tab_auto_closer_(std::make_unique<KoanTabAutoCloser>(browser_view)),
       media_(std::make_unique<KoanMediaController>(browser_view)),
       download_animation_(
           std::make_unique<KoanDownloadAnimation>(browser_view)),
@@ -251,6 +253,7 @@ void KoanBrowserViewController::TearDown() {
   glance_->OnBrowserViewDestroying();
   library_->OnBrowserViewDestroying();
   toast_->Close();
+  tab_auto_closer_->OnBrowserViewDestroying();
   media_->OnBrowserViewDestroying();
   download_animation_->OnBrowserViewDestroying();
   loading_indicator_->OnBrowserViewDestroying();

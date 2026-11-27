@@ -218,6 +218,13 @@ constexpr Option kPinnedTabCloseBehaviors[] = {
     {"close", "Close tab"},
 };
 
+// "Close tabs I haven't used for" (koan::auto_close::kAllowedHours), Arc's
+// auto-archive times.
+constexpr Option kAutoCloseTimes[] = {
+    {"0", "Never"},    {"12", "12 hours"}, {"24", "24 hours"},
+    {"168", "7 days"}, {"720", "30 days"},
+};
+
 // Agent control's limits (koan/browser/agent/koan_agent_limits.h). Only these
 // values can be set, so 0 and "unlimited" cannot. Above 8 awake tabs the
 // option says what it costs (T-limits-5).
@@ -608,6 +615,18 @@ constexpr Row kRows[] = {
               "running)",
      .is_available = IsTabFreezingAvailable,
      .local_state = true},
+    // Koan's own (Arc's auto-archive, #482).
+    {.group = "background-tabs",
+     .control = Control::kMenu,
+     .pref = prefs::kAutoCloseTabsAfterHours,
+     .label = "Close tabs I haven't used for",
+     .options = kAutoCloseTimes,
+     .note = "Never closes Essentials, pinned tabs, tabs in a folder, the tab "
+             "each Space shows, agent tabs, or tabs in use (playing sound, in "
+             "a call, sharing the screen, open in DevTools, with a form you "
+             "started, downloading, in picture-in-picture, or on a page that "
+             "asks before you leave). Closed tabs are in the Library: "
+             "History, Closed tabs."},
     // Agents.
     {.group = "agent-control",
      .control = Control::kCheckbox,
