@@ -7,20 +7,22 @@
 
 class BrowserView;
 
-// Updates for a Koan built from source (issue #84; koan_update_logic.h).
-// Browser-wide, started by the first normal window:
+// Updates from Koan's tagged GitHub releases (issues #84, #549;
+// koan_update_logic.h). Browser-wide, started by the first normal window:
 //
 // - Zen's "Update Complete!" (ZenUpdates.mjs): after a launch of a build
-//   other than the previous launch's (its Chromium version or Koan commit,
-//   stamped at build time), the sidebar shows Zen's notification once, with
-//   what's new (the commits between the two builds on GitHub).
-// - The update check: at most once a day (koan_prefs.h kUpdatesCheckEnabled,
-//   on by default), one request to GitHub's API for the newest commit of the
-//   clone's develop branch. It carries no cookies, no credentials and
-//   nothing about the user; Incognito windows never start it. When that
-//   commit is newer than the build's, the sidebar says so once, with what's
-//   new and how to update (`git pull && scripts/build.sh`). Nothing is ever
-//   downloaded or installed.
+//   other than the previous launch's (Koan's or Chromium's version), the
+//   sidebar shows Zen's notification once, with what's new (the release
+//   page of this version).
+// - The update check: a minute after the first window, then at most every
+//   12 hours (koan_prefs.h kUpdatesCheckEnabled, on by default), one request
+//   for the latest release's signed manifest (koan_update_source.h). It
+//   carries no cookies, no credentials and nothing about the user; Incognito
+//   windows never start it. When the manifest's entry for this platform
+//   verifies and its version is newer, the sidebar says so once for that
+//   version, with what's new and the release to download (on Linux also the
+//   Flatpak install command). Nothing is downloaded or installed here; on
+//   the Mac, #550 will.
 namespace koan::updates {
 
 // From KoanBrowserViewController, once `browser_view` is in its widget.

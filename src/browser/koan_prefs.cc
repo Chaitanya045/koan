@@ -182,11 +182,13 @@ void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(kHapticFeedback, true);
   registry->RegisterBooleanPref(kUpdatesCheckEnabled, true);
   registry->RegisterTimePref(kUpdatesLastCheck, base::Time());
-  registry->RegisterStringPref(kUpdatesLatestCommit, "");
-  registry->RegisterTimePref(kUpdatesLatestCommitTime, base::Time());
-  registry->RegisterStringPref(kUpdatesNotifiedCommit, "");
+  registry->RegisterStringPref(kUpdatesLatestManifest, "");
+  registry->RegisterStringPref(kUpdatesNotifiedVersion, "");
   registry->RegisterBooleanPref(kUpdatesShowUpdateNotification, true);
   registry->RegisterStringPref(kUpdatesLastBuild, "");
+  registry->RegisterStringPref(kUpdatesLatestCommitObsolete, "");
+  registry->RegisterTimePref(kUpdatesLatestCommitTimeObsolete, base::Time());
+  registry->RegisterStringPref(kUpdatesNotifiedCommitObsolete, "");
   registry->RegisterBooleanPref(kAgentControlEnabled, AgentReadyByDefault());
   registry->RegisterIntegerPref(kAgentControlMaxLeasedTabs,
                                 agent::kLeasedTabsLimit.default_value);

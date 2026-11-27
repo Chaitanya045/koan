@@ -95,11 +95,11 @@ constexpr Group kGroups[] = {
     // about:preferences#home has one).
     {"newtab", "looks", "New Tab Page", "New tabs",
      "Choose what a new tab page shows"},
-    // Koan's own: Koan is built from source, so an update is `git pull &&
-    // scripts/build.sh`. Zen's update notification is zen.updates.*.
+    // Koan's own: the check of Koan's GitHub releases (koan_updates.h).
+    // Zen's update notification is zen.updates.*.
     {"updates", "looks", "Updates", "Koan Updates",
-     "Koan asks GitHub once a day for the newest commit of its develop "
-     "branch: the request carries no cookies and nothing about you"},
+     "Koan checks its GitHub releases for a newer version twice a day at "
+     "most: the request carries no cookies and nothing about you"},
     {"workspaces", "tabs", "Workspaces", "General settings for workspaces",
      "With workspaces, you can have multiple browsing sessions at once!"},
     {"pinned-tabs", "tabs", "Pinned Tabs", "General settings for pinned tabs",

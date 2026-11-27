@@ -161,6 +161,12 @@ jobs:
             echo "::warning::headless Koan did not render a page (logs: headless.log)"
           fi
 
+      # What gets published (a release, or the nightly from a base run) must
+      # trust only the real update key and URL.
+      - name: Check that the update test hooks are not built in
+        if: steps.build.outputs.status == 'finished' && (inputs.release || inputs.keep_base)
+        run: scripts/ci/check_update_test_hooks.sh chromium/src/out/Release chromium/src/out/Release/chrome
+
       - name: Make the Flatpak
         id: package
         if: steps.build.outputs.status == 'finished'

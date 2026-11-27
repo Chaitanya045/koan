@@ -280,7 +280,7 @@ if (!userDataDir || !rowOf('koan.agent_control.enabled')) {
 skipped('Strict, What agents can use and Limits: their effect',
         'needs an agent: scripts/e2e/agent_cli.mjs drives them with the koan CLI');
 skipped('Check for updates / Show a notification after Koan was updated: their effect',
-        'needs GitHub and a newer build; koan_update_logic_unittest has the logic');
+        'needs a newer signed release; koan_update_logic_unittest has the logic');
 skipped('Freeze background tabs: its effect',
         'tabs freeze after minutes in the background; scripts/e2e/power.mjs checks freezing');
 skipped('The Keyboard Shortcuts pane (rebind, conflicts, reset, each by what the key then does)',

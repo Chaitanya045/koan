@@ -97,6 +97,9 @@ jobs:
       - name: Fetch Chromium, apply patches and branding, gn gen
         id: fetch
         env:
+          # Test-only update hooks for a run whose build is never published
+          # (scripts/ci/linux_env.sh; scripts/tests/test_update_test_hooks.py).
+          KOAN_CI_UPDATE_TEST_HOOKS: ${{ (!inputs.keep_base && !inputs.release) && '1' || '0' }}
           KOAN_BASE_RUN: ${{ steps.base.outputs.base_run }}
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

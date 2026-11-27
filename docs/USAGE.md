@@ -1390,30 +1390,52 @@ from …" folder on it.
 
 ## Updates
 
-Koan has no automatic updater yet. To update a release, download the newest
-one from the [Releases page](https://github.com/koan-browser/koan/releases)
-and drag it over the old one in Applications (see
-[Installing the macOS build](#installing-the-macos-build)). A build from
-your own clone updates with `git pull && scripts/build.sh`
-([BUILDING-MAC.md](BUILDING-MAC.md#updating)).
+Koan checks its [GitHub releases](https://github.com/koan-browser/koan/releases)
+for a newer version and tells you in the sidebar. It doesn't download or
+install anything yet: on the Mac you download the new disk image and drag it
+over the old one in Applications (see
+[Installing the macOS build](#installing-the-macos-build)); on Linux you
+install the new Flatpak over the old one. A build from your own clone
+updates with `git pull && scripts/build.sh`
+([BUILDING-MAC.md](BUILDING-MAC.md#updating)); the check still looks at the
+releases, not at your clone.
 
-- **Update Complete!** After you start a build whose Chromium version or Koan
-  commit differs from the last one you started, the sidebar shows Zen's
+- **Update Available!** A minute after the first window opens, and then at
+  most every 12 hours, Koan reads the latest release's update manifest
+  (`koan-update.json`). If that release is newer than yours (by version,
+  pre-releases included: 0.0.3-alpha.1 comes before 0.0.3), the sidebar says
+  so once for that version: **What's new** opens the release notes and
+  **Download** the release's page. On Linux, **Download** also copies the
+  command that installs it once it is in your Downloads folder, `flatpak
+  install --user --reinstall ~/Downloads/Koan-<version>-x86_64.flatpak`.
+  Linux shows the notice only once releases carry a Flatpak (#468).
+- **Trust:** Koan only believes a manifest signed with the release key built
+  into it (Ed25519; the key is
+  [`src/browser/updates/koan_update_public_key.txt`](../src/browser/updates/koan_update_public_key.txt)).
+  The signature covers the version and the file's size and SHA-256 for your
+  platform. A manifest that isn't signed, or is signed with another key, or
+  names a file or release notes anywhere but
+  `github.com/koan-browser/koan/releases/`, is ignored. Pre-releases, drafts
+  and the nightlies are never offered: they aren't the latest release.
+- **Update Complete!** After you start a build whose Koan or Chromium
+  version differs from the last one you started, the sidebar shows Zen's
   notification for 15 seconds (it waits while you point at it). **What's new
-  in Koan** opens the commits between the two builds on GitHub; **Something
-  broke?** opens the issues.
-- **Update Available!** Once a day Koan asks GitHub for the newest commit of
-  your clone's develop branch (its `origin` remote, if that is on GitHub). If
-  it is newer than the commit your build was made from, the sidebar says so
-  once for that commit: what's new, **Copy the update command**, and how to
-  update. Koan never downloads or installs anything.
-- **Privacy:** the check is one `GET` to
-  `api.github.com/repos/<owner>/<repo>/commits?sha=develop&per_page=1`. It
-  sends no cookies or credentials, and nothing about you or your build;
-  GitHub sees your IP address, as for any page. No telemetry. Incognito
-  windows never start it.
+  in Koan** opens this version's release page; **Something broke?** opens the
+  issues.
+- **Privacy:** the check is one `GET` of
+  `https://github.com/koan-browser/koan/releases/latest/download/koan-update.json`
+  (GitHub redirects it to its file host). It sends no cookies or
+  credentials, and nothing about you or your build; GitHub sees your IP
+  address, as for any page. No telemetry. Incognito windows never start it.
 - **Turn off:** Settings > Look and Feel > Updates: **Check for updates** and
   **Show a notification after Koan was updated**.
+- **Trying it without a release** (developers): a test build (CI makes one
+  for each pull request, never for a release or a nightly) also takes
+  `--koan-update-manifest-url=<URL>` and `--koan-update-public-key=<base64>`,
+  to read a local manifest signed with a throwaway key
+  (`scripts/ci/update_manifest.py make --key-file <test key>`). In the
+  Flatpak they go in `~/.var/app/dev.koan.Koan/config/koan-flags.conf`.
+  Builds people install don't have them.
 
 ## Haptic feedback (macOS)
 
@@ -1580,7 +1602,8 @@ flatpak run dev.koan.Koan
 
 Flatpak fetches the Freedesktop runtime and the Chromium base app from
 Flathub the first time. Koan then shows up in your app menu. To update,
-install the newer file the same way. To remove it, `flatpak uninstall
+install the newer file the same way, with `--reinstall` (Koan's "Update
+Available!" copies that command for you, see [Updates](#updates)). To remove it, `flatpak uninstall
 dev.koan.Koan` (add `--delete-data` to remove the profile too).
 
 - The profile is in `~/.var/app/dev.koan.Koan/config/koan`.

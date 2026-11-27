@@ -123,11 +123,16 @@ Nightlies stay ad hoc signed.
 **The update manifest.** Each release carries `koan-update.json`, made by
 [`scripts/ci/update_manifest.py`](../scripts/ci/update_manifest.py). The app
 reads it from the fixed address
-`https://github.com/koan-browser/koan/releases/latest/download/koan-update.json`,
-downloads the disk image it names, and installs it only if the signature
-verifies with the public key built into the app
+`https://github.com/koan-browser/koan/releases/latest/download/koan-update.json`
+and believes it only if the signature verifies with the public key built
+into the app
 ([`src/browser/updates/koan_update_public_key.txt`](../src/browser/updates/koan_update_public_key.txt),
-a raw Ed25519 key in base64).
+a raw Ed25519 key in base64): it then says "Update Available!" (#549), and
+on the Mac it will download the disk image it names and install it (#550).
+Only a test build (CI makes one for a pull request, never for a release or a
+nightly: `koan_update_test_hooks`, `src/browser/updates/BUILD.gn`) can be
+pointed at another manifest and key; a release or nightly build that has the
+hooks fails before it is packaged (`scripts/ci/check_update_test_hooks.sh`).
 
 ```json
 {
