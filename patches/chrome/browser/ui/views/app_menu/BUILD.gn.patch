@@ -1,12 +1,13 @@
 diff --git a/chrome/browser/ui/views/app_menu/BUILD.gn b/chrome/browser/ui/views/app_menu/BUILD.gn
-index 50cbcd4..d65784a 100644
+index 50cbcd447ebb033546990af6cf546bff3c614800..9bd90839776e7ce4fa5e23b0f80205e8affcece6 100644
 --- a/chrome/browser/ui/views/app_menu/BUILD.gn
 +++ b/chrome/browser/ui/views/app_menu/BUILD.gn
-@@ -169,6 +169,7 @@ source_set("impl") {
+@@ -169,6 +169,8 @@ source_set("impl") {
      "//components/zoom",
      "//content/public/browser",
      "//extensions/buildflags",
 +    "//koan/browser:features",
++    "//koan/browser/ui/views",
      "//skia",
      "//ui/actions:actions_headers",
      "//ui/base",

@@ -138,7 +138,8 @@ Ctrl where the Mac uses ⌘, and a few keys of their own:
 
 On Linux there is no menu bar, so the sidebar's top row starts with Zen's
 app menu button (the menu icon, before back / forward / reload): Chromium's
-app menu, with New Tab, History, Downloads, Settings and **Exit** (Ctrl+Q)
+app menu, opening below it over the page (with tabs on the right, towards
+the page too), with New Tab, History, Downloads, Settings and **Exit** (Ctrl+Q)
 at the bottom. Its items show Koan's keys (New Incognito window: Ctrl+Shift+P;
 Save page as: Ctrl+Alt+Shift+S), and none where Koan gave Chrome's key to
 something else (Bookmark all tabs). Quit is in Settings > Keyboard Shortcuts (Window & Tab

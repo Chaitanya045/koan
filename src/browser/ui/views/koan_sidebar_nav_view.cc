@@ -182,6 +182,15 @@ void MirrorSidebarHeaderLayout(const views::View* host,
   }
 }
 
+bool AlignsAppMenuWithLeadingEdge(const views::View* button) {
+#if BUILDFLAG(IS_LINUX)
+  return views::IsViewClass<KoanAppMenuButton>(button) &&
+         !IsSidebarOnRight(button);
+#else
+  return false;
+#endif
+}
+
 KoanSidebarNavButtons::KoanSidebarNavButtons(BrowserView* browser_view)
     : browser_view_(browser_view) {
   SetOrientation(views::BoxLayout::Orientation::kHorizontal);

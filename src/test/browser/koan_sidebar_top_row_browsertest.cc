@@ -37,11 +37,18 @@
 #if BUILDFLAG(IS_LINUX)
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
+#include "chrome/browser/ui/views/toolbar/app_menu.h"
 #include "koan/browser/ui/views/koan_app_menu_button.h"
+#include "koan/browser/ui/views/koan_compact_mode.h"
+#include "koan/browser/ui/views/koan_sidebar_header.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/controls/menu/menu_runner.h"
+#include "ui/views/controls/menu/menu_scroll_view_container.h"
+#include "ui/views/controls/menu/submenu_view.h"
 #endif
 
 namespace koan {
@@ -185,11 +192,33 @@ IN_PROC_BROWSER_TEST_F(KoanSidebarTopRowBrowserTest, AppMenuButtonOffersExit) {
   ASSERT_TRUE(button->GetAcceleratorForCommandId(IDC_FIND, &key));
   EXPECT_EQ(key, ui::Accelerator(ui::VKEY_F, ui::EF_CONTROL_DOWN));
 
+  // With the sidebar on the left (the default) the menu lines up with the
+  // button's left edge and opens to the right, over the page, not to the
+  // left of the window as from the toolbar's ⋮.
+  ASSERT_FALSE(IsSidebarOnRight(button));
+  EXPECT_TRUE(AlignsAppMenuWithLeadingEdge(button));
   button->ShowMenuWithFlags(views::MenuRunner::NO_FLAGS);
   ASSERT_TRUE(base::test::RunUntil([&] { return button->IsMenuShowing(); }));
   // (The block-style menu behind kAppMenuGlowUp has no AppMenuModel.)
   if (AppMenuModel* model = button->app_menu_model()) {
     EXPECT_TRUE(model->GetIndexOfCommandId(IDC_EXIT).has_value());
+    views::SubmenuView* submenu =
+        button->app_menu()->root_menu_item()->GetSubmenu();
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return submenu->GetWidget() && submenu->GetWidget()->IsVisible();
+    }));
+    // The menu as drawn: its container less the shadow around it.
+    views::MenuScrollViewContainer* container =
+        submenu->GetScrollViewContainer();
+    gfx::Rect menu_bounds = container->GetBoundsInScreen();
+    menu_bounds.Inset(container->outside_border_insets());
+    const gfx::Rect button_bounds = button->GetBoundsInScreen();
+    EXPECT_GE(menu_bounds.x(), button_bounds.x())
+        << "menu " << menu_bounds.ToString() << ", button "
+        << button_bounds.ToString();
+    EXPECT_GT(menu_bounds.right(), button_bounds.right())
+        << "menu " << menu_bounds.ToString() << ", button "
+        << button_bounds.ToString();
   }
   button->CloseMenu();
   EXPECT_TRUE(base::test::RunUntil([&] { return !button->IsMenuShowing(); }));
