@@ -18,6 +18,8 @@
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
+#include "ui/accessibility/ax_action_data.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/events/event.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -43,8 +45,11 @@ KoanAppMenuButton::KoanAppMenuButton(BrowserView* browser_view)
 KoanAppMenuButton::~KoanAppMenuButton() = default;
 
 void KoanAppMenuButton::ButtonPressed(const ui::Event& event) {
+  // As BrowserAppMenuButton::ButtonPressed(): from the keyboard the menu
+  // shows its mnemonics and selects its first item.
   ShowMenuWithFlags(event.IsKeyEvent()
-                        ? views::MenuRunner::SHOULD_SHOW_MNEMONICS
+                        ? (views::MenuRunner::SHOULD_SHOW_MNEMONICS |
+                           views::MenuRunner::INVOKED_FROM_KEYBOARD)
                         : views::MenuRunner::NO_FLAGS);
 }
 
@@ -68,23 +73,93 @@ void KoanAppMenuButton::ShowMenuWithFlags(int run_types) {
 bool KoanAppMenuButton::GetAcceleratorForCommandId(
     int command_id,
     ui::Accelerator* accelerator) const {
-  if (command_id == IDC_EXIT) {
-    // Chrome has no key for Exit on Linux; Koan's Quit has one, which the
-    // user may have changed or cleared.
-    const KoanBrowserViewController* controller =
-        KoanBrowserViewController::From(browser_view_);
+  const KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
+  const KoanShortcutController* shortcuts =
+      controller ? controller->shortcuts() : nullptr;
+  if (!shortcuts) {
+    return false;
+  }
+  // A command a Koan shortcut runs (or does Koan's way, e.g. the Library's
+  // History) shows that shortcut's key in effect, which Zen may have moved
+  // (Save Page to Ctrl+Alt+Shift+S, private windows to Ctrl+Shift+P) and the
+  // user may have changed or cleared. Chrome has none for Exit on Linux.
+  if (const std::optional<shortcuts::Action> action =
+          ActionForCommand(command_id)) {
     const std::optional<ui::Accelerator> key =
-        controller && controller->shortcuts()
-            ? controller->shortcuts()->GetAccelerator(shortcuts::Action::kQuit)
-            : std::nullopt;
+        shortcuts->GetAccelerator(*action);
     if (key) {
       *accelerator = *key;
     }
     return key.has_value();
   }
+  // Any other command: Chrome's key, unless a Koan shortcut runs on it
+  // instead (Ctrl+S is compact mode, not Save Page; Ctrl+Shift+D pins the
+  // tab, not Bookmark All Tabs).
   const ToolbarView* toolbar = browser_view_->toolbar();
-  return toolbar &&
-         toolbar->GetAcceleratorForCommandId(command_id, accelerator);
+  ui::Accelerator chrome_key;
+  if (!toolbar ||
+      !toolbar->GetAcceleratorForCommandId(command_id, &chrome_key) ||
+      shortcuts->IsBound(chrome_key)) {
+    return false;
+  }
+  *accelerator = chrome_key;
+  return true;
+}
+
+// static
+std::optional<shortcuts::Action> KoanAppMenuButton::ActionForCommand(
+    int command_id) {
+  using shortcuts::Action;
+  // The commands of KoanShortcutController::Run() that Chromium's app menu
+  // has (AppMenuModel asks for reading mode's key as
+  // IDC_SHOW_READING_MODE_KEYBOARD).
+  switch (command_id) {
+    case IDC_EXIT:
+      return Action::kQuit;
+    case IDC_NEW_TAB:
+      return Action::kNewTab;
+    case IDC_NEW_WINDOW:
+      return Action::kNewWindow;
+    case IDC_NEW_INCOGNITO_WINDOW:
+      return Action::kNewPrivateWindow;
+    case IDC_NEW_SPLIT_TAB:
+      return Action::kNewEmptySplit;
+    case IDC_SAVE_PAGE:
+      return Action::kSavePage;
+    case IDC_SHOW_HISTORY:
+      return Action::kLibraryHistory;
+    case IDC_SHOW_DOWNLOADS:
+      return Action::kDownloads;
+    case IDC_SHOW_BOOKMARK_SIDE_PANEL:
+      return Action::kBookmarks;
+    case IDC_SHOW_READING_MODE:
+    case IDC_SHOW_READING_MODE_KEYBOARD:
+      return Action::kReaderMode;
+    case IDC_DEV_TOOLS_INSPECT:
+      return Action::kInspect;
+    case IDC_WINDOW_MUTE_SITE:
+      return Action::kMuteSite;
+    default:
+      return std::nullopt;
+  }
+}
+
+bool KoanAppMenuButton::HandleAccessibleAction(
+    const ui::AXActionData& action_data) {
+  // As BrowserAppMenuButton: screen readers open and close the menu with
+  // expand and collapse.
+  if (action_data.action == ax::mojom::Action::kExpand) {
+    ShowMenuWithFlags(views::MenuRunner::NO_FLAGS);
+    return true;
+  }
+  if (action_data.action == ax::mojom::Action::kCollapse) {
+    if (IsMenuShowing()) {
+      CloseMenu();
+    }
+    return true;
+  }
+  return AppMenuButton::HandleAccessibleAction(action_data);
 }
 
 BEGIN_METADATA(KoanAppMenuButton)

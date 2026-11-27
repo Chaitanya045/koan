@@ -161,13 +161,29 @@ IN_PROC_BROWSER_TEST_F(KoanSidebarTopRowBrowserTest, ExtensionsButtonToggles) {
 
 #if BUILDFLAG(IS_LINUX)
 // Linux has no menu bar: Zen's app menu button in the top row opens
-// Chromium's app menu, whose Exit shows Koan's Quit key, Ctrl+Q (#488).
+// Chromium's app menu, whose Exit shows Koan's Quit key, Ctrl+Q, and whose
+// other items show the keys in effect in Koan (#488).
 IN_PROC_BROWSER_TEST_F(KoanSidebarTopRowBrowserTest, AppMenuButtonOffersExit) {
   KoanAppMenuButton* button = WaitForView<KoanAppMenuButton>();
   ASSERT_TRUE(button);
   ui::Accelerator key;
   ASSERT_TRUE(button->GetAcceleratorForCommandId(IDC_EXIT, &key));
   EXPECT_EQ(key, ui::Accelerator(ui::VKEY_Q, ui::EF_CONTROL_DOWN));
+  // The menu shows the keys Koan runs them on, not Chromium's, which Zen
+  // gave to other shortcuts (Ctrl+Shift+N: New Blank Window; Ctrl+S: compact
+  // mode; Ctrl+Shift+D: pin the tab).
+  ASSERT_TRUE(
+      button->GetAcceleratorForCommandId(IDC_NEW_INCOGNITO_WINDOW, &key));
+  EXPECT_EQ(key, ui::Accelerator(ui::VKEY_P,
+                                 ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN));
+  ASSERT_TRUE(button->GetAcceleratorForCommandId(IDC_SAVE_PAGE, &key));
+  EXPECT_EQ(key,
+            ui::Accelerator(ui::VKEY_S, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
+                                            ui::EF_SHIFT_DOWN));
+  EXPECT_FALSE(button->GetAcceleratorForCommandId(IDC_BOOKMARK_ALL_TABS, &key));
+  // A key Koan leaves alone stays Chromium's.
+  ASSERT_TRUE(button->GetAcceleratorForCommandId(IDC_FIND, &key));
+  EXPECT_EQ(key, ui::Accelerator(ui::VKEY_F, ui::EF_CONTROL_DOWN));
 
   button->ShowMenuWithFlags(views::MenuRunner::NO_FLAGS);
   ASSERT_TRUE(base::test::RunUntil([&] { return button->IsMenuShowing(); }));
