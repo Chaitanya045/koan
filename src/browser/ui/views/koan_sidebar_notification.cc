@@ -343,6 +343,14 @@ class KoanSidebarNotification : public views::View,
     }
   }
 
+  // The card paints to a layer of its own, which a theme change (the Mode,
+  // or the system's light/dark) doesn't repaint: the card, its lines and
+  // links would keep the old colours until hovered (#564).
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    SchedulePaint();
+  }
+
   void OnPaint(gfx::Canvas* canvas) override {
     // zen-theme.css: --zen-sidebar-notification-bg, -shadow and -outline,
     // as the media cards.

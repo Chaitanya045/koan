@@ -286,6 +286,14 @@ class KoanGlanceBackdrop : public views::View {
     SchedulePaint();
   }
 
+  // It paints to a layer of its own, which a theme change (the Mode, or the
+  // system's light/dark) doesn't repaint: it would keep the old colours
+  // until something else repaints it (#564).
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    SchedulePaint();
+  }
+
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override {
     const ui::ColorProvider* colors = GetColorProvider();

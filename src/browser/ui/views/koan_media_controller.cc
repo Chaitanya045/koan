@@ -598,6 +598,14 @@ class KoanMediaCardView : public views::View {
                        kMediaArtistHeight);
   }
 
+  // The card paints to a layer of its own, which a theme change (the Mode,
+  // or the system's light/dark) doesn't repaint: it and its progress bar
+  // would keep the old colours until something else repaints them (#564).
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    SchedulePaint();
+  }
+
   void OnPaint(gfx::Canvas* canvas) override {
     // zen-theme.css: --zen-sidebar-notification-bg, -shadow and -outline.
     const ui::ColorProvider* colors = GetColorProvider();

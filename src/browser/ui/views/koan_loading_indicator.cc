@@ -60,6 +60,14 @@ class KoanLoadingBarView : public views::View {
     SchedulePaint();
   }
 
+  // The indicator puts it on a layer of its own, which a theme change (the
+  // Mode, or the system's light/dark) doesn't repaint: a still bar would
+  // keep the old colours (#564).
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    SchedulePaint();
+  }
+
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override {
     if (frame_.bar.IsEmpty() || frame_.opacity <= 0) {

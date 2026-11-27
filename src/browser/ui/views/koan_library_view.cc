@@ -509,6 +509,13 @@ void KoanLibraryRow::OnPaintBackground(gfx::Canvas* canvas) {
                         flags);
 }
 
+// A dimmed row paints to a layer of its own, which a theme change (the
+// Mode, or the system's light/dark) doesn't repaint (#564).
+void KoanLibraryRow::OnThemeChanged() {
+  views::Button::OnThemeChanged();
+  SchedulePaint();
+}
+
 void KoanLibraryRow::ShowContextMenuForViewImpl(
     views::View* source,
     const gfx::Point& point,
@@ -1061,6 +1068,14 @@ void KoanLibraryView::OnPaintBackground(gfx::Canvas* canvas) {
   flags.setShader(cc::PaintShader::MakeLinearGradient(points, colors, nullptr,
                                                       2, SkTileMode::kClamp));
   canvas->DrawRect(side, flags);
+}
+
+// The panel paints to a layer of its own, which a theme change (the Mode, or
+// the system's light/dark) doesn't repaint: its background and everything
+// in it without a layer of its own would keep the old colours (#564).
+void KoanLibraryView::OnThemeChanged() {
+  views::View::OnThemeChanged();
+  SchedulePaint();
 }
 
 BEGIN_METADATA(KoanLibraryView)
