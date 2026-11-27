@@ -82,3 +82,39 @@ source_set("install_logic") {
     "//base",
   ]
 }
+
+# The mechanics behind koan_update_platform.h: the Mac's hdiutil, ditto,
+# codesign, quarantine removal and the helper's start. Elsewhere there are
+# none (CreateInstallPlatform() returns null).
+source_set("install_platform") {
+  sources = [
+    "koan_update_platform.cc",
+    "koan_update_platform.h",
+  ]
+  public_deps = [
+    ":install_logic",
+    "//base",
+  ]
+  if (is_mac) {
+    sources += [ "koan_update_platform_mac.mm" ]
+    frameworks = [ "Foundation.framework" ]
+  }
+}
+
+if (is_mac) {
+  # Swaps a staged update in once Koan has exited, and rolls it back
+  # (koan_update_helper_main.mm). In Koan.app/Contents/Resources/bin, with
+  # the agent's tools (//koan/cli:koan_bundle_data), and signed with the app.
+  executable("koan-update-helper") {
+    sources = [ "koan_update_helper_main.mm" ]
+    deps = [
+      ":install_logic",
+      ":install_platform",
+      "//base",
+    ]
+    frameworks = [
+      "AppKit.framework",
+      "Foundation.framework",
+    ]
+  }
+}

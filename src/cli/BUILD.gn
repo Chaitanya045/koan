@@ -116,16 +116,20 @@ executable("koan-relay") {
 }
 
 if (is_mac) {
-  # Koan.app/Contents/Resources/bin/koan and koan-relay.
+  # Koan.app/Contents/Resources/bin/koan and koan-relay, and the updater's
+  # helper (//koan/browser/updates, #550), which the patch to chrome/BUILD.gn
+  # bundles through this target too.
   bundle_data("koan_bundle_data") {
     sources = [
       "$root_out_dir/koan",
       "$root_out_dir/koan-relay",
+      "$root_out_dir/koan-update-helper",
     ]
     outputs = [ "{{bundle_resources_dir}}/bin/{{source_file_part}}" ]
     public_deps = [
       ":koan",
       ":koan-relay",
+      "//koan/browser/updates:koan-update-helper",
     ]
   }
 }
