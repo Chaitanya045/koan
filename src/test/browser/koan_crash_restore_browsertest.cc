@@ -16,6 +16,7 @@
 // cleanly or as a crash would. The main test is the next start on the same
 // profile, which must hold the same.
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -81,8 +82,9 @@ class KoanCrashRestoreBrowserTest : public InProcessBrowserTest {
  protected:
   // Two Spaces: "Space", with a tab pinned in it and a normal tab, and
   // "Work" (with an icon) with a normal tab, shown. The session is on disk
-  // and the window's state written down (ExpectedFile()).
-  void SetUpSpaces() {
+  // and the window's state written down (ExpectedFile()). With
+  // `show_first`, "Space" is shown instead.
+  void SetUpSpaces(bool show_first = false) {
     KoanWorkspaceController* spaces = GetSpaces(browser());
     ASSERT_TRUE(spaces);
     ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
@@ -97,6 +99,9 @@ class KoanCrashRestoreBrowserTest : public InProcessBrowserTest {
     spaces->CreateSpace(u"Work", kRocket, {});
     ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
     ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), WorkUrl()));
+    if (show_first) {
+      spaces->SwitchTo(spaces->GetSpaces().front().id);
+    }
     for (int i = 0; i < tab_strip->count(); ++i) {
       ASSERT_TRUE(content::WaitForLoadStop(tab_strip->GetWebContentsAt(i)));
     }
@@ -168,6 +173,22 @@ class KoanCrashRestoreBrowserTest : public InProcessBrowserTest {
       }
     }
     return out;
+  }
+
+  // The URLs of the tabs of the Space called `name`, in order.
+  std::vector<std::string> SpaceUrls(const std::u16string& name) {
+    std::vector<std::string> urls;
+    TabStripModel* tab_strip = browser()->GetTabStripModel();
+    for (const KoanWorkspaceController::SpaceInfo& space :
+         GetSpaces(browser())->GetSpaces()) {
+      if (space.name == name) {
+        for (int index : TabsOfSpace(tab_strip, space.id)) {
+          urls.push_back(
+              tab_strip->GetWebContentsAt(index)->GetVisibleURL().spec());
+        }
+      }
+    }
+    return urls;
   }
 
   // Waits until the window holds what the last run wrote down, has joined
@@ -301,6 +322,75 @@ IN_PROC_BROWSER_TEST_F(KoanCrashRestoreBrowserTest,
       << Describe(nullptr);
   EXPECT_THAT(launch_tabs, testing::ElementsAre(base::StrCat(
                                {base::UTF16ToUTF8(kRocket), "Work active"})));
+}
+
+// The bubble answered late (#554, step 5 of the PR's test): the user opened
+// tabs in the launch's Space and made another Space first. The launch's
+// Space still goes, its tabs joining the restored Space shown (here
+// "Space", the session's namesake); the Space the user made stays, and the
+// session's selected tab stays selected.
+IN_PROC_BROWSER_TEST_F(KoanCrashRestoreBrowserTest,
+                       PRE_LateRestoreMergesTheLaunchSpace) {
+  ASSERT_NO_FATAL_FAILURE(SetUpSpaces(/*show_first=*/true));
+  PrefService* prefs = browser()->GetProfile()->GetPrefs();
+  prefs->SetInteger(prefs::kResumedCrashes, 1);
+  prefs->SetTime(prefs::kLastResumedTime, base::Time::Now());
+  EndAsCrash();
+}
+
+IN_PROC_BROWSER_TEST_F(KoanCrashRestoreBrowserTest,
+                       LateRestoreMergesTheLaunchSpace) {
+  const GURL first("chrome://version/?l1");
+  const GURL second("chrome://version/?l2");
+  const GURL later("chrome://credits/?later");
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  base::RunLoop().RunUntilIdle();
+  // Not restored: the bubble asks.
+  ASSERT_EQ(1, browser()->GetTabStripModel()->count());
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      browser(), first, WindowOpenDisposition::kNewForegroundTab,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      browser(), second, WindowOpenDisposition::kNewForegroundTab,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  spaces->CreateSpace(u"Later", u"", {});
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), later));
+  ASSERT_THAT(SpaceNames(browser()), testing::ElementsAre(u"Space", u"Later"));
+
+  // The bubble's Restore.
+  SessionRestore::RestoreSessionAfterCrash(browser());
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return SpaceNames(browser()) ==
+           std::vector<std::u16string>{u"Later", u"Space", u"Work"};
+  })) << Describe(nullptr);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_THAT(SpaceNames(browser()),
+              testing::ElementsAre(u"Later", u"Space", u"Work"))
+      << Describe(nullptr);
+  // The session's tabs first, then the launch's about:blank and the tabs
+  // opened beside it, each once.
+  EXPECT_THAT(SpaceUrls(u"Space"),
+              testing::ElementsAre(PinnedUrl().spec(), OtherUrl().spec(),
+                                   "about:blank", first.spec(), second.spec()))
+      << Describe(nullptr);
+  EXPECT_THAT(SpaceUrls(u"Work"), testing::ElementsAre(WorkUrl().spec()));
+  EXPECT_THAT(SpaceUrls(u"Later"), testing::ElementsAre(later.spec()));
+  // Still pinned in its Space.
+  bool pinned = false;
+  TabStripModel* tab_strip = browser()->GetTabStripModel();
+  for (int i = 0; i < tab_strip->count(); ++i) {
+    if (tab_strip->GetWebContentsAt(i)->GetVisibleURL() == PinnedUrl()) {
+      pinned = IsPinnedInSpace(tab_strip->GetTabAtIndex(i));
+    }
+  }
+  EXPECT_TRUE(pinned) << Describe(nullptr);
+  // "Space" is shown, on the session's tab.
+  const std::optional<tab_groups::TabGroupId> active = spaces->GetActiveSpace();
+  ASSERT_TRUE(active);
+  EXPECT_EQ(u"Space", spaces->GetSpace(*active)->name);
+  EXPECT_EQ(OtherUrl(), tab_strip->GetActiveWebContents()->GetVisibleURL());
 }
 
 }  // namespace koan

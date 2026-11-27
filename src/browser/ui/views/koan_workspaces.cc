@@ -1636,14 +1636,19 @@ void KoanWorkspaceController::MergeStartupSpaceAfterRestore() {
   if (!space || GetSpaces().size() < 2 || !IsLaunchSpace(*space)) {
     return;
   }
-  // The restored Space shown, else the first one (none is shown while an
-  // Essential is).
+  const std::set<tab_groups::TabGroupId> before =
+      std::exchange(pre_restore_spaces_, {});
+  const std::vector<tabs::TabHandle> launch_tabs =
+      std::exchange(launch_tabs_, {});
+  launch_space_.reset();
+  // The restored Space shown, else the first restored one (none is shown
+  // while an Essential is); never another Space from before the restore.
   std::optional<tab_groups::TabGroupId> target = GetActiveSpace();
   const bool shown = target == space;
-  if (!target || shown) {
+  if (!target || before.contains(*target)) {
     target.reset();
     for (const SpaceInfo& info : GetSpaces()) {
-      if (info.id != *space) {
+      if (info.id != *space && !before.contains(info.id)) {
         target = info.id;
         break;
       }
@@ -1653,10 +1658,15 @@ void KoanWorkspaceController::MergeStartupSpaceAfterRestore() {
     return;
   }
   TabStripModel* model = tab_strip_model();
-  // The tab the launch showed (a URL it was given): the restore selected the
-  // session's tab since.
+  // The tab the launch showed (a URL it was given), if it still is the
+  // Space's last one: the restore selected the session's tab since. Not a
+  // tab the user opened while the crash bubble waited.
   tabs::TabInterface* launch_tab =
       shown ? model->GetActiveTab() : last_active_tabs_[*space].Get();
+  if (launch_tab &&
+      !std::ranges::contains(launch_tabs, launch_tab->GetHandle())) {
+    launch_tab = nullptr;
+  }
   // A new tab page the launch opened on, with nothing to go back to, closes
   // (the restore replaces it, as upstream's does when it is the window's
   // only tab); every other tab moves.
@@ -1674,7 +1684,7 @@ void KoanWorkspaceController::MergeStartupSpaceAfterRestore() {
   }
   deleting_.insert(*space);
   last_active_tabs_.erase(*space);
-  if (shown) {
+  if (GetActiveSpace() == space) {
     SwitchTo(*target);
   }
   std::vector<int> indices;
@@ -1886,7 +1896,16 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
       if (space) {
         model->AddToExistingGroup(indices, *space, /*add_to_end=*/true);
       } else {
-        WriteSpace(NewSpaceGroup(indices), {.name = kDefaultSpaceName});
+        const tab_groups::TabGroupId id = NewSpaceGroup(indices);
+        WriteSpace(id, {.name = kDefaultSpaceName});
+        // The window's first Space, made for the tabs it opened with (no
+        // session restored into it, no stored Spaces): a restore into the
+        // window later merges it (MergeStartupSpaceAfterRestore()).
+        if (!started_ &&
+            !SessionRestore::IsRestoring(browser_view_->GetProfile())) {
+          launch_space_ = id;
+          launch_tabs_ = handles;
+        }
       }
     }
     spaces = GetSpaces();
@@ -2949,16 +2968,27 @@ void KoanWorkspaceController::OnTabChangedAt(tabs::TabInterface* tab,
 void KoanWorkspaceController::OnTabGroupChanged(const TabGroupChange& change) {
   if (change.type == TabGroupChange::kCreated && !restore_started_ &&
       SessionRestore::IsRestoring(browser_view_->GetProfile())) {
-    // The first Space a restore adds: the window's only Space until now is
-    // the one it started with (a window the restore creates has none, and
-    // Spaces the user made are never replaced).
+    // The first Space a restore adds. The Space the window's launch made is
+    // to be merged into the restored ones, also when the user made other
+    // Spaces meanwhile (the crash bubble's Restore, answered late): those
+    // stay. Else the window's only Space until now, which is the one it
+    // started with (a window the restore creates has none). Spaces the user
+    // made are never replaced.
     restore_started_ = true;
     std::vector<SpaceInfo> before = GetSpaces();
     std::erase_if(
         before, [&](const SpaceInfo& info) { return info.id == change.group; });
-    pre_restore_space_ = before.size() == 1
-                             ? std::make_optional(before.front().id)
-                             : std::nullopt;
+    pre_restore_spaces_.clear();
+    for (const SpaceInfo& info : before) {
+      pre_restore_spaces_.insert(info.id);
+    }
+    if (launch_space_ && pre_restore_spaces_.contains(*launch_space_)) {
+      pre_restore_space_ = launch_space_;
+    } else {
+      pre_restore_space_ = before.size() == 1
+                               ? std::make_optional(before.front().id)
+                               : std::nullopt;
+    }
   }
   if (change.type == TabGroupChange::kCreated) {
     // Not a group moved here from another window (a whole Space, which

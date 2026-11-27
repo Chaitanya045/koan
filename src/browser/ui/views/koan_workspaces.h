@@ -465,9 +465,10 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // A session restored into this window (Restore after a crash, Koan's or
   // the bubble's) leaves the Space the window started in beside the
   // session's, named as the session's first one may be: its tabs (a URL the
-  // launch was given) move to the restored Space shown, its new tab page
-  // closes, and it goes (Zen's restore adds no Space, #554). Only that
-  // Space, and only while it is the launch's (IsLaunchSpace()).
+  // launch was given, tabs the user opened while the bubble waited) move to
+  // the restored Space shown, its new tab page closes, and it goes (Zen's
+  // restore adds no Space, #554). Only that Space, and only while it is the
+  // launch's (IsLaunchSpace()); other Spaces made before the restore stay.
   void MergeStartupSpaceAfterRestore();
   // Whether `space` (the window's one Space from before a session restore)
   // is still as the launch made it: the default name, no icon, theme or
@@ -652,7 +653,15 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // (MergeStartupSpaceAfterRestore()).
   bool restore_started_ = false;
   std::optional<tab_groups::TabGroupId> pre_restore_space_;
+  // Every Space the window had when the restore started: none of them is a
+  // target of the merge.
+  std::set<tab_groups::TabGroupId> pre_restore_spaces_;
   bool merge_startup_space_ = false;
+  // The Space the window's launch made for the tabs it opened with, and
+  // those tabs (a URL the launch was given, its New Tab page), until a
+  // restore into the window merges it.
+  std::optional<tab_groups::TabGroupId> launch_space_;
+  std::vector<tabs::TabHandle> launch_tabs_;
   base::CallbackListSubscription session_restored_subscription_;
   // The Space shown last, for animating and as a fallback.
   std::optional<tab_groups::TabGroupId> last_space_;
