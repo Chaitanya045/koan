@@ -133,6 +133,80 @@ push. The release job also has its own `macos-nightly-release` group.
 
 Review of PR #70: [reviews/pr70-review.md](https://github.com/Chaitanya045/koan/blob/ac644383c4884c21aaa7a2a7fc23694e5a5859e0/.agent/notes/reviews/pr70-review.md).
 
+## Resuming
+
+A job resumes the previous one's siso state (out/Koan with `.siso_fs_state`
+and `.siso_deps`, mtimes kept by the archives). Anything outside the
+archives that siso sees differently in the next job can make it redo
+finished work, and that stalls the chain: each job spends its 5 h on the
+same steps and 16 jobs never finish.
+
+**Runner image dates (issue #534).** `develop` run 45816128161 (full
+build): build-01, 02 and 04 ran on `xcode-27-arm64` 20261104.0337.1,
+build-03 on 20261123.0387.2. Build-03 recompiled 21,653 of build-01's
+22,539 objects, and build-04 the same again. siso's own reasons, from the
+`siso_explain` files in `koan-mac-out-4` (`siso_explain.0` is build-03's)
+and the two `.siso_fs_state` files:
+
+1. `//build/modules:mac_sysroot` and `//build/config/mac:sdk_inputs` are
+   `noop.py` actions whose declared outputs are the SDK's `usr/include`
+   (through `out/Koan/sdk/xcode_links`), so siso's state records 3,451 SDK
+   headers as generated files, with their mtime and when the action last
+   ran (GN actions are `restat`, so that time is what siso compares).
+2. The headers' mtime is when the runner image was made: `mach/exc.defs`
+   is 2026-11-04 04:52:34 UTC on 20261104 and 2026-11-23 16:08:34 on
+   20261123. When the disk doesn't match the state, siso drops the entry
+   (hashfs `handleBeforeLocal` / `handleAfterLocal`), with it the action's
+   run time, and then finds the header "older than most recent input
+   ../../build/noop.py", so it runs the action again. Build-02, on the
+   same image as build-01, skipped it.
+3. The rerun makes `gen/build/modules/module.modulemap` dirty ("input
+   out/Koan/phony/build/modules/mac_sysroot: input
+   .../usr/include/arpa/nameser.h: dirty"), which rebuilds
+   `obj/build/modules/system/module.pcm` (Clang's system module), and every
+   object that imports it is dirty: 23,064 steps in build-03, 23,253 in
+   build-04 ("deps for … dirty: input
+   out/Koan/obj/build/modules/system/module.pcm: dirty").
+
+The out archive, `.siso_deps` and the `xcode_links` symlinks (same target
+on both images, made on 11-26 by build-01's gn gen) were fine.
+
+Fix: `mac_build_slice.sh` gives every file of the SDK one mtime
+(2001-01-01 UTC, `sudo find … -exec touch -h`) before siso starts, so the
+state matches the disk on any image. Only when Xcode and the SDK are the
+ones the fetch job recorded in `.cache/ci-toolchain` (same Xcode build, same
+headers); with another, the mtimes stay, siso rebuilds what the new SDK
+changes (correct), and the resume check below is off. The first incremental
+build on a base from before the fix rebuilds once.
+
+**The resume check.** A job that stops at the deadline writes the steps
+siso had left to `out/Koan/koan-ci-resume` with the run id
+(`scripts/ci/build_progress.py record`). Ten minutes into the next job, if
+siso's total is above 1.25 × that + 1,000, the job stops siso and fails
+with an `::error::` and the head of `siso_explain`. A healthy resume
+settles within 2 min at or below what the previous job left (build-02:
+49,796 vs build-01's 52,255 left); build-03 and 04 settled at 68,900 vs
+36,348 and 66,634 vs 39,437. The first `[0/N]` total doesn't tell: build-02
+started at 90,434. Nothing to compare in slice 1 (no state, or a base
+run's).
+
+**Logs.** Each job prints the image (`$ImageOS $ImageVersion`), Xcode, the
+SDK path, the mtimes of `SDKSettings.json` and `mach/exc.defs`, and the
+`xcode_links` targets, before the build and after it (gn gen can replace a
+link), into the job log and `toolchain.txt` in `koan-mac-logs-N`, with
+`siso_explain` (why siso ran each step it ran). The job summary has the
+image. `out/Koan/metal-toolchain` points into a cryptex mount whose name
+changes every boot, but no step's inputs go through it (no siso_explain
+line).
+
+**Linux chain** (`linux-chain.yml`, `linux_build_slice.sh`): not exposed
+to this. Its compile steps use Chromium's clang and Debian sysroot from the
+source archive (`use_sysroot = true`), and `mac_sysroot`/`sdk_inputs` are
+Mac-only; the runner's files only run the build (python3, the shell), and
+siso doesn't track those. Inferred from the build files, not from a
+resumed Linux job's explain. It has the same resume check and copies
+`siso_explain` to its logs.
+
 ## Release signing
 
 - **Nightly:** ad hoc (`codesign -s -`, `mac_package.sh` without

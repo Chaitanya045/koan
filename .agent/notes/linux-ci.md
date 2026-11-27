@@ -34,7 +34,12 @@ flatpak-check ┘                (.flatpak)          (nightly-linux)
 - `linux-build.yml`: unpack source and the previous `out/Release`,
   `linux_build_slice.sh` (SIGINT to siso 65 min before the 6 h limit), then
   pack and upload out, or (last slice) a headless smoke test and the
-  Flatpak.
+  Flatpak. Like the Mac's, a slice that has far more to do than the
+  previous one left fails after 10 min (`build_progress.py`), and its logs
+  get `siso_explain`. The Mac chain's stall on runner image dates (#534,
+  macos-ci.md "Resuming") doesn't apply here: the compile steps' inputs are
+  all in the source archive (Chromium's clang and sysroot), not on the
+  runner.
 
 Build config: `build/koan-release.gn` (`KOAN_CONFIG=release`, set by
 `scripts/ci/linux_env.sh`): no component build, no DCHECKs, no symbols,
