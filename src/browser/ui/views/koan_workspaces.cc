@@ -81,6 +81,7 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_emoji_picker.h"
+#include "koan/browser/ui/views/koan_essentials_profiles.h"
 #include "koan/browser/ui/views/koan_folders.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_haptics.h"
@@ -552,6 +553,11 @@ void KoanWorkspaceController::OnAddedToWidget() {
   pref_change_registrar_.Add(
       prefs::kWorkspaceTint,
       base::BindRepeating(&KoanWorkspaceController::OnTintPrefChanged,
+                          base::Unretained(this)));
+  // Zen's container-specific Essentials, from Koan's settings (#479).
+  pref_change_registrar_.Add(
+      prefs::kWorkspacesSeparateEssentials,
+      base::BindRepeating(&KoanWorkspaceController::ScheduleUpdate,
                           base::Unretained(this)));
 }
 
@@ -1555,6 +1561,8 @@ void KoanWorkspaceController::Update() {
   MatchEmptyTabsToSpaceContainers();
   DisconnectSavedGroups();
   KeepStartupEssential();
+  UpdateEssentialsProfiles();
+  ShowActiveEssential();
   SnapshotSpaces();
   StoreSpaces();
   CloseGroupEditors();
@@ -2354,6 +2362,9 @@ void KoanWorkspaceController::PlaySwitchAnimation(
   // for any other switch, and for a swipe that was abandoned.)
   const float dragged = drag_.TakeSlideOffset();
   swipe_timer_.Stop();
+  // Zen: the Essentials slide with the Space when its profile's grid isn't
+  // the old one's, else they stay put.
+  slides_essentials_ = EssentialsGridOfSpace(from) != EssentialsGridOfSpace(to);
 
   // TabStripView clips its layer to its bounds, so the Spaces slide
   // within the sidebar.
@@ -2405,8 +2416,12 @@ void KoanWorkspaceController::OnSlideOutDone(SlideOutLayers* slide_out) {
 
 std::vector<views::View*> KoanWorkspaceController::GetSlidingViews() {
   auto* tab_strip = views::AsViewClass<TabStripView>(header_->parent());
-  const std::vector<views::View*> views = {
-      header_.get(), tab_strip->unpinned_tabs_scroll_view()};
+  std::vector<views::View*> views = {header_.get(),
+                                     tab_strip->unpinned_tabs_scroll_view()};
+  // (Zen's container-specific Essentials, #479.)
+  if (slides_essentials_ && tab_strip->pinned_tabs_scroll_view()) {
+    views.push_back(tab_strip->pinned_tabs_scroll_view());
+  }
   for (views::View* view : views) {
     if (!view->layer()) {
       view->SetPaintToLayer();
@@ -2495,6 +2510,8 @@ void KoanWorkspaceController::StartLibrarySwipe() {
 }
 
 void KoanWorkspaceController::StartAddSpaceSwipe() {
+  // The Essentials stay while the Space makes way for the badge.
+  slides_essentials_ = false;
   auto* tab_strip = views::AsViewClass<TabStripView>(header_->parent());
   if (add_space_badge_ && add_space_badge_->parent() != tab_strip) {
     // The sidebar was rebuilt: the old one goes with its tab strip.
@@ -2536,9 +2553,18 @@ void KoanWorkspaceController::SetSlidingOffset(float offset) {
   }
   gfx::Transform transform;
   transform.Translate(offset, 0);
-  for (views::View* view : GetSlidingViews()) {
+  const std::vector<views::View*> sliding = GetSlidingViews();
+  for (views::View* view : sliding) {
     view->layer()->GetAnimator()->AbortAllAnimations();
     view->layer()->SetTransform(transform);
+  }
+  // The Essentials stay where they are when they don't go with the Space (the
+  // swipe turned toward a Space of the same profile).
+  for (views::View* view : GetOffsetViews()) {
+    if (!std::ranges::contains(sliding, view)) {
+      view->layer()->GetAnimator()->AbortAllAnimations();
+      view->layer()->SetTransform(gfx::Transform());
+    }
   }
 }
 
@@ -2590,9 +2616,23 @@ void KoanWorkspaceController::UpdateSwipe(float amount) {
     case SwipeEdgeAction::kAddSpace:
       UpdateAddSpaceSwipe(amount, width);
       return;
-    case SwipeEdgeAction::kNone:
+    case SwipeEdgeAction::kNone: {
+      // Zen's swipe moves the Essentials along only toward a Space of
+      // another profile (#479).
+      const std::vector<SpaceInfo> spaces = GetSpaces();
+      auto it = std::ranges::find(spaces, true, &SpaceInfo::active);
+      const std::optional<size_t> next =
+          it == spaces.end()
+              ? std::nullopt
+              : NextSpaceIndex(
+                    static_cast<size_t>(it - spaces.begin()), spaces.size(),
+                    SwipeGoesToNextSpace(amount, base::i18n::IsRTL()),
+                    WrapsAround());
+      slides_essentials_ = next && EssentialsGridOfSpace(it->id) !=
+                                       EssentialsGridOfSpace(spaces[*next].id);
       SetSlidingOffset(offset);
       return;
+    }
   }
 }
 
@@ -2751,6 +2791,7 @@ std::vector<views::View*> KoanWorkspaceController::GetOffsetViews() const {
     add(header_.get());
     if (auto* tab_strip = views::AsViewClass<TabStripView>(header_->parent())) {
       add(tab_strip->unpinned_tabs_scroll_view());
+      add(tab_strip->pinned_tabs_scroll_view());
     }
   }
   return views;
@@ -2830,6 +2871,12 @@ void KoanWorkspaceController::OnTabStripModelChanged(
           return TabRemoveReasonUtils::WillDeleteWebContents(
               removed.remove_reason);
         });
+  }
+  // An Essential of a grid the window doesn't show (Zen's container-specific
+  // Essentials): its Space shows (ShowActiveEssential()).
+  if (selection.active_tab_changed() && selection.new_tab &&
+      !IsEssentialShown(selection.new_tab)) {
+    ScheduleUpdate();
   }
   if (change.type() != TabStripModelChange::kSelectionOnly) {
     ScheduleUpdate();
@@ -3011,6 +3058,9 @@ void KoanWorkspaceController::OnTabGroupFocusChanged(
           base::StrCat({info->name, u" Space"}));
     }
   }
+  // The new Space's Essentials in the same frame (after the old ones' layers
+  // went to the slide), so that they slide in with it.
+  UpdateEssentialsProfiles();
   // (Upstream's own focus-mode colour comes through ApplySpaceColor() too;
   // this covers the order the observers run in.)
   ApplySpaceColor();

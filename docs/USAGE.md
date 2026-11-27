@@ -430,8 +430,20 @@ As in Zen there are two kinds of pinned tab:
   **+ New Tab**, among the other tabs or below them) it is a normal tab
   again. While you hold it, a thin line with a ring at its start shows
   where it lands (nothing moves until you let go).
-- **Essentials** are shared by all Spaces, up to 12: "Add to
-  Essentials" in the tab's context menu shows how many are used ("3 / 12").
+- **Essentials** are shared by the Spaces of a profile, up to 12 per
+  profile: "Add to Essentials" in the tab's context menu shows how many of
+  its profile's are used ("3 / 12"). As in Zen, each Space shows only the
+  Essentials of its profile (see Profiles under Spaces): Spaces with the
+  same profile share a grid, and a Space without a profile shows the
+  Essentials without one. When you switch to a Space of another profile
+  the grid slides with the Space; between Spaces of the same profile it
+  stays put. A tab of another profile than the Space's can't become one of
+  its Essentials: "Add to Essentials" is greyed out, and a tab dropped on
+  the grid goes back with a toast saying why. ⌘1–⌘9 and Ctrl+Tab count only
+  the Essentials shown; picking another profile's Essential some other way
+  (Switch to Tab in the address bar, an extension) switches to the first
+  Space of its profile. To have every Essential in every Space, as before,
+  turn off Settings > Pinned Tabs > **Enable profile-specific Essentials**.
   Dragging a tab into the grid also makes it an Essential: the tiles move
   aside to open a gap where it will go (as when you drag an Essential to
   reorder the grid). With no
@@ -573,7 +585,9 @@ belongs to a Space, and new tabs open in the active one.
   a thin line in its profile's colour at its edge. Changing a Space's
   profile changes where its new tabs open; its open tabs keep theirs.
   Deleting a Space keeps its profile and its data, so another Space can
-  use it. Clear browsing data doesn't clear profiles yet, and notifications
+  use it. Each profile has its own Essentials (see Pinned tabs and
+  Essentials); an Essential whose profile no Space has any more shows in
+  the Spaces without a profile. Clear browsing data doesn't clear profiles yet, and notifications
   don't work in a profile. Incognito windows have no profiles.
 - **Unload Space** (right-click the header or a Space button) frees the
   Space's tabs; they reload when you select them. Unload All Other Spaces

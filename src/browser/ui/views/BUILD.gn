@@ -423,6 +423,8 @@ source_set("impl") {
     "koan_essentials.cc",
     "koan_essentials_audio_badge.cc",
     "koan_essentials_audio_badge.h",
+    "koan_essentials_profiles.cc",
+    "koan_essentials_profiles.h",
     "koan_essentials_promo.cc",
     "koan_essentials_promo.h",
     "koan_folder_controller.cc",
