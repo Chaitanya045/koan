@@ -301,13 +301,13 @@ IN_PROC_BROWSER_TEST_F(KoanTabAutoCloseBrowserTest,
   history->AddPage(GURL("https://home.example/"), base::Time::Now(),
                    history::SOURCE_BROWSED);
   // The default profile's history, everything, as the Library clears it.
-  base::CancelableTaskTracker tracker;
-  base::test::TestFuture<void> deleted;
-  DeleteProfileHistory(profile, history, /*history_profile=*/std::string(), {},
-                       base::Time(), &tracker);
-  // Done, and its notice heard (it comes before this flush's reply).
-  history->FlushForTest(deleted.GetCallback());
-  ASSERT_TRUE(deleted.Wait());
+  {
+    HistoryDeletionWaiter deleted(history);
+    DeleteProfileHistory(profile, history, /*history_profile=*/std::string(),
+                         {}, base::Time());
+    // Its notice names the visits gone, not all history (#582).
+    EXPECT_FALSE(deleted.Wait().all_history);
+  }
   closed = Closed();
   ASSERT_EQ(1u, closed.size());
   EXPECT_EQ(Page("Work"), closed[0].url);
@@ -333,6 +333,7 @@ IN_PROC_BROWSER_TEST_F(KoanTabAutoCloseBrowserTest,
   ASSERT_EQ(1u, Closed().size());
   history->AddPage(GURL("https://work.example/"), base::Time::Now(),
                    history::SOURCE_BROWSED);
+  base::CancelableTaskTracker tracker;
   base::test::TestFuture<void> cleared;
   history->ExpireHistoryBetween(
       {}, std::nullopt, base::Time::Now() - base::Hours(1), base::Time(),

@@ -49,6 +49,7 @@
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_space_history.h"
 #include "koan/browser/ui/views/koan_space_history_index.h"
+#include "koan/browser/ui/views/koan_tab_auto_closer.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
 #include "net/dns/mock_host_resolver.h"
@@ -109,6 +110,21 @@ class KoanSpaceHistoryBrowserTest : public InProcessBrowserTest {
       pages.insert(result.url());
     }
     return pages;
+  }
+
+  // How many visits to `url` have `app_id`.
+  size_t Visits(const GURL& url, const std::string& app_id) {
+    history::QueryOptions options;
+    options.duplicate_policy = history::QueryOptions::KEEP_ALL_DUPLICATES;
+    options.app_id = app_id;
+    base::test::TestFuture<history::QueryResults> results;
+    base::CancelableTaskTracker tracker;
+    history()->QueryHistory(u"", options, results.GetCallback(), &tracker);
+    size_t count = 0;
+    for (const history::URLResult& result : results.Take()) {
+      count += result.url() == url;
+    }
+    return count;
   }
 
   AutocompleteController* omnibox() {
@@ -261,21 +277,78 @@ IN_PROC_BROWSER_TEST_F(KoanSpaceHistoryBrowserTest, LibraryFilterActsOnOne) {
   EXPECT_TRUE(
       base::test::RunUntil([&] { return index->ShowsPage(home_url_, work_); }));
   EXPECT_TRUE(index->ShowsPage(home_url_, ""));
+  const size_t work_visits = Visits(home_url_, tag);
+  const size_t default_visits = Visits(home_url_, std::string());
+  ASSERT_GT(work_visits, 0u);
+  ASSERT_GT(default_visits, 0u);
 
-  // "Forget This Page" with Work shown.
-  base::test::TestFuture<void> expired;
-  base::CancelableTaskTracker tracker;
-  history()->ExpireHistoryBetween({home_url_}, tag, base::Time(), base::Time(),
-                                  /*user_initiated=*/true,
-                                  expired.GetCallback(), &tracker);
-  ASSERT_TRUE(expired.Wait());
+  // "Forget This Page" with Work shown, as the Library does it.
+  HistoryDeletionWaiter deleted(history());
+  DeleteProfileHistory(profile(), history(), work_, {home_url_}, base::Time());
+  const HistoryDeletionNotice notice = deleted.Wait();
+  // The notice names Work's visits, not all history with pages (#582, which
+  // DeletionInfo rejects and observers take as everything gone), and not the
+  // page: the default profile still has it.
+  EXPECT_FALSE(notice.all_history);
+  EXPECT_FALSE(notice.has_time_range);
+  EXPECT_FALSE(notice.restrict_urls);
+  EXPECT_TRUE(notice.deleted_pages.empty());
+  EXPECT_EQ(work_visits, notice.deleted_visits.size());
+
+  // Work's other page and the default profile's visits to the page stay.
+  EXPECT_EQ(0u, Visits(home_url_, tag));
   EXPECT_EQ(std::set<GURL>{work_url_}, Pages(tag));
-  EXPECT_TRUE(Pages(std::string()).contains(home_url_));
+  EXPECT_EQ(1u, Visits(work_url_, tag));
+  EXPECT_EQ(default_visits, Visits(home_url_, std::string()));
   // The index reads the deletion again.
   EXPECT_TRUE(base::test::RunUntil(
       [&] { return !index->ShowsPage(home_url_, work_); }));
   EXPECT_TRUE(index->ShowsPage(home_url_, ""));
   EXPECT_TRUE(index->ShowsPage(work_url_, work_));
+  // The URL bar still suggests each profile's pages.
+  ASSERT_EQ(work_space_, spaces_->GetActiveSpace());
+  EXPECT_TRUE(EventuallySuggests(u"work.ex", "work.example"));
+  EXPECT_FALSE(Suggests(u"home.ex", "home.example"));
+  spaces_->SwitchTo(first_);
+  EXPECT_TRUE(EventuallySuggests(u"home.ex", "home.example"));
+}
+
+// A page only one profile visited goes with its last visit, and the notice
+// says so; clearing all of a profile's history isn't all history either.
+IN_PROC_BROWSER_TEST_F(KoanSpaceHistoryBrowserTest,
+                       LibraryRemovalsNameWhatWent) {
+  ASSERT_NO_FATAL_FAILURE(VisitInTwoProfiles());
+  const GURL other_url =
+      embedded_test_server()->GetURL("other.example", "/title3.html");
+  ASSERT_TRUE(OpenTyped(other_url));
+  const std::string tag = containers::HistoryAppIdForProfile(work_);
+  ASSERT_EQ((std::set<GURL>{work_url_, other_url}), Pages(tag));
+
+  {
+    HistoryDeletionWaiter deleted(history());
+    DeleteProfileHistory(profile(), history(), work_, {work_url_},
+                         base::Time());
+    const HistoryDeletionNotice notice = deleted.Wait();
+    EXPECT_FALSE(notice.all_history);
+    EXPECT_FALSE(notice.has_time_range);
+    EXPECT_EQ(std::set<GURL>{work_url_}, notice.deleted_pages);
+  }
+  EXPECT_FALSE(Pages(std::nullopt).contains(work_url_));
+  EXPECT_EQ(std::set<GURL>{other_url}, Pages(tag));
+
+  // Clear history, everything, with Work shown.
+  {
+    HistoryDeletionWaiter deleted(history());
+    DeleteProfileHistory(profile(), history(), work_, {}, base::Time());
+    const HistoryDeletionNotice notice = deleted.Wait();
+    EXPECT_FALSE(notice.all_history);
+    EXPECT_FALSE(notice.has_time_range);
+    EXPECT_EQ(std::set<GURL>{other_url}, notice.deleted_pages);
+  }
+  EXPECT_TRUE(Pages(tag).empty());
+  EXPECT_TRUE(Pages(std::string()).contains(home_url_));
+  spaces_->SwitchTo(first_);
+  EXPECT_TRUE(EventuallySuggests(u"home.ex", "home.example"));
 }
 
 }  // namespace koan

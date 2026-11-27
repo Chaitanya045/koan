@@ -13,9 +13,10 @@
 
 #include "base/command_line.h"
 #include "base/functional/bind.h"
-#include "base/functional/callback_helpers.h"
 #include "base/memory/weak_ptr.h"
 #include "base/supports_user_data.h"
+#include "base/task/cancelable_task_tracker.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/uuid.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -32,6 +33,9 @@
 #include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
 #include "chrome/common/webui_url_constants.h"
 #include "components/download/public/common/download_item.h"
+#include "components/history/core/browser/history_backend.h"
+#include "components/history/core/browser/history_database.h"
+#include "components/history/core/browser/history_db_task.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/prefs/pref_service.h"
@@ -122,24 +126,40 @@ class ProfileHistoryDeletions : public base::SupportsUserData::Data {
     return Get(profile);
   }
 
-  // Until the runner returned goes, the notice of a deletion of `urls` (all
-  // pages if empty) from `begin` on is DeleteProfileHistory()'s.
-  base::ScopedClosureRunner Add(base::Time begin, const std::set<GURL>& urls) {
+  // A deletion on its way, until Remove(id).
+  int Add() {
     const int id = next_id_++;
-    pending_.push_back(
-        {id, begin, urls.empty() ? std::nullopt : std::make_optional(urls)});
-    return base::ScopedClosureRunner(base::BindOnce(
-        &ProfileHistoryDeletions::Remove, weak_factory_.GetWeakPtr(), id));
+    pending_.push_back({id, std::nullopt});
+    return id;
   }
 
-  // Whether `info` is the notice of one of them: ExpireHistoryBetween()
-  // passes on the range and the pages as it was given them.
+  // Deletion `id` is removing `visit` (with others): its notice names it.
+  void SetVisit(int id, history::VisitID visit) {
+    for (Deletion& deletion : pending_) {
+      if (deletion.id == id) {
+        deletion.visit = visit;
+      }
+    }
+  }
+
+  void Remove(int id) {
+    std::erase_if(pending_,
+                  [id](const Deletion& deletion) { return deletion.id == id; });
+  }
+
+  // Whether `info` is the notice of one of them: a visit is removed once.
   bool Covers(const history::DeletionInfo& info) const {
     return std::ranges::any_of(pending_, [&](const Deletion& deletion) {
-      return info.time_range().begin() == deletion.begin &&
-             info.time_range().end().is_null() &&
-             info.restrict_urls() == deletion.urls;
+      return deletion.visit &&
+             info.deleted_visit_ids().contains(*deletion.visit);
     });
+  }
+
+  // For the deletions' history tasks: they outlive the Library that asked.
+  base::CancelableTaskTracker* tracker() { return &tracker_; }
+
+  base::WeakPtr<ProfileHistoryDeletions> GetWeakPtr() {
+    return weak_factory_.GetWeakPtr();
   }
 
  private:
@@ -147,18 +167,82 @@ class ProfileHistoryDeletions : public base::SupportsUserData::Data {
 
   struct Deletion {
     int id;
-    base::Time begin;
-    std::optional<std::set<GURL>> urls;
+    std::optional<history::VisitID> visit;
   };
-
-  void Remove(int id) {
-    std::erase_if(pending_,
-                  [id](const Deletion& deletion) { return deletion.id == id; });
-  }
 
   int next_id_ = 0;
   std::vector<Deletion> pending_;
+  base::CancelableTaskTracker tracker_;
   base::WeakPtrFactory<ProfileHistoryDeletions> weak_factory_{this};
+};
+
+// Removes one profile's visits (those tagged `app_id`) from `begin` on, to
+// `urls` (every page if empty), on the history database's sequence, with
+// HistoryBackend::RemoveVisits() (as sync removes visits). Its notice names
+// the visits and the pages gone (those with no visit left in any profile),
+// with no time range. ExpireHistoryBetween() can't say that (#582): its notice
+// carries the range it was given, and from the beginning that is "all
+// history" (DeletionInfo::IsAllHistory()) to every observer, which DeletionInfo
+// rejects with pages (a DCHECK) and which visited links, the URL bar's index,
+// top sites and the rest take as everything gone.
+class RemoveProfileVisitsTask : public history::HistoryDBTask {
+ public:
+  RemoveProfileVisitsTask(std::string app_id,
+                          std::set<GURL> urls,
+                          base::Time begin,
+                          base::WeakPtr<ProfileHistoryDeletions> deletions,
+                          int id)
+      : app_id_(std::move(app_id)),
+        urls_(std::move(urls)),
+        begin_(begin),
+        origin_(base::SequencedTaskRunner::GetCurrentDefault()),
+        deletions_(std::move(deletions)),
+        id_(id) {}
+
+  // Destroyed on the sequence that scheduled it, after the notice.
+  ~RemoveProfileVisitsTask() override {
+    origin_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&ProfileHistoryDeletions::Remove, deletions_, id_));
+  }
+
+  // history::HistoryDBTask:
+  bool RunOnDBThread(history::HistoryBackend* backend,
+                     history::HistoryDatabase* db) override {
+    history::VisitVector visits;
+    db->GetAllVisitsInRange(begin_, base::Time::Max(), app_id_,
+                            /*max_results=*/0, &visits);
+    if (!urls_.empty()) {
+      std::set<history::URLID> url_ids;
+      for (const GURL& url : urls_) {
+        if (const history::URLID url_id = db->GetRowForURL(url, nullptr)) {
+          url_ids.insert(url_id);
+        }
+      }
+      std::erase_if(visits, [&](const history::VisitRow& visit) {
+        return !url_ids.contains(visit.url_id);
+      });
+    }
+    if (visits.empty()) {
+      return true;
+    }
+    // The notice goes to the same sequence, after this.
+    origin_->PostTask(FROM_HERE,
+                      base::BindOnce(&ProfileHistoryDeletions::SetVisit,
+                                     deletions_, id_, visits.front().visit_id));
+    backend->RemoveVisits(visits, history::DeletionInfo::Reason::kOther);
+    return true;
+  }
+
+  void DoneRunOnMainThread() override {}
+
+ private:
+  const std::string app_id_;
+  const std::set<GURL> urls_;
+  const base::Time begin_;
+  const scoped_refptr<base::SequencedTaskRunner> origin_;
+  const base::WeakPtr<ProfileHistoryDeletions> deletions_;
+  const int id_;
 };
 
 // The profile (koan_history_profiles.h) whose closed tab has the Koan session
@@ -583,8 +667,7 @@ void DeleteProfileHistory(Profile* profile,
                           history::HistoryService* history,
                           std::string_view history_profile,
                           const std::set<GURL>& urls,
-                          base::Time begin,
-                          base::CancelableTaskTracker* tracker) {
+                          base::Time begin) {
   PrefService* prefs = profile->GetPrefs();
   const base::ListValue& list = prefs->GetList(prefs::kAutoClosedTabs);
   const size_t count = list.size();
@@ -603,15 +686,14 @@ void DeleteProfileHistory(Profile* profile,
   if (!history) {
     return;
   }
-  // The runner goes once the deletion is done (its notice comes before) or
-  // dropped.
-  history->ExpireHistoryBetween(
-      urls, containers::HistoryAppIdForProfile(history_profile), begin,
-      base::Time(), /*user_initiated=*/true,
-      base::BindOnce(
-          [](base::ScopedClosureRunner) {},
-          ProfileHistoryDeletions::GetOrCreate(profile)->Add(begin, urls)),
-      tracker);
+  ProfileHistoryDeletions* deletions =
+      ProfileHistoryDeletions::GetOrCreate(profile);
+  history->ScheduleDBTask(
+      FROM_HERE,
+      std::make_unique<RemoveProfileVisitsTask>(
+          containers::HistoryAppIdForProfile(history_profile), urls, begin,
+          deletions->GetWeakPtr(), deletions->Add()),
+      deletions->tracker());
 }
 
 }  // namespace koan

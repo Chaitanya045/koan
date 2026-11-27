@@ -13,7 +13,6 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
-#include "base/task/cancelable_task_tracker.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
@@ -125,16 +124,16 @@ void ForgetAutoClosedTab(Profile* profile, const std::string& id);
 // The Library's removals while it shows one Space profile (#474): deletes
 // that profile's visits (`history_profile`, named as in
 // koan_history_profiles.h) to `urls`, or to every page if empty, from `begin`
-// (all of them if null) on. Chromium's notice of the deletion doesn't say
-// which profile it was, so the closed tabs it covers are forgotten here,
-// only those of `history_profile` (by the container in their session data),
-// and the windows' closers let the notice go by.
+// (all of them if null) on, even once the Library has closed. Chromium's
+// notice names the visits and the pages gone, never a time range (#582), and
+// doesn't say which profile it was, so the closed tabs it covers are
+// forgotten here, only those of `history_profile` (by the container in their
+// session data), and the windows' closers let the notice go by.
 void DeleteProfileHistory(Profile* profile,
                           history::HistoryService* history,
                           std::string_view history_profile,
                           const std::set<GURL>& urls,
-                          base::Time begin,
-                          base::CancelableTaskTracker* tracker);
+                          base::Time begin);
 
 }  // namespace koan
 
