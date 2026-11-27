@@ -73,6 +73,7 @@ source_set("browsertests_impl") {
     "browser/koan_browser_test_utils.h",
     "browser/koan_command_palette_browsertest.cc",
     "browser/koan_essentials_drop_browsertest.cc",
+    "browser/koan_essentials_profiles_browsertest.cc",
     "browser/koan_glance_settings_browsertest.cc",
     "browser/koan_import_browsertest.cc",
     "browser/koan_playing_page_adoption_browsertest.cc",
