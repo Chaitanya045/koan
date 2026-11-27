@@ -149,7 +149,7 @@ jobs:
           nightly build.
 
           Install it for your user (Flatpak fetches the Freedesktop runtime
-          and the Chromium base app from Flathub):
+          from Flathub; over an older Koan, add \`--reinstall\`):
 
           \`\`\`sh
           flatpak install --user ./$FLATPAK

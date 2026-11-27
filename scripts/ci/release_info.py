@@ -159,6 +159,8 @@ flatpak install --user ./@FLATPAK@
 flatpak run dev.koan.Koan
 ```
 
+Over an older Koan, add `--reinstall` to the install (your profile stays).
+
 Its SHA-256 checksum is in the `.sha256` file next to it:
 
 ```

@@ -1455,11 +1455,18 @@ flatpak install --user ./Koan-*.flatpak
 flatpak run dev.koan.Koan
 ```
 
-Flatpak fetches the Freedesktop runtime and the Chromium base app from
-Flathub the first time. Koan then shows up in your app menu. There are no
-in-app updates on Linux yet: to update, install the newer file the same
-way. To remove it, `flatpak uninstall
-dev.koan.Koan` (add `--delete-data` to remove the profile too).
+Flatpak fetches the Freedesktop runtime (and your graphics drivers for it)
+from Flathub the first time. Koan then shows up in your app menu. There are
+no in-app updates on Linux yet: to update, install the newer file over the
+old one, which keeps your profile (a plain `flatpak install` stops at
+"already installed"):
+
+```sh
+flatpak install --user --reinstall ./Koan-*.flatpak
+```
+
+To remove it, `flatpak uninstall dev.koan.Koan` (add `--delete-data` to
+remove the profile too).
 
 - The profile is in `~/.var/app/dev.koan.Koan/config/koan`.
 - Extra command-line flags go in
