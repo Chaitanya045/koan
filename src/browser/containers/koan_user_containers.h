@@ -88,6 +88,37 @@ std::optional<std::string> NewTabContainer(const NewTabFacts& facts);
 bool ShowsContainerLine(const std::optional<ContainerId>& tab_container,
                         const std::optional<ContainerId>& space_container);
 
+// Zen's container-specific Essentials (zen.workspaces.separate-essentials,
+// #479) in one window: one grid of Essentials per profile, and the window
+// shows the active Space's.
+struct EssentialsProfiles {
+  EssentialsProfiles();
+  EssentialsProfiles(const EssentialsProfiles&);
+  EssentialsProfiles& operator=(const EssentialsProfiles&);
+  ~EssentialsProfiles();
+
+  // Off (the setting, or a window without Spaces): one grid of every
+  // Essential.
+  bool separate = false;
+  // The active Space's container (nullopt: none, the default profile).
+  std::optional<ContainerId> shown;
+  // The user containers the window's Spaces have.
+  std::vector<ContainerId> spaces;
+
+  // The grid of an Essential, or of a tab that would become one, in
+  // `tab_container`: that container's if one of the Spaces has it, else the
+  // default profile's (nullopt). Zen hides an Essential whose container no
+  // Space has; here it stays reachable in the Spaces without a profile.
+  // Off, every Essential is in the one grid (nullopt).
+  std::optional<ContainerId> GridOf(
+      const std::optional<ContainerId>& tab_container) const;
+  // Whether the grid shows the Essential now.
+  bool Shows(const std::optional<ContainerId>& tab_container) const;
+
+  friend bool operator==(const EssentialsProfiles&,
+                         const EssentialsProfiles&) = default;
+};
+
 }  // namespace koan::containers
 
 #endif  // KOAN_BROWSER_CONTAINERS_KOAN_USER_CONTAINERS_H_
