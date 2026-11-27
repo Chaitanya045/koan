@@ -206,7 +206,7 @@ toolbar at the top edge. A page's own fullscreen (a video's) hides it all.
 **Bookmarks bar**: off, as in Zen: none anywhere, also on the new tab page
 and after importing bookmarks. Turn it on in Koan's settings (Look and Feel
 > Appearance > Bookmarks bar) or with ⇧⌘B (View > Always Show Bookmarks Bar,
-whose check mark follows the setting); Chromium's own "Show bookmarks bar"
+whose check mark follows the setting; Ctrl+Shift+B on Linux); Chromium's own "Show bookmarks bar"
 setting doesn't change it. It then shows above every page, the new tab page
 too: below the toolbar with Sidebar and Top Toolbar, and with Only Sidebar in
 Zen's top bar above the page (34 px, beside the sidebar), also in compact mode
@@ -819,7 +819,8 @@ yet).
 **Settings** (Koan's settings, Look and Feel → Glance; Zen's
 `zen.glance.enabled` and `zen.glance.activation-method`): **Enable Glance**,
 and **Trigger method**: Ctrl + Click, Alt + Click (the default), Shift +
-Click or Meta (Command) + Click. Both apply at once, in the pages already
+Click or Meta (Command) + Click (on Linux "Super + Click", which GNOME and
+KDE often keep for moving windows). Both apply at once, in the pages already
 open too, as in Zen. With another trigger
 method, a click Glance can't open (not a web link, an app window) does
 what that modifier does without Glance (⌘: a background tab; Shift: a
@@ -1387,7 +1388,7 @@ Zen's `zen.theme.acrylic-urlbar` is "Glass URL bar" (Settings,
 URL Bar): the floating URL bar (⌘T / ⌘L) turns translucent with the page
 blurred behind it. Off by default, as in Zen; it also stays opaque while
 macOS's Reduce Transparency is on and in a window that isn't active (Zen's
-rules). The card is translucent over a blur of the page; only the card of
+rules; on Linux only the second, and its note says so). The card is translucent over a blur of the page; only the card of
 the window it opens in changes. The suggestion list under it stays opaque. Off
 macOS only the page is blurred.
 
