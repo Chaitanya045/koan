@@ -23,6 +23,7 @@ enum class VerticalTabStripCollapseState;
 }  // namespace tabs
 
 namespace views {
+struct ProposedLayout;
 class SizeBounds;
 class View;
 }  // namespace views
@@ -112,7 +113,9 @@ std::vector<views::View*> OrderWithGap(
 
 // The children the vertical grid `grid` lays out, in order
 // (pinned_tab_container_view_vertical_layout.cc), given upstream's
-// `children` (its collection's tiles): with a gap, OrderWithGap().
+// `children` (its collection's tiles): the tiles the grid shows (Zen's
+// container-specific Essentials, koan_essentials_profiles.h), and with a gap,
+// OrderWithGap().
 std::vector<views::View*> EssentialsLayoutChildren(
     const views::View* grid,
     std::vector<views::View*> children);
@@ -125,6 +128,24 @@ std::vector<views::View*> GetEssentialsLayoutChildren(
     list.push_back(child);
   }
   return EssentialsLayoutChildren(grid, std::move(list));
+}
+
+// The tiles among upstream's `children` of `grid` that it doesn't show
+// (another profile's Essentials, koan_essentials_profiles.h), which
+// EssentialsLayoutChildren() leaves out: added to `layout`, the grid's
+// proposed layout, as hidden.
+void AddHiddenEssentials(const views::View* grid,
+                         const std::vector<views::View*>& children,
+                         views::ProposedLayout& layout);
+template <typename Children>
+void AddHiddenEssentialsLayouts(const views::View* grid,
+                                const Children& children,
+                                views::ProposedLayout& layout) {
+  std::vector<views::View*> list;
+  for (views::View* child : children) {
+    list.push_back(child);
+  }
+  AddHiddenEssentials(grid, list, layout);
 }
 
 // Whether a tab view that is `pinned` is an Essentials tile (with Koan's

@@ -114,6 +114,23 @@ else
   echo "needs org.flatpak.Builder (flatpak install --user flathub org.flatpak.Builder)" >&2
   exit 1
 fi
+# The downloads first, each on its own and retried up to 4 times, so a bad
+# minute on Flathub or GitHub doesn't fail the job and a real build failure
+# isn't retried: the runtime, SDK and base app from Flathub, then the
+# manifest's sources (zypak) into the state dir the build reuses.
+fetch() {
+  local what="$1" n
+  shift
+  for n in 1 2 3 4; do
+    "${builder[@]}" --user --state-dir="$WORK/state" "$@" \
+      "$WORK/app" "$WORK/build/$APP_ID.yml" && return 0
+    [[ $n == 4 ]] || { echo "$what failed (try $n of 4), retrying in 15 s" >&2; sleep 15; }
+  done
+  echo "$what failed 4 times" >&2
+  return 1
+}
+fetch "installing the runtime from Flathub" --install-deps-from=flathub --install-deps-only
+fetch "downloading the sources" --download-only
 # rofiles-fuse needs FUSE, which containers and some runners lack.
 "${builder[@]}" --user --install-deps-from=flathub --disable-rofiles-fuse \
   --force-clean --repo="$WORK/repo" --state-dir="$WORK/state" \

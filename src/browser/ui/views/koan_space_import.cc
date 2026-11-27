@@ -28,6 +28,7 @@
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tabs/public/tab_group.h"
 #include "components/tabs/public/tab_interface.h"
+#include "koan/browser/containers/koan_container_partition.h"
 #include "koan/browser/importer/koan_imported_spaces.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_folder_controller.h"
@@ -111,12 +112,13 @@ class SpaceImport {
 
   size_t Run(const ImportedSpaces& plan) {
     // The Essentials first, while Koan's 12 fit (Zen's import); the others
-    // are pinned in the first Space.
+    // are pinned in the first Space. They open in the default profile, so
+    // they count in its grid (Zen's container-specific Essentials, #479).
     std::vector<ImportedItem> essentials;
     Flatten(plan.essentials, essentials);
     std::vector<ImportedItem> leftovers;
     for (const ImportedItem& tab : essentials) {
-      if (window_->pinned->CanAddToEssentials()) {
+      if (window_->pinned->HasRoomInEssentials(std::nullopt)) {
         AddTab(tab, model()->IndexOfFirstNonPinnedTab(), std::nullopt, {});
       } else {
         leftovers.push_back(tab);
