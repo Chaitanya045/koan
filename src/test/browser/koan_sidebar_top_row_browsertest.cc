@@ -14,6 +14,7 @@
 
 #include "base/strings/strcat.h"
 #include "base/test/run_until.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -32,6 +33,16 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(IS_LINUX)
+#include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/ui/toolbar/app_menu_model.h"
+#include "koan/browser/ui/views/koan_app_menu_button.h"
+#include "ui/base/accelerators/accelerator.h"
+#include "ui/events/event_constants.h"
+#include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/views/controls/menu/menu_runner.h"
+#endif
 
 namespace koan {
 
@@ -111,7 +122,8 @@ IN_PROC_BROWSER_TEST_F(KoanSidebarTopRowBrowserTest, NavButtonsAreClientArea) {
       ui_test_utils::NavigateToURL(browser(), GURL("chrome://version/")));
   KoanSidebarNavButtons* row = WaitForView<KoanSidebarNavButtons>();
   ASSERT_TRUE(row);
-  ASSERT_EQ(row->children().size(), 3u);
+  // Back, forward and reload; on Linux after Zen's app menu button.
+  ASSERT_EQ(row->children().size(), BUILDFLAG(IS_LINUX) ? 4u : 3u);
   for (views::View* button : row->children()) {
     ASSERT_TRUE(IsOnScreen(button));
     gfx::Point centre = button->GetLocalBounds().CenterPoint();
@@ -146,5 +158,26 @@ IN_PROC_BROWSER_TEST_F(KoanSidebarTopRowBrowserTest, ExtensionsButtonToggles) {
   views::test::ButtonTestApi(button).NotifyDefaultMouseClick();
   EXPECT_TRUE(base::test::RunUntil([&] { return !BubbleAt(button); }));
 }
+
+#if BUILDFLAG(IS_LINUX)
+// Linux has no menu bar: Zen's app menu button in the top row opens
+// Chromium's app menu, whose Exit shows Koan's Quit key, Ctrl+Q (#488).
+IN_PROC_BROWSER_TEST_F(KoanSidebarTopRowBrowserTest, AppMenuButtonOffersExit) {
+  KoanAppMenuButton* button = WaitForView<KoanAppMenuButton>();
+  ASSERT_TRUE(button);
+  ui::Accelerator key;
+  ASSERT_TRUE(button->GetAcceleratorForCommandId(IDC_EXIT, &key));
+  EXPECT_EQ(key, ui::Accelerator(ui::VKEY_Q, ui::EF_CONTROL_DOWN));
+
+  button->ShowMenuWithFlags(views::MenuRunner::NO_FLAGS);
+  ASSERT_TRUE(base::test::RunUntil([&] { return button->IsMenuShowing(); }));
+  // (The block-style menu behind kAppMenuGlowUp has no AppMenuModel.)
+  if (AppMenuModel* model = button->app_menu_model()) {
+    EXPECT_TRUE(model->GetIndexOfCommandId(IDC_EXIT).has_value());
+  }
+  button->CloseMenu();
+  EXPECT_TRUE(base::test::RunUntil([&] { return !button->IsMenuShowing(); }));
+}
+#endif  // BUILDFLAG(IS_LINUX)
 
 }  // namespace koan

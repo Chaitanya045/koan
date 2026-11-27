@@ -62,6 +62,9 @@ enum class Action {
   // (koan_window_sync.h OpenBlankWindow()).
   kNewBlankWindow,
   kNewPrivateWindow,
+  // Zen's "Quit Application" (Firefox's key_quitApplication): a key on Linux
+  // only; on macOS ⌘Q is the menu bar's Quit, outside this table.
+  kQuit,
   kMuteSite,
   kBookmarks,
   kDownloads,
@@ -106,7 +109,7 @@ const Info* FindAction(std::string_view id);
 // Zen writes its defaults with "accel" (Cmd on macOS, Ctrl elsewhere), which
 // they follow here (ui::EF_PLATFORM_ACCELERATOR); macOS also gets Zen's
 // Ctrl+1..0 (switch to Space N) and Firefox's macOS keys for Inspect and
-// Downloads.
+// Downloads, and Linux Firefox's Ctrl+Q (Quit).
 std::vector<Binding> DefaultBindings();
 
 // Whether Chrome on macOS runs `accelerator` as a reserved command (Close
