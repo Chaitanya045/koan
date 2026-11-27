@@ -36,9 +36,11 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <linux/magic.h>
+#include <linux/openat2.h>
 #include <poll.h>
 #include <sys/stat.h>
 #include <sys/statfs.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 
 #include <array>
@@ -49,6 +51,7 @@
 #include "base/containers/span.h"
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
+#include "base/posix/safe_strerror.h"
 #include "base/posix/unix_domain_socket.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -421,6 +424,10 @@ namespace {
 #ifndef SO_PEERPIDFD
 #define SO_PEERPIDFD 77
 #endif
+// Linux 5.8 (linux/stat.h), in case the C library's header has not got it.
+#ifndef STATX_ATTR_MOUNT_ROOT
+#define STATX_ATTR_MOUNT_ROOT 0x00002000
+#endif
 
 constexpr int kMaxAncestors = 12;
 // The procfs root's inode (PROC_ROOT_INO in the kernel).
@@ -435,10 +442,62 @@ constexpr size_t kMaxPendingTokens = 64;
 constexpr size_t kMaxProcFile = 16 * 1024;
 constexpr base::TimeDelta kSlowLookup = base::Seconds(1);
 
-// The contents of a small file under `dir` (a /proc directory), or nullopt.
-std::optional<std::string> ReadAt(int dir, const std::string& name) {
-  base::ScopedFD fd(
-      HANDLE_EINTR(openat(dir, name.c_str(), O_RDONLY | O_CLOEXEC)));
+// A procfs to look things up in: its root, and the device of its superblock,
+// which everything opened below it must be on.
+struct ProcFs {
+  base::ScopedFD root;
+  dev_t device = 0;
+};
+
+// `fd` as a ProcFs, if it is the root of a procfs (PROC_SUPER_MAGIC, inode 1).
+std::optional<ProcFs> AsProcFs(base::ScopedFD fd) {
+  struct statfs file_system;
+  struct stat info;
+  if (!fd.is_valid() || fstatfs(fd.get(), &file_system) != 0 ||
+      file_system.f_type != PROC_SUPER_MAGIC || fstat(fd.get(), &info) != 0 ||
+      !S_ISDIR(info.st_mode) || info.st_ino != kProcRootInode) {
+    return std::nullopt;
+  }
+  ProcFs proc;
+  proc.root = std::move(fd);
+  proc.device = info.st_dev;
+  return proc;
+}
+
+// Opens `name` below `dir` (a procfs root, or a directory opened by this
+// function below one) without crossing a mount, following a magic link or
+// leaving `dir`, and checks that what it opened is on the procfs `device`.
+//
+// A /proc a client sent belongs to the client's mount namespace, where a
+// same-user program in a user namespace of its own may have mounted anything
+// over a directory or a file of it (another process's /proc/<pid> over
+// Koan's, so that Koan's fdinfo names a process it chose). A plain openat()
+// follows those mounts; RESOLVE_NO_XDEV refuses them, and `self` is an
+// ordinary symlink in procfs ("<pid>"), which RESOLVE_BENEATH still follows
+// (agent-control.md section 4.6, "A /proc with mounts in it"). There is no
+// fallback where openat2() is missing or filtered (Flatpak's seccomp list
+// does not filter it): the lookup fails, and the peer is refused.
+base::ScopedFD OpenBelow(dev_t device,
+                         int dir,
+                         const std::string& name,
+                         uint64_t flags) {
+  open_how how = {};
+  how.flags = flags | O_CLOEXEC;
+  how.resolve = RESOLVE_NO_XDEV | RESOLVE_NO_MAGICLINKS | RESOLVE_BENEATH;
+  base::ScopedFD fd(static_cast<int>(HANDLE_EINTR(
+      syscall(__NR_openat2, dir, name.c_str(), &how, sizeof(how)))));
+  struct stat info;
+  if (!fd.is_valid() || fstat(fd.get(), &info) != 0 || info.st_dev != device) {
+    return base::ScopedFD();
+  }
+  return fd;
+}
+
+// The contents of a small file below `dir`, or nullopt.
+std::optional<std::string> ReadAt(dev_t device,
+                                  int dir,
+                                  const std::string& name) {
+  base::ScopedFD fd = OpenBelow(device, dir, name, O_RDONLY);
   if (!fd.is_valid()) {
     return std::nullopt;
   }
@@ -459,11 +518,17 @@ std::optional<std::string> ReadAt(int dir, const std::string& name) {
   return text;
 }
 
-// The executable of the process whose /proc directory is `dir`, as the kernel
-// names it (a path in the program's own mount namespace), or "".
-std::string ExecutablePath(int dir) {
+// What the procfs link `name` below `dir` says, read from the link itself
+// (opened without following it, below `dir` as OpenBelow() does), or "".
+std::string ReadLinkBelow(dev_t device, int dir, const std::string& name) {
+  base::ScopedFD link = OpenBelow(device, dir, name, O_PATH | O_NOFOLLOW);
+  struct stat info;
+  if (!link.is_valid() || fstat(link.get(), &info) != 0 ||
+      !S_ISLNK(info.st_mode)) {
+    return std::string();
+  }
   std::array<char, PATH_MAX> path;
-  const ssize_t length = readlinkat(dir, "exe", path.data(), path.size());
+  const ssize_t length = readlinkat(link.get(), "", path.data(), path.size());
   if (length <= 0 || static_cast<size_t>(length) >= path.size()) {
     return std::string();
   }
@@ -471,43 +536,81 @@ std::string ExecutablePath(int dir) {
       base::span(path).first(static_cast<size_t>(length))));
 }
 
+// The executable of the process whose /proc directory is `dir`, as the kernel
+// names it (a path in the program's own mount namespace), or "".
+std::string ExecutablePath(dev_t device, int dir) {
+  return ReadLinkBelow(device, dir, "exe");
+}
+
 // The process's start, so that a pid that was reused is told apart.
-std::optional<ProcStat> StatOf(int dir) {
-  std::optional<std::string> text = ReadAt(dir, "stat");
+std::optional<ProcStat> StatOf(dev_t device, int dir) {
+  std::optional<std::string> text = ReadAt(device, dir, "stat");
   return text ? ParseProcStat(*text) : std::nullopt;
 }
 
-// The identity of the executable of the process whose /proc directory is
-// `dir`: FileIdentity() of the file `exe` names (opened through the link, so
-// the file itself, whatever path it has now). On a FUSE file system the inode
-// and times are whatever the file system's server says, so the identity is
-// this process alone ("process:<pid>:<start>"): every new process asks again,
-// and none can borrow another's pin. nullopt if there is no file to look at.
-std::optional<std::string> ExecutableIdentity(int dir,
-                                              int pid,
-                                              uint64_t start_time) {
-  base::ScopedFD exe(HANDLE_EINTR(openat(dir, "exe", O_PATH | O_CLOEXEC)));
-  struct stat info;
-  struct statfs file_system;
-  if (!exe.is_valid() || fstat(exe.get(), &info) != 0 ||
-      fstatfs(exe.get(), &file_system) != 0 || !S_ISREG(info.st_mode)) {
+// The executable of the process whose /proc directory is `dir` (in the procfs
+// on `device`): its path and FileIdentity(), both of the one file the kernel
+// keeps as the process's executable, or nullopt.
+//
+// `exe` is a magic link, and openat2() refuses to follow one under any of the
+// flags OpenBelow() uses, so it is followed by a plain openat(). That reaches
+// the process's executable unless a file is mounted on the link itself in the
+// client's mount namespace (move_mount() onto an O_PATH descriptor of it). A
+// file mounted there is the root of its mount, and a process's executable
+// reached through the link is not (a binary that is bind-mounted on its own
+// is refused too: it cannot be told from that case), so a mount root is
+// refused (STATX_ATTR_MOUNT_ROOT). The path is then read from the open file
+// itself, through this process's own /proc (`own`), and must equal what the
+// link says: the path and the identity are those of the same file, even if
+// the process execs meanwhile.
+//
+// On a FUSE file system the inode and times are whatever the file system's
+// server says, so the identity is this process alone ("process:<pid>:
+// <start>"): every new process asks again, and none can borrow another's
+// pin.
+std::optional<ProcessInfo> Executable(const ProcFs& own,
+                                      dev_t device,
+                                      int dir,
+                                      int pid,
+                                      uint64_t start_time) {
+  const std::string named = ExecutablePath(device, dir);
+  if (named.empty()) {
     return std::nullopt;
   }
-  if (file_system.f_type == FUSE_SUPER_MAGIC) {
-    return "process:" + base::NumberToString(pid) + ":" +
-           base::NumberToString(start_time);
+  base::ScopedFD exe(HANDLE_EINTR(openat(dir, "exe", O_PATH | O_CLOEXEC)));
+  struct statx info = {};
+  constexpr unsigned int kWanted =
+      STATX_TYPE | STATX_INO | STATX_SIZE | STATX_CTIME;
+  if (!exe.is_valid() ||
+      statx(exe.get(), "", AT_EMPTY_PATH | AT_STATX_SYNC_AS_STAT, kWanted,
+            &info) != 0 ||
+      (info.stx_mask & kWanted) != kWanted || !S_ISREG(info.stx_mode) ||
+      !(info.stx_attributes_mask & STATX_ATTR_MOUNT_ROOT) ||
+      (info.stx_attributes & STATX_ATTR_MOUNT_ROOT)) {
+    return std::nullopt;
   }
-  return FileIdentity(info.st_ino, info.st_ctim.tv_sec, info.st_ctim.tv_nsec,
-                      info.st_size);
-}
-
-// Whether `fd` is the root of a procfs.
-bool IsProcRoot(int fd) {
+  base::ScopedFD fds =
+      OpenBelow(own.device, own.root.get(), "self/fd", O_RDONLY | O_DIRECTORY);
+  const std::string opened =
+      fds.is_valid() ? ReadLinkBelow(own.device, fds.get(),
+                                     base::NumberToString(exe.get()))
+                     : std::string();
+  if (opened != named) {
+    return std::nullopt;
+  }
   struct statfs file_system;
-  struct stat info;
-  return fstatfs(fd, &file_system) == 0 &&
-         file_system.f_type == PROC_SUPER_MAGIC && fstat(fd, &info) == 0 &&
-         S_ISDIR(info.st_mode) && info.st_ino == kProcRootInode;
+  if (fstatfs(exe.get(), &file_system) != 0) {
+    return std::nullopt;
+  }
+  ProcessInfo process;
+  process.path = opened;
+  process.signing_identity =
+      file_system.f_type == FUSE_SUPER_MAGIC
+          ? "process:" + base::NumberToString(pid) + ":" +
+                base::NumberToString(start_time)
+          : FileIdentity(info.stx_ino, info.stx_ctime.tv_sec,
+                         info.stx_ctime.tv_nsec, info.stx_size);
+  return process;
 }
 
 // Whether the process of a pidfd has exited (its pidfd is readable then). A
@@ -522,15 +625,22 @@ bool HasExited(int pidfd) {
 // from this process's own fdinfo of the pidfd, through `proc`. `self` in a
 // procfs names the reader only where the reader is visible, so a procfs of a
 // namespace this process is not in (one the client made) has no `self`, and
-// gives nothing.
-std::optional<int> PidThrough(int proc, int pidfd) {
+// gives nothing; a mount on the way is refused (OpenBelow()).
+std::optional<int> PidThrough(const ProcFs& proc, int pidfd) {
   std::optional<std::string> info =
-      ReadAt(proc, "self/fdinfo/" + base::NumberToString(pidfd));
+      ReadAt(proc.device, proc.root.get(),
+             "self/fdinfo/" + base::NumberToString(pidfd));
   std::optional<int> pid = info ? PidFromPidfdInfo(*info) : std::nullopt;
   if (!pid || *pid <= 0) {
     return std::nullopt;
   }
   return pid;
+}
+
+// This process's own /proc.
+std::optional<ProcFs> OwnProc() {
+  return AsProcFs(base::ScopedFD(
+      HANDLE_EINTR(open("/proc", O_PATH | O_DIRECTORY | O_CLOEXEC))));
 }
 
 enum class Hello {
@@ -580,17 +690,20 @@ Hello ReadHello(int socket, base::ScopedFD* proc) {
 
 class LinuxPeerDescriptors final : public PeerDescriptors {
  public:
-  LinuxPeerDescriptors(base::ScopedFD pidfd, base::ScopedFD dir)
-      : pidfd_(std::move(pidfd)), dir_(std::move(dir)) {}
+  LinuxPeerDescriptors(base::ScopedFD pidfd, base::ScopedFD dir, dev_t device)
+      : pidfd_(std::move(pidfd)), dir_(std::move(dir)), device_(device) {}
 
   int pidfd() const { return pidfd_.get(); }
   int dir() const { return dir_.get(); }
+  dev_t device() const { return device_; }
 
  private:
   base::ScopedFD pidfd_;
   // /proc/<pid> of the process: bound to that process, so reads through it
   // fail once it is gone, even if its pid is reused.
   base::ScopedFD dir_;
+  // Its procfs's.
+  dev_t device_;
 };
 
 class LinuxPeerResolver final : public PeerResolver {
@@ -673,19 +786,26 @@ class LinuxPeerResolver final : public PeerResolver {
     // The /proc to look in: the one the client sent, once the kernel has
     // said it is a procfs in which this process and the peer are both
     // visible; else this process's own.
-    base::ScopedFD proc;
+    std::optional<ProcFs> own = OwnProc();
+    if (!own) {
+      return refuse("no /proc");
+    }
+    std::optional<ProcFs> proc;
     if (hello_proc.is_valid()) {
-      if (!IsProcRoot(hello_proc.get())) {
+      proc = AsProcFs(std::move(hello_proc));
+      if (!proc) {
         return refuse("what the hello sent is not a /proc");
       }
-      proc = std::move(hello_proc);
     } else {
-      proc.reset(HANDLE_EINTR(open("/proc", O_PATH | O_DIRECTORY | O_CLOEXEC)));
-      if (!proc.is_valid() || !IsProcRoot(proc.get())) {
-        return refuse("no /proc");
-      }
+      proc = OwnProc();
     }
-    const std::optional<int> pid = PidThrough(proc.get(), pending->pidfd.get());
+    // openat2(), which every lookup below a /proc uses: without it, nothing.
+    if (!OpenBelow(proc->device, proc->root.get(), ".", O_PATH | O_DIRECTORY)
+             .is_valid()) {
+      return refuse("openat2() failed (" + base::safe_strerror(errno) +
+                    "; Linux 5.6 or later is needed)");
+    }
+    const std::optional<int> pid = PidThrough(*proc, pending->pidfd.get());
     if (!pid) {
       if (HasExited(pending->pidfd.get())) {
         VLOG(1) << "agent peer: the program has exited";
@@ -697,37 +817,40 @@ class LinuxPeerResolver final : public PeerResolver {
                           "must run on the host, not in another sandbox)"
                         : "the program is not in /proc");
     }
-    base::ScopedFD dir(
-        HANDLE_EINTR(openat(proc.get(), base::NumberToString(*pid).c_str(),
-                            O_RDONLY | O_DIRECTORY | O_CLOEXEC)));
+    base::ScopedFD dir =
+        OpenBelow(proc->device, proc->root.get(), base::NumberToString(*pid),
+                  O_RDONLY | O_DIRECTORY);
     // A pid is not reused while its process lives: if the pidfd's process is
     // still there after the directory was opened, the directory is its.
     if (!dir.is_valid() || HasExited(pending->pidfd.get())) {
+      if (!dir.is_valid() && !HasExited(pending->pidfd.get())) {
+        return refuse("the program's /proc directory could not be opened");
+      }
       VLOG(1) << "agent peer: the program has exited";
       return std::nullopt;
     }
-    const std::optional<ProcStat> stat = StatOf(dir.get());
-    const std::string path = ExecutablePath(dir.get());
-    if (!stat || path.empty()) {
-      return refuse("no executable path");
+    const std::optional<ProcStat> stat = StatOf(proc->device, dir.get());
+    if (!stat) {
+      return refuse("no stat for the program");
     }
-    std::optional<std::string> identity =
-        ExecutableIdentity(dir.get(), *pid, stat->start_time);
-    if (!identity) {
+    std::optional<ProcessInfo> process =
+        Executable(*own, proc->device, dir.get(), *pid, stat->start_time);
+    if (!process) {
       return refuse("the executable could not be looked at");
     }
+    const std::string path = process->path;
 
     ResolvedPeer peer;
     peer.identity.uid = pending->uid;
-    peer.identity.process = ProcessInfo{path, std::move(*identity)};
+    peer.identity.process = std::move(*process);
     peer.identity.ancestors =
-        Ancestors(proc.get(), stat->parent, stat->start_time);
+        Ancestors(*own, *proc, stat->parent, stat->start_time);
     const std::array<uint64_t, 2> handle = {static_cast<uint64_t>(*pid),
                                             stat->start_time};
     const auto handle_bytes = base::as_byte_span(handle);
     peer.handle.assign(handle_bytes.begin(), handle_bytes.end());
     peer.descriptors = std::make_shared<LinuxPeerDescriptors>(
-        std::move(pending->pidfd), std::move(dir));
+        std::move(pending->pidfd), std::move(dir), proc->device);
     if (timer.Elapsed() > kSlowLookup) {
       LOG(WARNING) << "agent peer: slow lookup of " << path << ": "
                    << timer.Elapsed().InMilliseconds() << " ms, "
@@ -744,7 +867,8 @@ class LinuxPeerResolver final : public PeerResolver {
     // executable (an exec of another program changes the link).
     return held && !peer.identity.process.path.empty() &&
            !HasExited(held->pidfd()) &&
-           ExecutablePath(held->dir()) == peer.identity.process.path;
+           ExecutablePath(held->device(), held->dir()) ==
+               peer.identity.process.path;
   }
 
  private:
@@ -779,28 +903,27 @@ class LinuxPeerResolver final : public PeerResolver {
   // user's) is recorded as unverified, and one that started after its child
   // is a later process that reused the pid: the chain stops there, so it
   // never names a stranger and never silently gets shorter.
-  std::vector<ProcessInfo> Ancestors(int proc,
+  std::vector<ProcessInfo> Ancestors(const ProcFs& own,
+                                     const ProcFs& proc,
                                      int parent,
                                      uint64_t child_start) const {
     std::vector<ProcessInfo> chain;
     for (int depth = 0; depth < kMaxAncestors && parent > 1; ++depth) {
-      base::ScopedFD dir(
-          HANDLE_EINTR(openat(proc, base::NumberToString(parent).c_str(),
-                              O_RDONLY | O_DIRECTORY | O_CLOEXEC)));
+      base::ScopedFD dir =
+          OpenBelow(proc.device, proc.root.get(), base::NumberToString(parent),
+                    O_RDONLY | O_DIRECTORY);
       const std::optional<ProcStat> stat =
-          dir.is_valid() ? StatOf(dir.get()) : std::nullopt;
+          dir.is_valid() ? StatOf(proc.device, dir.get()) : std::nullopt;
       if (!stat || stat->start_time > child_start) {
         chain.push_back(ProcessInfo{std::string(), "unverified"});
         break;
       }
-      ProcessInfo ancestor;
-      ancestor.path = ExecutablePath(dir.get());
-      std::optional<std::string> identity =
-          ancestor.path.empty()
-              ? std::nullopt
-              : ExecutableIdentity(dir.get(), parent, stat->start_time);
-      ancestor.signing_identity = identity ? *identity : "unverified";
-      chain.push_back(std::move(ancestor));
+      std::optional<ProcessInfo> found =
+          Executable(own, proc.device, dir.get(), parent, stat->start_time);
+      chain.push_back(found
+                          ? std::move(*found)
+                          : ProcessInfo{ExecutablePath(proc.device, dir.get()),
+                                        "unverified"});
       child_start = stat->start_time;
       parent = stat->parent;
     }

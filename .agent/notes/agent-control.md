@@ -484,6 +484,26 @@ returned null off the Mac. What #489 adds, and why each piece is as it is:
     the pidfd must still be alive once `<proc>/n` is open, since a pid is not reused while its process lives.
   - What is read through it is the kernel's: `exe`, the uid, and the parents (`stat`; a parent that started after
     its child is a reused pid and ends the chain as "unverified").
+  - **A /proc with mounts in it (review of #514).** The descriptor belongs to the client's mount namespace. A
+    same-user program can `unshare` a user and mount namespace (keeping its PID namespace, so Koan stays visible
+    and `self` resolves) and bind-mount its own `/proc/<pid>` over `/proc/<Koan's host pid>`, with pidfds of an
+    approved program at every low descriptor number. A plain `openat(proc, "self/fdinfo/<n>")` follows that
+    mount, because a path walk crosses the mounts of the vfsmount it walks, whoever walks it. Koan would then read
+    the helper's descriptor and take the connection for the approved program, with no prompt. So every lookup
+    below a `/proc`, the client's or Koan's own, uses `openat2()` with `RESOLVE_NO_XDEV | RESOLVE_NO_MAGICLINKS |
+    RESOLVE_BENEATH` (`OpenBelow()`). `self` is an ordinary symlink in procfs and still resolves. Each descriptor
+    must be on the root's procfs (`st_dev`). There is no fallback if `openat2()` fails: Flatpak's seccomp list
+    doesn't filter it, and the browser process has no seccomp of its own.
+  - **`exe` is a magic link, and no `openat2()` flag will follow one**, so it is followed by a plain `openat()`.
+    Its text is read from the link itself (opened `O_PATH|O_NOFOLLOW` below the verified directory). A file can be
+    mounted on the link (`move_mount()` onto an `O_PATH` descriptor of it), but what is mounted there is the root
+    of its mount. A process's executable reached through the link is not one, so a mount root is refused
+    (`STATX_ATTR_MOUNT_ROOT`; a binary bind-mounted on its own is refused with it). The path is then read from the
+    opened file, through Koan's own `/proc/self/fd`, and must equal the link's text. So the path and the identity
+    are always those of the same file, even across an exec in between.
+  - `AProcWithMountsInItIsRefused` (`koan_agent_peer_unittest.cc`) builds the attack with an unprivileged user and
+    mount namespace (skipped where those are off). A control shows that a plain `openat()` is fooled, and the
+    resolver must refuse.
   - Without a hello, or when the peer is visible anyway (the CLI's own resolvers, a non-Flatpak Koan), the
     process's own `/proc` is used.
   - `Unchanged()` keeps the pidfd and the `/proc/<pid>` directory, and checks "not exited, same `exe`".

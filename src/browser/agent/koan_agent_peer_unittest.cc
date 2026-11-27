@@ -29,8 +29,10 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <sys/un.h>
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -42,6 +44,7 @@
 #include "base/posix/unix_domain_socket.h"
 #include "base/process/launch.h"
 #include "base/process/process.h"
+#include "base/strings/string_number_conversions.h"
 #endif
 
 namespace koan::agent {
@@ -491,6 +494,147 @@ TEST(KoanAgentPeerTest, ARealChildIsResolvedAndIsGoneWhenItExits) {
   // Once it is gone it is not the peer any more.
   ASSERT_TRUE(child.Terminate(0, /*wait=*/true));
   EXPECT_FALSE(resolver->Unchanged(*peer));
+}
+
+// The attack the review of #514 found: a same-user program in a user and
+// mount namespace of its own (keeping the PID namespace, so that Koan stays
+// visible) bind-mounts its own /proc/<pid> over Koan's and fills its
+// descriptors with pidfds of another program, so that Koan's fdinfo, read
+// through the /proc it sends, names that program. The control connection
+// shows that a plain openat() is fooled; the resolver must refuse.
+TEST(KoanAgentPeerTest, AProcWithMountsInItIsRefused) {
+  if (!KernelHasPeerPidfd()) {
+    GTEST_SKIP() << "no SO_PEERPIDFD (Linux 6.5+)";
+  }
+  if (!base::PathExists(base::FilePath("/usr/bin/python3"))) {
+    GTEST_SKIP() << "no python3";
+  }
+  // The program the attacker wants to be taken for.
+  base::Process victim = base::LaunchProcess(
+      std::vector<std::string>{"/bin/sleep", "60"}, base::LaunchOptions());
+  ASSERT_TRUE(victim.IsValid());
+  base::ScopedFD victim_pidfd(
+      static_cast<int>(syscall(__NR_pidfd_open, victim.Pid(), 0)));
+  ASSERT_TRUE(victim_pidfd.is_valid());
+
+  base::ScopedTempDir dir;
+  ASSERT_TRUE(dir.CreateUniqueTempDirUnderPath(base::FilePath("/tmp")));
+  const base::FilePath path = dir.GetPath().Append("s");
+  sockaddr_un address = {};
+  address.sun_family = AF_UNIX;
+  ASSERT_LT(path.value().size(), sizeof(address.sun_path));
+  base::span(address.sun_path).copy_prefix_from(base::span(path.value()));
+  base::ScopedFD listener(socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0));
+  ASSERT_EQ(bind(listener.get(), reinterpret_cast<sockaddr*>(&address),
+                 sizeof(address)),
+            0);
+  ASSERT_EQ(listen(listener.get(), 4), 0);
+  int out[2];
+  ASSERT_EQ(pipe(out), 0);
+  base::ScopedFD out_read(out[0]);
+  base::ScopedFD out_write(out[1]);
+
+  // The attacker: the victim's pidfd at every descriptor from 7 to 899, its
+  // own /proc/<pid> mounted over this test's, then two connections, each
+  // with its /proc (the first for the control, the second as the hello).
+  constexpr char kAttacker[] = R"(
+import ctypes, fcntl, os, socket, sys, time
+def say(text):
+    os.write(1, (text + "\n").encode())
+libc = ctypes.CDLL(None, use_errno=True)
+uid, gid, koan = os.getuid(), os.getgid(), os.getppid()
+if libc.unshare(0x10000000 | 0x00020000) != 0:
+    say("skip unshare"); sys.exit(0)
+for name, text in (("setgroups", "deny"), ("uid_map", "%d %d 1" % (uid, uid)),
+                   ("gid_map", "%d %d 1" % (gid, gid))):
+    with open("/proc/self/" + name, "w") as f:
+        f.write(text)
+if libc.mount(None, b"/", None, 0x4000 | 0x40000, None) != 0:
+    say("skip private"); sys.exit(0)
+if libc.mount(("/proc/%d" % os.getpid()).encode(),
+              ("/proc/%d" % koan).encode(), None, 0x1000, None) != 0:
+    say("skip bind %d" % ctypes.get_errno()); sys.exit(0)
+def high(fd):
+    moved = fcntl.fcntl(fd, fcntl.F_DUPFD, 900)
+    os.close(fd)
+    return moved
+proc = high(os.open("/proc", os.O_PATH | os.O_DIRECTORY))
+for n in range(7, 900):
+    if n != 3:
+        os.dup2(3, n)
+for _ in range(2):
+    s = socket.socket(socket.AF_UNIX)
+    s.connect(sys.argv[1])
+    s = socket.socket(fileno=high(s.detach()))
+    socket.send_fds(s, [b"K"], [proc])
+    s.detach()
+say("sent")
+time.sleep(30)
+)";
+  base::LaunchOptions options;
+  options.fds_to_remap.emplace_back(victim_pidfd.get(), 3);
+  options.fds_to_remap.emplace_back(out_write.get(), STDOUT_FILENO);
+  base::Process attacker =
+      base::LaunchProcess(std::vector<std::string>{"/usr/bin/python3", "-c",
+                                                   kAttacker, path.value()},
+                          options);
+  ASSERT_TRUE(attacker.IsValid());
+  out_write.reset();
+  const auto stop = [&] {
+    attacker.Terminate(0, /*wait=*/true);
+    victim.Terminate(0, /*wait=*/true);
+  };
+  pollfd said = {out_read.get(), POLLIN, 0};
+  ASSERT_EQ(poll(&said, 1, 10000), 1) << "the attacker said nothing";
+  std::array<char, 256> line = {};
+  const ssize_t length = read(out_read.get(), line.data(), line.size() - 1);
+  const std::string what(line.data(), length > 0 ? length : 0);
+  if (what.starts_with("skip")) {
+    stop();
+    GTEST_SKIP() << "no unprivileged user and mount namespace here: " << what;
+  }
+  ASSERT_TRUE(what.starts_with("sent")) << what;
+
+  // The control: through the attacker's /proc a plain openat() reads the
+  // attacker's descriptors as this process's.
+  base::ScopedFD control(accept(listener.get(), nullptr, nullptr));
+  ASSERT_TRUE(control.is_valid());
+  uint8_t byte = 0;
+  std::vector<base::ScopedFD> fds;
+  ASSERT_EQ(base::UnixDomainSocket::RecvMsg(control.get(),
+                                            base::span_from_ref(byte), &fds),
+            1);
+  ASSERT_EQ(fds.size(), 1u);
+  base::ScopedFD attacker_pidfd(
+      static_cast<int>(syscall(__NR_pidfd_open, attacker.Pid(), 0)));
+  ASSERT_TRUE(attacker_pidfd.is_valid());
+  ASSERT_GE(attacker_pidfd.get(), 7);
+  ASSERT_LT(attacker_pidfd.get(), 900);
+  base::ScopedFD info(openat(
+      fds[0].get(),
+      ("self/fdinfo/" + base::NumberToString(attacker_pidfd.get())).c_str(),
+      O_RDONLY | O_CLOEXEC));
+  std::string text;
+  if (info.is_valid()) {
+    std::array<char, 4096> buffer;
+    const ssize_t got = read(info.get(), buffer.data(), buffer.size());
+    if (got > 0) {
+      text.assign(buffer.data(), static_cast<size_t>(got));
+    }
+  }
+  EXPECT_EQ(PidFromPidfdInfo(text), victim.Pid())
+      << "the attack did not take hold; the test proves nothing: " << text;
+
+  // The resolver is not fooled.
+  base::ScopedFD accepted(accept(listener.get(), nullptr, nullptr));
+  ASSERT_TRUE(accepted.is_valid());
+  const std::unique_ptr<PeerResolver> resolver =
+      CreatePlatformPeerResolver(PeerHello::kExpected);
+  const std::optional<PeerToken> token =
+      resolver->TokenForSocket(accepted.get());
+  ASSERT_TRUE(token);
+  EXPECT_FALSE(resolver->Resolve(*token));
+  stop();
 }
 
 TEST(KoanAgentPeerTest, WhatIsNotAPeerFailsClosed) {
