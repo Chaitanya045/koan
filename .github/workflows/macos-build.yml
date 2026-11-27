@@ -30,7 +30,7 @@ on:
         default: false
         type: boolean
       keep_base:
-        description: Keep the finished out/Koan for later runs to build on (only for a run of develop itself)
+        description: Keep the finished out/Koan for later runs to build on (only for a run of develop itself or of a release tag)
         required: false
         default: false
         type: boolean
@@ -177,8 +177,8 @@ jobs:
           if-no-files-found: error
 
       # Kept for later runs to build on (scripts/ci/find_base.sh), only from
-      # a run that built develop itself: objects built from unmerged code
-      # must never be linked into what users install.
+      # a run that built develop itself or a release tag: objects built from
+      # unmerged code must never be linked into what users install.
       # Before packaging, which signs Koan.app in place (and adds the VMP
       # signature): the next build starts from the build's own output.
       - name: Pack the finished build

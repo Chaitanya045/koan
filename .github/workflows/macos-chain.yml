@@ -5,11 +5,14 @@
 # an artifact of the run under the name in the "dmg" output. See
 # .agent/notes/macos-ci.md.
 #
-# With incremental (the nightly), the fetch job starts from the newest
-# successful develop run's tree and build 1 from its finished out/Koan, so
-# only what changed since is rebuilt; releases always build from scratch.
-# Only a keep_base run (develop built by develop, never unmerged code) leaves
-# its source and out/Koan for later runs to build on.
+# With incremental (the nightly and releases), the fetch job starts from the
+# newest trusted run's tree (a develop nightly or a release;
+# scripts/ci/find_base.sh) and build 1 from its finished out/Koan, so only
+# what changed since is rebuilt. Only a keep_base run (develop built by
+# develop, or a release tag; never unmerged code) leaves its source and
+# out/Koan for later runs to build on. So a full build happens once per
+# full-build input change (scripts/ci/incremental.sh), whichever kind of
+# run comes first, and every later one builds on the one before.
 #
 # The caller decides whether to build, publishes the .dmg, and grants the
 # jobs' permissions (contents: read; actions: write for the cleanup).
@@ -28,12 +31,12 @@ on:
         default: false
         type: boolean
       incremental:
-        description: Build on the last trusted macos.yml run's tree and out/Koan when it can
+        description: Build on the newest trusted run's tree and out/Koan (a develop nightly or a release) when it can
         required: false
         default: false
         type: boolean
       keep_base:
-        description: Keep this run's source and finished out/Koan as a base for later runs (only for a run of develop itself)
+        description: Keep this run's source and finished out/Koan as a base for later runs (only for a run of develop itself or of a release tag)
         required: false
         default: false
         type: boolean

@@ -49,8 +49,9 @@ Chromium's Debian sysroot. Same reasons as the Mac's for no
 ## Incremental builds
 
 A full build is ~73k steps (~8 h of build jobs on these runners). A run
-builds on the newest successful `develop` run that kept its tree and
-finished `out/Release`, so a nightly rebuilds only what its commits changed.
+builds on the newest successful trusted run (a `develop` nightly or a
+release, `scripts/ci/trusted_base.sh`) that kept its tree and finished
+`out/Release`, so a nightly rebuilds only what its commits changed.
 
 **Who is a base.** Only a *trusted* run (`keep_base` in `linux-chain.yml` and
 `linux-build.yml`, set by `linux.yml`'s plan job): one that built `develop`
@@ -62,8 +63,9 @@ cleanup deletes the source and out-final of older `develop` runs (see
 be building on one). A labelled pull
 request's run, or a manual run of another ref, may still *build on* the
 base (`scripts/ci/find_base.sh linux.yml koan-linux`, which only picks
-successful `schedule` and `workflow_dispatch` runs of `develop` that still
-have both archives; "How the base is found" in macos-ci.md), but keeps
+successful `schedule` and `workflow_dispatch` runs of `develop`, and
+successful release.yml runs of a `v*` tag, that still have both
+`koan-linux-*` archives; "How the base is found" in macos-ci.md), but keeps
 its source 3 days, uploads no finished build, and its cleanup deletes only its own source and out slices. So
 objects built from unmerged code never end up in the published Flatpak, and
 a pull request that moves `CHROMIUM_VERSION` can't delete `develop`'s base.
@@ -222,5 +224,8 @@ runtime repo, so `flatpak install ./Koan-….flatpak` fetches the runtime.
   makes it, but agents outside the sandbox reach Koan's socket under
   `~/.var/app/dev.koan.Koan/config/koan/AgentControl/` only if they
   know that path. Not looked at yet.
-- Tagged releases (`release.yml`) build only the Mac; a Linux leg would
-  call `linux-chain.yml` with `release: true` (and no `keep_base`).
+- Tagged releases (`release.yml`) build only the Mac; a Linux leg (#468)
+  must call `linux-chain.yml` with `release: true` and `keep_base: true`, so
+  the release builds on the newest trusted Linux build and is one itself
+  (`find_base.sh` already looks at release.yml's runs; the chain's cleanup
+  prunes with `BRANCH: develop` also in a release run).

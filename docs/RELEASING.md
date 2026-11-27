@@ -84,8 +84,10 @@ GitHub showed none in the repository's sidebar and `/releases/latest` was a
    `gh workflow run release.yml -f tag=v0.0.2-alpha.1` (`-f draft=true`
    keeps the release as a draft to look at first).
 5. **The workflow** checks the tag, `VERSION` and the notes in a few minutes
-   (a mismatch fails there, not a day later), then builds for about 16 hours
-   (the nightly's chain, `macos-chain.yml`), then publishes the release: the
+   (a mismatch fails there, not a day later), then builds (the nightly's
+   chain, `macos-chain.yml`; an hour or two, or about 16 hours when it is
+   the first build after a full-build input changed: see
+   [How releases are built](#how-releases-are-built)), then publishes the release: the
    title, the notes followed by GitHub's generated notes since the previous
    release tag, the `.dmg`, its `.sha256` and `koan-update.json` (see
    [Signing and updates](#signing-and-updates)). Publishing waits for the
@@ -98,6 +100,36 @@ GitHub showed none in the repository's sidebar and `/releases/latest` was a
 
 To redo a release, delete it (and any leftover draft of it) on GitHub first;
 the workflow refuses a tag that already has one. Never move a published tag.
+
+### How releases are built
+
+A full build happens once per full-build input change: a new
+`CHROMIUM_VERSION`, a change to the fetch scripts (`KOAN_FULL_BUILD_INPUTS`
+in `scripts/ci/mac_fetch.sh` and `linux_fetch.sh`), or a new Xcode or runner
+image (`scripts/ci/incremental.sh`). The first trusted build after it is
+full, whichever kind it is, a nightly or a release. Every later trusted
+build is incremental: it starts from the newest trusted build's tree and
+`out/` directory (`scripts/ci/find_base.sh`) and rebuilds only what changed
+since, then becomes the base for the next one.
+
+- **Trusted builds** are the develop nightlies (`macos.yml`, `linux.yml` on
+  `develop`, scheduled or run by hand without another `ref`) and releases
+  (`release.yml` for a `v*` tag, pushed or run by hand). Only they keep
+  their tree and finished build (`keep_base`, 14 days), and only they are
+  picked as a base. A release counts only when the tag points at the commit
+  the run started from, or when it was run from `develop`.
+- **Pull-request builds** (and manual runs of other refs) build on a base
+  but never become one: unmerged code is never linked into what users
+  install.
+- A release's tree and `out/` are a nightly's: the same gn args
+  (`build/koan-mac.gn`), the update test hooks off in both (checked by
+  `scripts/ci/check_update_test_hooks.sh`), the version from `VERSION`.
+  What makes it a release, the `.dmg`'s name (`KOAN_RELEASE`) and the
+  signing in the publish job, happens after the build is packed as a base.
+  So a nightly built on a release (or the other way round) carries nothing
+  over that a nightly of the same commit wouldn't have.
+- The run's summary says which run it built on ("Incremental: building on
+  run N") or "Full build".
 
 ### Labels for the generated notes
 
@@ -208,7 +240,7 @@ the nightly's configuration (`build/koan-mac.gn`). Why, measured against the
 
 | | Fits? | Why |
 |---|---|---|
-| Compile time | yes | The dev build takes 3 chained jobs (~16 h). The official build is ~86k steps (the M4 Air with 16 GB did 55k of them in 3 h 56 min at `-j 8`), each heavier (no PCH, -O2, bitcode): about 18-24 h, 4-6 slices of the 16 |
+| Compile time | yes | A full dev build takes 3 chained jobs (~16 h); most releases build incrementally. The official build is ~86k steps (the M4 Air with 16 GB did 55k of them in 3 h 56 min at `-j 8`), each heavier (no PCH, -O2, bitcode): about 18-24 h, 4-6 slices of the 16 |
 | PGO profiles | yes | A DEPS hook with `checkout_pgo_profiles` fetches Chromium's mac-arm profile (~310 MB) and V8's builtins profiles from public Google Cloud Storage; `mac_fetch.sh` would only set the variable |
 | Disk | probably | Source 18 GB + bitcode objects 25-35 GB + ThinLTO cache + archives + swap: 70-80 GB of the ~101 GB |
 | **The framework's ThinLTO link** | **no** | One build step that does all optimisation and code generation of the framework. `build_official.sh` refuses less than 12 GB of RAM (estimated peak 6-9 GB with 4 threads); the runner has 7 GB in all, so it would swap throughout. On 3 vCPUs it would take an estimated 3-7 h before swapping, longer than a ~5 h slice. A step can't be split across jobs; only lld's ThinLTO cache could carry finished modules over, if `out/KoanOfficial/thinlto-cache` went into the archive, and every resumed link would redo the serial thin-link phase. Untested |
