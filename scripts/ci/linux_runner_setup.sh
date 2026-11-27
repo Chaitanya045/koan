@@ -9,6 +9,8 @@
 # apply_branding.sh; Ubuntu's ImageMagick 6 has no `magick` command, so a
 # small one that runs `convert` goes on PATH. --package also installs
 # flatpak and Flathub's org.flatpak.Builder for scripts/ci/linux_package.sh.
+# apt reads only Ubuntu's archive (linux_apt_sources.sh), and the downloads
+# are retried a few times.
 #
 # Exports KOAN_SCRATCH to $GITHUB_ENV: the disk with the most room for the
 # archives (/mnt when the runner has that second disk, else RUNNER_TEMP).
@@ -20,6 +22,20 @@ if [[ ${GITHUB_ACTIONS:-} != true || $(uname -s) != Linux ]]; then
 fi
 PACKAGE=0
 [[ ${1:-} != --package ]] || PACKAGE=1
+
+# Runs a network fetch up to 4 times, 15 s apart, so a server's bad minute
+# doesn't fail the job; a fetch that keeps failing still does.
+#   retry <what> <command...>
+retry() {
+  local what="$1" n
+  shift
+  for n in 1 2 3 4; do
+    "$@" && return 0
+    [[ $n == 4 ]] || { echo "$what failed (try $n of 4), retrying in 15 s" >&2; sleep 15; }
+  done
+  echo "$what failed 4 times" >&2
+  return 1
+}
 
 echo "==> Machine"
 . /etc/os-release && echo "$PRETTY_NAME"
@@ -47,16 +63,26 @@ if [[ $PACKAGE == 1 ]]; then
 else
   pkgs+=(imagemagick)
 fi
-sudo apt-get update -qq
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends "${pkgs[@]}" >/dev/null
+# Only Ubuntu's own archive, where all of these come from: the image's
+# third-party sources (Microsoft's and others) fail the update whenever one
+# of their servers does (linux_apt_sources.sh). A failure of Ubuntu's
+# archive is still fatal, after the retries.
+apt_sources="$RUNNER_TEMP/koan-apt-sources"
+"$(dirname "$0")/linux_apt_sources.sh" /etc/apt "$apt_sources"
+apt_opts=(-o "Dir::Etc::SourceList=/dev/null" -o "Dir::Etc::SourceParts=$apt_sources"
+  -o Acquire::Retries=3)
+retry apt-get update sudo apt-get update -qq "${apt_opts[@]}"
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+  "${apt_opts[@]}" "${pkgs[@]}" >/dev/null
 
 # Flathub's flatpak-builder, the one linux_package.sh was checked with:
 # Ubuntu's (1.4) fails appstreamcli compose on the metainfo
 # ("E: file-read-error").
 if [[ $PACKAGE == 1 ]]; then
-  flatpak remote-add --user --if-not-exists flathub \
+  retry "Flathub's remote" flatpak remote-add --user --if-not-exists flathub \
     https://dl.flathub.org/repo/flathub.flatpakrepo
-  flatpak install --user -y --noninteractive flathub org.flatpak.Builder >/dev/null
+  retry org.flatpak.Builder \
+    flatpak install --user -y --noninteractive flathub org.flatpak.Builder >/dev/null
 fi
 
 if [[ $PACKAGE == 0 ]] && ! command -v magick >/dev/null; then

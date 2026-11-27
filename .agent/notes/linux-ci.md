@@ -97,6 +97,27 @@ one at `/mnt`, the setup adds 4 GB of swap there and puts the archives on
 it (`KOAN_SCRATCH`, else `RUNNER_TEMP`). Ubuntu's ImageMagick 6 has no `magick`, which `apply_branding.sh`
 calls; the setup puts a `magick` that runs `convert` on PATH.
 
+**Package sources.** The image ships third-party apt sources (Microsoft's
+and others) the setup installs nothing from; an `apt-get update` over all
+of them failed run 45980089943 on a 403 from packages.microsoft.com
+(#532). `scripts/ci/linux_apt_sources.sh /etc/apt <dir>` copies only the
+source files whose every URI is on `ubuntu.com` into a directory, and the
+setup's `apt-get update` and `install` read only that
+(`Dir::Etc::SourceList=/dev/null`, `Dir::Etc::SourceParts=<dir>`), with
+`Acquire::Retries=3` and up to 4 tries of the update, 15 s apart. Finding
+no Ubuntu source, or Ubuntu's archive failing all 4 tries, still fails the
+job. `scripts/tests/test_linux_apt_sources.py` covers the filtering on a
+fake `/etc/apt`, and `flatpak-check.yml` adds a dead source
+(`dead.invalid`) before running the setup, so every pull request that
+touches it shows on a real runner that a dead third-party source is
+ignored. The other downloads are retried too: Flathub's remote and
+`org.flatpak.Builder` in the setup (4 tries), the Flatpak's runtime, SDK
+and base app (`--install-deps-only`) and the manifest's sources
+(`--download-only`) in `linux_package.sh` (4 tries each, before the build,
+so a real build failure isn't retried), and the actionlint download in
+`ci.yml` (`curl --retry`, as `check_gn_format.sh` and the other check
+scripts already did).
+
 The tool caches (vpython, CIPD) go to `.cache/linux` (`linux_env.sh`) so
 they travel in the source archive, as `.cache/mac` does. HOME stays the
 runner's: the macOS one-folder rule isn't needed on Linux.
