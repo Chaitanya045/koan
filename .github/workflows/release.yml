@@ -8,10 +8,21 @@
 #    must exist and be finished, the app's CFBundleVersion must go up from the
 #    previous release's, and no release of the tag may exist yet
 #    (scripts/ci/release_info.py). Anything else fails here, not a day later.
-# 2. build (~16 h): the nightly's chain (macos-chain.yml: fetch, chained
+# 2. build: the nightly's chain (macos-chain.yml: fetch, chained
 #    macos-build.yml slices) on the tag's commit, with the nightly's dev
 #    config (build/koan-mac.gn). An official ThinLTO + PGO build doesn't fit
 #    GitHub's hosted 7 GB runners: docs/RELEASING.md, "Official builds".
+#    Incremental, as the nightly is: it builds on the newest trusted build's
+#    tree and out/Koan (a develop nightly or an earlier release;
+#    scripts/ci/find_base.sh), so it takes an hour or two, unless a full
+#    build input (CHROMIUM_VERSION, the fetch scripts, Xcode) changed since
+#    (~16 h). And it is a keep_base run: the next nightly or release builds
+#    on it, which matters most when a release is the first build on a new
+#    Chromium. Its tree and out/Koan are a nightly's: the same gn args, the
+#    update test hooks off (KOAN_CI_UPDATE_TEST_HOOKS=0, checked by
+#    check_update_test_hooks.sh), VERSION from the commit; only the .dmg's
+#    name (KOAN_RELEASE, mac_package.sh, after out/Koan is packed) and the
+#    publish job's signing differ, and neither is in the base.
 # 3. publish (macOS, the only job with the "release" environment, so one
 #    approval): takes Koan.app out of the build's ad hoc .dmg, signs it with
 #    the self-signed "Koan Release Signing" certificate (scripts/ci/
@@ -162,6 +173,9 @@ jobs:
     with:
       ref: ${{ needs.prepare.outputs.sha }}
       release: true
+      # Build on the newest trusted build, and be one for the next.
+      incremental: true
+      keep_base: true
     secrets:
       EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
       EVS_PASSWD: ${{ secrets.EVS_PASSWD }}

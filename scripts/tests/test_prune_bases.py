@@ -8,8 +8,8 @@ The fake `gh` on PATH answers `gh api` from a recorded set of runs and
 artifacts the way the GitHub API does: the artifacts of a name
 (actions/artifacts?name=), a run (actions/runs/<id>), a run's artifacts,
 the runs of a workflow (narrowed by ?branch= and ?event=, as
-scripts/ci/find_base.sh asks), and DELETE of an artifact, which removes it
-from the record. --jq goes through the real jq. Skipped without bash or jq.
+scripts/ci/find_base.sh asks), a tag (git/ref/tags/<name>), and DELETE of
+an artifact, which removes it from the record. --jq goes through the real jq. Skipped without bash or jq.
 
 #569: develop run 46026497864's cleanup deleted the archives of 46019353569
 while pull request #514's build, which had picked it as its base, was still
@@ -47,6 +47,15 @@ url = urllib.parse.urlsplit(path)
 query = dict(urllib.parse.parse_qsl(url.query))
 parts = url.path.split('/')
 runs = {str(r['id']): r for r in data['runs']}
+if '/git/ref/tags/' in url.path:
+  if parts[-1] not in data.get('tags', {}):
+    sys.stderr.write('gh: Not Found (HTTP 404)\n')
+    sys.exit(1)
+  body = {'object': {'type': 'commit', 'sha': data['tags'][parts[-1]]}}
+  out = subprocess.run(['jq', '-r', jq], input=json.dumps(body), text=True,
+                       capture_output=True, check=True).stdout
+  sys.stdout.write(out)
+  sys.exit(0)
 if method == 'DELETE':
   data['artifacts'] = [a for a in data['artifacts'] if str(a['id']) != parts[-1]]
   json.dump(data, open(data_file, 'w'))
@@ -100,6 +109,7 @@ class FakeGhTest(unittest.TestCase):
     gh.chmod(0o755)
     self.runs = []
     self.artifacts = []
+    self.tags = {}
     self.data = self.tmp / 'data.json'
     self.log = self.tmp / 'gh.log'
 
@@ -113,6 +123,7 @@ class FakeGhTest(unittest.TestCase):
                       'updated_at': _iso(NOW - ended),
                       'created_at': _iso(NOW - ended - 10 * HOUR),
                       'head_branch': branch, 'event': event,
+                      'head_sha': f'{run_id:040x}',
                       'path': f'.github/workflows/{workflow}'})
     for name in artifacts:
       self.artifacts.append({'id': 900_000 + len(self.artifacts),
@@ -120,9 +131,17 @@ class FakeGhTest(unittest.TestCase):
                              'expired': name in expired})
     return run_id
 
+  def add_release(self, ended, tag, **kwargs):
+    """A release.yml run of `tag` (pushed), which points at its commit."""
+    run_id = self.add_run(ended, branch=tag, event='push',
+                          workflow='release.yml', **kwargs)
+    self.tags[tag] = f'{run_id:040x}'
+    return run_id
+
   def env(self, **extra):
     self.data.write_text(json.dumps({'runs': self.runs,
-                                     'artifacts': self.artifacts}))
+                                     'artifacts': self.artifacts,
+                                     'tags': self.tags}))
     self.log.write_text('')
     env = dict(os.environ, FAKE_GH_DATA=str(self.data),
                FAKE_GH_LOG=str(self.log), GH_REPO='owner/repo',
@@ -206,6 +225,40 @@ class PruneBasesTest(FakeGhTest):
     self.assertEqual(left[running], {SOURCE})
     # The only base, and newest until now: it stays.
     self.assertEqual(left[base], set(BOTH))
+
+  def test_releases_and_nightlies_supersede_each_other(self):
+    old = self.add_run(ended=60 * HOUR)
+    release = self.add_release(ended=40 * HOUR, tag='v0.0.3')
+    nightly = self.add_run(ended=20 * HOUR)
+    this = self.add_release(ended=0, tag='v0.0.4')  # A release's cleanup.
+    out = self.prune(this)
+    left = self.left()
+    self.assertNotIn(old, left)
+    self.assertNotIn(release, left)
+    self.assertIn(f'deleting the archives of run {release}', out)
+    self.assertEqual(left[nightly], set(BOTH))
+
+  def test_a_release_that_is_no_base_keeps_its_archives(self):
+    failed = self.add_release(ended=40 * HOUR, tag='v0.0.3',
+                              conclusion='failure', artifacts=(SOURCE,))
+    this = self.add_run(ended=0)
+    self.prune(this)
+    self.assertEqual(self.left()[failed], {SOURCE})
+
+  def test_untrusted_release_runs_are_not_touched(self):
+    # A branch named like a tag, and a tag that moved: not this script's.
+    branch = self.add_run(ended=40 * HOUR, branch='v9', event='workflow_dispatch',
+                          workflow='release.yml')
+    moved = self.add_release(ended=40 * HOUR, tag='v0.0.3')
+    self.tags['v0.0.3'] = 'f' * 40
+    old = self.add_run(ended=40 * HOUR)
+    self.add_run(ended=20 * HOUR)
+    this = self.add_run(ended=0)
+    self.prune(this)
+    left = self.left()
+    self.assertNotIn(old, left)
+    self.assertEqual(left[branch], set(BOTH))
+    self.assertEqual(left[moved], set(BOTH))
 
   def test_only_this_workflow_and_branch_and_older_runs(self):
     feature = self.add_run(ended=40 * HOUR, branch='feature',
