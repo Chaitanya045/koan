@@ -223,6 +223,34 @@ class ReleaseInfoTest(unittest.TestCase):
     with self.assertRaises(release_info.ReleaseError):
       release_info.render_notes('x', 'd', 'not-a-sha')
 
+  def test_render_notes_with_the_flatpak(self):
+    sha, fsha = 'ab' * 32, 'cd' * 32
+    flatpak = 'Koan-0.0.2-alpha.1-x86_64.flatpak'
+    generated = "## What's Changed\n* x\n"
+    # Notes with the placeholders: filled in, nothing added.
+    body = release_info.render_notes(
+        '@DMG@\n@FLATPAK@\n@FLATPAK_SHA256@  @FLATPAK@\n', 'a.dmg', sha,
+        generated, flatpak, fsha)
+    self.assertIn('%s  %s' % (fsha, flatpak), body)
+    self.assertNotIn('@', body)
+    self.assertNotIn('## Linux', body)
+    # Notes that don't know about Linux get the section, before GitHub's.
+    body = release_info.render_notes('Get @DMG@ @SHA256@\n', 'a.dmg', sha,
+                                     generated, flatpak, fsha)
+    self.assertIn('## Linux\n', body)
+    self.assertIn('flatpak install --user ./' + flatpak, body)
+    self.assertIn('%s  %s' % (fsha, flatpak), body)
+    self.assertNotIn('@FLATPAK', body)
+    self.assertLess(body.index('## Linux'), body.index("## What's Changed"))
+    self.assertTrue(body.endswith(generated))
+    # Without a Flatpak: as before, nothing about Linux.
+    body = release_info.render_notes('Get @DMG@ @SHA256@\n', 'a.dmg', sha)
+    self.assertNotIn('Linux', body)
+    with self.assertRaises(release_info.ReleaseError):
+      release_info.render_notes('@FLATPAK@', 'a.dmg', sha)
+    with self.assertRaises(release_info.ReleaseError):
+      release_info.render_notes('x', 'a.dmg', sha, '', flatpak, 'nope')
+
   def test_check_in_a_repository(self):
     with tempfile.TemporaryDirectory() as tmp:
       repo = pathlib.Path(tmp)
