@@ -1,0 +1,12 @@
+diff --git a/content/browser/notifications/notification_event_dispatcher_impl.h b/content/browser/notifications/notification_event_dispatcher_impl.h
+--- a/content/browser/notifications/notification_event_dispatcher_impl.h
++++ b/content/browser/notifications/notification_event_dispatcher_impl.h
+@@ -57,6 +57,8 @@
+   void DispatchNonPersistentCloseEvent(
+       const std::string& notification_id,
+       base::OnceClosure completed_closure) override;
++  RenderFrameHost* GetNonPersistentNotificationFrame(
++      const std::string& notification_id) override;
+ 
+   // Registers the associated document weak pointer and the listener to receive
+   // the show, click and close events of the non-persistent notification

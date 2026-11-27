@@ -6,11 +6,14 @@
 #include <optional>
 #include <vector>
 
+#include "base/command_line.h"
+#include "base/files/file_path.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/run_until.h"
 #include "base/test/test_future.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -19,6 +22,7 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/navigator/browser_navigator.h"
 #include "chrome/browser/ui/navigator/browser_navigator_params.h"
+#include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/unload_controller.h"
@@ -1011,6 +1015,66 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
   }));
   EXPECT_TRUE(spaces->GetSpaces().front().icon.empty());
   EXPECT_TRUE(IsEmptyTab(model->GetActiveTab()));
+}
+
+// A link from another app on Linux is a command-line URL, here to a running
+// Koan (ProcessSingleton's StartupBrowserCreator::
+// ProcessCommandLineAlreadyRunning()): Zen's Space routing sends it to the
+// default Space for external links, through the ScopedCommandLineLinks hook
+// in StartupBrowserCreatorImpl::DetermineURLsAndLaunch() (a first launch
+// takes the same path). macOS takes these links from app_controller_mac.mm
+// instead, so there the command line changes nothing.
+IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
+                       CommandLineLinksTakeTheExternalDefault) {
+  constexpr bool kCommandLineLinksAreExternal = !BUILDFLAG(IS_MAC);
+  {
+    ScopedCommandLineLinks no_urls(false);
+    EXPECT_FALSE(ScopedExternalLinks::IsActive());
+  }
+  {
+    ScopedCommandLineLinks urls(true);
+    EXPECT_EQ(kCommandLineLinksAreExternal, ScopedExternalLinks::IsActive());
+  }
+  EXPECT_FALSE(ScopedExternalLinks::IsActive());
+
+  ASSERT_TRUE(embedded_test_server()->Start());
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  ASSERT_TRUE(spaces);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  spaces->CreateSpace(u"Links", u"", {});
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  const auto infos = spaces->GetSpaces();
+  spaces->SwitchTo(infos[0].id);
+  ASSERT_EQ(infos[0].id, *spaces->GetActiveSpace());
+  // A page in the active Space, not Zen's empty tab, which a link may take.
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kPage)));
+  browser()->GetProfile()->GetPrefs()->SetString(
+      prefs::kSpaceRoutingExternalDefault, "Links");
+
+  const GURL link = embedded_test_server()->GetURL("/title1.html");
+  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
+  command_line.AppendArg(link.spec());
+  TabStripModel* model = browser()->GetTabStripModel();
+  const int count = model->count();
+  StartupBrowserCreator::ProcessCommandLineAlreadyRunning(
+      command_line, base::FilePath(),
+      {.path = browser()->GetProfile()->GetPath(),
+       .mode = StartupProfileMode::kBrowserWindow});
+  // The marker lives only while the launch opens its tabs.
+  EXPECT_FALSE(ScopedExternalLinks::IsActive());
+  ASSERT_EQ(count + 1, model->count());
+  content::WebContents* opened = nullptr;
+  for (int i = 0; i < model->count(); ++i) {
+    if (model->GetWebContentsAt(i)->GetVisibleURL() == link) {
+      opened = model->GetWebContentsAt(i);
+    }
+  }
+  ASSERT_TRUE(opened);
+  // Koan routes the tab in a task posted when it is inserted, long before
+  // the page has loaded.
+  ASSERT_TRUE(content::WaitForLoadStop(opened));
+  EXPECT_EQ(kCommandLineLinksAreExternal ? infos[1].id : infos[0].id,
+            tabs::TabInterface::GetFromContents(opened)->GetGroup());
 }
 
 }  // namespace koan

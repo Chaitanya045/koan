@@ -59,6 +59,18 @@ inline constexpr char kMacProductDirName[] = "Koan";
 inline constexpr char kMacKeychainServiceName[] = "Koan Safe Storage";
 inline constexpr char kMacKeychainAccountName[] = "Koan";
 
+// Linux: Koan's own keyring item for that key, not Chromium's (upstream's
+// non-Chrome-branded names are "Chromium Safe Storage", application
+// "chromium", KWallet folder "Chromium Keys"). With the Secret Service
+// (GNOME Keyring, KeePassXC, ...) the item is found by its "application"
+// attribute and shown by its label; with KWallet it is the entry
+// kLinuxSecretKeyName in the folder kLinuxKWalletFolder. Never change these
+// once profiles exist: their data would no longer decrypt. Used by
+// components/os_crypt/async/browser/freedesktop_secret_key_provider.h.
+inline constexpr char kLinuxSecretKeyName[] = "Koan Safe Storage";
+inline constexpr char kLinuxSecretAppName[] = "koan";
+inline constexpr char kLinuxKWalletFolder[] = "Koan Keys";
+
 }  // namespace koan
 
 #endif  // KOAN_COMMON_KOAN_BRANDING_H_

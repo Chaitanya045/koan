@@ -53,8 +53,9 @@ if [[ ${KOAN_CI_DUMMY:-0} == 1 ]]; then
   done
   chmod +x "$OUT/chrome" "$OUT/chrome_crashpad_handler" "$OUT/koan" \
     "$OUT/koan-relay"
+  mkdir -p "$OUT/koan_fonts"
   for f in icudtl.dat resources.pak chrome_100_percent.pak chrome_200_percent.pak \
-      locales/en-US.pak; do
+      locales/en-US.pak koan_fonts/OFL.txt; do
     : > "$OUT/$f"
   done
   echo "is_component_build = false" > "$OUT/args.gn"
@@ -69,13 +70,14 @@ if grep -q 'is_component_build = true' "$OUT/args.gn" 2>/dev/null; then
 fi
 
 echo "==> Staging $OUT"
+# koan_fonts: Geist for the native UI (//koan/browser/ui/fonts:font_files).
 # koan and koan-relay: the agent's tools (//koan/cli), /app/koan/koan and
 # /app/koan/koan-relay in the Flatpak; agents on the host run them from the
 # Flatpak's files (`koan setup` links ~/.local/bin/koan). scripts/build.sh
 # builds them with chrome on Linux.
 required=(chrome chrome_crashpad_handler icudtl.dat resources.pak
-          chrome_100_percent.pak chrome_200_percent.pak locales koan
-          koan-relay)
+          chrome_100_percent.pak chrome_200_percent.pak locales koan_fonts
+          koan koan-relay)
 optional=(v8_context_snapshot.bin snapshot_blob.bin libEGL.so libGLESv2.so
           libvk_swiftshader.so vk_swiftshader_icd.json libvulkan.so.1
           libqt5_shim.so libqt6_shim.so libqt6_shim.so.6 libffmpeg.so

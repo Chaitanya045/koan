@@ -9,13 +9,17 @@ diff --git a/components/permissions/permission_util.cc b/components/permissions/
  #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom.h"
  #include "third_party/blink/public/common/features.h"
  #include "third_party/blink/public/common/permissions/permission_utils.h"
-@@ -680,6 +681,10 @@
+@@ -680,6 +681,14 @@
      const GURL& requesting_origin,
      content::RenderProcessHost* render_process_host) {
    DCHECK(render_process_host);
-+  // Koan: an agent container gets no permission, and is never asked.
-+  if (koan::containers::IsAgentProcess(render_process_host)) {
-+    return true;
++  // Koan: an agent container gets no permission, and is never asked; a
++  // Space's profile asks for notifications like any tab.
++  if (std::optional<bool> koan_blocked =
++          koan::containers::PermissionBlockedInContainer(
++              render_process_host,
++              permission == ContentSettingsType::NOTIFICATIONS)) {
++    return *koan_blocked;
 +  }
    switch (GetPermissionDelegationMode(permission)) {
      case PermissionDelegationMode::kDelegated:

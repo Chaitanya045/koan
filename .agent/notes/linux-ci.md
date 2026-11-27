@@ -34,7 +34,12 @@ flatpak-check ┘                (.flatpak)          (nightly-linux)
 - `linux-build.yml`: unpack source and the previous `out/Release`,
   `linux_build_slice.sh` (SIGINT to siso 65 min before the 6 h limit), then
   pack and upload out, or (last slice) a headless smoke test and the
-  Flatpak.
+  Flatpak. Like the Mac's, a slice that has far more to do than the
+  previous one left fails after 10 min (`build_progress.py`), and its logs
+  get `siso_explain`. The Mac chain's stall on runner image dates (#534,
+  macos-ci.md "Resuming") doesn't apply here: the compile steps' inputs are
+  all in the source archive (Chromium's clang and sysroot), not on the
+  runner.
 
 Build config: `build/koan-release.gn` (`KOAN_CONFIG=release`, set by
 `scripts/ci/linux_env.sh`): no component build, no DCHECKs, no symbols,
@@ -147,6 +152,25 @@ sandbox patches, on Flathub's big builders):
 - The profile is `~/.var/app/dev.koan.Koan/config/koan`: the branding
   renames Chromium's folder (seen on a desktop install, 2026-11-24).
   cobalt.ini's ConfigDir says the same.
+- **Widevine (#494):** `build/koan-release.gn` sets `enable_widevine`
+  (upstream: Chrome-branded only), so `enable_widevine_cdm_component`
+  follows; `bundle_widevine_cdm` stays false (Google's binary) and host
+  verification is macOS/Windows only. The component updater downloads the
+  CDM into `<profile>/WidevineCdm/<version>/` and writes the hint file
+  `latest-component-updated-widevine-cdm` there; on Linux the CDM is
+  preloaded at startup, before the zygote is sandboxed, so it plays only
+  after a restart. cobalt.ini's `ExposeWidevine` makes cobalt set
+  `ZYPAK_EXPOSE_WIDEVINE_PATH` to `$XDG_CONFIG_HOME/<ConfigDir>/WidevineCdm`
+  (`~/.var/app/dev.koan.Koan/config/koan/WidevineCdm`), which zypak exposes
+  to `flatpak-spawn --sandbox`; ConfigDir must stay the profile folder's
+  name (`scripts/tests/test_widevine.py`). `linux_package.sh` stages an
+  `out/Release/WidevineCdm` only if a build ever bundles one; it doesn't.
+  The args change rebuilds (estimate) the files that include
+  `third_party/widevine/cdm/buildflags.h` (~480 translation units, most
+  through `chrome/common/chrome_paths.h`) and the new component, CDM
+  registration and renderer key-system sources, plus the link: a few
+  percent of the ~73k steps, not a full build. Not yet tried in the
+  Flatpak (USAGE, "Checking it (Linux Flatpak)").
 - App id `dev.koan.Koan`, the Mac bundle id. Flathub would need a domain
   the project controls; a bundle installed from a file doesn't.
 

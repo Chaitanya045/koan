@@ -9,7 +9,7 @@ diff --git a/components/omnibox/browser/autocomplete_controller.cc b/components/
  #include "net/base/url_util.h"
  #include "net/http/http_util.h"
  #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
-@@ -588,6 +589,8 @@
+@@ -576,6 +577,8 @@
    }
  #endif
  
@@ -18,3 +18,12 @@ diff --git a/components/omnibox/browser/autocomplete_controller.cc b/components/
    // Create URL scoring signal annotators.
    if (OmniboxFieldTrial::IsPopulatingUrlScoringSignalsEnabled() &&
        OmniboxFieldTrial::AreScoringSignalsAnnotatorsEnabled()) {
+@@ -1623,6 +1626,8 @@
+ 
+   OldResult old_result(update_type, input_, &internal_result_);
+   AggregateNewMatches();
++  // Koan: history suggestions from the active Space's profile only (#474).
++  koan::FilterSpaceHistoryMatches(*provider_client_, input_, internal_result_);
+ 
+   MlRerank(old_result);
+ 

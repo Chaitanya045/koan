@@ -24,8 +24,9 @@ source_set("access_prefs") {
   deps = [ "//components/prefs" ]
 }
 
-# What a container is, the SiteInstances upstream's hooks put new tabs in, and
-# the blocks' check of the user's switches (koan_agent_access.h). Depends on
+# What a container is, the SiteInstances upstream's hooks put new tabs in, the
+# blocks' check of the user's switches (koan_agent_access.h) and the profile a
+# visit records (koan_history_profiles.h). Depends on
 # //base, //components/prefs, //components/user_prefs and
 # //content/public/browser only, so upstream targets in components/ and
 # extensions/ can depend on it.
@@ -35,6 +36,8 @@ source_set("partition") {
     "koan_agent_access.h",
     "koan_container_partition.cc",
     "koan_container_partition.h",
+    "koan_history_profiles.cc",
+    "koan_history_profiles.h",
   ]
   public_deps = [
     ":access_prefs",
@@ -144,7 +147,9 @@ test("koan_containers_unittests") {
     "koan_agent_access_unittest.cc",
     "koan_container_grants_unittest.cc",
     "koan_container_partition_unittest.cc",
+    "koan_container_permissions_unittest.cc",
     "koan_container_restore_unittest.cc",
+    "koan_history_profiles_unittest.cc",
     "koan_user_containers_unittest.cc",
   ]
   deps = [
@@ -153,6 +158,8 @@ test("koan_containers_unittests") {
     ":user_containers",
     "//base",
     "//base/test:test_support",
+    "//components/content_settings/core/common",
+    "//components/permissions",
     "//components/prefs",
     "//components/prefs:test_support",
     "//components/user_prefs",

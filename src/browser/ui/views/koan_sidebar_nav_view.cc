@@ -47,6 +47,9 @@
 #include "koan/browser/ui/views/koan_site_panel_actions.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "koan/browser/ui/views/koan_url_pill_buttons.h"
+#if BUILDFLAG(IS_LINUX)
+#include "koan/browser/ui/views/koan_app_menu_button.h"
+#endif
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
@@ -179,6 +182,15 @@ void MirrorSidebarHeaderLayout(const views::View* host,
   }
 }
 
+bool AlignsAppMenuWithLeadingEdge(const views::View* button) {
+#if BUILDFLAG(IS_LINUX)
+  return views::IsViewClass<KoanAppMenuButton>(button) &&
+         !IsSidebarOnRight(button);
+#else
+  return false;
+#endif
+}
+
 KoanSidebarNavButtons::KoanSidebarNavButtons(BrowserView* browser_view)
     : browser_view_(browser_view) {
   SetOrientation(views::BoxLayout::Orientation::kHorizontal);
@@ -198,6 +210,14 @@ KoanSidebarNavButtons::KoanSidebarNavButtons(BrowserView* browser_view)
     button->SetPreferredSize(kButtonSize);
     return AddChildView(std::move(button));
   };
+#if BUILDFLAG(IS_LINUX)
+  // Zen's app menu button, first in its top row (order -2 in
+  // vertical-tabs.css): the hidden toolbar's ⋮ is the only other way to
+  // Chromium's app menu, and its Exit. macOS has the menu bar instead, where
+  // Zen hides the button too (zen.view.mac.show-three-dot-menu).
+  AddChildView(std::make_unique<KoanAppMenuButton>(browser_view_))
+      ->SetPreferredSize(kButtonSize);
+#endif
   back_ = nav_button(vector_icons::kBackArrowChromeRefreshOldIcon, IDC_BACK,
                      u"Back");
   forward_ = nav_button(vector_icons::kForwardArrowChromeRefreshOldIcon,
