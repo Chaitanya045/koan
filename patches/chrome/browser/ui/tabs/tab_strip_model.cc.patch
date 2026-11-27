@@ -95,8 +95,8 @@ diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/
        return true;
      }
  
-+    // Koan: nor Zen's hidden empty tab.
-+    if (koan::IsEmptyTab(GetTabAtIndex(i))) {
++    // Koan: nor a tab the sidebar hides (empty tab, hidden Essentials).
++    if (koan::IsHiddenTab(GetTabAtIndex(i))) {
 +      return true;
 +    }
 +
@@ -150,7 +150,7 @@ diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/
 +              const bool closing = i >= static_cast<int>(block_tabs.start()) &&
 +                                   i < static_cast<int>(block_tabs.end());
 +              return closing || !is_eligible(i) ||
-+                             koan::IsEmptyTab(GetTabAtIndex(i))
++                             koan::IsHiddenTab(GetTabAtIndex(i))
 +                         ? nullptr
 +                         : GetWebContentsAt(i);
 +            })) {

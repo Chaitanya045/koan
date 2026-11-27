@@ -66,6 +66,11 @@ bool IsInSpaceForm(const views::View* tab_strip_view,
 // Spaces are off.
 bool IsEmptyTab(const tabs::TabInterface* tab);
 
+// A tab the sidebar doesn't show: Zen's empty tab, or an Essential of a
+// profile whose grid the window doesn't show (Zen's container-specific
+// Essentials, koan_essentials_profiles.h). ⌘1-⌘9 and Ctrl+Tab pass over it.
+bool IsHiddenTab(const tabs::TabInterface* tab);
+
 // The empty tab stops being one when it navigates in place (a bookmark, the
 // Library, a dropped link, chrome.tabs.update): its mark goes, so that Back
 // into the new tab page later is an ordinary tab with a row, and Cmd+W
