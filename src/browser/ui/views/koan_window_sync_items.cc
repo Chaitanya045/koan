@@ -37,10 +37,12 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "koan/browser/containers/koan_container_partition.h"
+#include "koan/browser/containers/koan_user_containers.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_session_data.h"
+#include "koan/browser/ui/views/koan_space_profile_menu.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_window_sync_client.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
@@ -119,8 +121,10 @@ std::unique_ptr<content::WebContents> NewPlaceholder(
   if (page) {
     params.site_instance = containers::SiteInstanceForReplacement(page);
   } else if (std::optional<containers::ContainerId> container =
-                 containers::Parse(record.container);
-             container && container->kind == containers::ContainerKind::kUser) {
+                 containers::SpaceContainerFromString(
+                     SpaceContainerIfListed(profile, record.container))) {
+    // (Only a profile that is still one: a deleted one's would be made
+    // again, #477.)
     params.site_instance =
         containers::CreateSiteInstance(profile, *container, GURL(record.url));
   }

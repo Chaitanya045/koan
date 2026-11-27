@@ -479,11 +479,11 @@ KoanWorkspaceController::KoanWorkspaceController(BrowserView* browser_view)
       tab_drag_(std::make_unique<KoanTabDrag>(this, browser_view)),
       space_routing_(std::make_unique<KoanSpaceRouting>(this, browser_view)),
       swipe_(std::make_unique<KoanSpaceSwipe>(this)) {
+  // A deleted profile's tabs don't restore into it (#477), in any window.
+  containers::InstallUserContainerCheck();
   if (IsEnabled()) {
     // Agent control opens agents' tabs in containers, in windows like this.
     containers::InstallAgentTabOpener();
-    // A deleted profile's tabs don't restore into it (#477).
-    containers::InstallUserContainerCheck();
     tab_strip_model()->AddObserver(this);
     session_restored_subscription_ =
         SessionRestore::RegisterOnSessionRestoredCallback(
