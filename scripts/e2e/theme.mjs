@@ -102,6 +102,10 @@ function placement(t) {
           `panel ${x},${y} ${w}x${h}; want ${wantX},${wantY}`];
 }
 
+// Whether the showing tab's prefers-color-scheme comes to `dark` (a scheme
+// button's choice reaches the renderers a moment after the click).
+const prefersDark = dark => waitFor(async () => await pagePrefersDark() === dark, 3000);
+
 // The Space header's menu (Spaces, #57): Change Name…, Change Icon…, Edit
 // Theme…, ….
 async function headerMenu() {
@@ -170,8 +174,8 @@ check("Five preset pages with Zen's 41 swatches", swatches.length === 41, `${swa
 check('Opacity slider and grain dial',
       !!shown(t, 'KoanThemeOpacitySlider')[0] && !!shown(t, 'KoanThemeGrainDial')[0]);
 
-await click(button(t, 'Dark'));
-check('The Dark scheme button makes websites dark', await pagePrefersDark() === true);
+await click(button(await tree(), 'Dark'));
+check('The Dark scheme button makes websites dark', await prefersDark(true), await appearance());
 
 await click(button(await tree(), 'Next colors'));
 t = await tree();
@@ -249,14 +253,14 @@ if (!keyboardFocus(p)) {
   await pickerKey(VK.DELETE);
   check('...and Delete removes it', picker(await tree())?.p.Dots === '');
 }
-await click(button(t, 'Light'));
-check('The Light scheme button makes websites light', await pagePrefersDark() === false,
+await click(button(await tree(), 'Light'));
+check('The Light scheme button makes websites light', await prefersDark(false),
       await appearance());
 p = picker(await tree());
 check("A light window without a theme is Zen's #e9e9e9",
       p?.p.WindowBackground === 'rgba(233, 233, 233, 1)', p?.p.WindowBackground);
 await click(button(await tree(), 'Dark'));
-check('The Dark scheme button makes websites dark again', await pagePrefersDark() === true,
+check('The Dark scheme button makes websites dark again', await prefersDark(true),
       await appearance());
 await closePicker();
 

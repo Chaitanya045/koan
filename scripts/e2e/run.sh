@@ -7,7 +7,9 @@
 # scripts/perf/profile_ui.mjs). Without URLs it opens
 # scripts/e2e/pages/<test>.html if that exists, else two example.com tabs.
 # scripts/e2e/prefs/<test>.json, if it exists, seeds the fresh profile's
-# Preferences ({profile} in it is the profile's directory). KOAN_FLAGS adds
+# Preferences ({profile} in it is the profile's directory), and
+# scripts/e2e/local_state/<test>.json, if it exists, is the profile's Local
+# State (as scripts/mac/suite.sh does). KOAN_FLAGS adds
 # browser flags (e.g. --disable-features=...); features in an
 # --enable-features there are added to the ones run.sh needs.
 #
@@ -88,6 +90,10 @@ seed_prefs() {
 prefs="$KOAN_ROOT/scripts/e2e/prefs/$test_name.json"
 if [[ -f $prefs ]]; then seed_prefs "$(<"$prefs")"; fi
 if [[ -n ${PREFS:-} ]]; then seed_prefs "$PREFS"; fi
+# Local State prefs (e.g. the look, koan.look.style: theme.json's Zen look,
+# without which the Space menu's Theme… is greyed out, #585).
+local_state="$KOAN_ROOT/scripts/e2e/local_state/$test_name.json"
+if [[ -f $local_state ]]; then cp "$local_state" "$prof/Local State"; fi
 
 script="$KOAN_ROOT/scripts/e2e/$test_name.mjs"
 [[ $test_name == *.mjs ]] && script=$test_name

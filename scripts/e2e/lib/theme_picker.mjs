@@ -1,22 +1,25 @@
 // Helpers for the theme picker's end-to-end tests (theme.mjs,
 // theme_glass.mjs): native views through UI DevTools, keys to a widget like
 // real keys, the command palette, the picker and its window background.
-import { UI_PORT, browserCall, connect, evalIn, key, keyToWidget, pages, settingsCall, sleep, waitFor,
-         whole }
+import { UI_PORT, browserCall, connect, evalIn, key, keyToWidget, pages, settingsCall, sleep, waitFor }
     from './koan.mjs';
-import { focusUrlBar, keyWindowReport } from './mac.mjs';
+import { focusUrlBar, keyWindowReport, rootMouse } from './mac.mjs';
 
 export const unquote = v => (typeof v === 'string' ? v.replace(/^"(.*)"$/, '$1') : v);
 
 // Every widget and view as {node, cls, nodeId, shown, x, y, w, h, ax, ay,
 // root, path, p}: x/y relative to the parent, ax/ay to the widget's root
-// view; `p` holds all properties; `shown` includes the ancestors'.
+// view; `p` holds all properties; `shown` includes the ancestors'. A root
+// view also has its widget's name and place among the widgets of that name
+// (wname, wn), for lib/mac.mjs rootMouse().
 export async function tree() {
   const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
   await ui.send('DOM.enable');
   await ui.send('CSS.enable');
   const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
   const out = [];
+  const named = {};
+  let wname, wn;
   const walk = async (n, depth, parent, path) => {
     const a = n.attributes ?? [];
     // Widgets are named, views have a class.
@@ -32,6 +35,8 @@ export async function tree() {
       if (n.nodeName === 'Widget') {
         // A widget's views start a new tree.
         out.push({ node: 'Widget', cls, nodeId: n.nodeId, shown: true, path, p });
+        wname = cls;
+        wn = named[cls] = (named[cls] ?? -1) + 1;
         self = null;
       } else {
         self = {
@@ -40,6 +45,7 @@ export async function tree() {
           ax: parent ? parent.ax + +p.X : 0, ay: parent ? parent.ay + +p.Y : 0, path, p,
         };
         self.root = parent ? parent.root : self;
+        if (!parent) Object.assign(self, { wname, wn });
         out.push(self);
       }
       path = [...path, cls];
@@ -61,11 +67,13 @@ export async function ui(method, params) {
 }
 
 // A mouse event at (x, y) in `view`, sent to its root view like a real one,
-// so the root view targets the view under it (menus, drags).
+// so the root view targets the view under it (menus, drags). UI DevTools
+// numbers the nodes again on each DOM.getDocument: a widget that came since
+// `view` was read (a button's tooltip) moves the root's number, and the
+// event went to another view (a scheme button's click did nothing, #585),
+// so rootMouse() finds the root again by its widget.
 export const mouse = (view, type, x, y, button = 'left') =>
-  ui('DOM.dispatchMouseEvent', { nodeId: view.root.nodeId,
-      event: { type, x: whole(view.ax + x), y: whole(view.ay + y), button,
-               wheelDirection: 'none' } });
+  rootMouse(view.root, [type], view.ax + x, view.ay + y, button);
 
 export async function click(view, x = 10, y = 10, button = 'left', wait = 700) {
   await mouse(view, 'mousePressed', x, y, button);
@@ -177,7 +185,11 @@ export async function palette(action) {
     return i >= 0 && i + 1;
   }) || 0) - 1;
   if (index < 0) {
-    console.log(`  (palette: no "${action}" row; rows: ${(await paletteRows()).labels.join(' / ')})`);
+    // (A row named like the action that is the search for the typed text
+    // says so: it isn't the action's row.)
+    const rows = await paletteRows();
+    console.log(`  (palette: no "${action}" action row; rows: ${
+        rows.labels.map((l, i) => `${l}${rows.search[i] ? ' (search)' : ''}`).join(' / ')})`);
   }
   for (let i = 0; i < 10 && index >= 0; i++) {
     if ((await paletteRows()).selected === index) break;
