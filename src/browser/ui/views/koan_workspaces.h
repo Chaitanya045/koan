@@ -462,13 +462,17 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // Brings back closed Spaces, puts loose (ungrouped, unpinned) tabs into a
   // Space and focuses one.
   void EnsureOneSpaceShown();
-  // A session restored into this window (Restore after a crash) leaves the
-  // Space the window started in, with its new tab page: closes it (Zen's
-  // restore adds no Space). Only that Space, and only if it is untouched.
-  void DropStartupSpaceAfterRestore();
-  // Whether `space` is the window's one Space from before a session restore
-  // that is still one untouched new tab page: what restoring replaces.
-  bool IsUntouchedStartupSpace(const tab_groups::TabGroupId& space) const;
+  // A session restored into this window (Restore after a crash, Koan's or
+  // the bubble's) leaves the Space the window started in beside the
+  // session's, named as the session's first one may be: its tabs (a URL the
+  // launch was given) move to the restored Space shown, its new tab page
+  // closes, and it goes (Zen's restore adds no Space, #554). Only that
+  // Space, and only while it is the launch's (IsLaunchSpace()).
+  void MergeStartupSpaceAfterRestore();
+  // Whether `space` (the window's one Space from before a session restore)
+  // is still as the launch made it: the default name, no icon, theme or
+  // profile, and no tab pinned in it.
+  bool IsLaunchSpace(const tab_groups::TabGroupId& space) const;
   void OnSessionRestored(Profile* profile, int tab_count);
   // Upstream's group state a Space can't have: collapsed (its tabs hidden,
   // with no header to expand it), and a Chrome colour on a group that didn't
@@ -644,10 +648,11 @@ class KoanWorkspaceController : public TabStripModelObserver,
   std::set<tab_groups::TabGroupId> deleting_;
   // A session restore is adding Spaces to this window (set by its first new
   // Space), the window's only Space from before it, and whether the restore
-  // finished, so that Space is to go if it is still untouched.
+  // finished, so that Space is merged into the restored ones
+  // (MergeStartupSpaceAfterRestore()).
   bool restore_started_ = false;
   std::optional<tab_groups::TabGroupId> pre_restore_space_;
-  bool drop_startup_space_ = false;
+  bool merge_startup_space_ = false;
   base::CallbackListSubscription session_restored_subscription_;
   // The Space shown last, for animating and as a fallback.
   std::optional<tab_groups::TabGroupId> last_space_;

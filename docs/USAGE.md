@@ -699,6 +699,12 @@ names, icons and colours; each with a new tab, the startup pages in the
 Space that was active). So does a window opened on macOS after you closed
 the last one.
 
+After a crash or a forced quit, the next start brings the session back
+without asking, as Zen does: each Space once, with its pinned and other tabs
+in their order. A link or URL that start was given opens in the Space you
+were in. If Koan crashes again within a minute of that, Chromium's "Restore
+pages?" bubble asks first.
+
 **Every window has the same Spaces** (Zen's window sync,
 `koan.window_sync.enabled`): creating, renaming, re-icon'ing, re-theming,
 reordering or deleting a Space in one window does the same in the others.

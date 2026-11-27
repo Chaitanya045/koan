@@ -16,6 +16,7 @@
 #include "base/uuid.h"
 #include "base/values.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/sessions/exit_type_service.h"
 #include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
@@ -77,7 +78,7 @@ KoanWindowSyncClient* KoanWindowSyncClient::From(
 }
 
 void KoanWindowSyncClient::OnAddedToWidget() {
-  if (sync_ || session_restored_subscription_) {
+  if (sync_ || waiting_to_join_) {
     return;
   }
   // A blank window says so in its session entry, once the session tracks
@@ -102,14 +103,46 @@ void KoanWindowSyncClient::OnAddedToWidget() {
       !KoanWindowSync::ShouldSync(browser_view_)) {
     return;
   }
-  // A window a session restore is filling joins once it has its Spaces:
-  // before, it would take the others' Spaces and then get its own on top.
-  if (SessionRestore::IsRestoring(browser_view_->GetProfile())) {
-    session_restored_subscription_ =
-        SessionRestore::RegisterOnSessionRestoredCallback(base::BindRepeating(
-            &KoanWindowSyncClient::OnSessionRestored, base::Unretained(this)));
+  waiting_to_join_ = true;
+  JoinWhenReady();
+}
+
+void KoanWindowSyncClient::JoinWhenReady() {
+  // Not once the window goes (OnBrowserViewDestroying()) or has joined.
+  if (!waiting_to_join_ || sync_) {
     return;
   }
+  Profile* profile = browser_view_->GetProfile();
+  // A window a session restore is filling joins once it has its Spaces:
+  // before, it would take the others' Spaces and then get its own on top.
+  if (SessionRestore::IsRestoring(profile)) {
+    if (!session_restored_subscription_) {
+      session_restored_subscription_ =
+          SessionRestore::RegisterOnSessionRestoredCallback(
+              base::BindRepeating(&KoanWindowSyncClient::OnSessionRestored,
+                                  base::Unretained(this)));
+    }
+    return;
+  }
+  // After a crash, the session may still be restored into this window: by
+  // Koan right after the launch (koan_crash_restore.h), or by the crash
+  // bubble's Restore. Joined before, the first window would take the saved
+  // state's pinned tabs and Essentials as placeholders, beside the restored
+  // ones, and its startup Space would take a saved Space's id (#554). So it
+  // joins once upstream takes the crash as acknowledged: after the restore
+  // (ExitTypeService waits for it to finish), the bubble's dismissal or a
+  // new window.
+  ExitTypeService* exit_type = ExitTypeService::GetInstanceForProfile(profile);
+  if (exit_type && exit_type->waiting_for_user_to_ack_crash()) {
+    if (!waiting_for_crash_ack_) {
+      waiting_for_crash_ack_ = true;
+      exit_type->AddCrashAckCallback(base::BindOnce(
+          &KoanWindowSyncClient::OnCrashAcked, weak_factory_.GetWeakPtr()));
+    }
+    return;
+  }
+  waiting_to_join_ = false;
+  session_restored_subscription_ = base::CallbackListSubscription();
   Join();
 }
 
@@ -121,20 +154,17 @@ void KoanWindowSyncClient::OnSessionRestored(Profile* profile, int tab_count) {
   // notifies before it returns, so IsRestoring() is still true here): join
   // right after it.
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(&KoanWindowSyncClient::JoinAfterRestore,
+      FROM_HERE, base::BindOnce(&KoanWindowSyncClient::JoinWhenReady,
                                 weak_factory_.GetWeakPtr()));
 }
 
-void KoanWindowSyncClient::JoinAfterRestore() {
-  // Not once the window goes (OnBrowserViewDestroying() drops the
-  // subscription) or has joined; and not while another restore of the
-  // profile runs, whose end is told too.
-  if (!session_restored_subscription_ ||
-      SessionRestore::IsRestoring(browser_view_->GetProfile())) {
-    return;
-  }
-  session_restored_subscription_ = base::CallbackListSubscription();
-  Join();
+void KoanWindowSyncClient::OnCrashAcked() {
+  waiting_for_crash_ack_ = false;
+  // Also told from inside the end of a restore (ExitTypeService::
+  // OnSessionRestoreDone()), while it still counts as restoring.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&KoanWindowSyncClient::JoinWhenReady,
+                                weak_factory_.GetWeakPtr()));
 }
 
 void KoanWindowSyncClient::Join() {
@@ -172,6 +202,7 @@ void KoanWindowSyncClient::Join() {
 }
 
 void KoanWindowSyncClient::OnBrowserViewDestroying() {
+  waiting_to_join_ = false;
   session_restored_subscription_ = base::CallbackListSubscription();
   spaces_changed_subscription_ = base::CallbackListSubscription();
   folders_changed_subscription_ = base::CallbackListSubscription();

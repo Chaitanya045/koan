@@ -1607,48 +1607,100 @@ void KoanWorkspaceController::OnSessionRestored(Profile* profile,
                                                 int tab_count) {
   if (restore_started_ && profile == browser_view_->GetProfile()) {
     restore_started_ = false;
-    drop_startup_space_ = pre_restore_space_.has_value();
+    merge_startup_space_ = pre_restore_space_.has_value();
     ScheduleUpdate();
   }
 }
 
-bool KoanWorkspaceController::IsUntouchedStartupSpace(
+bool KoanWorkspaceController::IsLaunchSpace(
     const tab_groups::TabGroupId& space) const {
   const std::optional<SpaceInfo> info = GetSpace(space);
   if (!info || info->name != kDefaultSpaceName || !info->icon.empty() ||
-      !info->theme.is_default()) {
+      !info->theme.is_default() || !info->container.empty()) {
     return false;
   }
+  // The user's own pinned tabs stay in their Space.
   TabStripModel* model = tab_strip_model();
   const gfx::Range tabs = model->group_model()->GetTabGroup(space)->ListTabs();
-  if (tabs.length() != 1) {
-    return false;
+  for (size_t i = tabs.start(); i < tabs.end(); ++i) {
+    if (IsPinnedInSpace(model->GetTabAtIndex(static_cast<int>(i)))) {
+      return false;
+    }
   }
-  // Upstream's HasSingleNewTabPage(), which decides whether a restore after a
-  // crash replaces the tab the window started on.
-  const int index = static_cast<int>(tabs.start());
-  content::WebContents* contents = model->GetWebContentsAt(index);
-  return !model->IsTabPinned(index) &&
-         (contents->GetURL() == chrome::ChromeUINewTabURLAsGURL() ||
-          search::IsInstantNTP(contents));
+  return true;
 }
 
-void KoanWorkspaceController::DropStartupSpaceAfterRestore() {
+void KoanWorkspaceController::MergeStartupSpaceAfterRestore() {
   const std::optional<tab_groups::TabGroupId> space =
       std::exchange(pre_restore_space_, std::nullopt);
-  if (!space || GetSpaces().size() < 2 || !IsUntouchedStartupSpace(*space)) {
+  if (!space || GetSpaces().size() < 2 || !IsLaunchSpace(*space)) {
+    return;
+  }
+  // The restored Space shown, else the first one (none is shown while an
+  // Essential is).
+  std::optional<tab_groups::TabGroupId> target = GetActiveSpace();
+  const bool shown = target == space;
+  if (!target || shown) {
+    target.reset();
+    for (const SpaceInfo& info : GetSpaces()) {
+      if (info.id != *space) {
+        target = info.id;
+        break;
+      }
+    }
+  }
+  if (!target) {
     return;
   }
   TabStripModel* model = tab_strip_model();
-  if (GetActiveSpace() == space) {
-    Cycle(/*forward=*/true);
+  // The tab the launch showed (a URL it was given): the restore selected the
+  // session's tab since.
+  tabs::TabInterface* launch_tab =
+      shown ? model->GetActiveTab() : last_active_tabs_[*space].Get();
+  // A new tab page the launch opened on, with nothing to go back to, closes
+  // (the restore replaces it, as upstream's does when it is the window's
+  // only tab); every other tab moves.
+  std::vector<tabs::TabHandle> to_move;
+  std::vector<tabs::TabHandle> to_close;
+  const gfx::Range tabs = model->group_model()->GetTabGroup(*space)->ListTabs();
+  for (size_t i = tabs.start(); i < tabs.end(); ++i) {
+    tabs::TabInterface* tab = model->GetTabAtIndex(static_cast<int>(i));
+    content::WebContents* contents = tab->GetContents();
+    const bool empty =
+        (contents->GetURL() == chrome::ChromeUINewTabURLAsGURL() ||
+         search::IsInstantNTP(contents)) &&
+        !contents->GetController().CanGoBack();
+    (empty ? to_close : to_move).push_back(tab->GetHandle());
   }
   deleting_.insert(*space);
   last_active_tabs_.erase(*space);
-  model->CloseWebContentsAt(
-      static_cast<int>(
-          model->group_model()->GetTabGroup(*space)->ListTabs().start()),
-      TabCloseTypes::CLOSE_USER_GESTURE);
+  if (shown) {
+    SwitchTo(*target);
+  }
+  std::vector<int> indices;
+  for (const tabs::TabHandle& handle : to_move) {
+    if (tabs::TabInterface* tab = handle.Get()) {
+      indices.push_back(model->GetIndexOfTab(tab));
+    }
+  }
+  std::ranges::sort(indices);
+  if (!indices.empty()) {
+    model->AddToExistingGroup(indices, *target, /*add_to_end=*/true);
+  }
+  for (const tabs::TabHandle& handle : to_close) {
+    if (tabs::TabInterface* tab = handle.Get()) {
+      model->CloseWebContentsAt(model->GetIndexOfTab(tab),
+                                TabCloseTypes::CLOSE_USER_GESTURE);
+    }
+  }
+  // Shown in its new Space, as a start that restores the session shows the
+  // URLs it was given.
+  if (launch_tab && std::ranges::contains(to_move, launch_tab->GetHandle())) {
+    const int index = model->GetIndexOfTab(launch_tab);
+    if (index != TabStripModel::kNoTab) {
+      model->ActivateTabAt(index);
+    }
+  }
 }
 
 void KoanWorkspaceController::EnsureOneSpaceShown() {
@@ -1840,8 +1892,8 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
     spaces = GetSpaces();
   }
   ungrouped_from_.clear();
-  if (std::exchange(drop_startup_space_, false)) {
-    DropStartupSpaceAfterRestore();
+  if (std::exchange(merge_startup_space_, false)) {
+    MergeStartupSpaceAfterRestore();
     spaces = GetSpaces();
   }
 
