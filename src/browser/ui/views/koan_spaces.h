@@ -189,6 +189,25 @@ class ScopedExternalLinks {
   static bool IsActive();
 };
 
+// StartupBrowserCreatorImpl::DetermineURLsAndLaunch()
+// (startup_browser_creator_impl.cc), for links from other apps on Linux:
+// there they arrive as command-line URLs, to a running Koan
+// (ProcessSingleton) and at launch alike. With `has_command_line_urls`, the
+// tabs opened while one lives are external links, as with
+// ScopedExternalLinks. A launch without them (a session restore, Koan's own
+// relaunch, which drops the URLs, first-run tabs) is not. Does nothing on
+// macOS, where those links come through app_controller_mac.mm instead.
+class ScopedCommandLineLinks {
+ public:
+  explicit ScopedCommandLineLinks(bool has_command_line_urls);
+  ScopedCommandLineLinks(const ScopedCommandLineLinks&) = delete;
+  ScopedCommandLineLinks& operator=(const ScopedCommandLineLinks&) = delete;
+  ~ScopedCommandLineLinks();
+
+ private:
+  std::optional<ScopedExternalLinks> external_links_;
+};
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_SPACES_H_

@@ -11,6 +11,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -286,6 +287,18 @@ ScopedExternalLinks::~ScopedExternalLinks() {
 bool ScopedExternalLinks::IsActive() {
   return g_external_links > 0;
 }
+
+// ScopedCommandLineLinks (koan_spaces.h).
+
+ScopedCommandLineLinks::ScopedCommandLineLinks(bool has_command_line_urls) {
+#if !BUILDFLAG(IS_MAC)
+  if (has_command_line_urls) {
+    external_links_.emplace();
+  }
+#endif
+}
+
+ScopedCommandLineLinks::~ScopedCommandLineLinks() = default;
 
 // Waits for an empty new tab's first navigation (Zen's initial-document
 // case in ZenSpaceRoutingNavigation.sys.mjs).

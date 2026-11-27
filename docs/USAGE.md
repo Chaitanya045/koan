@@ -551,7 +551,8 @@ belongs to a Space, and new tabs open in the active one.
   the first matching route wins. Match by Contains, Is Exactly (ignoring
   http(s)://, www. and a final /) or RegEx. "Default route for external
   links" picks the Space links from other apps open in when no route
-  matches. Right-click a tab > Add Route for Domain adds a route for its
+  matches. On Linux that includes a link given on Koan's command line,
+  which is how other apps (and `xdg-open`) open a link in Koan. Right-click a tab > Add Route for Domain adds a route for its
   site (one per selected tab's site) and opens the settings. Essentials and
   pinned tabs are never routed.
 - **Profiles: separate logins per Space** (Zen's containers per Space).
