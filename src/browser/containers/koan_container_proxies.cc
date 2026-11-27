@@ -164,7 +164,8 @@ std::optional<RuntimeProxy> ContainerProxies::ProxyFor(
   if (auto it = runtime_.find(container.id); it != runtime_.end()) {
     runtime = it->second;
   }
-  return EffectiveProxy(saved, runtime);
+  return EffectiveProxy(saved, runtime,
+                        disconnected_for_run_.contains(container.id));
 }
 
 void ContainerProxies::FlushForTesting() {
@@ -229,8 +230,9 @@ void ContainerProxies::ApplySwitch() {
         SetProxySetting(container.id, std::nullopt);
         break;
       case ProxySwitch::Action::kDisconnect:
-        runtime_.insert_or_assign(container.id.id,
-                                  RuntimeProxy::Disconnected());
+        // With or without a saved proxy: the switch promises a failing
+        // container for this run.
+        disconnected_for_run_.insert(container.id.id);
         break;
     }
     return;

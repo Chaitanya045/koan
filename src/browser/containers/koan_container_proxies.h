@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -93,6 +94,9 @@ class ContainerProxies : public base::SupportsUserData::Data,
   base::ScopedObservation<Profile, ProfileObserver> profile_observation_{this};
   // By ContainerId::id.
   std::map<std::string, RuntimeProxy> runtime_;
+  // The containers --koan-container-proxy disconnected for this run, by
+  // ContainerId::id (EffectiveProxy()'s `disconnected_for_run`).
+  std::set<std::string> disconnected_for_run_;
   // One per user container network context (a partition gets a new one when
   // the network service restarts).
   std::vector<std::unique_ptr<Relay>> relays_;

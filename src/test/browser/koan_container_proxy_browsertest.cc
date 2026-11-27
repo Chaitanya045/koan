@@ -11,6 +11,7 @@
 #include <optional>
 #include <string>
 
+#include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/test_future.h"
 #include "chrome/browser/chrome_content_browser_client.h"
@@ -34,6 +35,7 @@
 #include "koan/browser/containers/koan_container_proxy.h"
 #include "koan/browser/containers/koan_user_containers.h"
 #include "koan/browser/koan_prefs.h"
+#include "koan/browser/koan_switches.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "net/base/net_errors.h"
 #include "net/base/network_anonymization_key.h"
@@ -201,6 +203,34 @@ IN_PROC_BROWSER_TEST_F(KoanContainerProxyBrowserTest,
            ->GetTabStripModel()
            ->GetActiveWebContents()
            ->GetPrimaryMainFrame()));
+}
+
+class KoanContainerProxySwitchBrowserTest
+    : public KoanContainerProxyBrowserTest {
+ protected:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitchASCII(switches::kContainerProxy,
+                                    "Linux box=disconnected");
+  }
+};
+
+// The switch's "disconnected" fails the container for the run with no saved
+// proxy too, as USAGE and koan_switches.h say.
+IN_PROC_BROWSER_TEST_F(KoanContainerProxySwitchBrowserTest,
+                       DisconnectedFailsWithoutASavedProxy) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL page = embedded_test_server()->GetURL("/title1.html");
+  // Added before the first proxies() call, which applies the switch.
+  const ContainerId box = AddContainer(u"Linux box");
+  const ContainerId other = AddContainer(u"Other");
+
+  EXPECT_EQ("", LookUp(box, kLocalDevServer));
+  EXPECT_EQ(net::ERR_NO_SUPPORTED_PROXIES, LoadIn(box, page));
+  EXPECT_EQ(net::OK, LoadIn(other, page));
+
+  // A proxy saved during the run doesn't reconnect it.
+  ASSERT_TRUE(proxies()->SetProxySetting(box, ProxySetting{kTunnel}));
+  EXPECT_EQ("", LookUp(box, kLocalDevServer));
 }
 
 }  // namespace

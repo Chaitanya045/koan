@@ -14,6 +14,7 @@
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_browser_context.h"
 #include "net/proxy_resolution/proxy_config.h"
+#include "net/proxy_resolution/proxy_config_with_annotation.h"
 #include "net/proxy_resolution/proxy_host_matching_rules.h"
 #include "net/proxy_resolution/proxy_info.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -84,15 +85,31 @@ TEST(ContainerProxyTest, RuntimeStateCountsOnlyWithASetting) {
   EXPECT_FALSE(RuntimeProxy::Disconnected().connected());
 
   // No setting: the profile's proxy settings, whatever the runtime says.
-  EXPECT_FALSE(EffectiveProxy(std::nullopt, std::nullopt));
-  EXPECT_FALSE(EffectiveProxy(std::nullopt, tunnel));
-  EXPECT_FALSE(EffectiveProxy(std::nullopt, RuntimeProxy::Disconnected()));
+  EXPECT_FALSE(EffectiveProxy(std::nullopt, std::nullopt, false));
+  EXPECT_FALSE(EffectiveProxy(std::nullopt, tunnel, false));
+  EXPECT_FALSE(
+      EffectiveProxy(std::nullopt, RuntimeProxy::Disconnected(), false));
   // A setting: its server, unless a runtime state is set.
   EXPECT_EQ(RuntimeProxy::Through(setting.server),
-            EffectiveProxy(setting, std::nullopt));
-  EXPECT_EQ(tunnel, EffectiveProxy(setting, tunnel));
+            EffectiveProxy(setting, std::nullopt, false));
+  EXPECT_EQ(tunnel, EffectiveProxy(setting, tunnel, false));
   EXPECT_EQ(RuntimeProxy::Disconnected(),
-            EffectiveProxy(setting, RuntimeProxy::Disconnected()));
+            EffectiveProxy(setting, RuntimeProxy::Disconnected(), false));
+}
+
+// --koan-container-proxy=<name>=disconnected fails the container for the
+// run, with no saved proxy too (USAGE, koan_switches.h).
+TEST(ContainerProxyTest, TheSwitchDisconnectsWithOrWithoutASetting) {
+  const ProxySetting setting{.server = "socks5://127.0.0.1:1080"};
+  const RuntimeProxy tunnel = RuntimeProxy::LocalSocks5(40123);
+  EXPECT_EQ(RuntimeProxy::Disconnected(),
+            EffectiveProxy(std::nullopt, std::nullopt, true));
+  EXPECT_EQ(RuntimeProxy::Disconnected(),
+            EffectiveProxy(std::nullopt, tunnel, true));
+  EXPECT_EQ(RuntimeProxy::Disconnected(),
+            EffectiveProxy(setting, std::nullopt, true));
+  EXPECT_EQ(RuntimeProxy::Disconnected(),
+            EffectiveProxy(setting, tunnel, true));
 }
 
 // Upstream guard: net bypasses the proxy for loopback implicitly, which is
@@ -123,9 +140,10 @@ TEST(ContainerProxyTest, EverythingGoesThroughTheProxyLoopbackToo) {
     // One proxy and no DIRECT to fall back to.
     EXPECT_EQ("SOCKS5 127.0.0.1:1080", info.proxy_list().ToPacString()) << url;
   }
-  const net::ProxyConfig& config = ContainerProxyConfig(proxy).value();
-  EXPECT_FALSE(config.HasAutomaticSettings());
-  EXPECT_FALSE(config.pac_mandatory());
+  // Kept: value() is a reference into it.
+  const net::ProxyConfigWithAnnotation config = ContainerProxyConfig(proxy);
+  EXPECT_FALSE(config.value().HasAutomaticSettings());
+  EXPECT_FALSE(config.value().pac_mandatory());
 }
 
 TEST(ContainerProxyTest, DisconnectedHasNothingToConnectThrough) {

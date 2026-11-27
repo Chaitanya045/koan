@@ -76,9 +76,15 @@ struct RuntimeProxy {
 // profile's proxy settings, as every other tab does); else the runtime state
 // if one is set, else the saved server. A runtime state without a setting
 // counts for nothing, so removing the setting always takes the proxy away.
+//
+// `disconnected_for_run` is --koan-container-proxy=<name>=disconnected
+// (koan_switches.h), a test of the fail mode: the container is disconnected
+// for this run whatever its setting and runtime state, with no setting too.
+// Nothing saves it, so the next run without the switch is as before.
 std::optional<RuntimeProxy> EffectiveProxy(
     const std::optional<ProxySetting>& saved,
-    const std::optional<RuntimeProxy>& runtime);
+    const std::optional<RuntimeProxy>& runtime,
+    bool disconnected_for_run);
 
 // The proxy configuration a container's network context gets for `proxy`.
 // Everything goes through the proxy, loopback and link-local addresses too
@@ -105,8 +111,9 @@ std::optional<ContainerId> UserContainerFromPartitionPath(
 
 // The --koan-container-proxy switch (koan_switches.h): "<container
 // name>=<value>", where the value is a proxy server (saved as the
-// container's setting), "none" (removes the setting) or "disconnected" (the
-// runtime state for this run, as while a tunnel is down).
+// container's setting), "none" (removes the setting) or "disconnected"
+// (disconnected for this run, saved proxy or not, as while a tunnel is down:
+// EffectiveProxy()'s `disconnected_for_run`).
 struct ProxySwitch {
   std::string container_name;
   enum class Action { kSave, kRemove, kDisconnect } action = Action::kSave;

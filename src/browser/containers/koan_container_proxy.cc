@@ -108,7 +108,11 @@ RuntimeProxy RuntimeProxy::Disconnected() {
 
 std::optional<RuntimeProxy> EffectiveProxy(
     const std::optional<ProxySetting>& saved,
-    const std::optional<RuntimeProxy>& runtime) {
+    const std::optional<RuntimeProxy>& runtime,
+    bool disconnected_for_run) {
+  if (disconnected_for_run) {
+    return RuntimeProxy::Disconnected();
+  }
   if (!saved) {
     return std::nullopt;
   }
