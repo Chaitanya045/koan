@@ -1083,6 +1083,24 @@ Koan is set up to stay light (details in `PERFORMANCE.md`):
   (Settings > Tab Management > Performance).
 - **Energy saver** works as in Chrome: on a MacBook it turns on below 20 %
   battery (Settings > Performance > Energy saver).
+- **Close tabs you haven't used** (off by default, Arc's auto-archive):
+  Settings > Tab Management > Performance > "Close tabs I haven't used
+  for": Never, 12 hours, 24 hours, 7 days or 30 days. A tab counts as used
+  while it is the tab its window shows; the time goes on while Koan is
+  closed, so an old tab goes at the next start, once the session is back.
+  Never closed: Essentials, pinned tabs, tabs in a folder, the tab each
+  Space shows, a Space's empty tab, agent tabs, a split view with a tab
+  that stays, and tabs in use (playing sound, in a call, sharing the
+  screen, open in DevTools, with a form you started, downloading, in
+  picture-in-picture, or with a page that would ask before closing).
+  Before the first close ever, a notice says so (with a **Settings**
+  button), and nothing closes until the next check a few minutes later.
+  Closed tabs are in the Library: History > Filter > Closed tabs, kept for
+  120 days (up to 500), apart from ⌘⇧T's recently closed tabs. Click one
+  to reopen it in its Space and profile; forget it with its row's button.
+  Clearing history forgets those it covers. To try it without waiting,
+  start Koan with `--koan-auto-close-tabs-after=<seconds>` (it shortens
+  whatever time is set, not Never).
 
 ## Library
 
@@ -1115,8 +1133,9 @@ with three sections down its side, and opens on the one you used last:
 - **History** (⌘Y or ⌘⇧H): the last 120 days by day. Search, or **Filter**:
   when (today since midnight, this week, this month), sort (by date, site, most visited,
   last visited), what to look through (history or the tabs closed
-  recently) and, once you have a profile, which profile (each opening
-  shows the active Space's; All profiles shows everything). Click a page to open it in a new tab; ⌘-click or
+  recently, including those Koan closed because you hadn't used them; see
+  Memory and power) and, once you have a profile, which profile (each
+  opening shows the active Space's; All profiles shows everything). Click a page to open it in a new tab; ⌘-click or
   middle-click opens it in the background and keeps the Library open.
   Hover a row for its visit time and the forget / reopen buttons;
   right-click for "Forget About This Site" (its history, cookies, site data

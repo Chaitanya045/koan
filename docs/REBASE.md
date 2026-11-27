@@ -335,6 +335,16 @@ gateway needs a `MessagePumpForIO` thread, which the browser IO thread is). Beha
 is set before local state is registered (the Agent ready default is computed then, T-ready-3); a browser-modal dialog's
 close callback runs for Esc and for closing the window (both deny, T-ready-4).
 
+"Close tabs I haven't used for" (`src/browser/koan_tab_auto_close.*`, `src/browser/ui/views/koan_tab_auto_closer.*`,
+#482) adds no patch. It uses upstream symbols, so a rename breaks the compile: `WebContents::GetLastActiveTime`,
+`NeedToFireBeforeUnload`, `DiscardEligibilityPolicy::CanDiscard` (through `koan::IsTabInUse`), `SessionRestore::IsRestoring`,
+`TabDragController::IsActive`, `TabCloseTypes::CLOSE_NONE`, `chrome::AddRestoredTab`, `DownloadItemUtils::GetOriginalWebContents`,
+`HistoryServiceObserver::OnHistoryDeletions`. Behaviour it relies on: `GetLastActiveTime()` is when the tab was last shown
+and comes back with the session (`SessionTab::last_active_time`); a tab closed without `CLOSE_CREATE_HISTORICAL_TAB` doesn't
+enter the recently closed list; `AddRestoredTab` runs Koan's tab restore hooks with the given extra data (a reopened tab's
+container). Guards: koan_unittests `KoanTabAutoCloseTest.*` (the rule) and koan_browsertests `KoanTabAutoCloseBrowserTest.*`
+(an old tab closes into Koan's list and not Chromium's, reopens in its Space, a restored old tab closes after the restore).
+
 The keep-alive lease (`src/browser/agent/koan_agent_lease.*`) adds no patch: `WebContents::IncrementCapturerCount` (visible,
 no wake lock), `WebContents::ForbidExternalPopupMenus` (macOS, `USE_EXTERNAL_POPUP_MENU`), `PageLiveStateDecorator::SetIsPinnedTab`
 and `SetGlicActuationState(kActuatingOnBackgroundTab)`. Behaviour it relies on: the pinned bit exempts a page from Koan's

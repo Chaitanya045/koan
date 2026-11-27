@@ -58,11 +58,12 @@ class KoanToast {
   // Shows `text` with Zen's small icon button after it (e.g. "New background
   // tab opened!" with a tab icon that switches to the tab). `action_name`
   // is the button's tooltip and accessible name; pressing it runs `action`
-  // and hides the toast.
+  // and hides the toast. It stays `timeout` once in.
   void ShowWithAction(const std::u16string& text,
                       const gfx::VectorIcon& action_icon,
                       const std::u16string& action_name,
-                      base::OnceClosure action);
+                      base::OnceClosure action,
+                      base::TimeDelta timeout = kToastDefaultTimeout);
 
   // Drops the toast at once (e.g. the window is going away).
   void Close();

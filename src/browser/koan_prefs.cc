@@ -69,6 +69,9 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kOpenPinnedInNewTab, true);
   registry->RegisterBooleanPref(kCtrlTabWithinKind, false);
   registry->RegisterBooleanPref(kCtrlTabSkipPending, false);
+  registry->RegisterIntegerPref(kAutoCloseTabsAfterHours, 0);
+  registry->RegisterBooleanPref(kAutoCloseNoticeShown, false);
+  registry->RegisterListPref(kAutoClosedTabs);
   registry->RegisterBooleanPref(kCommandPaletteSuggestions, true);
   registry->RegisterDictionaryPref(kCommandPaletteUsage);
   registry->RegisterStringPref(kPinnedTabCloseShortcutBehavior,
