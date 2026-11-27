@@ -52,6 +52,10 @@ struct InstallLocation {
   // Koan's Updates folder is on the app's volume, so a copy staged there
   // swaps in with one rename.
   bool updates_on_app_volume = false;
+  // The app's volume swaps two names in one rename (renamex_np's
+  // RENAME_SWAP, VOL_CAP_INT_RENAME_SWAP): APFS does, HFS+ and exFAT don't.
+  // True when the volume doesn't say.
+  bool rename_swap = true;
 };
 
 // Why Koan can't install a release itself, and sends the user to the release
@@ -62,6 +66,8 @@ enum class Blocker {
   kTranslocated,
   kReadOnly,
   kNotWritable,
+  // The app's volume can't swap two names in one rename (HFS+, exFAT).
+  kNoRenameSwap,
   // The release has no file Koan knows how to install (DownloadFileName()).
   kNoFile,
   // This version was rolled back or failed to install (IsHeld()).
@@ -99,11 +105,31 @@ std::optional<std::string> DownloadFileName(const UpdateInfo& update);
 inline constexpr char kPartialSuffix[] = ".part";
 
 // Firefox's app.update.download.maxAttempts (2 in Zen): after that many
-// failed downloads of a version, Koan stops and offers the release page.
+// failed downloads of a version, Koan stops and offers the release page. A
+// try that got further than the try before it doesn't count
+// (DownloadResult::kFailedWithProgress): a slow link resumes until it is done.
 inline constexpr int kMaxDownloadAttempts = 2;
 
 // How long to wait before the next try after `failures` failed ones.
 base::TimeDelta RetryDelay(int failures);
+
+// How long to wait before resuming a try that made progress.
+inline constexpr base::TimeDelta kResumeDelay = base::Seconds(30);
+
+// Whether a try that failed got the file further than the `on_disk` bytes
+// it started with: its response continued from `offset` and `received`
+// bytes of it arrived. Each such try ends further on, and the file has a
+// signed size, so resuming them always ends.
+bool MadeProgress(int64_t on_disk, int64_t offset, int64_t received);
+
+enum class DownloadResult {
+  // Complete, and the file the manifest signs (MatchesRelease()).
+  kOk,
+  // Counts toward kMaxDownloadAttempts.
+  kFailed,
+  // MadeProgress(): resumed after kResumeDelay, not counted.
+  kFailedWithProgress,
+};
 
 // The Range header that resumes a download with `partial` of `size` bytes
 // on disk ("bytes=<partial>-"), or nullopt to start from the beginning.
@@ -116,8 +142,12 @@ enum class BodyStart {
   kAppend,
   // 200: the whole file, so start the partial file again.
   kReplace,
-  // Anything else: drop the partial file and count a failure.
-  kReject,
+  // A 206 that isn't the rest of the file, or 416 (the server doesn't have
+  // that range): the partial file is no good. Drop it, count a failure.
+  kDiscard,
+  // Anything else (a 5xx, 429, 404…): count a failure and keep the partial
+  // file for the next try.
+  kRetry,
 };
 BodyStart ClassifyResponse(int response_code,
                            std::string_view content_range,
@@ -158,10 +188,18 @@ enum class PrepareError {
   kNoApp,
   kCopy,
   kQuarantine,
+  // hdiutil, ditto or codesign didn't finish in time.
+  kTimeout,
   kSignature,
   kBundleId,
   kVersion,
 };
+
+// Whether `error` says the release itself is no good (its signature, bundle
+// ID or version): the version is held (IsHeld()) and its disk image goes.
+// Other errors (a full disk, a busy hdiutil, a timeout) may pass: the image
+// is kept, and preparing it is tried again (InstallFlow::OnPrepared()).
+bool IsRejection(PrepareError error);
 
 // Whether the copy in `staged` may replace the running app: the same bundle
 // ID (`bundle_id`), the version the manifest signs (`update_version`), and
@@ -253,6 +291,85 @@ LaunchDecision DecideOnLaunch(const std::optional<InstallMarker>& marker,
                               const base::FilePath& running_app);
 
 // ---------------------------------------------------------------------------
+// The Updates folder.
+
+// Whether `entry`, in the Updates folder, may go when a download of
+// `download_name` starts: anything but that download and its partial file,
+// the marker, the helper's logs and the copy `marker` names (whichever
+// copy of Koan it is for: another copy's old app, kept until its new version
+// has started, included).
+bool ShouldSweepUpdatesEntry(const base::FilePath& entry,
+                             std::string_view download_name,
+                             const std::optional<InstallMarker>& marker);
+
+// Whether a disk image attached from `image_path` is one of Koan's
+// downloads, left attached by a prepare that didn't finish (Koan quit, or
+// hdiutil was stopped): detached at startup.
+bool IsUpdateImage(const base::FilePath& image_path,
+                   const base::FilePath& updates_dir);
+
+// Whether `entry`, next to `app`, is a staging folder an earlier install left
+// behind: a hidden <app's folder>/.<app name>-update-<version> folder for a
+// version older than `running_version` (no copy of Koan from `app` will
+// install it, and no copy's old app waits in it: that one is named for the
+// running version) that `marker` doesn't name either.
+bool IsStaleSiblingStaging(const base::FilePath& app,
+                           const base::FilePath& entry,
+                           std::string_view running_version,
+                           const std::optional<InstallMarker>& marker);
+
+// ---------------------------------------------------------------------------
+// The helper (koan_update_helper_main.mm).
+
+// In the app bundle (Contents/Resources/bin; //koan/cli's bundle data).
+inline constexpr char kHelperName[] = "koan-update-helper";
+// Its log, next to the marker, and the one before it: helper.log is started
+// again once it is past kMaxHelperLogSize.
+inline constexpr char kHelperLogName[] = "helper.log";
+inline constexpr char kHelperOldLogName[] = "helper.old.log";
+inline constexpr int64_t kMaxHelperLogSize = 1024 * 1024;
+
+// <app>/Contents/Resources/bin/koan-update-helper.
+base::FilePath HelperPathIn(const base::FilePath& app);
+
+// The app a helper at `helper` (an absolute path) is part of: the .app that
+// HelperPathIn() gives `helper` for, or an empty path.
+base::FilePath HelperBundle(const base::FilePath& helper);
+
+// What the helper was started for.
+enum class HelperTask {
+  // --roll-back absent: swap a kReady copy in.
+  kInstall,
+  // --roll-back: put the old copy (kSwapped) back.
+  kRollBack,
+};
+
+// Why the helper refuses `marker`, or nullopt if it may swap its copy in:
+// the marker is the one `task` expects, names the app the helper is part of
+// (`own_app`; a same-user process could otherwise write a marker that swaps
+// any app) and a copy StagingDir() could have placed for it. The copy's
+// signature is checked again right before the swap, too.
+std::optional<std::string> HelperRefusal(
+    const std::optional<InstallMarker>& marker,
+    HelperTask task,
+    const base::FilePath& own_app,
+    const base::FilePath& updates_dir);
+
+// Whether a process running the executable `process_path` keeps the helper
+// from replacing `app` (both resolved): anything that runs from inside it,
+// except another helper (two helpers would otherwise wait for each other).
+bool BlocksSwap(const base::FilePath& app, std::string_view process_path);
+
+// The code requirement switch's value (kCodeRequirementSwitch,
+// koan_update_source.h) that passes `requirement` (UpdateSource's
+// code_requirement) to the helper: none for ReleaseCodeRequirement(), which
+// the helper requires by itself, else the test hooks' text. The helper reads
+// it back with GetUpdateSource(), which takes it only in a build with
+// koan_update_test_hooks.
+std::optional<std::string> CodeRequirementSwitchValue(
+    std::string_view requirement);
+
+// ---------------------------------------------------------------------------
 // Holding a version back after a rollback or a failed install.
 
 struct InstallHold {
@@ -278,6 +395,22 @@ bool IsHeld(const InstallHold& hold, std::string_view version, base::Time now);
 
 // If the user doesn't restart, Zen reminds them after 6 days.
 inline constexpr base::TimeDelta kRestartReminderDelay = base::Days(6);
+
+// What "Restart to update" does.
+enum class RestartAction {
+  // No update is staged.
+  kNone,
+  // Another Koan (another profile's) runs from the app: the helper couldn't
+  // replace it, so restarting would only bring the old version back. Tell
+  // the user to quit that one first.
+  kQuitOtherFirst,
+  // An agent is using Koan: ask first.
+  kAsk,
+  kRestart,
+};
+RestartAction DecideRestart(bool ready,
+                            bool other_instance_running,
+                            bool agent_using_koan);
 
 enum class Stage {
   kIdle,
@@ -311,6 +444,8 @@ enum class Step {
   kAnnounceReady,
   // Show #549's notice with the release page.
   kOfferManual,
+  // Stop the download or the wait for a retry (the settings changed).
+  kCancel,
 };
 
 class InstallFlow {
@@ -331,21 +466,33 @@ class InstallFlow {
   Step OnStagedCopyFound(std::string_view version);
   // Update was clicked in "Update Available!".
   Step OnUserAccepted();
-  // The download finished: `ok` if the file is complete and is the one the
-  // manifest signs (MatchesRelease()).
-  Step OnDownloaded(bool ok);
-  // The copy was staged and checked, or not.
-  Step OnPrepared(bool ok);
+  // A try of the download ended.
+  Step OnDownloaded(DownloadResult result);
+  // The copy was staged and checked (no error), or not. A rejection
+  // (IsRejection()) offers the release page; another error tries again
+  // later, up to kMaxDownloadAttempts tries in all.
+  Step OnPrepared(std::optional<PrepareError> error);
+  // "When a new version is out" changed: "let me choose" stops a download
+  // and asks; "automatically" starts the one that was waiting for Update.
+  Step OnModeChanged(InstallMode mode);
+  // "Check for updates" was turned off: a download, or the wait for Update,
+  // stops (the partial file stays). A staged copy stays ready, as Firefox
+  // still installs an update it has staged.
+  Step OnChecksTurnedOff();
 
   Stage stage() const { return stage_; }
   const std::string& version() const { return version_; }
   int failures() const { return failures_; }
-  base::TimeDelta retry_delay() const { return RetryDelay(failures_); }
+  base::TimeDelta retry_delay() const {
+    return resume_soon_ ? kResumeDelay : RetryDelay(failures_);
+  }
 
  private:
   Stage stage_ = Stage::kIdle;
   std::string version_;
   int failures_ = 0;
+  // The last try made progress (DownloadResult::kFailedWithProgress).
+  bool resume_soon_ = false;
 };
 
 }  // namespace koan::updates

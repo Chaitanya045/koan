@@ -105,6 +105,9 @@ std::optional<Blocker> CheckLocation(const InstallLocation& location) {
   if (!location.writable) {
     return Blocker::kNotWritable;
   }
+  if (!location.rename_swap) {
+    return Blocker::kNoRenameSwap;
+  }
   return std::nullopt;
 }
 
@@ -135,6 +138,90 @@ bool IsStagedPathFor(const base::FilePath& app,
          IsValidVersion(std::string_view(name).substr(prefix.size()));
 }
 
+bool IsStaleSiblingStaging(const base::FilePath& app,
+                           const base::FilePath& entry,
+                           std::string_view running_version,
+                           const std::optional<InstallMarker>& marker) {
+  if (!IsCleanAbsolutePath(app) || entry.DirName() != app.DirName()) {
+    return false;
+  }
+  const std::string name = entry.BaseName().value();
+  const std::string prefix = SiblingStagingPrefix(app);
+  if (!base::StartsWith(name, prefix)) {
+    return false;
+  }
+  const std::string_view version = std::string_view(name).substr(prefix.size());
+  if (!IsValidVersion(version) || !IsNewerVersion(running_version, version)) {
+    return false;
+  }
+  return !marker || marker->staged.DirName() != entry;
+}
+
+base::FilePath HelperPathIn(const base::FilePath& app) {
+  return app.Append("Contents")
+      .Append("Resources")
+      .Append("bin")
+      .Append(kHelperName);
+}
+
+base::FilePath HelperBundle(const base::FilePath& helper) {
+  if (!IsCleanAbsolutePath(helper) ||
+      helper.BaseName().value() != kHelperName) {
+    return base::FilePath();
+  }
+  const base::FilePath app = helper.DirName().DirName().DirName().DirName();
+  if (app.Extension() != ".app" || HelperPathIn(app) != helper) {
+    return base::FilePath();
+  }
+  return app;
+}
+
+std::optional<std::string> HelperRefusal(
+    const std::optional<InstallMarker>& marker,
+    HelperTask task,
+    const base::FilePath& own_app,
+    const base::FilePath& updates_dir) {
+  if (!marker) {
+    return "no marker";
+  }
+  const MarkerState expected = task == HelperTask::kRollBack
+                                   ? MarkerState::kSwapped
+                                   : MarkerState::kReady;
+  if (marker->state != expected) {
+    return base::StrCat({"the marker is ", MarkerStateName(marker->state),
+                         ", not ", MarkerStateName(expected)});
+  }
+  if (own_app.empty() || marker->app != own_app) {
+    return base::StrCat({"the marker is for ", marker->app.AsUTF8Unsafe(),
+                         ", not ", own_app.AsUTF8Unsafe()});
+  }
+  if (!IsStagedPathFor(marker->app, marker->staged, updates_dir)) {
+    return base::StrCat(
+        {marker->staged.AsUTF8Unsafe(), " isn't a staged copy's place"});
+  }
+  return std::nullopt;
+}
+
+bool BlocksSwap(const base::FilePath& app, std::string_view process_path) {
+  if (app.empty() ||
+      !base::StartsWith(process_path, base::StrCat({app.value(), "/"}))) {
+    return false;
+  }
+  return process_path != HelperPathIn(app).value();
+}
+
+std::optional<std::string> CodeRequirementSwitchValue(
+    std::string_view requirement) {
+  if (requirement.empty() || requirement == ReleaseCodeRequirement()) {
+    return std::nullopt;
+  }
+  // GetUpdateSource() adds the '=' (the requirement's text, not a file).
+  if (requirement[0] == '=') {
+    requirement.remove_prefix(1);
+  }
+  return std::string(requirement);
+}
+
 std::optional<std::string> DownloadFileName(const UpdateInfo& update) {
   const std::string name = update.url.ExtractFileName();
   if (!IsPlainFileName(name) || !base::EndsWith(name, ".dmg") ||
@@ -150,6 +237,10 @@ base::TimeDelta RetryDelay(int failures) {
     delay *= 2;
   }
   return std::min(delay, kMaxRetryDelay);
+}
+
+bool MadeProgress(int64_t on_disk, int64_t offset, int64_t received) {
+  return received > 0 && offset + received > on_disk;
 }
 
 std::optional<std::string> RangeHeaderFor(int64_t partial, int64_t size) {
@@ -169,12 +260,18 @@ BodyStart ClassifyResponse(int response_code,
   int64_t first = 0;
   int64_t last = 0;
   int64_t total = 0;
-  if (response_code == 206 && partial > 0 &&
-      ParseContentRange(content_range, &first, &last, &total) &&
-      first == partial && last == size - 1 && total == size) {
-    return BodyStart::kAppend;
+  if (response_code == 206) {
+    return partial > 0 &&
+                   ParseContentRange(content_range, &first, &last, &total) &&
+                   first == partial && last == size - 1 && total == size
+               ? BodyStart::kAppend
+               : BodyStart::kDiscard;
   }
-  return BodyStart::kReject;
+  // Range Not Satisfiable: the partial file doesn't fit the server's file.
+  if (response_code == 416) {
+    return BodyStart::kDiscard;
+  }
+  return BodyStart::kRetry;
 }
 
 bool MatchesRelease(const UpdateInfo& update,
@@ -187,6 +284,21 @@ bool MatchesRelease(const UpdateInfo& update,
 std::string ReleaseCodeRequirement() {
   return base::StrCat(
       {"=certificate leaf = H\"", kReleaseCertificateSha1, "\""});
+}
+
+bool IsRejection(PrepareError error) {
+  switch (error) {
+    case PrepareError::kSignature:
+    case PrepareError::kBundleId:
+    case PrepareError::kVersion:
+      return true;
+    case PrepareError::kMount:
+    case PrepareError::kNoApp:
+    case PrepareError::kCopy:
+    case PrepareError::kQuarantine:
+    case PrepareError::kTimeout:
+      return false;
+  }
 }
 
 std::optional<PrepareError> CheckStagedBundle(
@@ -303,6 +415,41 @@ LaunchDecision DecideOnLaunch(const std::optional<InstallMarker>& marker,
   return decision;
 }
 
+bool ShouldSweepUpdatesEntry(const base::FilePath& entry,
+                             std::string_view download_name,
+                             const std::optional<InstallMarker>& marker) {
+  const std::string name = entry.BaseName().value();
+  if (name == download_name ||
+      name == base::StrCat({download_name, kPartialSuffix}) ||
+      name == kMarkerFileName || name == kHelperLogName ||
+      name == kHelperOldLogName) {
+    return false;
+  }
+  return !marker || marker->staged.DirName() != entry;
+}
+
+bool IsUpdateImage(const base::FilePath& image_path,
+                   const base::FilePath& updates_dir) {
+  if (!IsCleanAbsolutePath(image_path) || image_path.DirName() != updates_dir) {
+    return false;
+  }
+  const std::string name = image_path.BaseName().value();
+  return base::EndsWith(name, ".dmg") ||
+         base::EndsWith(name, base::StrCat({".dmg", kPartialSuffix}));
+}
+
+RestartAction DecideRestart(bool ready,
+                            bool other_instance_running,
+                            bool agent_using_koan) {
+  if (!ready) {
+    return RestartAction::kNone;
+  }
+  if (other_instance_running) {
+    return RestartAction::kQuitOtherFirst;
+  }
+  return agent_using_koan ? RestartAction::kAsk : RestartAction::kRestart;
+}
+
 InstallHold NextHold(const InstallHold& current,
                      std::string_view version,
                      base::Time now) {
@@ -340,6 +487,7 @@ Step InstallFlow::OnUpdateFound(std::string_view version,
   }
   version_ = std::string(version);
   failures_ = 0;
+  resume_soon_ = false;
   if (blocker) {
     stage_ = Stage::kManual;
     return Step::kOfferManual;
@@ -358,6 +506,7 @@ Step InstallFlow::OnStagedCopyFound(std::string_view version) {
   }
   version_ = std::string(version);
   failures_ = 0;
+  resume_soon_ = false;
   stage_ = Stage::kPreparing;
   return Step::kVerifyStaged;
 }
@@ -370,13 +519,20 @@ Step InstallFlow::OnUserAccepted() {
   return Step::kDownload;
 }
 
-Step InstallFlow::OnDownloaded(bool ok) {
+Step InstallFlow::OnDownloaded(DownloadResult result) {
   if (stage_ != Stage::kDownloading) {
     return Step::kNone;
   }
-  if (ok) {
-    stage_ = Stage::kPreparing;
-    return Step::kPrepare;
+  resume_soon_ = false;
+  switch (result) {
+    case DownloadResult::kOk:
+      stage_ = Stage::kPreparing;
+      return Step::kPrepare;
+    case DownloadResult::kFailedWithProgress:
+      resume_soon_ = true;
+      return Step::kRetryLater;
+    case DownloadResult::kFailed:
+      break;
   }
   if (++failures_ < kMaxDownloadAttempts) {
     return Step::kRetryLater;
@@ -385,12 +541,54 @@ Step InstallFlow::OnDownloaded(bool ok) {
   return Step::kOfferManual;
 }
 
-Step InstallFlow::OnPrepared(bool ok) {
+Step InstallFlow::OnPrepared(std::optional<PrepareError> error) {
   if (stage_ != Stage::kPreparing) {
     return Step::kNone;
   }
-  stage_ = ok ? Stage::kReady : Stage::kManual;
-  return ok ? Step::kAnnounceReady : Step::kOfferManual;
+  if (!error) {
+    stage_ = Stage::kReady;
+    return Step::kAnnounceReady;
+  }
+  // The disk image is kept: the next try finds it complete and prepares it
+  // again.
+  if (!IsRejection(*error) && ++failures_ < kMaxDownloadAttempts) {
+    resume_soon_ = false;
+    stage_ = Stage::kDownloading;
+    return Step::kRetryLater;
+  }
+  stage_ = Stage::kManual;
+  return Step::kOfferManual;
+}
+
+Step InstallFlow::OnModeChanged(InstallMode mode) {
+  if (mode == InstallMode::kAutomatic && stage_ == Stage::kWaitingForUser) {
+    stage_ = Stage::kDownloading;
+    return Step::kDownload;
+  }
+  if (mode == InstallMode::kAskFirst && stage_ == Stage::kDownloading) {
+    stage_ = Stage::kWaitingForUser;
+    failures_ = 0;
+    resume_soon_ = false;
+    return Step::kAskUser;
+  }
+  return Step::kNone;
+}
+
+Step InstallFlow::OnChecksTurnedOff() {
+  switch (stage_) {
+    case Stage::kDownloading:
+    case Stage::kWaitingForUser:
+      stage_ = Stage::kIdle;
+      return Step::kCancel;
+    case Stage::kManual:
+      // The next check (once they are back on) may offer it again.
+      stage_ = Stage::kIdle;
+      return Step::kNone;
+    case Stage::kIdle:
+    case Stage::kPreparing:
+    case Stage::kReady:
+      return Step::kNone;
+  }
 }
 
 }  // namespace koan::updates

@@ -55,6 +55,9 @@ TEST(KoanUpdateInstallTest, LocationBlockers) {
   EXPECT_EQ(CheckLocation(Location()), std::nullopt);
 
   InstallLocation location = Location();
+  // HFS+ or exFAT: the swap would fail once Koan has quit.
+  location.rename_swap = false;
+  EXPECT_EQ(CheckLocation(location), Blocker::kNoRenameSwap);
   location.writable = false;
   EXPECT_EQ(CheckLocation(location), Blocker::kNotWritable);
   // Running from the disk image, or from App Translocation's copy (which is
@@ -132,16 +135,34 @@ TEST(KoanUpdateInstallTest, ResumesWithARange) {
   EXPECT_EQ(ClassifyResponse(200, "", 40, 100), BodyStart::kReplace);
   EXPECT_EQ(ClassifyResponse(206, "bytes 40-99/100", 40, 100),
             BodyStart::kAppend);
+  // A 206 that isn't exactly the rest, or a 416: the partial file goes.
   for (const char* range :
        {"bytes 0-99/100", "bytes 40-98/100", "bytes 40-99/200", "bytes 40-99/*",
         "40-99/100", ""}) {
-    EXPECT_EQ(ClassifyResponse(206, range, 40, 100), BodyStart::kReject)
+    EXPECT_EQ(ClassifyResponse(206, range, 40, 100), BodyStart::kDiscard)
         << range;
   }
   EXPECT_EQ(ClassifyResponse(206, "bytes 0-99/100", 0, 100),
-            BodyStart::kReject);
-  EXPECT_EQ(ClassifyResponse(416, "", 40, 100), BodyStart::kReject);
-  EXPECT_EQ(ClassifyResponse(404, "", 0, 100), BodyStart::kReject);
+            BodyStart::kDiscard);
+  EXPECT_EQ(ClassifyResponse(416, "", 40, 100), BodyStart::kDiscard);
+  // Anything else is the server's trouble: the partial file stays.
+  for (int code : {0, 304, 404, 429, 500, 502, 503}) {
+    EXPECT_EQ(ClassifyResponse(code, "", 40, 100), BodyStart::kRetry) << code;
+  }
+}
+
+TEST(KoanUpdateInstallTest, OnlyAFailureWithoutProgressCounts) {
+  // Nothing arrived.
+  EXPECT_FALSE(MadeProgress(40, 40, 0));
+  EXPECT_FALSE(MadeProgress(0, 0, 0));
+  // Resumed at 40 and got further.
+  EXPECT_TRUE(MadeProgress(40, 40, 1));
+  EXPECT_TRUE(MadeProgress(0, 0, 10));
+  // A 200 that started over and didn't get past what was on disk before:
+  // no progress, or a server that keeps failing early would be retried
+  // forever.
+  EXPECT_FALSE(MadeProgress(40, 0, 40));
+  EXPECT_TRUE(MadeProgress(40, 0, 41));
 }
 
 TEST(KoanUpdateInstallTest, MatchesTheSignedSizeAndHash) {
@@ -161,6 +182,19 @@ TEST(KoanUpdateInstallTest, PinsTheReleaseCertificate) {
   EXPECT_EQ(
       ReleaseCodeRequirement(),
       "=certificate leaf = H\"41c53b537255ba68d030856528bdaccd559e0b50\"");
+}
+
+TEST(KoanUpdateInstallTest, OnlyARejectedReleaseIsHeld) {
+  for (PrepareError error : {PrepareError::kSignature, PrepareError::kBundleId,
+                             PrepareError::kVersion}) {
+    EXPECT_TRUE(IsRejection(error)) << static_cast<int>(error);
+  }
+  // A full disk, a busy hdiutil, a timeout: tried again.
+  for (PrepareError error :
+       {PrepareError::kMount, PrepareError::kNoApp, PrepareError::kCopy,
+        PrepareError::kQuarantine, PrepareError::kTimeout}) {
+    EXPECT_FALSE(IsRejection(error)) << static_cast<int>(error);
+  }
 }
 
 TEST(KoanUpdateInstallTest, StagedBundleChecks) {
@@ -302,26 +336,26 @@ TEST(KoanUpdateInstallTest, FlowDownloadsPreparesAndAnnounces) {
   EXPECT_EQ(flow.OnUpdateFound("0.0.5", InstallMode::kAutomatic, std::nullopt),
             Step::kNone);
   EXPECT_EQ(flow.version(), "0.0.4");
-  EXPECT_EQ(flow.OnPrepared(true), Step::kNone);
+  EXPECT_EQ(flow.OnPrepared(std::nullopt), Step::kNone);
 
-  EXPECT_EQ(flow.OnDownloaded(true), Step::kPrepare);
+  EXPECT_EQ(flow.OnDownloaded(DownloadResult::kOk), Step::kPrepare);
   EXPECT_EQ(flow.stage(), Stage::kPreparing);
-  EXPECT_EQ(flow.OnPrepared(true), Step::kAnnounceReady);
+  EXPECT_EQ(flow.OnPrepared(std::nullopt), Step::kAnnounceReady);
   EXPECT_EQ(flow.stage(), Stage::kReady);
   EXPECT_EQ(flow.OnUpdateFound("0.0.4", InstallMode::kAutomatic, std::nullopt),
             Step::kNone);
-  EXPECT_EQ(flow.OnDownloaded(true), Step::kNone);
+  EXPECT_EQ(flow.OnDownloaded(DownloadResult::kOk), Step::kNone);
 }
 
 TEST(KoanUpdateInstallTest, FlowRetriesThenFallsBack) {
   InstallFlow flow;
   flow.OnUpdateFound("0.0.4", InstallMode::kAutomatic, std::nullopt);
-  EXPECT_EQ(flow.OnDownloaded(false), Step::kRetryLater);
+  EXPECT_EQ(flow.OnDownloaded(DownloadResult::kFailed), Step::kRetryLater);
   EXPECT_EQ(flow.failures(), 1);
   EXPECT_EQ(flow.retry_delay(), base::Minutes(10));
   EXPECT_EQ(flow.stage(), Stage::kDownloading);
   static_assert(kMaxDownloadAttempts == 2);
-  EXPECT_EQ(flow.OnDownloaded(false), Step::kOfferManual);
+  EXPECT_EQ(flow.OnDownloaded(DownloadResult::kFailed), Step::kOfferManual);
   EXPECT_EQ(flow.stage(), Stage::kManual);
   // Not offered twice for the same version; a newer one starts over.
   EXPECT_EQ(flow.OnUpdateFound("0.0.4", InstallMode::kAutomatic, std::nullopt),
@@ -331,18 +365,275 @@ TEST(KoanUpdateInstallTest, FlowRetriesThenFallsBack) {
   EXPECT_EQ(flow.failures(), 0);
 }
 
-TEST(KoanUpdateInstallTest, FlowFallsBackWhenPrepareFails) {
+TEST(KoanUpdateInstallTest, FlowResumesASlowDownload) {
   InstallFlow flow;
   flow.OnUpdateFound("0.0.4", InstallMode::kAutomatic, std::nullopt);
-  flow.OnDownloaded(true);
-  EXPECT_EQ(flow.OnPrepared(false), Step::kOfferManual);
+  // A slow link times out again and again, each time further on: resumed
+  // soon, and never counted.
+  for (int i = 0; i < 5; ++i) {
+    EXPECT_EQ(flow.OnDownloaded(DownloadResult::kFailedWithProgress),
+              Step::kRetryLater);
+    EXPECT_EQ(flow.failures(), 0);
+    EXPECT_EQ(flow.retry_delay(), kResumeDelay);
+    EXPECT_EQ(flow.stage(), Stage::kDownloading);
+  }
+  // A try without progress counts, and waits the usual time.
+  EXPECT_EQ(flow.OnDownloaded(DownloadResult::kFailed), Step::kRetryLater);
+  EXPECT_EQ(flow.failures(), 1);
+  EXPECT_EQ(flow.retry_delay(), base::Minutes(10));
+  EXPECT_EQ(flow.OnDownloaded(DownloadResult::kFailedWithProgress),
+            Step::kRetryLater);
+  EXPECT_EQ(flow.OnDownloaded(DownloadResult::kOk), Step::kPrepare);
+}
+
+TEST(KoanUpdateInstallTest, FlowFallsBackWhenTheReleaseIsRejected) {
+  InstallFlow flow;
+  flow.OnUpdateFound("0.0.4", InstallMode::kAutomatic, std::nullopt);
+  flow.OnDownloaded(DownloadResult::kOk);
+  EXPECT_EQ(flow.OnPrepared(PrepareError::kSignature), Step::kOfferManual);
   EXPECT_EQ(flow.stage(), Stage::kManual);
+}
+
+TEST(KoanUpdateInstallTest, FlowTriesAPrepareAgain) {
+  InstallFlow flow;
+  flow.OnUpdateFound("0.0.4", InstallMode::kAutomatic, std::nullopt);
+  flow.OnDownloaded(DownloadResult::kOk);
+  // A full disk: later, with the image kept (the next try finds it whole).
+  EXPECT_EQ(flow.OnPrepared(PrepareError::kCopy), Step::kRetryLater);
+  EXPECT_EQ(flow.stage(), Stage::kDownloading);
+  EXPECT_EQ(flow.retry_delay(), base::Minutes(10));
+  EXPECT_EQ(flow.OnDownloaded(DownloadResult::kOk), Step::kPrepare);
+  // Up to kMaxDownloadAttempts tries in all.
+  EXPECT_EQ(flow.OnPrepared(PrepareError::kTimeout), Step::kOfferManual);
+  EXPECT_EQ(flow.stage(), Stage::kManual);
+}
+
+TEST(KoanUpdateInstallTest, FlowFollowsTheInstallMode) {
+  // "Automatically" while waiting for Update: the download starts.
+  InstallFlow flow;
+  flow.OnUpdateFound("0.0.4", InstallMode::kAskFirst, std::nullopt);
+  EXPECT_EQ(flow.OnModeChanged(InstallMode::kAskFirst), Step::kNone);
+  EXPECT_EQ(flow.OnModeChanged(InstallMode::kAutomatic), Step::kDownload);
+  EXPECT_EQ(flow.stage(), Stage::kDownloading);
+  EXPECT_EQ(flow.OnModeChanged(InstallMode::kAutomatic), Step::kNone);
+  // "Let me choose" while downloading: it stops and asks.
+  flow.OnDownloaded(DownloadResult::kFailed);
+  EXPECT_EQ(flow.OnModeChanged(InstallMode::kAskFirst), Step::kAskUser);
+  EXPECT_EQ(flow.stage(), Stage::kWaitingForUser);
+  EXPECT_EQ(flow.failures(), 0);
+  EXPECT_EQ(flow.OnDownloaded(DownloadResult::kOk), Step::kNone);
+
+  // Staged: the mode no longer matters.
+  InstallFlow ready;
+  ready.OnUpdateFound("0.0.4", InstallMode::kAutomatic, std::nullopt);
+  ready.OnDownloaded(DownloadResult::kOk);
+  EXPECT_EQ(ready.OnModeChanged(InstallMode::kAskFirst), Step::kNone);
+  ready.OnPrepared(std::nullopt);
+  EXPECT_EQ(ready.OnModeChanged(InstallMode::kAskFirst), Step::kNone);
+  EXPECT_EQ(ready.stage(), Stage::kReady);
+}
+
+TEST(KoanUpdateInstallTest, FlowStopsWhenChecksAreTurnedOff) {
+  InstallFlow downloading;
+  downloading.OnUpdateFound("0.0.4", InstallMode::kAutomatic, std::nullopt);
+  EXPECT_EQ(downloading.OnChecksTurnedOff(), Step::kCancel);
+  EXPECT_EQ(downloading.stage(), Stage::kIdle);
+  EXPECT_EQ(downloading.OnDownloaded(DownloadResult::kOk), Step::kNone);
+  // Back on, the release found again resumes it.
+  EXPECT_EQ(
+      downloading.OnUpdateFound("0.0.4", InstallMode::kAutomatic, std::nullopt),
+      Step::kDownload);
+
+  InstallFlow asking;
+  asking.OnUpdateFound("0.0.4", InstallMode::kAskFirst, std::nullopt);
+  EXPECT_EQ(asking.OnChecksTurnedOff(), Step::kCancel);
+  EXPECT_EQ(asking.OnUserAccepted(), Step::kNone);
+
+  InstallFlow manual;
+  manual.OnUpdateFound("0.0.4", InstallMode::kAutomatic, Blocker::kReadOnly);
+  EXPECT_EQ(manual.OnChecksTurnedOff(), Step::kNone);
+  EXPECT_EQ(manual.stage(), Stage::kIdle);
+
+  // A staged copy stays ready, and one being prepared goes on.
+  InstallFlow preparing;
+  preparing.OnUpdateFound("0.0.4", InstallMode::kAutomatic, std::nullopt);
+  preparing.OnDownloaded(DownloadResult::kOk);
+  EXPECT_EQ(preparing.OnChecksTurnedOff(), Step::kNone);
+  EXPECT_EQ(preparing.OnPrepared(std::nullopt), Step::kAnnounceReady);
+  EXPECT_EQ(preparing.OnChecksTurnedOff(), Step::kNone);
+  EXPECT_EQ(preparing.stage(), Stage::kReady);
+}
+
+TEST(KoanUpdateInstallTest, RestartDecisions) {
+  EXPECT_EQ(DecideRestart(false, false, false), RestartAction::kNone);
+  EXPECT_EQ(DecideRestart(false, true, true), RestartAction::kNone);
+  EXPECT_EQ(DecideRestart(true, false, false), RestartAction::kRestart);
+  EXPECT_EQ(DecideRestart(true, false, true), RestartAction::kAsk);
+  // Another profile's Koan first, agent or not: restarting wouldn't update.
+  EXPECT_EQ(DecideRestart(true, true, false), RestartAction::kQuitOtherFirst);
+  EXPECT_EQ(DecideRestart(true, true, true), RestartAction::kQuitOtherFirst);
+}
+
+TEST(KoanUpdateInstallTest, HelperPaths) {
+  EXPECT_EQ(HelperPathIn(P("/Applications/Koan.app")),
+            P("/Applications/Koan.app/Contents/Resources/bin/"
+              "koan-update-helper"));
+  EXPECT_EQ(HelperBundle(P("/Applications/Koan.app/Contents/Resources/bin/"
+                           "koan-update-helper")),
+            P("/Applications/Koan.app"));
+  for (const char* path :
+       {"/Applications/Koan.app/Contents/Resources/bin/other",
+        "/Applications/Koan.app/Contents/MacOS/koan-update-helper",
+        "/Applications/Koan/Contents/Resources/bin/koan-update-helper",
+        "/tmp/koan-update-helper", "koan-update-helper",
+        "Koan.app/Contents/Resources/bin/koan-update-helper",
+        "/A/../Koan.app/Contents/Resources/bin/koan-update-helper"}) {
+    EXPECT_EQ(HelperBundle(P(path)), base::FilePath()) << path;
+  }
+}
+
+TEST(KoanUpdateInstallTest, HelperChecksTheMarker) {
+  const base::FilePath app = P("/Applications/Koan.app");
+  const base::FilePath updates = P("/Data/Koan/Updates");
+  EXPECT_EQ(HelperRefusal(Marker(MarkerState::kReady), HelperTask::kInstall,
+                          app, updates),
+            std::nullopt);
+  EXPECT_EQ(HelperRefusal(Marker(MarkerState::kSwapped), HelperTask::kRollBack,
+                          app, updates),
+            std::nullopt);
+  EXPECT_NE(HelperRefusal(std::nullopt, HelperTask::kInstall, app, updates),
+            std::nullopt);
+  // Not the state the task needs.
+  EXPECT_NE(HelperRefusal(Marker(MarkerState::kSwapped), HelperTask::kInstall,
+                          app, updates),
+            std::nullopt);
+  EXPECT_NE(HelperRefusal(Marker(MarkerState::kReady), HelperTask::kRollBack,
+                          app, updates),
+            std::nullopt);
+  for (MarkerState state :
+       {MarkerState::kGood, MarkerState::kRolledBack, MarkerState::kFailed}) {
+    EXPECT_NE(HelperRefusal(Marker(state), HelperTask::kInstall, app, updates),
+              std::nullopt);
+  }
+  // A marker written for another app (a same-user process trying to have
+  // the helper swap something else in) or by another copy of Koan.
+  EXPECT_NE(HelperRefusal(Marker(MarkerState::kReady), HelperTask::kInstall,
+                          P("/Users/me/Applications/Koan.app"), updates),
+            std::nullopt);
+  EXPECT_NE(HelperRefusal(Marker(MarkerState::kReady), HelperTask::kInstall,
+                          base::FilePath(), updates),
+            std::nullopt);
+  InstallMarker other = Marker(MarkerState::kReady);
+  other.app = P("/Applications/Other.app");
+  other.staged = P("/Data/Koan/Updates/0.0.4/Other.app");
+  EXPECT_NE(HelperRefusal(other, HelperTask::kInstall, app, updates),
+            std::nullopt);
+  // A copy where Koan doesn't stage one.
+  InstallMarker elsewhere = Marker(MarkerState::kReady);
+  elsewhere.staged = P("/tmp/0.0.4/Koan.app");
+  EXPECT_NE(HelperRefusal(elsewhere, HelperTask::kInstall, app, updates),
+            std::nullopt);
+}
+
+TEST(KoanUpdateInstallTest, HelpersDontWaitForEachOther) {
+  const base::FilePath app = P("/Applications/Koan.app");
+  EXPECT_TRUE(BlocksSwap(app, "/Applications/Koan.app/Contents/MacOS/Koan"));
+  EXPECT_TRUE(BlocksSwap(app,
+                         "/Applications/Koan.app/Contents/Frameworks/Koan "
+                         "Framework.framework/Helpers/Koan Helper.app/"
+                         "Contents/MacOS/Koan Helper"));
+  EXPECT_TRUE(BlocksSwap(app,
+                         "/Applications/Koan.app/Contents/Resources/bin/"
+                         "koan-agent"));
+  // Another helper (another profile's, or one still waiting to roll back).
+  EXPECT_FALSE(BlocksSwap(app,
+                          "/Applications/Koan.app/Contents/Resources/bin/"
+                          "koan-update-helper"));
+  EXPECT_FALSE(BlocksSwap(app, "/Applications/Koan.app2/Contents/MacOS/Koan"));
+  EXPECT_FALSE(BlocksSwap(app, "/Applications/Koan.app"));
+  EXPECT_FALSE(BlocksSwap(app, ""));
+  EXPECT_FALSE(BlocksSwap(base::FilePath(), "/Contents/MacOS/Koan"));
+}
+
+TEST(KoanUpdateInstallTest, PassesOnlyATestRequirementToTheHelper) {
+  EXPECT_EQ(CodeRequirementSwitchValue(ReleaseCodeRequirement()), std::nullopt);
+  EXPECT_EQ(CodeRequirementSwitchValue(""), std::nullopt);
+  // What GetUpdateSource() made of --koan-update-code-requirement=<text>.
+  EXPECT_EQ(CodeRequirementSwitchValue("=certificate leaf = H\"abc\""),
+            "certificate leaf = H\"abc\"");
+}
+
+TEST(KoanUpdateInstallTest, SweepsTheUpdatesFolder) {
+  const std::optional<InstallMarker> none;
+  const char kName[] = "Koan-0.0.5-arm64.dmg";
+  for (const char* kept : {"Koan-0.0.5-arm64.dmg", "Koan-0.0.5-arm64.dmg.part",
+                           "install.json", "helper.log", "helper.old.log"}) {
+    EXPECT_FALSE(ShouldSweepUpdatesEntry(P("/Data/Koan/Updates").Append(kept),
+                                         kName, none))
+        << kept;
+  }
+  for (const char* swept : {"Koan-0.0.4-arm64.dmg", "Koan-0.0.4-arm64.dmg.part",
+                            "0.0.4", "install.json.tmp"}) {
+    EXPECT_TRUE(ShouldSweepUpdatesEntry(P("/Data/Koan/Updates").Append(swept),
+                                        kName, none))
+        << swept;
+  }
+  // The folder the marker names stays, also another copy's (its old app,
+  // until its new version has started).
+  InstallMarker other = Marker(MarkerState::kSwapped);
+  other.app = P("/Users/me/Applications/Koan.app");
+  EXPECT_FALSE(
+      ShouldSweepUpdatesEntry(P("/Data/Koan/Updates/0.0.4"), kName, other));
+  EXPECT_TRUE(
+      ShouldSweepUpdatesEntry(P("/Data/Koan/Updates/0.0.3"), kName, other));
+}
+
+TEST(KoanUpdateInstallTest, SweepsStaleStagingFolders) {
+  const base::FilePath app = P("/Applications/Koan.app");
+  const std::optional<InstallMarker> none;
+  // Older than the running version: nothing will install it.
+  EXPECT_TRUE(IsStaleSiblingStaging(app, P("/Applications/.Koan-update-0.0.3"),
+                                    "0.0.4", none));
+  // The running version's: the old app after a swap, kept until the new
+  // version has started, also another profile's (whose marker this isn't).
+  EXPECT_FALSE(IsStaleSiblingStaging(app, P("/Applications/.Koan-update-0.0.4"),
+                                     "0.0.4", none));
+  // Newer: another profile's copy, perhaps, or the next prepare redoes it.
+  EXPECT_FALSE(IsStaleSiblingStaging(app, P("/Applications/.Koan-update-0.0.5"),
+                                     "0.0.4", none));
+  // The one the marker names stays, whatever its version.
+  InstallMarker marked = Marker(MarkerState::kSwapped);
+  marked.staged = P("/Applications/.Koan-update-0.0.3/Koan.app");
+  EXPECT_FALSE(IsStaleSiblingStaging(app, P("/Applications/.Koan-update-0.0.3"),
+                                     "0.0.4", marked));
+  // Not a staging folder of this app's.
+  for (const char* entry :
+       {"/Applications/.Other-update-0.0.3", "/Applications/Koan-update-0.0.3",
+        "/Applications/.Koan-update-x", "/Applications/.Koan-update-",
+        "/Users/me/.Koan-update-0.0.3", "/Applications/Koan.app"}) {
+    EXPECT_FALSE(IsStaleSiblingStaging(app, P(entry), "0.0.4", none)) << entry;
+  }
+}
+
+TEST(KoanUpdateInstallTest, FindsImagesLeftAttached) {
+  const base::FilePath updates = P("/Data/Koan/Updates");
+  EXPECT_TRUE(
+      IsUpdateImage(P("/Data/Koan/Updates/Koan-0.0.4-arm64.dmg"), updates));
+  EXPECT_TRUE(IsUpdateImage(P("/Data/Koan/Updates/Koan-0.0.4-arm64.dmg.part"),
+                            updates));
+  for (const char* image :
+       {"/Users/me/Downloads/Koan-0.0.4-arm64.dmg",
+        "/Data/Koan/Updates/0.0.4/Koan-0.0.4-arm64.dmg",
+        "/Data/Koan/Updates/disk.img", "Koan-0.0.4-arm64.dmg"}) {
+    EXPECT_FALSE(IsUpdateImage(P(image), updates)) << image;
+  }
 }
 
 TEST(KoanUpdateInstallTest, FlowOffersTheReleasePageWhenBlocked) {
   for (Blocker blocker :
        {Blocker::kUnsupported, Blocker::kTranslocated, Blocker::kReadOnly,
-        Blocker::kNotWritable, Blocker::kNoFile, Blocker::kHeld}) {
+        Blocker::kNotWritable, Blocker::kNoRenameSwap, Blocker::kNoFile,
+        Blocker::kHeld}) {
     InstallFlow flow;
     EXPECT_EQ(flow.OnUpdateFound("0.0.4", InstallMode::kAutomatic, blocker),
               Step::kOfferManual);
@@ -356,7 +647,7 @@ TEST(KoanUpdateInstallTest, FlowAsksFirst) {
             Step::kAskUser);
   EXPECT_EQ(flow.stage(), Stage::kWaitingForUser);
   // Nothing downloads until Update is clicked.
-  EXPECT_EQ(flow.OnDownloaded(true), Step::kNone);
+  EXPECT_EQ(flow.OnDownloaded(DownloadResult::kOk), Step::kNone);
   EXPECT_EQ(flow.OnUpdateFound("0.0.4", InstallMode::kAskFirst, std::nullopt),
             Step::kNone);
   EXPECT_EQ(flow.OnUserAccepted(), Step::kDownload);
@@ -369,7 +660,7 @@ TEST(KoanUpdateInstallTest, FlowResumesAStagedCopy) {
   EXPECT_EQ(flow.OnStagedCopyFound("0.0.4"), Step::kVerifyStaged);
   EXPECT_EQ(flow.stage(), Stage::kPreparing);
   EXPECT_EQ(flow.OnStagedCopyFound("0.0.4"), Step::kNone);
-  EXPECT_EQ(flow.OnPrepared(true), Step::kAnnounceReady);
+  EXPECT_EQ(flow.OnPrepared(std::nullopt), Step::kAnnounceReady);
 }
 
 }  // namespace
