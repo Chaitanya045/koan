@@ -92,6 +92,12 @@ find "$STAGE/locales" -name '*.pak.info' -delete
 if [[ ${KOAN_CI_DUMMY:-0} != 1 ]]; then
   strip --strip-unneeded "$STAGE/chrome" "$STAGE/chrome_crashpad_handler" \
     "$STAGE/koan" "$STAGE/koan-relay"
+  # koan and koan-relay run on the host, from the Flatpak's files, with the
+  # host's libraries: say which (agent-control.md section 4.6).
+  for tool in koan koan-relay; do
+    echo "$tool needs: $(readelf -d "$STAGE/$tool" |
+      sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p' | tr '\n' ' ')"
+  done
 fi
 cp LICENSE THIRD_PARTY_NOTICES.md "$STAGE/"
 du -sh "$STAGE"

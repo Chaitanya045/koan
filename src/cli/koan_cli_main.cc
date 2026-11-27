@@ -2729,6 +2729,29 @@ bool RelayRuns(const std::string& session) {
       .is_valid();
 }
 
+// Why koan-relay failed, for the `what` it was asked to do ("was not paired",
+// "did not start (see above)").
+std::string RelayFailed(int code, const std::string& what) {
+#if BUILDFLAG(IS_LINUX)
+  // 127: the dynamic loader could not start it (the line above names the
+  // library), or it is not there. koan-relay comes from Koan's Flatpak and
+  // runs on the host, which has to have the libraries //net links: NSS and
+  // GLib (scripts/ci/linux_package.sh prints what it needs).
+  base::FilePath self;
+  if (code == 127 && base::PathService::Get(base::FILE_EXE, &self)) {
+    if (!base::PathExists(self.DirName().Append("koan-relay"))) {
+      return "there is no koan-relay next to this koan (" +
+             self.DirName().value() + ")";
+    }
+    return "koan-relay could not start on this computer: a library it needs "
+           "is missing (named above). Install your system's NSS and GLib "
+           "(libnss3 and libglib2.0-0 on Debian and Ubuntu, nss and glib2 on "
+           "Fedora and Arch), then try again";
+  }
+#endif
+  return "koan-relay " + what;
+}
+
 // `koan agent-browser <args>`: the relay of the args' agent-browser session,
 // paired once (its own approval, naming koan-relay and the agent) and started
 // if it does not run, then agent-browser with AGENT_BROWSER_CDP in its
@@ -2744,13 +2767,20 @@ int AgentBrowser(const Command& command) {
   if (PairedClients(relay_home).empty()) {
     fprintf(stderr,
             "koan: agent-browser needs koan-relay; approve it in Koan...\n");
-    if (RunRelay({"pair"}, command) != 0) {
-      return Fail("koan-relay was not paired", kNotConnected);
+    if (const int code = RunRelay({"pair"}, command); code != 0) {
+      return Fail(RelayFailed(code, "was not paired"), kNotConnected);
     }
   }
-  if (!RelayRuns(*session) &&
-      RunRelay({"serve", "--session", *session}, command) != 0) {
-    return Fail("the relay did not start (see above)", kNotConnected);
+  if (!RelayRuns(*session)) {
+    if (const int code = RunRelay({"serve", "--session", *session}, command);
+        code != 0) {
+#if BUILDFLAG(IS_LINUX)
+      return Fail(RelayFailed(code, "did not start (see above)"),
+                  kNotConnected);
+#else
+      return Fail("the relay did not start (see above)", kNotConnected);
+#endif
+    }
   }
   std::string env;
   std::optional<std::string> url;
