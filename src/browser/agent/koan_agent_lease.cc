@@ -455,7 +455,24 @@ void AgentLeaseManager::UpdateWake() {
   }
 }
 
-#if !BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_LINUX)
+// The desktop's power saver (GNOME's and KDE's power mode, power-profiles-
+// daemon's "power-saver" profile). Chromium already reads it, from the XDG
+// desktop portal's PowerProfileMonitor (no Flatpak permission needed), and
+// reports it as battery power: in 158 that is the only way its Linux power
+// monitor says kBatteryPower (components/power_monitor/
+// power_monitor_device_source_linux.cc; reading UPower's OnBattery is a TODO
+// there). So on Linux "on battery in Low Power Mode" is "in power saver
+// mode", and the setting is labelled so (koan_settings_rows.cc). The day
+// Chromium reads the battery too, this answers "on battery" as well: fewer
+// awake tabs on battery, not a setting that does nothing (docs/REBASE.md).
+bool IsLowPowerModeEnabled() {
+  const base::PowerMonitor* monitor = base::PowerMonitor::GetInstance();
+  return monitor && monitor->IsInitialized() &&
+         monitor->GetBatteryPowerStatus() ==
+             base::PowerStateObserver::BatteryPowerStatus::kBatteryPower;
+}
+#elif !BUILDFLAG(IS_MAC)
 bool IsLowPowerModeEnabled() {
   return false;
 }

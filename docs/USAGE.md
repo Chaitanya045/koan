@@ -1506,7 +1506,7 @@ Incognito and Guest launches and with another `--user-data-dir` unless you turn
 it on there. Your organisation's `RemoteDebuggingAllowed` policy turns it off.
 
 The limits are settings: awake agent tabs (4, halved on battery in Low Power
-Mode), approval requests per minute (3) and failed attempts before a 5-minute
+Mode; on Linux, in the desktop's power saver mode), approval requests per minute (3) and failed attempts before a 5-minute
 block (5). Approvals last until Koan quits for now. The command line tool and
 the tab features come next (see `.agent/notes/agent-control.md`).
 
