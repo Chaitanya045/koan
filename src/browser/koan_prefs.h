@@ -192,6 +192,15 @@ inline constexpr char kWorkspacesSwipeEdgeActions[] =
 inline constexpr char kWorkspacesSeparateEssentials[] =
     "koan.workspaces.separate_essentials";
 
+// Keep history apart for each profile (#474,
+// .agent/notes/upstream/space-history.md): the URL bar's history suggestions
+// and Switch to Tab show the active Space profile's pages only, and the
+// Library's History shows that profile unless asked for another. On by
+// default. Off, they show every profile's, as before. Visits record their
+// profile either way.
+inline constexpr char kSpacesSeparateHistory[] =
+    "koan.workspaces.separate_history";
+
 // Obsolete: until the tint became per window (a window's user colour
 // override, KoanWorkspaceController::ApplySpaceColor()), Koan set the Space's
 // colour as the profile's user colour and kept the user's own here (0: none).

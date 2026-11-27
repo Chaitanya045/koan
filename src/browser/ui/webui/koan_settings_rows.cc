@@ -566,6 +566,15 @@ constexpr Row kRows[] = {
               "sidebar (a sideways wheel needs none)",
      .options = kSpaceScrollModifiers,
      .is_available = features::IsWorkspacesEnabled},
+    // Koan's own (#474): Zen keeps one history for every container.
+    {.group = "workspaces",
+     .control = Control::kCheckbox,
+     .pref = prefs::kSpacesSeparateHistory,
+     .label = "Keep history apart for each profile",
+     .is_available = features::IsWorkspacesEnabled,
+     .note = "The URL bar suggests only the active Space's profile's pages "
+             "and tabs, and the Library's History shows that profile first. "
+             "Bookmarks, passwords and autofill stay shared."},
     {.group = "pinned-tabs",
      .control = Control::kCheckbox,
      .pref = prefs::kPinnedTabRestoreToPinnedUrl,

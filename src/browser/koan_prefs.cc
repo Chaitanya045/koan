@@ -49,6 +49,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterStringPref(kWorkspacesScrollModifierKey, "ctrl");
   registry->RegisterBooleanPref(kWorkspacesSwipeEdgeActions, true);
   registry->RegisterBooleanPref(kWorkspacesSeparateEssentials, true);
+  registry->RegisterBooleanPref(kSpacesSeparateHistory, true);
   registry->RegisterIntegerPref(kWorkspaceTintApplied, 0);
   registry->RegisterIntegerPref(kWorkspaceTintSavedColor, 0);
   registry->RegisterIntegerPref(kWorkspaceTintSavedVariant, 0);

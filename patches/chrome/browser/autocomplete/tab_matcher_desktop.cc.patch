@@ -1,17 +1,17 @@
 diff --git a/chrome/browser/autocomplete/tab_matcher_desktop.cc b/chrome/browser/autocomplete/tab_matcher_desktop.cc
-index 90e72cf2b73229595a9107e024e766c04ad766b3..c3cc80c285d69216963faef353887eccd17211ba 100644
 --- a/chrome/browser/autocomplete/tab_matcher_desktop.cc
 +++ b/chrome/browser/autocomplete/tab_matcher_desktop.cc
-@@ -12,6 +12,8 @@
+@@ -12,6 +12,9 @@
  #include "components/omnibox/common/omnibox_features.h"
  #include "content/public/browser/navigation_controller.h"
  #include "content/public/browser/web_contents_user_data.h"
 +#include "koan/browser/containers/koan_container_partition.h"
++#include "koan/browser/ui/views/koan_space_history.h"
 +#include "koan/browser/ui/views/koan_spaces.h"
  
  namespace {
  class AutocompleteClientWebContentsUserData
-@@ -113,7 +115,16 @@ std::vector<content::WebContents*> TabMatcherDesktop::GetOpenWebContents(
+@@ -113,7 +116,18 @@
  
      TabStripModel* const tab_strip_model = bwi->GetTabStripModel();
      for (int i = 0; i < tab_strip_model->count(); ++i) {
@@ -21,8 +21,10 @@ index 90e72cf2b73229595a9107e024e766c04ad766b3..c3cc80c285d69216963faef353887ecc
 +      }
        auto* web_contents = tab_strip_model->GetWebContentsAt(i);
 +      // Koan: the omnibox never offers an agent container's tab (@tabs,
-+      // Switch to tab).
-+      if (koan::containers::IsAgentContents(web_contents)) {
++      // Switch to tab), nor one of another Space profile than the one
++      // being typed in (#474).
++      if (koan::containers::IsAgentContents(web_contents) ||
++          koan::IsOutsideOmniboxProfile(profile_, web_contents)) {
 +        continue;
 +      }
        if (web_contents != active_tab || !exclude_active_tab) {
