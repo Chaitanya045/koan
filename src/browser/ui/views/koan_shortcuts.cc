@@ -465,7 +465,7 @@ bool KoanShortcutController::CycleTabs(const shortcuts::CycleKey& key) {
   for (int step = 1; step < count; ++step) {
     const int i = (active + (forward ? step : count - step)) % count;
     tabs::TabInterface* tab = model->GetTabAtIndex(i);
-    if (model->IsTabCollapsed(i) || IsEmptyTab(tab) ||
+    if (model->IsTabCollapsed(i) || IsHiddenTab(tab) ||
         (workspace && !tab->IsPinned() && tab->GetGroup() != workspace) ||
         (within_kind && tab->IsPinned() != active_pinned) ||
         (skip_pending && IsTabUnloaded(tab->GetContents()))) {
@@ -483,8 +483,9 @@ bool KoanShortcutController::CycleTabs(const shortcuts::CycleKey& key) {
 std::vector<tabs::TabHandle> KoanShortcutController::RecentTabs(
     TabStripModel* model) {
   // Zen's recently-used list (browser-ctrlTab-js.patch) holds the tabs that
-  // are shown, so this Space's and the Essentials, and never one that hasn't
-  // loaded (zen.ctrlTab.show-pending-tabs, false). Chromium's
+  // are shown, so this Space's and the Essentials it shows (only its
+  // profile's, with Zen's container-specific Essentials), and never one that
+  // hasn't loaded (zen.ctrlTab.show-pending-tabs, false). Chromium's
   // (chrome::CycleToMruTab) takes every tab of the window, and would open
   // another Space's collapsed group to show one.
   const std::optional<tab_groups::TabGroupId> workspace =
@@ -493,7 +494,7 @@ std::vector<tabs::TabHandle> KoanShortcutController::RecentTabs(
   for (int i = 0; i < model->count(); ++i) {
     tabs::TabInterface* tab = model->GetTabAtIndex(i);
     if (i != model->active_index() &&
-        (model->IsTabCollapsed(i) ||
+        (model->IsTabCollapsed(i) || IsHiddenTab(tab) ||
          (workspace && !tab->IsPinned() && tab->GetGroup() != workspace) ||
          IsTabUnloaded(tab->GetContents()))) {
       continue;

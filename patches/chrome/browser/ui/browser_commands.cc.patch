@@ -36,8 +36,8 @@ index 224dc66bf6356c3adb96c7372ed977f2f1c289d2..ad414ff40f03e4f540be9e7769fa2c62
      return false;
    }
  
-+  // Koan: nor Zen's hidden empty tab.
-+  if (koan::IsEmptyTab(tab)) {
++  // Koan: nor a tab the sidebar hides (empty tab, hidden Essentials).
++  if (koan::IsHiddenTab(tab)) {
 +    return false;
 +  }
 +
