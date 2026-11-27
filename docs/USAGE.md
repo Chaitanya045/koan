@@ -864,7 +864,8 @@ match Zen too. The Zen look follows the system's light or dark mode.
 shadcn's tokens (`background`, `foreground`, `card`, `popover`, `primary`,
 `secondary`, `muted`, `accent`, `destructive`, `border`, `input`, `ring`, the
 `sidebar-*` set) and their corner radii from `--radius` (10px: sm 6, md 8,
-lg 10, xl 14). The font is Geist (bundled, SIL OFL), from the next start.
+lg 10, xl 14). The font is Geist (bundled, SIL OFL), from the next start,
+on macOS and Linux (in the Flatpak and outside it).
 
 **Settings > Look and Feel > Appearance** (browser-wide, applies at once to
 every window):

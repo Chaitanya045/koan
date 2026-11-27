@@ -30,18 +30,42 @@ action("fonts_data") {
   ]
 }
 
+if (is_linux) {
+  # The TrueType faces as files next to the binary (koan_fonts/, with their
+  # licence): fontconfig, which Skia finds fonts through on Linux, only loads
+  # fonts from files. scripts/ci/linux_package.sh ships the folder.
+  copy("font_files") {
+    sources = [
+      "geist/Geist-Bold.ttf",
+      "geist/Geist-Medium.ttf",
+      "geist/Geist-Regular.ttf",
+      "geist/Geist-SemiBold.ttf",
+      "geist/GeistMono-Regular.ttf",
+      "geist/OFL.txt",
+    ]
+    outputs = [ "$root_out_dir/koan_fonts/{{source_file_part}}" ]
+  }
+}
+
 source_set("fonts") {
   sources = [
     "koan_fonts.cc",
     "koan_fonts.h",
   ]
-  if (is_mac) {
-    sources += [ "koan_fonts_mac.mm" ]
-  } else {
-    sources += [ "koan_fonts_other.cc" ]
-  }
   deps = [
     ":fonts_data",
     "//base",
   ]
+  if (is_mac) {
+    sources += [ "koan_fonts_mac.mm" ]
+  } else if (is_linux) {
+    sources += [ "koan_fonts_linux.cc" ]
+    deps += [
+      "//third_party/fontconfig",
+      "//ui/gfx",
+    ]
+    data_deps = [ ":font_files" ]
+  } else {
+    sources += [ "koan_fonts_other.cc" ]
+  }
 }

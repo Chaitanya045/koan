@@ -55,6 +55,14 @@ test("koan_unittests") {
     "//url",
   ]
   data_deps = [ "//third_party/icu:icudata" ]
+  if (is_linux) {
+    sources += [ "//koan/browser/ui/fonts/koan_fonts_linux_unittest.cc" ]
+    deps += [
+      "//koan/browser/ui/fonts",
+      "//ui/base",
+      "//ui/gfx",
+    ]
+  }
 }
 
 # Koan's browser tests (InProcessBrowserTest): Spaces, pinned tabs and what
