@@ -6,6 +6,7 @@
 #define KOAN_BROWSER_UI_VIEWS_KOAN_COMPACT_MODE_H_
 
 #include <algorithm>
+#include <utility>
 
 #include "koan/browser/koan_vertical_tabs.h"  // koan::OwnsSidebar()
 
@@ -111,6 +112,22 @@ void MirrorLayoutChildren(Layout& layout, int left, int right) {
   for (auto& [child, child_layout] : layout.children) {
     child_layout.bounds.set_x(left + right - child_layout.bounds.right());
     MirrorLayoutChildren(child_layout, 0, child_layout.bounds.width());
+  }
+}
+
+// Swaps the leading and trailing corners of `corners` (a
+// CustomCornersBackground::Corners, keyed by `Orientation`, upstream's
+// CornerOrientation) where IsSidebarOnRight(): the tabbed layout sets them
+// for the unmirrored layout, so the window's rounded corners would otherwise
+// land on the inner side of the view (#492).
+template <typename Orientation, typename Corners>
+void MirrorCornersForSidebar(const views::View* browser_view,
+                             Corners& corners) {
+  if (IsSidebarOnRight(browser_view)) {
+    std::swap(corners[Orientation::kTopLeading],
+              corners[Orientation::kTopTrailing]);
+    std::swap(corners[Orientation::kBottomLeading],
+              corners[Orientation::kBottomTrailing]);
   }
 }
 

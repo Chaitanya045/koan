@@ -42,6 +42,7 @@ source_set("views") {
     "koan_traffic_lights.h",
     "koan_url_bar.h",
     "koan_window_background.h",
+    "koan_window_corners.h",
     "koan_window_glass.h",
     "koan_window_glass_mac.h",
     "koan_window_sync_hooks.h",
@@ -105,6 +106,13 @@ source_set("window_edges") {
 # for the unit tests.
 source_set("content_radius") {
   sources = [ "koan_content_radius.h" ]
+}
+
+# Which corners of a view meet the window's rounded corners, and the Linux
+# window's corner radii (koan_window_corners_geometry.h): geometry only.
+source_set("window_corners_geometry") {
+  sources = [ "koan_window_corners_geometry.h" ]
+  public_deps = [ "//ui/gfx/geometry" ]
 }
 
 # Whether upstream's floating corners beside the sidebar show
@@ -302,6 +310,7 @@ test("koan_views_unittests") {
     "koan_swipe_edge_actions_unittest.cc",
     "koan_swipe_tracker_unittest.cc",
     "koan_url_pill_buttons_unittest.cc",
+    "koan_window_corners_unittest.cc",
     "koan_window_edges_unittest.cc",
     "koan_zen_logic_unittest.cc",
   ]
@@ -324,6 +333,7 @@ test("koan_views_unittests") {
     ":strip_on_share",
     ":swipe_tracker",
     ":url_pill_buttons",
+    ":window_corners_geometry",
     ":window_edges",
     ":zen_logic",
     "//base",
@@ -542,6 +552,7 @@ source_set("impl") {
     "koan_widget_color_key.h",
     "koan_window_controls.cc",
     "koan_window_controls.h",
+    "koan_window_corners.cc",
     "koan_window_drag.cc",
     "koan_window_drag.h",
     "koan_window_glass.cc",
@@ -600,6 +611,7 @@ source_set("impl") {
     ":swipe_tracker",
     ":url_pill_buttons",
     ":views",
+    ":window_corners_geometry",
     ":window_edges",
     ":zen_logic",
     "//base:i18n",
