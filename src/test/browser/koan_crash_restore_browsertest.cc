@@ -71,6 +71,14 @@ GURL WorkUrl() {
   return GURL("chrome://credits/");
 }
 
+GURL ReadUrl() {
+  return GURL("chrome://version/?read");
+}
+
+GURL ReadUrl2() {
+  return GURL("chrome://credits/?read2");
+}
+
 class KoanCrashRestoreBrowserTest : public InProcessBrowserTest {
  public:
   void SetUpOnMainThread() override {
@@ -81,10 +89,12 @@ class KoanCrashRestoreBrowserTest : public InProcessBrowserTest {
 
  protected:
   // Two Spaces: "Space", with a tab pinned in it and a normal tab, and
-  // "Work" (with an icon) with a normal tab, shown. The session is on disk
-  // and the window's state written down (ExpectedFile()). With
-  // `show_first`, "Space" is shown instead.
-  void SetUpSpaces(bool show_first = false) {
+  // "Work" (with an icon) with a normal tab, shown. With `with_read`, a third
+  // one, "Read", with two tabs, the first selected. `shown` names the Space
+  // shown last (empty: "Work"). The session is on disk and the window's
+  // state written down (ExpectedFile()).
+  void SetUpSpaces(bool with_read = false,
+                   const std::u16string& shown = std::u16string()) {
     KoanWorkspaceController* spaces = GetSpaces(browser());
     ASSERT_TRUE(spaces);
     ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
@@ -99,8 +109,23 @@ class KoanCrashRestoreBrowserTest : public InProcessBrowserTest {
     spaces->CreateSpace(u"Work", kRocket, {});
     ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
     ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), WorkUrl()));
-    if (show_first) {
-      spaces->SwitchTo(spaces->GetSpaces().front().id);
+    if (with_read) {
+      spaces->CreateSpace(u"Read", u"", {});
+      ASSERT_TRUE(WaitForSpaceCount(browser(), 3));
+      ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), ReadUrl()));
+      tabs::TabInterface* read = tab_strip->GetActiveTab();
+      ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+          browser(), ReadUrl2(), WindowOpenDisposition::kNewForegroundTab,
+          ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+      tab_strip->ActivateTabAt(tab_strip->GetIndexOfTab(read));
+    }
+    if (!shown.empty()) {
+      for (const KoanWorkspaceController::SpaceInfo& space :
+           spaces->GetSpaces()) {
+        if (space.name == shown) {
+          spaces->SwitchTo(space.id);
+        }
+      }
     }
     for (int i = 0; i < tab_strip->count(); ++i) {
       ASSERT_TRUE(content::WaitForLoadStop(tab_strip->GetWebContentsAt(i)));
@@ -112,6 +137,18 @@ class KoanCrashRestoreBrowserTest : public InProcessBrowserTest {
     base::ScopedAllowBlockingForTesting allow_blocking;
     ASSERT_TRUE(base::WriteFile(ExpectedFile(), state));
   }
+
+  // Ends this run as a second crash within a minute of a silent restore:
+  // the next start asks with the bubble.
+  void EndAsSecondCrash() {
+    PrefService* prefs = browser()->GetProfile()->GetPrefs();
+    prefs->SetInteger(prefs::kResumedCrashes, 1);
+    prefs->SetTime(prefs::kLastResumedTime, base::Time::Now());
+    EndAsCrash();
+  }
+
+  void CheckLateRestore(const std::u16string& session_shown,
+                        const GURL& session_tab);
 
   // Ends this run as a crash would: the last session's exit type stays
   // "crashed" (ExitTypeService writes "clean" at exit only once the crash
@@ -295,10 +332,7 @@ IN_PROC_BROWSER_TEST_F(KoanCrashRestoreNoUrlBrowserTest,
 IN_PROC_BROWSER_TEST_F(KoanCrashRestoreBrowserTest,
                        PRE_SecondCrashAsksAndRestoresOnce) {
   ASSERT_NO_FATAL_FAILURE(SetUpSpaces());
-  PrefService* prefs = browser()->GetProfile()->GetPrefs();
-  prefs->SetInteger(prefs::kResumedCrashes, 1);
-  prefs->SetTime(prefs::kLastResumedTime, base::Time::Now());
-  EndAsCrash();
+  EndAsSecondCrash();
 }
 
 IN_PROC_BROWSER_TEST_F(KoanCrashRestoreBrowserTest,
@@ -324,30 +358,25 @@ IN_PROC_BROWSER_TEST_F(KoanCrashRestoreBrowserTest,
                                {base::UTF16ToUTF8(kRocket), "Work active"})));
 }
 
-// The bubble answered late (#554, step 5 of the PR's test): the user opened
-// tabs in the launch's Space and made another Space first. The launch's
-// Space still goes, its tabs joining the restored Space shown (here
-// "Space", the session's namesake); the Space the user made stays, and the
-// session's selected tab stays selected.
-IN_PROC_BROWSER_TEST_F(KoanCrashRestoreBrowserTest,
-                       PRE_LateRestoreMergesTheLaunchSpace) {
-  ASSERT_NO_FATAL_FAILURE(SetUpSpaces(/*show_first=*/true));
-  PrefService* prefs = browser()->GetProfile()->GetPrefs();
-  prefs->SetInteger(prefs::kResumedCrashes, 1);
-  prefs->SetTime(prefs::kLastResumedTime, base::Time::Now());
-  EndAsCrash();
-}
-
-IN_PROC_BROWSER_TEST_F(KoanCrashRestoreBrowserTest,
-                       LateRestoreMergesTheLaunchSpace) {
+// The bubble answered late (#554, steps 5 and 5b of the PR's test): the
+// user opened tabs in the launch's Space, then made another Space, which
+// Create Space shows, and pressed Restore from there. The session comes
+// back as it was: the launch Space's tabs go to the end of the Space the
+// session showed, which is shown again on the session's selected tab; the
+// Space the user made stays, neither merged nor shown. `session_shown` is
+// that Space, `session_tab` its selected tab.
+void KoanCrashRestoreBrowserTest::CheckLateRestore(
+    const std::u16string& session_shown,
+    const GURL& session_tab) {
   const GURL first("chrome://version/?l1");
   const GURL second("chrome://version/?l2");
   const GURL later("chrome://credits/?later");
   KoanWorkspaceController* spaces = GetSpaces(browser());
+  TabStripModel* tab_strip = browser()->GetTabStripModel();
   ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
   base::RunLoop().RunUntilIdle();
   // Not restored: the bubble asks.
-  ASSERT_EQ(1, browser()->GetTabStripModel()->count());
+  ASSERT_EQ(1, tab_strip->count()) << Describe(nullptr);
   ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
       browser(), first, WindowOpenDisposition::kNewForegroundTab,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
@@ -356,41 +385,74 @@ IN_PROC_BROWSER_TEST_F(KoanCrashRestoreBrowserTest,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
   spaces->CreateSpace(u"Later", u"", {});
   ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  // On "Later", as a user is after Create Space.
+  const auto shown_name = [&] {
+    const std::optional<tab_groups::TabGroupId> active =
+        spaces->GetActiveSpace();
+    return active ? spaces->GetSpace(*active)->name : std::u16string();
+  };
+  ASSERT_TRUE(base::test::RunUntil([&] { return shown_name() == u"Later"; }));
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), later));
   ASSERT_THAT(SpaceNames(browser()), testing::ElementsAre(u"Space", u"Later"));
+  ASSERT_EQ(later, tab_strip->GetActiveWebContents()->GetVisibleURL());
 
   // The bubble's Restore.
   SessionRestore::RestoreSessionAfterCrash(browser());
+  const std::vector<std::u16string> names = {u"Later", u"Space", u"Work",
+                                             u"Read"};
   ASSERT_TRUE(base::test::RunUntil([&] {
-    return SpaceNames(browser()) ==
-           std::vector<std::u16string>{u"Later", u"Space", u"Work"};
+    return SpaceNames(browser()) == names;
   })) << Describe(nullptr);
   base::RunLoop().RunUntilIdle();
-  EXPECT_THAT(SpaceNames(browser()),
-              testing::ElementsAre(u"Later", u"Space", u"Work"))
-      << Describe(nullptr);
-  // The session's tabs first, then the launch's about:blank and the tabs
-  // opened beside it, each once.
-  EXPECT_THAT(SpaceUrls(u"Space"),
-              testing::ElementsAre(PinnedUrl().spec(), OtherUrl().spec(),
-                                   "about:blank", first.spec(), second.spec()))
-      << Describe(nullptr);
+  EXPECT_EQ(names, SpaceNames(browser())) << Describe(nullptr);
+  // Each tab once: the session's, then in the Space it showed, the launch's
+  // about:blank and the tabs opened beside it.
+  const std::vector<std::string> launch_tabs = {"about:blank", first.spec(),
+                                                second.spec()};
+  std::vector<std::string> space = {PinnedUrl().spec(), OtherUrl().spec()};
+  std::vector<std::string> read = {ReadUrl().spec(), ReadUrl2().spec()};
+  std::vector<std::string>& merged = session_shown == u"Read" ? read : space;
+  merged.insert(merged.end(), launch_tabs.begin(), launch_tabs.end());
+  EXPECT_EQ(space, SpaceUrls(u"Space")) << Describe(nullptr);
+  EXPECT_EQ(read, SpaceUrls(u"Read")) << Describe(nullptr);
   EXPECT_THAT(SpaceUrls(u"Work"), testing::ElementsAre(WorkUrl().spec()));
   EXPECT_THAT(SpaceUrls(u"Later"), testing::ElementsAre(later.spec()));
   // Still pinned in its Space.
   bool pinned = false;
-  TabStripModel* tab_strip = browser()->GetTabStripModel();
   for (int i = 0; i < tab_strip->count(); ++i) {
     if (tab_strip->GetWebContentsAt(i)->GetVisibleURL() == PinnedUrl()) {
       pinned = IsPinnedInSpace(tab_strip->GetTabAtIndex(i));
     }
   }
   EXPECT_TRUE(pinned) << Describe(nullptr);
-  // "Space" is shown, on the session's tab.
-  const std::optional<tab_groups::TabGroupId> active = spaces->GetActiveSpace();
-  ASSERT_TRUE(active);
-  EXPECT_EQ(u"Space", spaces->GetSpace(*active)->name);
-  EXPECT_EQ(OtherUrl(), tab_strip->GetActiveWebContents()->GetVisibleURL());
+  // The Space the session showed, on its selected tab; not "Later".
+  EXPECT_EQ(session_shown, shown_name()) << Describe(nullptr);
+  EXPECT_EQ(session_tab, tab_strip->GetActiveWebContents()->GetVisibleURL())
+      << Describe(nullptr);
+}
+
+// Step 5: the session showed "Space".
+IN_PROC_BROWSER_TEST_F(KoanCrashRestoreBrowserTest,
+                       PRE_LateRestoreMergesTheLaunchSpace) {
+  ASSERT_NO_FATAL_FAILURE(SetUpSpaces(/*with_read=*/true, u"Space"));
+  EndAsSecondCrash();
+}
+
+IN_PROC_BROWSER_TEST_F(KoanCrashRestoreBrowserTest,
+                       LateRestoreMergesTheLaunchSpace) {
+  CheckLateRestore(u"Space", OtherUrl());
+}
+
+// Step 5b: the session showed "Read", on its first tab.
+IN_PROC_BROWSER_TEST_F(KoanCrashRestoreBrowserTest,
+                       PRE_LateRestoreMergesTheLaunchSpaceIntoTheShownOne) {
+  ASSERT_NO_FATAL_FAILURE(SetUpSpaces(/*with_read=*/true, u"Read"));
+  EndAsSecondCrash();
+}
+
+IN_PROC_BROWSER_TEST_F(KoanCrashRestoreBrowserTest,
+                       LateRestoreMergesTheLaunchSpaceIntoTheShownOne) {
+  CheckLateRestore(u"Read", ReadUrl());
 }
 
 }  // namespace koan

@@ -193,6 +193,9 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // The Spaces in sidebar order, and the active one.
   std::vector<SpaceInfo> GetSpaces() const;
   std::optional<tab_groups::TabGroupId> GetActiveSpace() const;
+  // A session is being restored into this window, which showed `data`
+  // (kShownSpaceSessionKey's): called before its tabs are added.
+  void OnSessionShownRestoring(const std::string& data);
   std::optional<SpaceInfo> GetSpace(const tab_groups::TabGroupId& space) const;
   // A Space's id in the stored Spaces (prefs::kWorkspaceList's "id"), made
   // the first time it's asked for and kept while the window is open. A fresh
@@ -474,6 +477,9 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // is still as the launch made it: the default name, no icon, theme or
   // profile, and no tab pinned in it.
   bool IsLaunchSpace(const tab_groups::TabGroupId& space) const;
+  // Writes the Space shown and the selected tab to the window's session
+  // (kShownSpaceSessionKey) when they changed.
+  void StoreShownInSession();
   void OnSessionRestored(Profile* profile, int tab_count);
   // Upstream's group state a Space can't have: collapsed (its tabs hidden,
   // with no header to expand it), and a Chrome colour on a group that didn't
@@ -662,6 +668,18 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // restore into the window merges it.
   std::optional<tab_groups::TabGroupId> launch_space_;
   std::vector<tabs::TabHandle> launch_tabs_;
+  // What the session restored into this window showed
+  // (OnSessionShownRestoring()), by place, and the window's Essentials from
+  // before that restore.
+  struct SessionShown {
+    int space = -1;
+    int tab = -1;
+    int essential = -1;
+  };
+  std::optional<SessionShown> session_shown_;
+  std::vector<tabs::TabHandle> pre_restore_essentials_;
+  // What StoreShownInSession() wrote last.
+  std::string stored_shown_;
   base::CallbackListSubscription session_restored_subscription_;
   // The Space shown last, for animating and as a fallback.
   std::optional<tab_groups::TabGroupId> last_space_;

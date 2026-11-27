@@ -19,6 +19,8 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
+#include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
@@ -1562,6 +1564,7 @@ void KoanWorkspaceController::Update() {
   ShowActiveEssential();
   SnapshotSpaces();
   StoreSpaces();
+  StoreShownInSession();
   CloseGroupEditors();
   // Also where upstream set the group's colour without asking Koan (the
   // horizontal tab strip's controller has no hook).
@@ -1608,6 +1611,10 @@ void KoanWorkspaceController::OnSessionRestored(Profile* profile,
   if (restore_started_ && profile == browser_view_->GetProfile()) {
     restore_started_ = false;
     merge_startup_space_ = pre_restore_space_.has_value();
+    if (!merge_startup_space_) {
+      session_shown_.reset();
+      pre_restore_essentials_.clear();
+    }
     ScheduleUpdate();
   }
 }
@@ -1633,58 +1640,106 @@ bool KoanWorkspaceController::IsLaunchSpace(
 void KoanWorkspaceController::MergeStartupSpaceAfterRestore() {
   const std::optional<tab_groups::TabGroupId> space =
       std::exchange(pre_restore_space_, std::nullopt);
-  if (!space || GetSpaces().size() < 2 || !IsLaunchSpace(*space)) {
-    return;
-  }
   const std::set<tab_groups::TabGroupId> before =
       std::exchange(pre_restore_spaces_, {});
   const std::vector<tabs::TabHandle> launch_tabs =
       std::exchange(launch_tabs_, {});
   launch_space_.reset();
-  // The restored Space shown, else the first restored one (none is shown
-  // while an Essential is); never another Space from before the restore.
-  std::optional<tab_groups::TabGroupId> target = GetActiveSpace();
-  const bool shown = target == space;
-  if (!target || before.contains(*target)) {
-    target.reset();
-    for (const SpaceInfo& info : GetSpaces()) {
-      if (info.id != *space && !before.contains(info.id)) {
-        target = info.id;
-        break;
-      }
+  const std::optional<SessionShown> session =
+      std::exchange(session_shown_, std::nullopt);
+  const std::vector<tabs::TabHandle> essentials_before =
+      std::exchange(pre_restore_essentials_, {});
+  // Gone: the restore replaced its one New Tab page, and selected the
+  // session's tab itself (upstream does only in a window it restores into
+  // empty).
+  if (!space || !GetSpace(*space)) {
+    return;
+  }
+  // The restored Spaces, in the session's order.
+  std::vector<tab_groups::TabGroupId> restored;
+  for (const SpaceInfo& info : GetSpaces()) {
+    if (info.id != *space && !before.contains(info.id)) {
+      restored.push_back(info.id);
     }
   }
-  if (!target) {
+  if (restored.empty()) {
     return;
   }
   TabStripModel* model = tab_strip_model();
+  // The Space the session showed (its place in the session), else the
+  // restored Space shown, else the first one. Never a Space from before the
+  // restore: one the user made while the crash bubble waited stays as it is.
+  std::optional<tab_groups::TabGroupId> target;
+  if (session && session->space >= 0 &&
+      session->space < static_cast<int>(restored.size())) {
+    target = restored[session->space];
+  } else if (const std::optional<tab_groups::TabGroupId> active =
+                 GetActiveSpace();
+             active && std::ranges::contains(restored, *active)) {
+    target = active;
+  } else {
+    target = restored.front();
+  }
+  // The session's selected tab: in that Space, or one of its Essentials
+  // (pinned tabs the window didn't have before the restore).
+  tabs::TabInterface* session_tab = nullptr;
+  if (session && session->essential >= 0) {
+    int essential = 0;
+    for (int i = 0; i < model->count() && model->IsTabPinned(i); ++i) {
+      tabs::TabInterface* tab = model->GetTabAtIndex(i);
+      if (std::ranges::contains(essentials_before, tab->GetHandle())) {
+        continue;
+      }
+      if (essential++ == session->essential) {
+        session_tab = tab;
+        break;
+      }
+    }
+  } else if (session && session->tab >= 0) {
+    const gfx::Range tabs =
+        model->group_model()->GetTabGroup(*target)->ListTabs();
+    if (session->tab < static_cast<int>(tabs.length())) {
+      session_tab =
+          model->GetTabAtIndex(static_cast<int>(tabs.start()) + session->tab);
+    }
+  }
   // The tab the launch showed (a URL it was given), if it still is the
-  // Space's last one: the restore selected the session's tab since. Not a
-  // tab the user opened while the crash bubble waited.
-  tabs::TabInterface* launch_tab =
-      shown ? model->GetActiveTab() : last_active_tabs_[*space].Get();
+  // Space's last one. Not a tab the user opened while the crash bubble
+  // waited.
+  tabs::TabInterface* launch_tab = nullptr;
+  if (GetActiveSpace() == space) {
+    launch_tab = model->GetActiveTab();
+  } else if (auto it = last_active_tabs_.find(*space);
+             it != last_active_tabs_.end()) {
+    launch_tab = it->second.Get();
+  }
   if (launch_tab &&
       !std::ranges::contains(launch_tabs, launch_tab->GetHandle())) {
     launch_tab = nullptr;
   }
   // A new tab page the launch opened on, with nothing to go back to, closes
   // (the restore replaces it, as upstream's does when it is the window's
-  // only tab); every other tab moves.
+  // only tab); every other tab moves. Only while the Space is the launch's.
   std::vector<tabs::TabHandle> to_move;
   std::vector<tabs::TabHandle> to_close;
-  const gfx::Range tabs = model->group_model()->GetTabGroup(*space)->ListTabs();
-  for (size_t i = tabs.start(); i < tabs.end(); ++i) {
-    tabs::TabInterface* tab = model->GetTabAtIndex(static_cast<int>(i));
-    content::WebContents* contents = tab->GetContents();
-    const bool empty =
-        (contents->GetURL() == chrome::ChromeUINewTabURLAsGURL() ||
-         search::IsInstantNTP(contents)) &&
-        !contents->GetController().CanGoBack();
-    (empty ? to_close : to_move).push_back(tab->GetHandle());
+  if (IsLaunchSpace(*space)) {
+    const gfx::Range tabs =
+        model->group_model()->GetTabGroup(*space)->ListTabs();
+    for (size_t i = tabs.start(); i < tabs.end(); ++i) {
+      tabs::TabInterface* tab = model->GetTabAtIndex(static_cast<int>(i));
+      content::WebContents* contents = tab->GetContents();
+      const bool empty =
+          (contents->GetURL() == chrome::ChromeUINewTabURLAsGURL() ||
+           search::IsInstantNTP(contents)) &&
+          !contents->GetController().CanGoBack();
+      (empty ? to_close : to_move).push_back(tab->GetHandle());
+    }
+    deleting_.insert(*space);
+    last_active_tabs_.erase(*space);
   }
-  deleting_.insert(*space);
-  last_active_tabs_.erase(*space);
-  if (GetActiveSpace() == space) {
+  // The session comes back as it was: the Space it showed is shown, not the
+  // one the user was on while the bubble waited.
+  if (GetActiveSpace() != target) {
     SwitchTo(*target);
   }
   std::vector<int> indices;
@@ -1703,14 +1758,84 @@ void KoanWorkspaceController::MergeStartupSpaceAfterRestore() {
                                 TabCloseTypes::CLOSE_USER_GESTURE);
     }
   }
-  // Shown in its new Space, as a start that restores the session shows the
-  // URLs it was given.
-  if (launch_tab && std::ranges::contains(to_move, launch_tab->GetHandle())) {
-    const int index = model->GetIndexOfTab(launch_tab);
-    if (index != TabStripModel::kNoTab) {
-      model->ActivateTabAt(index);
-    }
+  // A launch URL's tab is selected in its new Space, as a start that
+  // restores the session shows the URLs it was given; else the session's
+  // selected tab (an Essential stays selected in a shown Space).
+  tabs::TabInterface* select =
+      launch_tab && std::ranges::contains(to_move, launch_tab->GetHandle())
+          ? launch_tab
+          : session_tab;
+  const int index =
+      select ? model->GetIndexOfTab(select) : TabStripModel::kNoTab;
+  if (index != TabStripModel::kNoTab) {
+    model->ActivateTabAt(index);
   }
+}
+
+void KoanWorkspaceController::OnSessionShownRestoring(const std::string& data) {
+  session_shown_.reset();
+  pre_restore_essentials_.clear();
+  TabStripModel* model = tab_strip_model();
+  // Only a session restored into this window as it is: upstream selects the
+  // session's tab and Space itself in a window it creates.
+  if (model->empty()) {
+    return;
+  }
+  const std::optional<base::Value> value =
+      base::JSONReader::Read(data, base::JSON_PARSE_RFC);
+  const base::DictValue* dict = value ? value->GetIfDict() : nullptr;
+  const std::optional<int> space = dict ? dict->FindInt("space") : std::nullopt;
+  if (!space) {
+    return;
+  }
+  session_shown_ =
+      SessionShown{.space = *space,
+                   .tab = dict->FindInt("tab").value_or(-1),
+                   .essential = dict->FindInt("essential").value_or(-1)};
+  for (int i = 0; i < model->count() && model->IsTabPinned(i); ++i) {
+    pre_restore_essentials_.push_back(model->GetTabAtIndex(i)->GetHandle());
+  }
+}
+
+void KoanWorkspaceController::StoreShownInSession() {
+  TabStripModel* model = tab_strip_model();
+  // Not while a restore is bringing this window's tabs (the session's copy
+  // is still to be read), nor a window going away.
+  if (restore_started_ || merge_startup_space_ || model->empty() ||
+      model->closing_all() || browser_view_->browser()->IsDeleteScheduled() ||
+      SessionRestore::IsRestoring(browser_view_->GetProfile())) {
+    return;
+  }
+  tabs::TabInterface* active = model->GetActiveTab();
+  const std::optional<tab_groups::TabGroupId> shown = GetActiveSpace();
+  if (!active || !shown) {
+    return;
+  }
+  const std::vector<SpaceInfo> spaces = GetSpaces();
+  const auto it = std::ranges::find(spaces, *shown, &SpaceInfo::id);
+  if (it == spaces.end()) {
+    return;
+  }
+  base::DictValue dict;
+  dict.Set("space", static_cast<int>(it - spaces.begin()));
+  const int index = model->GetIndexOfTab(active);
+  if (active->IsPinned()) {
+    // Essentials come first in the tab strip.
+    dict.Set("essential", index);
+  } else if (active->GetGroup() == shown) {
+    dict.Set(
+        "tab",
+        index -
+            static_cast<int>(
+                model->group_model()->GetTabGroup(*shown)->ListTabs().start()));
+  }
+  std::string data = base::WriteJson(dict).value_or(std::string());
+  if (data == stored_shown_) {
+    return;
+  }
+  stored_shown_ = data;
+  SetWindowSessionData(browser_view_->browser(), kShownSpaceSessionKey,
+                       std::move(data));
 }
 
 void KoanWorkspaceController::EnsureOneSpaceShown() {
@@ -2948,6 +3073,9 @@ void KoanWorkspaceController::OnTabStripModelChanged(
   }
   if (change.type() != TabStripModelChange::kSelectionOnly) {
     ScheduleUpdate();
+  } else if (selection.active_tab_changed()) {
+    // (Writes the session only: it doesn't change the model.)
+    StoreShownInSession();
   }
 }
 
@@ -3223,6 +3351,15 @@ void PlaceUnindexedTab(TabStripModel* tab_strip,
 
 bool WrapsSpaces(TabStripModel* tab_strip) {
   return KoanWorkspaceController::FromTabStrip(tab_strip) != nullptr;
+}
+
+void OnRestoringShownSpace(BrowserWindowInterface* browser,
+                           const std::string& data,
+                           bool from_session_restore) {
+  if (KoanWorkspaceController* spaces = SpacesOf(browser);
+      spaces && from_session_restore) {
+    spaces->OnSessionShownRestoring(data);
+  }
 }
 
 bool IsEmptyTab(const tabs::TabInterface* tab) {
