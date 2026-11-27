@@ -42,6 +42,7 @@ class MenuRunner;
 namespace koan {
 
 class KoanCaptionButtonsTargeter;
+class KoanCaptionButtonsWatcher;
 class KoanHotZone;
 class KoanOutsideWindowTracker;
 class KoanSidebarContextMenuController;
@@ -130,7 +131,10 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // 0 without it.
   int docked_bookmarks_bar_height() const;
   // The caption-button strip above the page is collapsed (the card starts at
-  // the gutter).
+  // the gutter). It stays open while it holds window buttons beside a shown
+  // sidebar: the macOS traffic lights with tabs on the right, or the frame's
+  // caption buttons that the desktop's button layout puts on the page's side
+  // (see CaptionStripKeptOpen()).
   bool caption_strip_collapsed() const;
   // The "Tabs on the right" setting. Where the sidebar is, is
   // IsSidebarOnRight() (koan_compact_mode.h), which also checks the window.
@@ -380,6 +384,15 @@ class KoanCompactModeController : public views::FocusChangeListener,
   bool IsCaptionButtonBesideSidebar(const views::View* button) const;
   // Whether the frame has caption buttons that hide with the strip.
   bool HasPageSideCaptionButtons() const;
+  // Not macOS: where Koan hides the toolbar, the strip with the frame's
+  // caption buttons stays open while some of them are on the page's side of a
+  // shown sidebar (koan::KeepsCaptionStripOpen()), as the strip with the
+  // traffic lights does on macOS with tabs on the right (issue #487).
+  bool CaptionStripKeptOpen() const;
+  // Shows or hides the strip when CaptionStripKeptOpen() changed: the frame
+  // laid its buttons out again (the desktop's button layout changed, the
+  // window opened or left fullscreen). Not from inside layout.
+  void CheckCaptionStripKeptOpen();
   // The content card's insets changed: lay out the contents area and Glance.
   void OnContentCardChanged();
 
@@ -417,6 +430,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   raw_ptr<KoanHotZone> caption_hot_zone_ = nullptr;
   // Lets the pointer through the revealed toolbar to the caption buttons.
   std::unique_ptr<KoanCaptionButtonsTargeter> caption_buttons_targeter_;
+  // Not macOS: tells when the frame lays its caption buttons out again.
+  std::unique_ptr<KoanCaptionButtonsWatcher> caption_buttons_watcher_;
   // macOS: the traffic lights, which the window buttons below stand for.
   std::unique_ptr<KoanTrafficLightsController> traffic_lights_;
   bool caption_strip_collapsible_ = false;
@@ -424,6 +439,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // as in Zen, so the strip above the page that holds them stays open (no
   // gutter there) when windowed.
   bool lights_keep_strip_open_ = false;
+  // CaptionStripKeptOpen() as last applied.
+  bool caption_strip_kept_open_ = false;
   bool caption_strip_revealed_ = false;
   base::OneShotTimer caption_hide_timer_;
   std::optional<base::TimeTicks> caption_unwanted_since_;

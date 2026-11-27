@@ -38,4 +38,23 @@ MonoLightsState GetMonoLightsState(bool pointer_over_buttons,
   return {.buttons_opaque = buttons, .dots_drawn = !buttons && !buttons_hidden};
 }
 
+bool IsCaptionButtonOnSidebarSide(const gfx::Rect& button,
+                                  int frame_width,
+                                  bool sidebar_on_right) {
+  const bool button_on_right = button.CenterPoint().x() > frame_width / 2;
+  return button_on_right == sidebar_on_right;
+}
+
+bool KeepsCaptionStripOpen(const std::vector<gfx::Rect>& buttons,
+                           int frame_width,
+                           bool sidebar_on_right,
+                           bool sidebar_hidden) {
+  return !sidebar_hidden &&
+         std::ranges::any_of(buttons, [&](const gfx::Rect& button) {
+           return !button.IsEmpty() &&
+                  !IsCaptionButtonOnSidebarSide(button, frame_width,
+                                                sidebar_on_right);
+         });
+}
+
 }  // namespace koan

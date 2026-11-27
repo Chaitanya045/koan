@@ -151,12 +151,19 @@ their access to the site).
 
 Click the pill or press ⌘L to edit the address (see [URL bar](#url-bar)).
 
-As in Zen, nothing sits above the page but a thin margin: move the pointer
-to the top edge of the window to show the window buttons (close, ...); the
-page moves down to make room and back up when you leave. When the buttons
-are on the sidebar's side of the window (e.g. GNOME's buttons with tabs on
-the right, or a "close,minimize,maximize:" button layout with tabs on the
-left), they stay in the sidebar's top row instead, as in Zen.
+On Linux and Windows the window buttons are the desktop's own, with the
+buttons and on the side its button layout asks for (GNOME's default is a
+close button on the right; KDE's is minimise, maximise and close on the
+right), and they are always there. When they are on the sidebar's side of
+the window (e.g. a "close,minimize,maximize:" layout with tabs on the left,
+or GNOME's with tabs on the right) they are in the sidebar's top row, as in
+Zen. On the other side they are in a strip above the page, as tall as the
+sidebar's top row; otherwise nothing sits above the page but a thin margin.
+With the sidebar hidden (compact mode) the strip goes too: move the pointer
+to the top edge of the window to show the buttons; the page moves down to
+make room and back up when you leave. (Zen hides the strip until then even
+with the sidebar shown; Koan keeps the buttons in view, as the traffic
+lights are on macOS.)
 
 ⌃⌥B switches to the multiple-toolbars layout (a toolbar above the
 page, as in Chrome) and back. The layout applies to all windows and

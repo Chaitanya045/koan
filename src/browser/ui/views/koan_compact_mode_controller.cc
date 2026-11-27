@@ -13,6 +13,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
+#include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
@@ -43,6 +44,7 @@
 #include "koan/browser/ui/views/koan_content_card.h"
 #include "koan/browser/ui/views/koan_folders.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
+#include "koan/browser/ui/views/koan_lights_geometry.h"
 #include "koan/browser/ui/views/koan_outside_window_tracker.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
@@ -80,6 +82,7 @@
 #include "ui/views/event_monitor.h"
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
+#include "ui/views/view_observer.h"
 #include "ui/views/view_targeter.h"
 #include "ui/views/view_targeter_delegate.h"
 #include "ui/views/view_tracker.h"
@@ -231,6 +234,44 @@ class KoanCaptionButtonsTargeter : public views::ViewTargeterDelegate {
   const raw_ptr<BrowserView> browser_view_;
 };
 
+// Not macOS: runs `on_changed` when one of the frame's caption buttons moves,
+// resizes, shows or hides, as the frame lays them out by the desktop's button
+// layout (BrowserFrameViewLinux::OnWindowButtonOrderingChange() lays out the
+// frame again without necessarily the browser view).
+class KoanCaptionButtonsWatcher : public views::ViewObserver {
+ public:
+  explicit KoanCaptionButtonsWatcher(base::RepeatingClosure on_changed)
+      : on_changed_(std::move(on_changed)) {}
+
+  // Watches the caption buttons among `frame`'s children (the frame view may
+  // be replaced, e.g. by the system title bar setting).
+  void Watch(views::View* frame) {
+    for (views::View* child : frame->children()) {
+      if (IsCaptionButton(child) && !observation_.IsObservingSource(child)) {
+        observation_.AddObservation(child);
+      }
+    }
+  }
+
+  // views::ViewObserver:
+  void OnViewBoundsChanged(views::View* observed_view) override {
+    on_changed_.Run();
+  }
+  void OnViewVisibilityChanged(views::View* observed_view,
+                               views::View* starting_view,
+                               bool visible) override {
+    on_changed_.Run();
+  }
+  void OnViewIsDeleting(views::View* observed_view) override {
+    observation_.RemoveObservation(observed_view);
+  }
+
+ private:
+  const base::RepeatingClosure on_changed_;
+  base::ScopedMultiSourceObservation<views::View, views::ViewObserver>
+      observation_{this};
+};
+
 // Tells the controller when native fullscreen starts and ends (Chromium's
 // immersive mode; only macOS has it for normal windows).
 class KoanCompactModeController::ImmersiveObserver
@@ -337,6 +378,28 @@ bool KoanCompactModeController::CanCompactMode() const {
 void KoanCompactModeController::OnBrowserViewLayout() {
   if (traffic_lights_) {
     traffic_lights_->OnBrowserViewLayout();
+  } else if (BrowserWidget* widget = browser_view_->browser_widget();
+             widget && widget->GetFrameView()) {
+    if (!caption_buttons_watcher_) {
+      caption_buttons_watcher_ =
+          std::make_unique<KoanCaptionButtonsWatcher>(base::BindRepeating(
+              [](base::WeakPtr<KoanCompactModeController> self) {
+                base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+                    FROM_HERE,
+                    base::BindOnce(
+                        &KoanCompactModeController::CheckCaptionStripKeptOpen,
+                        self));
+              },
+              weak_factory_.GetWeakPtr()));
+    }
+    caption_buttons_watcher_->Watch(widget->GetFrameView());
+    // (The card was laid out with the strip as it is now; the rest follows.)
+    if (CaptionStripKeptOpen() != caption_strip_kept_open_) {
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE,
+          base::BindOnce(&KoanCompactModeController::CheckCaptionStripKeptOpen,
+                         weak_factory_.GetWeakPtr()));
+    }
   }
   // Fullscreen and tab strip mode changes show up as layouts. Re-evaluate
   // outside of layout, since (de)activation reparents views.
@@ -465,7 +528,8 @@ bool KoanCompactModeController::PrefHidesToolbar() const {
 }
 
 bool KoanCompactModeController::caption_strip_collapsed() const {
-  if (caption_strip_collapsible_ && !caption_strip_revealed_) {
+  if (caption_strip_collapsible_ && !caption_strip_revealed_ &&
+      !CaptionStripKeptOpen()) {
     return true;
   }
   // (Native fullscreen has no lights to make room for.)
@@ -1282,11 +1346,14 @@ void KoanCompactModeController::Activate(Mode mode) {
     // Zen: no strip for the window buttons; they appear at the top edge.
     // Zen's macOS lights are always there, though: with the sidebar on the
     // right (not in its top row) they are over the page's corner, so the
-    // strip with them stays open.
+    // strip with them stays open. The other platforms' buttons are always
+    // there too: those over the page keep the strip open while the sidebar
+    // shows (CaptionStripKeptOpen(), from the frame's layout of them).
     lights_keep_strip_open_ =
         traffic_lights_ && IsSidebarOnRight(browser_view_) && !hides_sidebar();
     caption_strip_collapsible_ = !lights_keep_strip_open_;
     caption_strip_revealed_ = false;
+    caption_strip_kept_open_ = CaptionStripKeptOpen();
   }
   if (mode == Mode::kSingleToolbar || compact_keeps_sidebar_nav_) {
     InstallSidebarNav();
@@ -1785,6 +1852,7 @@ void KoanCompactModeController::Deactivate() {
   compact_keeps_sidebar_nav_ = false;
   caption_strip_collapsible_ = false;
   lights_keep_strip_open_ = false;
+  caption_strip_kept_open_ = false;
   caption_strip_revealed_ = false;
   caption_hide_timer_.Stop();
   caption_unwanted_since_.reset();
@@ -2158,7 +2226,8 @@ void KoanCompactModeController::OnToolbarHotZoneHovered(bool hovered) {
 }
 
 void KoanCompactModeController::OnCaptionHotZoneHovered(bool hovered) {
-  if (hovered && caption_strip_collapsible_ && HasPageSideCaptionButtons()) {
+  if (hovered && caption_strip_collapsible_ && !CaptionStripKeptOpen() &&
+      HasPageSideCaptionButtons()) {
     SetCaptionStripRevealed(true);
   }
 }
@@ -2225,9 +2294,44 @@ bool KoanCompactModeController::IsCaptionButtonBesideSidebar(
   if (hides_sidebar() || !button->parent()) {
     return false;
   }
-  const bool button_on_right =
-      button->bounds().CenterPoint().x() > button->parent()->width() / 2;
-  return button_on_right == IsSidebarOnRight(browser_view_);
+  return IsCaptionButtonOnSidebarSide(button->bounds(),
+                                      button->parent()->width(),
+                                      IsSidebarOnRight(browser_view_));
+}
+
+bool KoanCompactModeController::CaptionStripKeptOpen() const {
+  // (macOS: lights_keep_strip_open_. In fullscreen the frame has none.)
+  if (traffic_lights_ || !caption_strip_collapsible_ ||
+      IsWindowFullscreen(browser_view_)) {
+    return false;
+  }
+  const BrowserWidget* widget = browser_view_->browser_widget();
+  const BrowserFrameView* frame = widget ? widget->GetFrameView() : nullptr;
+  if (!frame) {
+    return false;
+  }
+  std::vector<gfx::Rect> buttons;
+  for (const views::View* child : frame->children()) {
+    if (IsCaptionButton(child) && child->GetVisible()) {
+      buttons.push_back(child->bounds());
+    }
+  }
+  return KeepsCaptionStripOpen(buttons, frame->width(),
+                               IsSidebarOnRight(browser_view_),
+                               hides_sidebar());
+}
+
+void KoanCompactModeController::CheckCaptionStripKeptOpen() {
+  if (IsClosing()) {
+    return;
+  }
+  const bool kept_open = CaptionStripKeptOpen();
+  if (kept_open == caption_strip_kept_open_) {
+    return;
+  }
+  caption_strip_kept_open_ = kept_open;
+  UpdateCaptionButtons();
+  OnContentCardChanged();
 }
 
 bool KoanCompactModeController::HasPageSideCaptionButtons() const {
@@ -2289,11 +2393,11 @@ void KoanCompactModeController::UpdateCaptionButtons() {
   if (!frame) {
     return;
   }
-  // The strip above the page is open, or (compact mode) the revealed toolbar
-  // has room for the buttons.
-  const bool page_side_shown = !caption_strip_collapsible_ ||
-                               caption_strip_revealed_ ||
-                               (can_reveal_toolbar() && toolbar_revealed_);
+  // The strip above the page is open (revealed, or kept open for the buttons
+  // over the page), or (compact mode) the revealed toolbar has room for the
+  // buttons.
+  const bool page_side_shown =
+      !caption_strip_collapsed() || (can_reveal_toolbar() && toolbar_revealed_);
   // The frame sets the caption buttons' visibility in its layout, so fade
   // them on a layer instead and let a hidden one ignore the pointer.
   for (views::View* child : frame->children()) {
@@ -2368,10 +2472,13 @@ void KoanCompactModeController::LayoutHotZones() {
   const gfx::Rect top_edge =
       page ? gfx::Rect(page->x(), bounds.y(), page->width(), gutter.top())
            : gfx::Rect(bounds.x(), bounds.y(), bounds.width(), gutter.top());
-  for (KoanHotZone* zone : {toolbar_hot_zone_.get(), caption_hot_zone_.get()}) {
-    if (zone) {
-      zone->SetBoundsRect(top_edge);
-    }
+  if (toolbar_hot_zone_) {
+    toolbar_hot_zone_->SetBoundsRect(top_edge);
+  }
+  // (Nothing to reveal over a strip that is kept open.)
+  if (caption_hot_zone_) {
+    caption_hot_zone_->SetBoundsRect(CaptionStripKeptOpen() ? gfx::Rect()
+                                                            : top_edge);
   }
 }
 

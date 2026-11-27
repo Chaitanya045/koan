@@ -74,4 +74,65 @@ TEST(KoanLightsGeometryTest, MonoLightsShowTheButtonsOnlyWhileHovered) {
             GetMonoLightsState(false, false, true));
 }
 
+// A 1280-wide window's caption buttons as the Linux frame lays them out, 32
+// by 46 in the top corners (issue #487).
+constexpr int kFrameWidth = 1280;
+const gfx::Rect kRightClose(1244, 0, 32, 46);
+const gfx::Rect kRightMaximize(1212, 0, 32, 46);
+const gfx::Rect kRightMinimize(1180, 0, 32, 46);
+const gfx::Rect kLeftClose(4, 0, 32, 46);
+
+TEST(KoanLightsGeometryTest, CaptionButtonSideFollowsTheButtonLayout) {
+  EXPECT_FALSE(IsCaptionButtonOnSidebarSide(kRightClose, kFrameWidth,
+                                            /*sidebar_on_right=*/false));
+  EXPECT_TRUE(IsCaptionButtonOnSidebarSide(kRightClose, kFrameWidth,
+                                           /*sidebar_on_right=*/true));
+  EXPECT_TRUE(IsCaptionButtonOnSidebarSide(kLeftClose, kFrameWidth,
+                                           /*sidebar_on_right=*/false));
+  EXPECT_FALSE(IsCaptionButtonOnSidebarSide(kLeftClose, kFrameWidth,
+                                            /*sidebar_on_right=*/true));
+}
+
+TEST(KoanLightsGeometryTest, PageSideCaptionButtonsKeepTheirStripOpen) {
+  // GNOME's default ("appmenu:close") with the sidebar on the left: the
+  // close button is over the page, so its strip stays (the bug was that it
+  // only showed with the pointer at the top edge).
+  EXPECT_TRUE(KeepsCaptionStripOpen({kRightClose}, kFrameWidth,
+                                    /*sidebar_on_right=*/false,
+                                    /*sidebar_hidden=*/false));
+  // KDE's default (minimise, maximise, close on the right), likewise.
+  EXPECT_TRUE(KeepsCaptionStripOpen(
+      {kRightMinimize, kRightMaximize, kRightClose}, kFrameWidth,
+      /*sidebar_on_right=*/false, /*sidebar_hidden=*/false));
+  // Buttons on the left with tabs on the right: over the page too.
+  EXPECT_TRUE(KeepsCaptionStripOpen({kLeftClose}, kFrameWidth,
+                                    /*sidebar_on_right=*/true,
+                                    /*sidebar_hidden=*/false));
+  // Buttons on both sides: the page side's keep it.
+  EXPECT_TRUE(KeepsCaptionStripOpen({kLeftClose, kRightClose}, kFrameWidth,
+                                    /*sidebar_on_right=*/false,
+                                    /*sidebar_hidden=*/false));
+}
+
+TEST(KoanLightsGeometryTest, SidebarSideOrHiddenCaptionButtonsNeedNoStrip) {
+  // On the sidebar's side they are in its top row.
+  EXPECT_FALSE(KeepsCaptionStripOpen({kRightClose}, kFrameWidth,
+                                     /*sidebar_on_right=*/true,
+                                     /*sidebar_hidden=*/false));
+  EXPECT_FALSE(KeepsCaptionStripOpen({kLeftClose}, kFrameWidth,
+                                     /*sidebar_on_right=*/false,
+                                     /*sidebar_hidden=*/false));
+  // Compact mode hides the sidebar: the top edge reveals them.
+  EXPECT_FALSE(KeepsCaptionStripOpen({kRightClose}, kFrameWidth,
+                                     /*sidebar_on_right=*/false,
+                                     /*sidebar_hidden=*/true));
+  // No buttons (the system title bar, fullscreen), or not laid out yet.
+  EXPECT_FALSE(KeepsCaptionStripOpen({}, kFrameWidth,
+                                     /*sidebar_on_right=*/false,
+                                     /*sidebar_hidden=*/false));
+  EXPECT_FALSE(KeepsCaptionStripOpen({gfx::Rect()}, kFrameWidth,
+                                     /*sidebar_on_right=*/true,
+                                     /*sidebar_hidden=*/false));
+}
+
 }  // namespace koan

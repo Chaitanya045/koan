@@ -5,6 +5,8 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_LIGHTS_GEOMETRY_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_LIGHTS_GEOMETRY_H_
 
+#include <vector>
+
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -39,6 +41,32 @@ struct MonoLightsState {
 MonoLightsState GetMonoLightsState(bool pointer_over_buttons,
                                    bool has_sheet,
                                    bool buttons_hidden);
+
+// The other platforms' window buttons are the frame's caption buttons, in
+// the window's top corners, on the side the desktop's button layout puts them
+// (GNOME's default: a close button on the right; KDE's: minimise, maximise and
+// close on the right). Where Koan hides the toolbar, the ones on the sidebar's
+// side sit in its top row, which keeps room for them, as the macOS traffic
+// lights do.
+
+// Whether the caption button at `button` (in a frame `frame_width` wide) is on
+// the sidebar's side of the window.
+bool IsCaptionButtonOnSidebarSide(const gfx::Rect& button,
+                                  int frame_width,
+                                  bool sidebar_on_right);
+
+// Whether the strip above the page that holds the caption buttons stays open
+// where Koan hides the toolbar, rather than collapsing to the page's gutter
+// until the pointer reaches the window's top edge: while one of `buttons` (the
+// visible caption buttons, in a frame `frame_width` wide) is on the page's side
+// of a sidebar that is shown, so that the desktop's window buttons are always
+// there, as the macOS traffic lights are with tabs on the right. A hidden
+// sidebar (compact mode) has no top row: then the strip collapses and the top
+// edge reveals all of them. Buttons not laid out yet (empty) don't count.
+bool KeepsCaptionStripOpen(const std::vector<gfx::Rect>& buttons,
+                           int frame_width,
+                           bool sidebar_on_right,
+                           bool sidebar_hidden);
 
 }  // namespace koan
 
