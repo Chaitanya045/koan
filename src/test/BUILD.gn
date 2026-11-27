@@ -2,6 +2,7 @@
 # Use of this source code is governed by the MIT license that can be
 # found in the LICENSE file.
 
+import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
 
@@ -59,6 +60,14 @@ test("koan_unittests") {
     "//url",
   ]
   data_deps = [ "//third_party/icu:icudata" ]
+
+  if (is_linux && use_dbus) {
+    sources += [ "//koan/common/koan_linux_safe_storage_unittest.cc" ]
+    deps += [
+      "//components/os_crypt/async/browser:freedesktop_secret_key_provider",
+      "//koan/common:branding",
+    ]
+  }
 }
 
 # Koan's browser tests (InProcessBrowserTest): Spaces, pinned tabs and what
