@@ -589,6 +589,7 @@ source_set("impl") {
     "//chrome/browser:browser_process",
     "//chrome/browser:command_updater_impl",
     "//chrome/browser:shell_integration",
+    "//chrome/browser/app_mode",
     "//chrome/browser/bookmarks",
     "//chrome/browser/browsing_data:constants",
     "//chrome/browser/favicon",

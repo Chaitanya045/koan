@@ -10,6 +10,7 @@
 #include "koan/browser/koan_vertical_tabs.h"  // koan::OwnsSidebar()
 
 class BrowserView;
+class BrowserWindowInterface;
 
 namespace views {
 class View;
@@ -23,13 +24,28 @@ namespace koan {
 // dying widget, so that is no test of the window being alive.
 bool IsWindowFullscreen(const BrowserView* browser_view);
 
-// macOS: whether the page is fullscreen (a video's fullscreen button, or an
-// extension), as opposed to the browser window (the green button, ⌃⌘F).
-// Koan is suspended then, as in Zen (`:not([inDOMFullscreen])`): the page fills
-// the screen, no card, no radius, no hot zones, no URL bar. Chromium keeps its
-// immersive mode (and the vertical tab strip's "draw" state) on then, so
-// nothing else tells Koan. False elsewhere.
+// macOS and Linux: whether the page is fullscreen (a video's fullscreen
+// button, or an extension), as opposed to the browser window (the green
+// button, ⌃⌘F; F11 on Linux). Koan is suspended then, as in Zen
+// (`:not([inDOMFullscreen])`): the page fills the screen, no card, no radius,
+// no hot zones, no URL bar. On macOS Chromium keeps its immersive mode (and the
+// vertical tab strip's "draw" state) on then, so nothing else tells Koan; on
+// Linux Chromium hides its UI for it (KeepsLayoutInFullscreen()). Also inside
+// the browser's fullscreen. False elsewhere.
 bool IsContentFullscreen(const BrowserView* browser_view);
+
+// Linux: whether `browser`'s window keeps its UI (Koan's layout: the sidebar
+// beside the page, the toolbar unless Koan hides it) when the window is
+// fullscreen (F11), as on macOS and as Zen does on Linux, instead of Chromium
+// hiding it all: a normal window with Koan's sidebar, unless the page is
+// fullscreen (a video), which still hides everything. Linux has no immersive
+// mode for normal windows, so without this Chromium hides the tab strip, the
+// toolbar and the bookmarks bar in every fullscreen. Called from
+// BrowserWindowFullscreenController::ShouldHideUIForFullscreen(), which the
+// tab strip, toolbar and bookmarks bar ask, so it doesn't ask Koan's views
+// (UseContentCard() depends on it). False on macOS (immersive mode keeps the
+// UI there) and elsewhere.
+bool KeepsLayoutInFullscreen(BrowserWindowInterface* browser);
 
 // Whether compact mode is applied to the window of `browser_view` (a
 // BrowserView). When true, the vertical tab strip takes no layout space (it
@@ -46,28 +62,32 @@ bool KeepsSidebarNav(const views::View* browser_view);
 // page card reaches the top of the window.
 bool IsToolbarHidden(const views::View* browser_view);
 
-// macOS: whether Koan's layout keeps the window's top container (the
-// toolbar) through native fullscreen, as in a window: a normal window with
-// Koan's sidebar (UseContentCard()). Zen on macOS keeps its toolbars in
-// fullscreen (Firefox's mac default browser.fullscreen.autohide false), and
-// its compact mode works there as in a window. So Chromium's immersive mode
-// doesn't take the top container into its overlay widget (which would only
-// reveal it from the top edge): the BrowserView hook asks this as the
-// fullscreen starts, and Koan's compact controller places it from then on
-// (the BrowserView with the toolbar shown, Koan's overlay where compact mode
-// or single toolbar hides it, out of sight while the page is fullscreen).
-// False elsewhere.
+// macOS and Linux: whether Koan's layout keeps the window's top container
+// (the toolbar) through the window's fullscreen, as in a window: a normal
+// window with Koan's sidebar (UseContentCard()). Zen on macOS keeps its
+// toolbars in fullscreen (Firefox's mac default browser.fullscreen.autohide
+// false), and its compact mode works there as in a window; Zen on Linux (F11)
+// keeps them too (its sidebar and toolbars are fullscreen toolbars, which
+// autohide leaves alone). So Chromium's immersive mode on macOS doesn't take
+// the top container into its overlay widget (which would only reveal it from
+// the top edge): the BrowserView hook asks this as the fullscreen starts, and
+// Koan's compact controller places it from then on (the BrowserView with the
+// toolbar shown, Koan's overlay where compact mode or single toolbar hides
+// it, out of sight while the page is fullscreen). Linux has no immersive mode:
+// there KeepsLayoutInFullscreen() keeps Chromium's UI, and the top container
+// stays where Koan's compact controller puts it. False elsewhere.
 bool KeepsTopContainerInFullscreen(const BrowserView* browser_view);
 
-// macOS: whether the window is in native fullscreen with Koan's layout
+// macOS and Linux: whether the window is fullscreen with Koan's layout
 // (KeepsTopContainerInFullscreen()). Like Zen, none of Chromium's fullscreen
 // top chrome is revealed from the top edge then (its toolbar, bookmarks bar;
 // AppKit's thin title bar with the traffic lights still slides in with the
 // menu bar, as in Zen): Koan's own layout stays, the toolbar above the page
 // unless compact mode or single toolbar hides it (then the sidebar's header
-// and the URL pill, or compact mode's own slide). Called from the BrowserView
-// and BrowserFrameViewMac hooks, so that Chromium's fullscreen toolbar style
-// is "none" and its dialogs anchor to the window. False elsewhere.
+// and the URL pill, or compact mode's own slide), and the URL bar opens as in
+// a window. Called from the BrowserView and BrowserFrameViewMac hooks, so that
+// Chromium's fullscreen toolbar style is "none" and its dialogs anchor to the
+// window (macOS only). False elsewhere.
 bool HidesFullscreenTopChrome(const views::View* browser_view);
 
 // Whether the strip at the top of the window where the frame draws its

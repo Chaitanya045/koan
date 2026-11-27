@@ -203,6 +203,22 @@ you change it in fullscreen: "Hide Tab bar" keeps the toolbar and reveals the
 sidebar at the screen's side edge, "Hide Top bar" and "Hide Both" reveal the
 toolbar at the top edge. A page's own fullscreen (a video's) hides it all.
 
+**Fullscreen on Linux** (F11) keeps the same layout too, as Zen's does on
+Linux: the sidebar stays beside the page, which keeps its gap and rounded
+corners; with single toolbar the sidebar's top row has the sidebar toggle
+and back / forward / reload, and Ctrl+L, Ctrl+T or the URL pill open the URL
+bar over the page; with "Sidebar and Top Toolbar" the toolbar stays above
+the page. With compact mode on (and
+no split view) the page fills the screen with no gap or corners, and the
+pointer at the screen's left edge (the right one with tabs on the right)
+slides the sidebar in; where compact mode hides the toolbar, the top edge
+slides it in. The window's buttons aren't shown in fullscreen (Zen shows a
+thin strip with them at the top edge). A page's own fullscreen (a video's),
+from a window or inside F11, hides it all and shows only the page; leaving it
+brings the layout back as it was, compact mode included. Chromium's "To exit
+full screen, press and hold Esc" notice still shows as fullscreen starts;
+F11 or holding Esc leaves it.
+
 **Bookmarks bar**: off, as in Zen: none anywhere, also on the new tab page
 and after importing bookmarks. Turn it on in Koan's settings (Look and Feel
 > Appearance > Bookmarks bar) or with ⇧⌘B (View > Always Show Bookmarks Bar,
