@@ -1,11 +1,12 @@
 # Linux CI and the Flatpak
 
-The nightly Linux build in `.github/workflows/linux.yml`: Koan for x86_64
-as a Flatpak bundle, built on GitHub's free runners. User-facing docs are in
+The Linux build: Koan for x86_64 as a Flatpak bundle, built on GitHub's
+free runners, nightly (`.github/workflows/linux.yml`) and for every tagged
+release (`release.yml`, "Releases" below). User-facing docs are in
 docs/USAGE.md ("Installing the Linux build").
 
-**Status:** Linux x86_64 ships as a Flatpak nightly built by CI (the owner
-decided on 2026-11-26, decisions.md). It was built on a fork (#442) and taken
+**Status:** Linux x86_64 ships as a Flatpak, nightly and with tagged
+releases, built by CI (the owner decided on 2026-11-26, decisions.md). It was built on a fork (#442) and taken
 over as #466. There is still no Windows build. Nothing here changes the Linux
 development build.
 
@@ -86,6 +87,36 @@ Checked locally on a fake tree (2026-11-22, with the earlier Linux-only
 scripts, since replaced by the shared ones): new, changed and removed
 patches; a changed and a deleted repo file; untouched files keep their
 mtimes; branding change exits 3.
+
+## Releases
+
+`release.yml`'s `build-linux` job calls `linux-chain.yml` with
+`ref: <the tag's commit>` and `release: true` (bundle
+`Koan-<version>-x86_64.flatpak`, no commit), with no `keep_base`, no secrets
+and no environment. It runs in parallel with the Mac `build` job. `publish`
+(the `release` environment, on macOS) `needs` both, so a failed leg means no
+release. It downloads the chain's `flatpak` artifact, checks the name, that
+it's not empty and that the chain built the same commit and Chromium as the
+Mac one, writes its `.sha256` with `shasum -a 256` (as `mac_package.sh` does
+for the .dmg) and uploads both. Not signed; `koan-update.json` stays
+Mac-only (Linux in-app updates would be notify-only, later).
+`release_info.py notes` fills `@FLATPAK@` and `@FLATPAK_SHA256@` in the
+notes, or adds a Linux section when the notes don't have them.
+
+- **Artifact names don't collide** between the two chains of a run:
+  `koan-mac-source.tar.zst`, `koan-mac-out-<n>.tar.zst`,
+  `koan-mac-out-final.tar.zst`, `koan-mac-logs-<n>` and `Koan-….dmg`, against
+  `koan-linux-…` (same shapes) and `Koan-….flatpak`.
+- **Base:** `linux-chain.yml` always looks for a base (`find_base.sh linux.yml
+  koan-linux`), and has no `incremental` input like `macos-chain.yml` (whose
+  releases build from scratch). So a tag's Linux build builds on the newest
+  successful develop nightly run that still has its source and finished
+  build (kept 14 days), when `CHROMIUM_VERSION`, the branding and the fetch
+  inputs match and the runner image is the same; otherwise it's a full
+  build. The base is only ever a trusted develop build, and the tag's tree
+  is made exactly this commit's (`incremental.sh`), so the result is the
+  same as a full build's.
+- Nothing here ran against a real tag yet.
 
 ## Runner
 
@@ -170,5 +201,3 @@ runtime repo, so `flatpak install ./Koan-….flatpak` fetches the runtime.
   makes it, but agents outside the sandbox reach Koan's socket under
   `~/.var/app/dev.koan.Koan/config/koan/AgentControl/` only if they
   know that path. Not looked at yet.
-- Tagged releases (`release.yml`) build only the Mac; a Linux leg would
-  call `linux-chain.yml` with `release: true` (and no `keep_base`).

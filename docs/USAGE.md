@@ -1433,8 +1433,10 @@ install a new nightly. Click **Always Allow**. The profile is in
 
 ## Installing the Linux build
 
-A Flatpak for x86_64 Linux, built every night from `develop` (when
-something that goes into the app changed): the
+A Flatpak for x86_64 Linux. Every tagged release has it next to the Mac
+disk image, on the [Releases page](https://github.com/koan-browser/koan/releases):
+`Koan-<version>-x86_64.flatpak` and its `.sha256`. It is also built every
+night from `develop` (when something that goes into the app changed): the
 `nightly-linux` pre-release on the
 [Releases page](https://github.com/koan-browser/koan/releases/tag/nightly-linux),
 `Koan-<version>-<commit>-x86_64.flatpak` and its `.sha256`. Any run of the
@@ -1454,8 +1456,9 @@ flatpak run dev.koan.Koan
 ```
 
 Flatpak fetches the Freedesktop runtime and the Chromium base app from
-Flathub the first time. Koan then shows up in your app menu. To update,
-install the newer file the same way. To remove it, `flatpak uninstall
+Flathub the first time. Koan then shows up in your app menu. There are no
+in-app updates on Linux yet: to update, install the newer file the same
+way. To remove it, `flatpak uninstall
 dev.koan.Koan` (add `--delete-data` to remove the profile too).
 
 - The profile is in `~/.var/app/dev.koan.Koan/config/koan`.

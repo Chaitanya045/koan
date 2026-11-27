@@ -17,9 +17,13 @@
       $GITHUB_OUTPUT.
 
   release_info.py notes --notes docs/releases/<v>.md --dmg <file>
-      --sha256 <hex> [--generated <file>] --output <file>
-      The release's body: the notes with @DMG@ and @SHA256@ filled in, then
-      GitHub's generated notes (the pull requests since the previous tag).
+      --sha256 <hex> --flatpak <file> --flatpak-sha256 <hex>
+      [--generated <file>] --output <file>
+      The release's body: the notes with @DMG@, @SHA256@, @FLATPAK@ and
+      @FLATPAK_SHA256@ filled in, then GitHub's generated notes (the pull
+      requests since the previous tag). Notes that don't mention @FLATPAK@
+      get a short Linux section after them, so the release always names the
+      Flatpak and its checksum.
 
 The version rules are in src/version/koan_version.py, which the build uses
 too, so the title, Info.plist and About Koan can't disagree.
@@ -145,10 +149,41 @@ def info(version, chromium, notes, previous, latest=True):
   }
 
 
-def render_notes(notes, dmg, sha256, generated=''):
-  if not re.fullmatch(r'[0-9a-f]{64}', sha256):
-    raise ReleaseError('%r is not a SHA-256' % sha256)
+LINUX_SECTION = '''## Linux
+
+**@FLATPAK@**: Linux on x86_64, as a Flatpak. Install it for your user and
+start it ([Installing the Linux build](https://github.com/koan-browser/koan/blob/develop/docs/USAGE.md#installing-the-linux-build)):
+
+```sh
+flatpak install --user ./@FLATPAK@
+flatpak run dev.koan.Koan
+```
+
+Its SHA-256 checksum is in the `.sha256` file next to it:
+
+```
+@FLATPAK_SHA256@  @FLATPAK@
+```
+'''
+
+
+def _check_sha256(value):
+  if not re.fullmatch(r'[0-9a-f]{64}', value):
+    raise ReleaseError('%r is not a SHA-256' % value)
+
+
+def render_notes(notes, dmg, sha256, generated='', flatpak='',
+                 flatpak_sha256=''):
+  _check_sha256(sha256)
   body = notes.replace('@DMG@', dmg).replace('@SHA256@', sha256).rstrip()
+  if flatpak or flatpak_sha256 or '@FLATPAK' in notes:
+    if not flatpak:
+      raise ReleaseError('the notes mention the Flatpak but no --flatpak')
+    _check_sha256(flatpak_sha256)
+    if '@FLATPAK@' not in notes:
+      body += '\n\n' + LINUX_SECTION.rstrip()
+    body = (body.replace('@FLATPAK_SHA256@', flatpak_sha256)
+            .replace('@FLATPAK@', flatpak))
   if generated.strip():
     body += '\n\n---\n\n' + generated.strip()
   return body + '\n'
@@ -191,6 +226,8 @@ def main(argv):
   p.add_argument('--notes', required=True)
   p.add_argument('--dmg', required=True)
   p.add_argument('--sha256', required=True)
+  p.add_argument('--flatpak', default='')
+  p.add_argument('--flatpak-sha256', default='')
   p.add_argument('--generated')
   p.add_argument('--output', required=True)
   args = parser.parse_args(argv)
@@ -208,7 +245,8 @@ def main(argv):
       if args.generated:
         generated = pathlib.Path(args.generated).read_text()
       body = render_notes(pathlib.Path(args.notes).read_text(), args.dmg,
-                          args.sha256, generated)
+                          args.sha256, generated, args.flatpak,
+                          args.flatpak_sha256)
       pathlib.Path(args.output).write_text(body)
   except (ReleaseError, ValueError, OSError) as e:
     print('release_info.py: %s' % e, file=sys.stderr)

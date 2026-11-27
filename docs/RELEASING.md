@@ -10,8 +10,8 @@ build, the packaging and the release workflow all use.
 
 | Channel | What it is | Where |
 |---|---|---|
-| **Nightly** | An ad hoc signed dev build of `develop`, every night that something changed. Replaced each time. | The rolling [`nightly`](https://github.com/koan-browser/koan/releases/tag/nightly) pre-release (`macos.yml`) |
-| **Alpha** | Tagged releases for early testers: `vX.Y.Z-alpha.N`. | [Releases](https://github.com/koan-browser/koan/releases), marked **Latest** |
+| **Nightly** | An ad hoc signed dev build of `develop`, every night that something changed. Replaced each time. | The rolling [`nightly`](https://github.com/koan-browser/koan/releases/tag/nightly) pre-release (`macos.yml`), and [`nightly-linux`](https://github.com/koan-browser/koan/releases/tag/nightly-linux) for the Linux Flatpak (`linux.yml`) |
+| **Alpha** | Tagged releases for early testers: `vX.Y.Z-alpha.N`. The Mac app and the Linux Flatpak. | [Releases](https://github.com/koan-browser/koan/releases), marked **Latest** |
 | Beta, Stable | Later. Alphas update in the app first ([Signing and updates](#signing-and-updates)). | |
 
 Every tagged release, alphas included, is a full GitHub release marked
@@ -49,8 +49,9 @@ GitHub showed none in the repository's sidebar and `/releases/latest` was a
     site or server sees keep Chromium's version.
 - **Nightlies** carry the same `VERSION` as `develop` (the next release's),
   and their disk image names add the commit:
-  `Koan-0.0.2-alpha.1-1a2b3c4-arm64.dmg`. Releases are
-  `Koan-0.0.2-alpha.1-arm64.dmg`.
+  `Koan-0.0.2-alpha.1-1a2b3c4-arm64.dmg` (Linux:
+  `Koan-0.0.2-alpha.1-1a2b3c4-x86_64.flatpak`). Releases are
+  `Koan-0.0.2-alpha.1-arm64.dmg` and `Koan-0.0.2-alpha.1-x86_64.flatpak`.
 
 ## Cadence
 
@@ -68,7 +69,8 @@ GitHub showed none in the repository's sidebar and `/releases/latest` was a
 2. **Write `docs/releases/<version>.md`.** Copy the sections of the last one
    (Download/Installing, What's new, Known issues, Build), or start from the
    skeleton the previous release left. `@DMG@` and `@SHA256@` are filled in
-   by the workflow. Remove every `TODO(release)`: the workflow refuses to
+   by the workflow, and so are `@FLATPAK@` and `@FLATPAK_SHA256@` (the Linux
+   Flatpak; notes without them get a short Linux section added). Remove every `TODO(release)`: the workflow refuses to
    publish while one is left. House rules: say what Koan does and how; **no
    comparisons with other browsers and no benchmark tables against
    anything**, Koan's older builds included. Add the version's line to
@@ -85,16 +87,21 @@ GitHub showed none in the repository's sidebar and `/releases/latest` was a
    keeps the release as a draft to look at first).
 5. **The workflow** checks the tag, `VERSION` and the notes in a few minutes
    (a mismatch fails there, not a day later), then builds for about 16 hours
-   (the nightly's chain, `macos-chain.yml`), then publishes the release: the
-   title, the notes followed by GitHub's generated notes since the previous
-   release tag, the `.dmg`, its `.sha256` and `koan-update.json` (see
-   [Signing and updates](#signing-and-updates)). Publishing waits for the
-   owner's approval in the `release` environment (the run's page shows
-   **Review deployments**); the environment only accepts `v*` tags and
-   `develop`.
+   (the nightly's chain, `macos-chain.yml`) and, in parallel, the Linux
+   Flatpak (`linux-chain.yml`, see [The Linux build](#the-linux-build)), then
+   publishes the release: the title, the notes followed by GitHub's generated
+   notes since the previous release tag, the `.dmg`, the
+   `Koan-<version>-x86_64.flatpak`, their `.sha256` files and
+   `koan-update.json` (see [Signing and updates](#signing-and-updates)).
+   Publishing needs both builds: if one fails, nothing is published.
+   Publishing waits for the owner's approval in the `release` environment
+   (the run's page shows **Review deployments**); the environment only
+   accepts `v*` tags and `develop`.
 6. **Check the release:** download the `.dmg`, compare its SHA-256, install
-   it, and look at About Koan (`0.0.2 (Alpha) · Chromium …`). Then bump
-   `VERSION` for the next one (step 1).
+   it, and look at About Koan (`0.0.2 (Alpha) · Chromium …`). Do the same
+   with the Flatpak (`flatpak install --user ./Koan-*.flatpak`, then
+   `flatpak run dev.koan.Koan`). Then bump `VERSION` for the next one
+   (step 1).
 
 To redo a release, delete it (and any leftover draft of it) on GitHub first;
 the workflow refuses a tag that already has one. Never move a published tag.
@@ -108,6 +115,24 @@ their first matching label: Features (`enhancement`, `feature`), Fixes
 `release`, `macos`, `chromium-update`), Docs (`docs`, `documentation`), then
 everything else. `skip-changelog`, `duplicate`, `invalid`, `wontfix`, `repo`
 and `tracker` are left out.
+
+## The Linux build
+
+The Flatpak is built by the nightly's chain, `linux-chain.yml`, called by
+`release.yml` as `build-linux` with `release: true` (the bundle is named
+without the commit) and without `keep_base` (a tag's build is never a base
+for later ones, and it deletes only its own archives). It has no secrets and
+isn't part of the `release` environment. Like the nightly's, it builds on
+the newest finished `develop` build when there is one that is at most 14
+days old and has the same Chromium and fetch inputs, and then rebuilds only
+what changed (25 to 45 minutes for a few commits, in the nightly's runs);
+otherwise it's a full build in up to 8 chained jobs
+(about 8 to 11 hours, less than the Mac's). A tag on a `release/<major>`
+branch has an older Chromium than `develop`, so it's a full build.
+[.agent/notes/linux-ci.md](../.agent/notes/linux-ci.md) has the details.
+
+The Flatpak isn't signed, and `koan-update.json` only has the Mac: Linux has
+no in-app updates yet, testers install the new file by hand.
 
 ## Signing and updates
 
