@@ -5,6 +5,7 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_SHORTCUTS_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_SHORTCUTS_H_
 
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -13,6 +14,8 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "components/tabs/public/tab_interface.h"
 #include "koan/browser/koan_shortcut_table.h"
+#include "koan/browser/ui/views/koan_keyboard_state.h"
+#include "koan/browser/ui/views/koan_recent_tab_walk.h"
 #include "ui/base/accelerators/accelerator.h"
 
 class BrowserView;
@@ -96,8 +99,8 @@ class KoanShortcutController : public ui::AcceleratorTarget {
   // goes to the tab shown last before the active one, of those Zen's list
   // has; each further press while Ctrl is held goes on down the same list
   // (Shift goes back up), and letting go of Ctrl ends the walk, so the next
-  // Ctrl+Tab flips back again. (Off macOS, Ctrl counts as let go of after
-  // every press: IsControlKeyDown().)
+  // Ctrl+Tab flips back again (RecentTabWalk, with Ctrl's state from
+  // ControlKeyState, on every platform).
   void CycleToRecentTab(TabStripModel* model, bool forward);
   // The tabs of Zen's list, most recently used first: the active one first.
   static std::vector<tabs::TabHandle> RecentTabs(TabStripModel* model);
@@ -117,10 +120,10 @@ class KoanShortcutController : public ui::AcceleratorTarget {
   raw_ptr<views::FocusManager> focus_manager_ = nullptr;
   std::vector<Binding> bindings_;
   PrefChangeRegistrar pref_change_registrar_;
-  // The walk of CycleToRecentTab(): the list as it was at its first press,
-  // and where in it the walk is.
-  std::vector<tabs::TabHandle> recent_walk_;
-  size_t recent_walk_index_ = 0;
+  // The walk of CycleToRecentTab(), and whether Ctrl is still held for it
+  // (from OnAddedToWidget() on).
+  RecentTabWalk<tabs::TabHandle> recent_walk_;
+  std::unique_ptr<ControlKeyState> control_key_;
   base::RepeatingTimer control_release_timer_;
 };
 
