@@ -71,19 +71,26 @@ source_set("sidebar_curve") {
 }
 
 # Zen's two-finger swipe between Spaces (MPL-2.0, see koan_swipe_tracker.h):
-# the gesture state machine and the formulas, and its edge actions (the
-# Library, a new Space: koan_swipe_edge_actions.h), plain C++ so that the unit
-# tests can use them. Also the Library's open motion (koan_library_motion.h).
+# the gesture state machine and the formulas, how each platform's touchpad
+# events feed it (koan_swipe_input.h), and its edge actions (the Library, a new
+# Space: koan_swipe_edge_actions.h), plain C++ so that the unit tests can use
+# them. Also the Library's open motion (koan_library_motion.h).
 source_set("swipe_tracker") {
   sources = [
     "koan_library_motion.cc",
     "koan_library_motion.h",
     "koan_swipe_edge_actions.cc",
     "koan_swipe_edge_actions.h",
+    "koan_swipe_input.cc",
+    "koan_swipe_input.h",
     "koan_swipe_tracker.cc",
     "koan_swipe_tracker.h",
   ]
   deps = [ "//base" ]
+  public_deps = [
+    "//ui/events:event_constants",
+    "//ui/events/types:headers",
+  ]
 }
 
 # Which edge of the window the pointer left through, and how far outside it
@@ -298,6 +305,7 @@ test("koan_views_unittests") {
     "koan_stored_tab_unittest.cc",
     "koan_strip_on_share_unittest.cc",
     "koan_swipe_edge_actions_unittest.cc",
+    "koan_swipe_input_unittest.cc",
     "koan_swipe_tracker_unittest.cc",
     "koan_url_pill_buttons_unittest.cc",
     "koan_window_edges_unittest.cc",
@@ -803,8 +811,10 @@ source_set("impl") {
   }
   if (is_linux) {
     # Dragging the window from the page asks the window manager to move it
-    # (koan_window_drag.cc); macOS runs a move loop instead.
+    # (koan_window_drag.cc); macOS runs a move loop instead. The Space swipe
+    # scales the touchpad's offsets for the Ozone platform (koan_space_swipe.cc).
     deps += [
+      "//ui/ozone",
       "//ui/platform_window",
       "//ui/platform_window/wm",
     ]

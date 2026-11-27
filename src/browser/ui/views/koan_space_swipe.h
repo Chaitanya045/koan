@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/memory/raw_ptr.h"
+#include "build/build_config.h"
 #include "koan/browser/ui/views/koan_scroll_capture.h"
 #include "koan/browser/ui/views/koan_swipe_tracker.h"
 #include "ui/events/event.h"
@@ -18,7 +19,8 @@ namespace koan {
 class KoanWorkspaceController;
 
 // KoanWorkspaceController's side of Zen's two-finger swipe between Spaces
-// (koan_swipe_tracker.h): translates the touchpad's ui::ScrollEvents.
+// (koan_swipe_tracker.h): translates the touchpad's ui::ScrollEvents, on macOS
+// and on Linux (koan_swipe_input.h).
 class KoanSpaceSwipe final : public KoanSwipeTracker::Delegate,
                              public KoanScrollCapture::Delegate {
  public:
@@ -40,6 +42,10 @@ class KoanSpaceSwipe final : public KoanSwipeTracker::Delegate,
     capturing_ = false;
   }
 
+  // The touchpad's travel of one gesture amount, in its scroll offsets: 550 on
+  // macOS, LinuxSwipePixelSize() for the Ozone platform on Linux.
+  static float PixelSize();
+
   // The swipe that is under way, and the momentum that follows it, gets all of
   // its scroll events, whichever of `window`'s views or child windows the
   // system sends them to (KoanScrollCapture), until the next swipe begins or
@@ -56,8 +62,17 @@ class KoanSpaceSwipe final : public KoanSwipeTracker::Delegate,
   bool TakeScroll(const ui::ScrollEvent& event) override;
 
  private:
+  // The phase the tracker gets for `event`. On Linux it depends on the events
+  // before it (LinuxSwipePhase()): `advance` takes `event` as the next one.
+  SwipePhase GetPhase(const ui::ScrollEvent& event, bool advance);
+
   const raw_ptr<KoanWorkspaceController> controller_;
-  KoanSwipeTracker tracker_{this};
+  KoanSwipeTracker tracker_{this, PixelSize()};
+#if BUILDFLAG(IS_LINUX)
+  // The last touchpad scroll event was the fingers lifting (or there was none
+  // yet).
+  bool lifted_ = true;
+#endif
   std::unique_ptr<KoanScrollCapture> capture_;
   bool capturing_ = false;
 };

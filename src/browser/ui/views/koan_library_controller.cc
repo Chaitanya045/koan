@@ -158,7 +158,10 @@ END_METADATA
 // The open panel covers the sidebar, so the touchpad's horizontal swipes over
 // it go to the Spaces' swipe as the sidebar's do (Zen listens on the library
 // too): swiping back closes it. macOS sends the mouse wheel as scroll events
-// too; only a wheel has ticks, and it stays the panel's.
+// too; only a wheel has ticks, and it stays the panel's. On Linux (a wheel is
+// a wheel event there) this is also where the rest of a swipe that opens the
+// panel goes once the panel is under the fingers: Aura sends each scroll event
+// to the window under the pointer, the panel's child window.
 class LibrarySwipeHandler : public ui::EventHandler {
  public:
   explicit LibrarySwipeHandler(BrowserView* browser_view)
@@ -166,11 +169,13 @@ class LibrarySwipeHandler : public ui::EventHandler {
 
   // ui::EventHandler:
   void OnScrollEvent(ui::ScrollEvent* event) override {
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 #if BUILDFLAG(IS_MAC)
     if (event->type() == ui::EventType::kScroll && event->HasNativeEvent() &&
         !ui::GetMouseWheelTick120ths(event->native_event()).IsZero()) {
       return;
     }
+#endif
     KoanBrowserViewController* controller =
         KoanBrowserViewController::From(browser_view_);
     if (controller && controller->workspaces() &&

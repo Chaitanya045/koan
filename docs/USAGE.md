@@ -510,20 +510,23 @@ belongs to a Space, and new tabs open in the active one.
   the Space (see Space themes below).
 - **Switch**: click a Space in the bottom bar, ⌘⌥← / ⌘⌥→ (they wrap around unless you turn that off in Settings > Tab
   Management > Workspaces), ⌃1…⌃0 for Space 1 to 10, swipe
-  horizontally with two fingers over the sidebar (on a Mac, as in Zen, the Space follows your
-  fingers, whatever the system's natural scrolling setting: moving them left
-  brings in the next Space, right the previous one, and lifting them
-  after enough travel, or a quick flick, switches Space), or turn the mouse wheel
+  horizontally with two fingers over the sidebar (as in Zen, the Space follows your
+  fingers: moving them left brings in the next Space, right the previous
+  one, and lifting them after enough travel, or a quick flick, switches
+  Space, else it springs back; on a Mac whatever the system's natural
+  scrolling setting, on Linux, Wayland or X11, the way the desktop's
+  touchpad natural scrolling setting has it, so with it off the Space moves
+  the other way, as scrolled content does), or turn the mouse wheel
   there (horizontally, or vertically while holding ⌃; the key and
   natural scrolling, which turns the wheel and the swipe round, are in
   Settings > Tab Management > Workspaces); the right-click
   menu of the header also lists the Spaces. The old Space slides out and
   the new one in, as in Zen, and you land on the tab you left the Space on
   (also after a restart).
-- **Swipe past the ends** (on a Mac, as in Zen): from the first Space (the
+- **Swipe past the ends** (on a Mac and on Linux, as in Zen): from the first Space (the
   one next to the Library; the last with the tabs on the right), swiping
   on towards the Library's side (fingers moving right, with the Library on
-  the left) opens the
+  the left; the other way round on Linux with natural scrolling off) opens the
   **Library**, which follows your fingers; swipe back over it to close it.
   From the last Space, swiping on (fingers moving left) brings in a round
   **+** badge whose ring fills as you go; once the ring fills the badge
@@ -1052,7 +1055,7 @@ with three sections down its side, and opens on the one you used last:
   Chrome's History page.
 
 Esc, the back arrow at the bottom of the side column, the same shortcut
-again, opening a tab, or (on a Mac) a two-finger swipe back over it closes
+again, opening a tab, or (with a touchpad) a two-finger swipe back over it closes
 the Library; swiping past the first Space opens it (see Spaces). Incognito
 windows have no
 Library: there ⌘Y shows Chrome's notice that history isn't saved, as

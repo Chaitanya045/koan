@@ -343,19 +343,22 @@ void SetSpaceRowsVisible(TabStripView* tab_strip, bool visible) {
 // Zen's mouse wheel over the sidebar (ZenSpaceManager's toolbox "wheel"
 // listener): a horizontal wheel, or a vertical one with the modifier of
 // zen.workspaces.scroll-modifier-key (Ctrl by default), switches Space; on
-// macOS also Zen's two-finger swipe. Runs before upstream's swipe controller on
-// the same view.
+// macOS and Linux also Zen's two-finger swipe. Runs before upstream's swipe
+// controller on the same view.
 class SpaceWheelHandler : public ui::EventHandler {
  public:
   explicit SpaceWheelHandler(KoanWorkspaceController* controller)
       : controller_(controller) {}
 
   // ui::EventHandler:
-#if BUILDFLAG(IS_MAC)
-  // macOS sends the mouse wheel as scroll events, like touchpad scrolling;
-  // only a wheel has ticks. The touchpad's horizontal swipes are
-  // KoanSpaceSwipe's (through the controller).
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+  // The touchpad's scrolling comes as scroll events, and its horizontal
+  // swipes are KoanSpaceSwipe's (through the controller). macOS sends the
+  // mouse wheel as scroll events too; only a wheel has ticks. Linux sends it
+  // as wheel events (OnMouseEvent()), on Wayland and X11 alike. A scroll event
+  // nothing takes comes back as a wheel event (Widget::OnScrollEvent()).
   void OnScrollEvent(ui::ScrollEvent* event) override {
+#if BUILDFLAG(IS_MAC)
     if (event->type() == ui::EventType::kScroll && event->HasNativeEvent() &&
         !ui::GetMouseWheelTick120ths(event->native_event()).IsZero()) {
       if (!Handle(event->x_offset(), event->y_offset(), event)) {
@@ -365,6 +368,7 @@ class SpaceWheelHandler : public ui::EventHandler {
       }
       return;
     }
+#endif
     // Touchpad scrolling over the Space switcher scrolls it, when its Spaces
     // don't fit (Zen's overflow-x: auto).
     if (event->type() == ui::EventType::kScroll &&
@@ -386,9 +390,10 @@ class SpaceWheelHandler : public ui::EventHandler {
     // Wheels are handled above; what comes here is touchpad scrolling,
     // which Zen leaves alone (only line scrolling switches).
 #else
-    // A horizontal wheel (or touchpad scroll) is upstream's swipe, which
-    // switches Space too (through PickSpaceTab() and WrapsSpaces()); the
-    // modifier with a vertical wheel is Zen's. Not touchpad scrolling.
+    // A horizontal wheel is upstream's swipe, which switches Space too
+    // (through PickSpaceTab() and WrapsSpaces()); the modifier with a vertical
+    // wheel is Zen's. On Linux what comes here from the touchpad is what
+    // KoanSpaceSwipe left (scrolling the tabs, a gesture's first pixels).
     if (!event->IsMouseWheelEvent()) {
       return;
     }
