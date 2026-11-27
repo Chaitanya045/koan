@@ -279,24 +279,14 @@ void KoanWindowDragController::StartDrag(const blink::WebMouseEvent& event) {
   // Then do what a press on the title bar does (WindowEventFilterLinux): the
   // window manager moves the window.
   content::RenderWidgetHostView* view = widget_host_->GetView();
-  aura::WindowTreeHost* host = widget->GetNativeWindow()->GetHost();
-  auto* platform_host = views::DesktopWindowTreeHostPlatform::GetHostForWidget(
-      host->GetAcceleratedWidget());
-  ui::WmMoveResizeHandler* handler =
-      platform_host && platform_host->platform_window()
-          ? ui::GetWmMoveResizeHandler(*platform_host->platform_window())
-          : nullptr;
-  // Headless (the e2e tests) has no window manager.
-  if (!handler || !view) {
+  if (!view) {
     return;
   }
   aura::Window* page_window = view->GetNativeView();
   gfx::Point point = gfx::ToRoundedPoint(event.PositionInWidget());
   aura::Window::ConvertPointToTarget(page_window, page_window->GetRootWindow(),
                                      &point);
-  host->ConvertDIPToScreenInPixels(&point);
-  handler->DispatchHostWindowDragMovement(HTCAPTION, point);
-  aura::Env::GetInstance()->set_mouse_button_flags(0);
+  StartWindowManagerMove(widget, point);
 #elif BUILDFLAG(IS_MAC)
   // macOS: AppKit moves the window while the button is down (as Zen does,
   // Zen's StartNativeWindowMove), so tiling at the screen's edges and the
@@ -335,5 +325,28 @@ void KoanWindowDragController::StartDrag(const blink::WebMouseEvent& event) {
   // gesture.
 #endif
 }
+
+#if BUILDFLAG(IS_LINUX)
+bool StartWindowManagerMove(views::Widget* widget,
+                            const gfx::Point& point_in_root) {
+  aura::WindowTreeHost* host = widget->GetNativeWindow()->GetHost();
+  auto* platform_host = views::DesktopWindowTreeHostPlatform::GetHostForWidget(
+      host->GetAcceleratedWidget());
+  ui::WmMoveResizeHandler* handler =
+      platform_host && platform_host->platform_window()
+          ? ui::GetWmMoveResizeHandler(*platform_host->platform_window())
+          : nullptr;
+  // Headless (the e2e tests) has no window manager. With the button up
+  // already, the window would follow the pointer until the next click.
+  if (!handler || !aura::Env::GetInstance()->IsLeftMouseButtonDown()) {
+    return false;
+  }
+  gfx::Point point = point_in_root;
+  host->ConvertDIPToScreenInPixels(&point);
+  handler->DispatchHostWindowDragMovement(HTCAPTION, point);
+  aura::Env::GetInstance()->set_mouse_button_flags(0);
+  return true;
+}
+#endif
 
 }  // namespace koan

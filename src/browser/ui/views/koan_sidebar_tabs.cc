@@ -5,6 +5,7 @@
 #include "koan/browser/ui/views/koan_sidebar_tabs.h"
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <optional>
 #include <string>
@@ -63,6 +64,7 @@
 #include "koan/browser/ui/views/koan_tab_drag.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
+#include "koan/browser/ui/views/koan_window_drag.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/browser/ui/views/koan_zen_window_drag.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -84,6 +86,7 @@
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/skia_conversions.h"
+#include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/text_utils.h"
@@ -851,7 +854,7 @@ bool IsSidebarClientArea(const views::View* tab_strip_view,
   if (IsOnSidebarHeaderView(region, point)) {
     return true;
   }
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
   // Upstream makes the scroll view's empty part below its contents caption
   // (TabStripView::IsPositionInWindowCaption()); the rest of it is client
   // area already.
@@ -1306,6 +1309,17 @@ void KoanSidebarTabsController::OnMouseEvent(ui::MouseEvent* event) {
     OnSidebarPressed(event);
     return;
   }
+#if BUILDFLAG(IS_LINUX)
+  if (empty_space_press_) {
+    if (event->type() == ui::EventType::kMouseDragged) {
+      OnEmptySpaceDragged(event);
+      return;
+    }
+    if (event->type() == ui::EventType::kMouseReleased) {
+      empty_space_press_.reset();
+    }
+  }
+#endif
   // Upstream's drag (to another window): Koan's own holds the sidebar
   // itself (koan_tab_drag.h).
   if (event->type() == ui::EventType::kMouseDragged &&
@@ -1329,6 +1343,9 @@ void KoanSidebarTabsController::OnMouseEvent(ui::MouseEvent* event) {
 void KoanSidebarTabsController::OnSidebarPressed(ui::MouseEvent* event) {
   // (A tab drag starts with a press.)
   drag_moves_ = 0;
+#if BUILDFLAG(IS_LINUX)
+  empty_space_press_.reset();
+#endif
   auto* region = views::AsViewClass<VerticalTabStripRegionView>(region_.get());
   auto* target = static_cast<views::View*>(event->target());
   if (!region || !target || !features::IsSidebarEnabled()) {
@@ -1376,8 +1393,52 @@ void KoanSidebarTabsController::OnSidebarPressed(ui::MouseEvent* event) {
                        },
                        weak_factory_.GetWeakPtr()));
   }
+#elif BUILDFLAG(IS_LINUX)
+  // Zen's draggable sidebar: the empty space is client area on Linux too
+  // (IsSidebarClientArea()), so that its double and middle clicks come here
+  // and not to the frame, which would maximise the window. A drag from it
+  // then moves the window, as the title bar's would. Taking the press also
+  // keeps its view the press handler, so that RootView leaves a second
+  // press its double-click flag.
+  if (event->IsOnlyLeftMouseButton()) {
+    event->SetHandled();
+    empty_space_press_ = event->root_location();
+  }
 #endif
 }
+
+#if BUILDFLAG(IS_LINUX)
+void KoanSidebarTabsController::OnEmptySpaceDragged(ui::MouseEvent* event) {
+  event->SetHandled();
+  // Un-snapping a maximized window takes a firmer gesture, as from the page
+  // (koan_window_drag.cc).
+  const float threshold = IsWindowSnapped(browser_view_)
+                              ? kWindowDragSnappedThreshold
+                              : kWindowDragThreshold;
+  const gfx::Vector2d moved = event->root_location() - *empty_space_press_;
+  if (std::hypot(moved.x(), moved.y()) < threshold) {
+    return;
+  }
+  empty_space_press_.reset();
+  // From a posted task, as Koan's page drag: on Wayland the move releases
+  // the pressed buttons at once, and that release would be dispatched inside
+  // this drag's. Ending the widget's capture first ends RootView's press (on
+  // X11 the release goes to the window manager).
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(
+                     [](base::WeakPtr<KoanSidebarTabsController> self,
+                        const gfx::Point& point) {
+                       views::Widget* widget =
+                           self ? self->browser_view_->GetWidget() : nullptr;
+                       if (!widget) {
+                         return;
+                       }
+                       widget->ReleaseCapture();
+                       StartWindowManagerMove(widget, point);
+                     },
+                     weak_factory_.GetWeakPtr(), event->root_location()));
+}
+#endif
 
 void KoanSidebarTabsController::OnViewIsDeleting(views::View* observed_view) {
   // The tab strip or the Space's group view, and the rows with it, is going

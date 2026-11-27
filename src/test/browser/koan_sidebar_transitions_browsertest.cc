@@ -9,6 +9,7 @@
 // Space follows. The frames in between are the video flow's
 // (scripts/mac/video/flows/essentials.mjs).
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -44,6 +45,7 @@
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
+#include "ui/base/hit_test.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/animation/animation.h"
@@ -52,6 +54,7 @@
 #include "ui/views/test/views_test_utils.h"
 #include "ui/views/view.h"
 #include "ui/views/view_utils.h"
+#include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 
 namespace koan {
@@ -261,6 +264,79 @@ IN_PROC_BROWSER_TEST_F(KoanSidebarTransitionsBrowserTest,
   // And nothing outside the region.
   EXPECT_FALSE(
       IsSidebarEmptySpace(strip, region, gfx::Point(-1, row_bounds.y())));
+}
+
+// Issue #517: on Linux the empty space below the tabs was the window's
+// caption, so the frame (WindowEventFilterLinux) took its clicks before the
+// views: a double-click there maximised the window and no tab opened. Through
+// the window's own hit test, the empty space is client area on macOS and
+// Linux (its double and middle clicks reach KoanSidebarTabsController, which
+// also moves the window from it), and the top row's empty part stays caption,
+// where a double-click maximises (Linux) or zooms (macOS) the window. Also
+// guards the upstream behaviour the fix relies on:
+// VerticalTabStripRegionView::IsPositionInWindowCaption() asking
+// koan::IsSidebarClientArea() first.
+IN_PROC_BROWSER_TEST_F(KoanSidebarTransitionsBrowserTest,
+                       EmptySpaceIsClientAreaAndTopRowIsCaption) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  OpenTabs(1);
+  auto* region = views::AsViewClass<VerticalTabStripRegionView>(
+      browser_view()->tab_strip_view());
+  TabStripView* strip = FindView<TabStripView>(browser_view());
+  ASSERT_TRUE(region);
+  ASSERT_TRUE(strip);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    views::test::RunScheduledLayout(browser_view());
+    return !LayoutAnimates(strip);
+  }));
+  const views::ScrollView* scroll = strip->unpinned_tabs_scroll_view();
+  ASSERT_TRUE(scroll);
+  const gfx::Rect scroll_bounds = views::View::ConvertRectToTarget(
+      scroll, region, scroll->GetLocalBounds());
+  views::Widget* widget = browser_view()->GetWidget();
+  ASSERT_TRUE(widget);
+  auto hit_test = [&](const gfx::Point& point) {
+    return widget->GetNonClientComponent(views::View::ConvertPointToTarget(
+        region, widget->GetRootView(), point));
+  };
+
+  // The empty space: the lowest point of the scroll view, in its middle,
+  // that is no row.
+  std::optional<gfx::Point> empty;
+  for (int y = scroll_bounds.bottom() - 2; y > scroll_bounds.y() && !empty;
+       y -= 2) {
+    const gfx::Point point(scroll_bounds.CenterPoint().x(), y);
+    if (IsSidebarEmptySpace(strip, region, point)) {
+      empty = point;
+    }
+  }
+  ASSERT_TRUE(empty) << "no empty space in " << scroll_bounds.ToString();
+  EXPECT_TRUE(IsSidebarClientArea(strip, region, *empty))
+      << empty->ToString() << ", the view there: " << ViewsAt(region, *empty);
+  EXPECT_FALSE(region->IsPositionInWindowCaption(*empty));
+  EXPECT_EQ(hit_test(*empty), HTCLIENT)
+      << empty->ToString() << ", the view there: " << ViewsAt(region, *empty);
+
+  // The top row's empty part (above the tabs, as near the row's middle as
+  // there is one): caption, for the window.
+  std::optional<gfx::Point> caption;
+  const int centre_x = region->width() / 2;
+  // (Clear of the window's resize borders.)
+  for (int y = 8; y < scroll_bounds.y() && !caption; y += 2) {
+    for (int dx = 0; dx < centre_x - 8 && !caption; dx += 2) {
+      for (const int x : {centre_x - dx, centre_x + dx}) {
+        if (!caption && region->IsPositionInWindowCaption(gfx::Point(x, y))) {
+          caption = gfx::Point(x, y);
+        }
+      }
+    }
+  }
+  ASSERT_TRUE(caption) << "no caption in the top row, above "
+                       << scroll_bounds.ToString();
+  EXPECT_FALSE(IsSidebarClientArea(strip, region, *caption));
+  EXPECT_EQ(hit_test(*caption), HTCAPTION)
+      << caption->ToString()
+      << ", the view there: " << ViewsAt(region, *caption);
 }
 
 // The recording (round 6, compact on): the revealed sidebar had no separator

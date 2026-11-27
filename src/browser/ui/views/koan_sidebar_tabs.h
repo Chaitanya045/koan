@@ -134,10 +134,13 @@ bool ShowsTabThrobber(content::BrowserContext* context);
 // VerticalTabStripRegionView::IsPositionInWindowCaption(): whether `point` (in
 // `region`'s coordinates) is client area that upstream would make window
 // caption: the Create-a-Space form (IsInSpaceForm()), Koan's views in the top
-// row (IsOnSidebarHeaderView()) and, on macOS, the empty space below the
-// tabs, so that their clicks reach the views (on macOS a caption point never
-// does; AppKit takes it). Koan moves the window from the empty space itself,
-// on a press (KoanSidebarTabsController).
+// row (IsOnSidebarHeaderView()) and, on macOS and Linux, the empty space
+// below the tabs, so that their clicks reach the views (on macOS a caption
+// point never does, AppKit takes it; on Linux the frame's
+// WindowEventFilterLinux takes a caption click before the views, and a
+// double-click there maximises the window). Koan moves the window from the
+// empty space itself (KoanSidebarTabsController): on macOS on a press, on
+// Linux on a drag.
 bool IsSidebarClientArea(const views::View* tab_strip_view,
                          const views::View* region,
                          const gfx::Point& point);
