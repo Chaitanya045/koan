@@ -594,7 +594,9 @@ belongs to a Space, and new tabs open in the active one.
   site sends while it is closed, and notifications from a site's service
   worker don't work in a profile yet: the site panel (the URL bar's site
   icon) says so. Some sites only offer push; they can't turn notifications
-  on in a profile.
+  on in a profile. In practice, sites that notify through a service worker,
+  as many mail and calendar apps do, still can't notify in a profile
+  ([#530](https://github.com/koan-browser/koan/issues/530)).
 - **Unload Space** (right-click the header or a Space button) frees the
   Space's tabs; they reload when you select them. Unload All Other Spaces
   frees all the others. Tabs on screen and tabs in use (playing sound, in
