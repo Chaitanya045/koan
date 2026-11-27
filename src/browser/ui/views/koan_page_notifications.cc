@@ -11,6 +11,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -26,6 +27,7 @@
 #include "koan/browser/containers/koan_container_partition.h"
 #include "koan/browser/ui/views/koan_space_profile_menu.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
+#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "ui/base/base_window.h"
 #include "ui/message_center/public/cpp/notification.h"
 #include "url/gurl.h"
@@ -50,6 +52,12 @@ struct NotificationSource {
 // close.
 constexpr size_t kMaxNotificationSources = 100;
 
+// What fits in a macOS banner's subtitle (Chromium's
+// CreateMacNotificationContext() measures 28 wide characters), which shows a
+// set context message untrimmed; past it, the site is cut to its domain so the
+// Space's name stays.
+constexpr size_t kMaxContextLength = 28;
+
 base::LRUCache<std::string, NotificationSource>& Sources() {
   static base::NoDestructor<base::LRUCache<std::string, NotificationSource>>
       sources(kMaxNotificationSources);
@@ -62,6 +70,18 @@ bool IsInSpaceProfile(content::WebContents* contents) {
   const std::optional<containers::ContainerId> container =
       containers::ContainerOf(contents);
   return container && container->kind == containers::ContainerKind::kUser;
+}
+
+// The window comes forward, out of the Dock or the taskbar if minimised.
+void BringToFront(BrowserWindowInterface* window) {
+  ui::BaseWindow* base_window = window->GetWindow();
+  if (!base_window) {
+    return;
+  }
+  if (base_window->IsMinimized()) {
+    base_window->Restore();
+  }
+  base_window->Activate();
 }
 
 // The tab, its Space and its window come forward, as when the user clicks
@@ -83,9 +103,7 @@ void ShowTab(content::WebContents* contents) {
   if (index != TabStripModel::kNoTab) {
     strip->ActivateTabAt(index);
   }
-  if (ui::BaseWindow* base_window = window->GetWindow()) {
-    base_window->Activate();
-  }
+  BringToFront(window);
 }
 
 // The Space the closed tab was in comes forward, in its window.
@@ -96,9 +114,7 @@ void ShowSpace(BrowserWindowInterface* window,
       spaces && space) {
     spaces->SwitchTo(*space);
   }
-  if (ui::BaseWindow* base_window = window->GetWindow()) {
-    base_window->Activate();
-  }
+  BringToFront(window);
 }
 
 }  // namespace
@@ -143,11 +159,19 @@ void OnShowingPageNotification(Profile* profile,
     name = SpaceProfileName(
         profile, containers::Serialize(*containers::ContainerOf(contents)));
   }
-  notification.set_context_message(PageNotificationContext(
-      url_formatter::FormatOriginForSecurityDisplay(
-          url::Origin::Create(notification.origin_url()),
-          url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS),
-      name));
+  std::u16string site = url_formatter::FormatOriginForSecurityDisplay(
+      url::Origin::Create(notification.origin_url()),
+      url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS);
+  if (PageNotificationContext(site, name).size() > kMaxContextLength) {
+    if (const std::string domain =
+            net::registry_controlled_domains::GetDomainAndRegistry(
+                notification.origin_url(),
+                net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+        !domain.empty()) {
+      site = base::UTF8ToUTF16(domain);
+    }
+  }
+  notification.set_context_message(PageNotificationContext(site, name));
 }
 
 void OnPageNotificationClicked(Profile* profile,

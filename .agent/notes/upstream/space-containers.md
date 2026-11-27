@@ -208,7 +208,9 @@ Others:
 **What the user sees.**
 - A page in a Space's profile asks for and shows notifications as in any tab.
 - The line under the notification's title names the Space after the site ("mail.example.com · Work"; for a tab in no
-  Space, an Essential, its profile's name), so two accounts of one site can be told apart. On macOS that line is the
+  Space, an Essential, its profile's name), so two accounts of one site can be told apart. Past 28 characters
+  (what a macOS banner's subtitle fits, which shows a set line untrimmed) the site is cut to its domain, so the
+  Space's name stays. On macOS that line is the
   notification's subtitle; on Linux it is the start of the body. A default tab's notification is upstream's (the
   site only).
 - A click shows the notification's tab: its window, its Space and the tab, as Firefox does; Chromium leaves it to the
