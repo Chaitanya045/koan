@@ -465,17 +465,13 @@ const collapsedTabs = collapsedSidebar.tabs;
 await key(VK.N, CTRL | ALT, 'n');
 s = await sidebar();
 form = one(s.vs, 'KoanSpaceCreationView');
-// Fails on Linux: #541. The header menus above leave their sidebar hold
-// (kKeepCurrentState) waiting for the pointer to move over the window, which
-// synthetic events never do, and that hold outranks the form's kKeepExpanded
-// lock, so the hidden sidebar stays shut with the form in it.
 {
   const hidden = s.vs.find(v => v.cls === 'KoanSpaceCreationView');
   check('Collapsed, Ctrl+Alt+N shows the Create form (the sidebar expands)',
         !!form && form.h > 100 && form.w >= 200,
         form ? JSON.stringify([form.w, form.h])
              : hidden ? `the form is there but hidden (${hidden.w}x${hidden.h}; the strip ` +
-                        `region ${regionWidth(s.vs)} wide; #541)` : 'no form');
+                        `region ${regionWidth(s.vs)} wide)` : 'no form');
 }
 const cancel = shown(s.vs, 'MdTextButton')
     .find(b => b.path.includes('KoanSpaceCreationView') && b.props.Text === 'Cancel');
@@ -494,8 +490,8 @@ if (IS_MAC && realInput()) {
 if (cancel) {
   await click(cancel);
 } else {
-  // (A hidden form, #541: Esc in its name field cancels it, as Cancel would,
-  // so the steps after this one still run.)
+  // (A hidden form: Esc in its name field cancels it, as Cancel would, so the
+  // steps after this one still run.)
   const name = s.vs.find(t => t.cls === 'Textfield' && t.path.includes('KoanSpaceCreationView'));
   if (name) await viewKey(name, VK.ESCAPE);
 }

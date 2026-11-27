@@ -5,13 +5,16 @@
 #include "koan/browser/ui/views/koan_sidebar_animation.h"
 
 #include <optional>
+#include <set>
 #include <utility>
+#include <vector>
 
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/no_destructor.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "chrome/browser/ui/animation/browser_animation_controller.h"
@@ -292,9 +295,21 @@ bool IsWindowClosing(views::Widget* widget) {
 }  // namespace
 
 struct SidebarHold::Impl : public ui::EventObserver {
-  void OnEvent(const ui::Event& event) override {
+  // The holds whose menu has closed and that wait for the pointer's next move
+  // (ReleaseWhenPointerMoves()), in every window.
+  static std::set<Impl*>& Waiting() {
+    static base::NoDestructor<std::set<Impl*>> waiting;
+    return *waiting;
+  }
+
+  ~Impl() override { Waiting().erase(this); }
+
+  void OnEvent(const ui::Event& event) override { LetGo(); }
+  // Releases the lock now and stops waiting for the pointer.
+  void LetGo() {
     ReleaseLock();
-    // Not from inside its own dispatch.
+    Waiting().erase(this);
+    // Not from inside the monitor's dispatch (or another event's).
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(&Impl::StopMonitoring, weak_factory.GetWeakPtr()));
@@ -356,6 +371,37 @@ void SidebarHold::ReleaseWhenPointerMoves() {
   impl_->monitor = views::EventMonitor::CreateWindowMonitor(
       impl_.get(), widget->GetNativeWindow(),
       {ui::EventType::kMouseMoved, ui::EventType::kMouseEntered});
+  Impl::Waiting().insert(impl_.get());
+}
+
+std::unique_ptr<ExpandOnHoverLock> TakeSidebarExpandedLock(
+    views::View* browser_view) {
+  auto* view = views::AsViewClass<BrowserView>(browser_view);
+  TabStripRegionView* region = view ? view->tab_strip_view() : nullptr;
+  if (!region) {
+    return nullptr;
+  }
+  // Taken first, so that letting go of a hold below finds the sidebar asked
+  // for: a sidebar that is out stays out rather than starting to slide away.
+  std::unique_ptr<ExpandOnHoverLock> lock =
+      region->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
+  // Upstream's UpdateExpandOnHoverState() ignores kKeepExpanded locks while
+  // any kKeepCurrentState lock is held, so a hold whose menu closed with the
+  // pointer outside the window (#541) would keep a hidden sidebar hidden
+  // until the pointer moved. A new request to show the sidebar ends that
+  // wait, as the pointer coming back would. Holds whose menu is still open
+  // aren't waiting, and keep the sidebar as it is.
+  views::Widget* widget = view->GetWidget();
+  std::vector<SidebarHold::Impl*> waiting;
+  for (SidebarHold::Impl* impl : SidebarHold::Impl::Waiting()) {
+    if (impl->widget == widget) {
+      waiting.push_back(impl);
+    }
+  }
+  for (SidebarHold::Impl* impl : waiting) {
+    impl->LetGo();
+  }
+  return lock;
 }
 
 std::unique_ptr<SidebarHold> HoldSidebarOpen(views::View* view) {
