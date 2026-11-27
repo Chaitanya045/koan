@@ -28,7 +28,11 @@ output() { echo "base_run=$1"; [[ -z ${GITHUB_OUTPUT:-} ]] || echo "base_run=$1"
 
 # Filtered here, not with ?status=success: that filter has left out a
 # successful run (tnfssc/koan 45281812693) for hours after it finished.
-runs="$(gh api "repos/$GH_REPO/actions/workflows/$WORKFLOW/runs?per_page=50" \
+# ?branch= is needed, though: every label added to any pull request starts a
+# run of the workflow (most are skipped at once), so without it 50 such runs
+# in a day push the last develop run off the page (2026-11-27: 52 runs, a
+# full Linux build for #469 and #470 although develop's base was there).
+runs="$(gh api "repos/$GH_REPO/actions/workflows/$WORKFLOW/runs?branch=$BRANCH&per_page=50" \
   --jq '.workflow_runs[] | select(.conclusion == "success" and .head_branch == env.BRANCH
     and (.event == "schedule" or .event == "workflow_dispatch")) | .id' 2>/dev/null || true)"
 for id in $runs; do
