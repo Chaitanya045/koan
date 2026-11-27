@@ -77,6 +77,17 @@ inline constexpr char kUpdatesShowUpdateNotification[] =
 // The build of the last launch (Zen's zen.updates.last-version and
 // last-build-id): Koan's and Chromium's versions, updates::BuildStamp().
 inline constexpr char kUpdatesLastBuild[] = "koan.updates.last_build";
+// Firefox's app.update.auto, on the Mac (koan_update_installer.h): true (the
+// default) is "Automatically download and install updates", false is "Check
+// for updates, but let me choose to install them" (nothing downloads until
+// the user clicks Update).
+inline constexpr char kUpdatesAutoInstall[] = "koan.updates.auto_install";
+// A version that was rolled back or failed to install, and isn't installed
+// automatically until held_until (null: for good), how often it failed
+// (updates::InstallHold). The release page is offered for it instead.
+inline constexpr char kUpdatesHeldVersion[] = "koan.updates.held_version";
+inline constexpr char kUpdatesHeldUntil[] = "koan.updates.held_until";
+inline constexpr char kUpdatesHeldCount[] = "koan.updates.held_count";
 // Obsolete: the check of develop's newest commit (before #549). Cleared at
 // startup. Remove after 2027-03.
 inline constexpr char kUpdatesLatestCommitObsolete[] =

@@ -21,21 +21,27 @@
 #include "base/timer/timer.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/download_prefs.h"
+#include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+#include "chrome/browser/ui/simple_message_box.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "components/version_info/version_info.h"
+#include "koan/browser/agent/koan_agent_forwarder.h"
+#include "koan/browser/agent/koan_agent_service.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_sidebar_notification.h"
 #include "koan/browser/ui/views/koan_toast.h"
+#include "koan/browser/ui/views/koan_update_installer.h"
 #include "koan/browser/ui/views/koan_zen_sidebar_notification.h"
 #include "koan/browser/updates/koan_update_logic.h"
+#include "koan/browser/updates/koan_update_platform.h"
 #include "koan/browser/updates/koan_update_source.h"
 #include "koan/version/koan_version.h"
 #include "net/base/load_flags.h"
@@ -63,8 +69,8 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
         description:
           "At most every 12 hours Koan downloads the signed update manifest "
           "(koan-update.json, about 1 KB) of its latest release on GitHub, "
-          "to tell the user when a newer version is out. It is only read: "
-          "nothing is downloaded or installed."
+          "to tell the user when a newer version is out. On the Mac, a newer "
+          "release is then downloaded and installed (koan_update_download)."
         trigger:
           "A minute after the first normal window opens, then at most every "
           "12 hours while one is open."
@@ -116,6 +122,13 @@ void DownloadFlatpak(BrowserView* browser_view,
   }
 }
 
+// Whether an agent is connected to Koan or holds a tab.
+bool AgentIsUsingKoan() {
+  const agent::AgentControlService* service = agent::AgentControlService::Get();
+  return service &&
+         (!service->clients().empty() || !service->controlled_tabs().empty());
+}
+
 class Updater {
  public:
   Updater() = default;
@@ -131,6 +144,9 @@ class Updater {
     if (!started_) {
       Start();
     }
+    if (installer_) {
+      installer_->OnWindowShown();
+    }
     if (complete_pending_ || update_pending_) {
       base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
           FROM_HERE,
@@ -138,6 +154,8 @@ class Updater {
           kWindowSettleDelay);
     }
   }
+
+  bool IsReadyToInstall() const { return installer_ && installer_->IsReady(); }
 
  private:
   PrefService* local_state() { return g_browser_process->local_state(); }
@@ -163,6 +181,15 @@ class Updater {
 
     platform_ = CurrentPlatform();
     source_ = GetUpdateSource(*base::CommandLine::ForCurrentProcess());
+    if (platform_) {
+      if (std::unique_ptr<InstallPlatform> install = CreateInstallPlatform()) {
+        installer_ = std::make_unique<UpdateInstaller>(
+            std::move(install), source_,
+            base::BindRepeating(&Updater::ShowInstallNotice,
+                                base::Unretained(this)));
+        installer_->Start();
+      }
+    }
     // A release found before (and not shown, or not yet shown for it),
     // verified again: with this build's key.
     ReadManifest(local_state()->GetString(prefs::kUpdatesLatestManifest));
@@ -244,6 +271,15 @@ class Updater {
               << static_cast<int>(update.error());
       return false;
     }
+    // The Mac installs it itself, and says what it does (ShowInstallNotice()).
+    if (installer_) {
+      if (CanCheck() &&
+          IsNewerVersion(update->version, koan::version::Full())) {
+        installer_->OnUpdateFound(*update);
+      }
+      return true;
+    }
+    notice_pending_ = InstallNotice::kDownloadByHand;
     if (ShouldNotify(
             update->version, koan::version::Full(),
             local_state()->GetString(prefs::kUpdatesNotifiedVersion))) {
@@ -252,6 +288,23 @@ class Updater {
       update_pending_.reset();
     }
     return true;
+  }
+
+  // From the installer: what to tell about `update`. The release page shows
+  // once per version, as on Linux. Update ("let me choose") shows once per
+  // launch until it is clicked, since nothing else starts the download;
+  // "Restart to update" each time it is asked for (when the update is
+  // staged, and after 6 days).
+  void ShowInstallNotice(const UpdateInfo& update, InstallNotice notice) {
+    if (notice == InstallNotice::kDownloadByHand &&
+        !ShouldNotify(
+            update.version, koan::version::Full(),
+            local_state()->GetString(prefs::kUpdatesNotifiedVersion))) {
+      return;
+    }
+    update_pending_ = update;
+    notice_pending_ = notice;
+    ShowPending();
   }
 
   void ShowPending() {
@@ -267,9 +320,11 @@ class Updater {
     // Not while Check for updates is off, also for a release found before it
     // was turned off (it shows after the next check once it is on).
     if (update_pending_ && CanCheck() &&
-        ShowUpdateAvailable(browser_view, *update_pending_)) {
-      local_state()->SetString(prefs::kUpdatesNotifiedVersion,
-                               update_pending_->version);
+        ShowUpdateAvailable(browser_view, *update_pending_, notice_pending_)) {
+      if (notice_pending_ == InstallNotice::kDownloadByHand) {
+        local_state()->SetString(prefs::kUpdatesNotifiedVersion,
+                                 update_pending_->version);
+      }
       update_pending_.reset();
     }
   }
@@ -294,7 +349,8 @@ class Updater {
   }
 
   bool ShowUpdateAvailable(BrowserView* browser_view,
-                           const UpdateInfo& update) {
+                           const UpdateInfo& update,
+                           InstallNotice notice) {
     SidebarNotificationParams params;
     params.heading = u"Update Available!";
     params.auto_hide = kUpdateNotificationTimeout;
@@ -306,6 +362,22 @@ class Updater {
         base::BindOnce(&OpenInNewTab, base::Unretained(browser_view),
                        update.notes_url),
         /*special=*/true);
+    if (notice == InstallNotice::kRestartToUpdate) {
+      params.links.emplace_back(
+          kKoanReloadIcon, u"Restart to update",
+          base::StrCat({u"Restart Koan to finish updating to ", version}),
+          base::BindOnce(&RestartToUpdate, base::Unretained(browser_view)));
+      return ShowSidebarNotification(browser_view, std::move(params));
+    }
+    if (notice == InstallNotice::kAskToUpdate && installer_) {
+      params.links.emplace_back(
+          kKoanDownloadsIcon, u"Update",
+          base::StrCat({u"Download Koan ", version,
+                        u" and install it when Koan restarts"}),
+          base::BindOnce(&UpdateInstaller::Accept,
+                         base::Unretained(installer_.get())));
+      return ShowSidebarNotification(browser_view, std::move(params));
+    }
     const GURL release_page = ReleasePageUrl(update.version);
     const std::u16string download_tooltip =
         base::StrCat({u"Koan ", version, u" on GitHub"});
@@ -319,7 +391,7 @@ class Updater {
                                                 ->DownloadPath()
                                                 .AsUTF8Unsafe())));
     } else {
-      // The Mac. #550 turns this into "Restart to update".
+      // The Mac, where Koan can't install it itself.
       params.links.emplace_back(
           kKoanDownloadsIcon, u"Download", download_tooltip,
           base::BindOnce(&OpenInNewTab, base::Unretained(browser_view),
@@ -332,8 +404,11 @@ class Updater {
   bool complete_pending_ = false;
   std::optional<std::string_view> platform_;
   UpdateSource source_;
-  // The newer release to tell about.
+  // The newer release to tell about, and how.
   std::optional<UpdateInfo> update_pending_;
+  InstallNotice notice_pending_ = InstallNotice::kDownloadByHand;
+  // The Mac's (null elsewhere).
+  std::unique_ptr<UpdateInstaller> installer_;
   PrefChangeRegistrar registrar_;
   base::OneShotTimer check_timer_;
   std::unique_ptr<network::SimpleURLLoader> loader_;
@@ -348,6 +423,30 @@ Updater& GetUpdater() {
 
 void OnBrowserWindowShown(BrowserView* browser_view) {
   GetUpdater().OnWindowShown(browser_view);
+}
+
+bool IsUpdateReadyToInstall() {
+  return GetUpdater().IsReadyToInstall();
+}
+
+void RestartToUpdate(BrowserView* browser_view) {
+  if (!IsUpdateReadyToInstall()) {
+    return;
+  }
+  // Nothing restarts on its own, and not under an agent without asking.
+  if (AgentIsUsingKoan()) {
+    chrome::ShowQuestionMessageBoxAsync(
+        browser_view ? browser_view->GetNativeWindow() : gfx::NativeWindow(),
+        u"Restart to update Koan?", u"An agent is using Koan. Restart anyway?",
+        base::BindOnce([](chrome::MessageBoxResult result) {
+          if (result == chrome::MESSAGE_BOX_RESULT_YES &&
+              IsUpdateReadyToInstall()) {
+            chrome::AttemptRelaunch();
+          }
+        }));
+    return;
+  }
+  chrome::AttemptRelaunch();
 }
 
 }  // namespace koan::updates

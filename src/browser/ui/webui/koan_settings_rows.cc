@@ -26,7 +26,8 @@ namespace koan::settings {
 
 namespace {
 
-// Haptic feedback is macOS's (koan::PlayHapticFeedback()).
+// Haptic feedback is macOS's (koan::PlayHapticFeedback()), and so is
+// installing updates (koan_update_installer.h).
 bool IsMacOS() {
   return BUILDFLAG(IS_MAC);
 }
@@ -159,6 +160,12 @@ constexpr char kZenLookOnlyNote[] =
 constexpr Option kLayouts[] = {
     {"true", "Only Sidebar", "single"},
     {"false", "Sidebar and Top Toolbar", "multiple"},
+};
+
+// How updates install (Firefox's app.update.auto, as Zen shows it).
+constexpr Option kUpdateInstallModes[] = {
+    {"true", "Automatically download and install updates"},
+    {"false", "Check for updates, but let me choose to install them"},
 };
 
 // What compact mode hides (zen-preferences.ftl zen-compact-mode-styles-*).
@@ -515,6 +522,16 @@ constexpr Row kRows[] = {
      .control = Control::kCheckbox,
      .pref = prefs::kUpdatesCheckEnabled,
      .label = "Check for updates",
+     .local_state = true},
+    // Only where Koan installs updates itself (koan_update_installer.h).
+    {.group = "updates",
+     .control = Control::kMenu,
+     .pref = prefs::kUpdatesAutoInstall,
+     .label = "When a new version is out",
+     .options = kUpdateInstallModes,
+     .depends_on = prefs::kUpdatesCheckEnabled,
+     .is_available = IsMacOS,
+     .indent = true,
      .local_state = true},
     {.group = "updates",
      .control = Control::kCheckbox,
