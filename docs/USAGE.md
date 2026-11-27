@@ -918,6 +918,11 @@ Besides the shortcuts above:
   onto the sidebar: the line shows where its tab will go, and letting go
   takes the tab out of the split, to that place, selected (hold Shift to
   keep the selection). The header's unsplit button does it in place.
+- **Split shortcuts** (⌘⌥V / ⌘⌥H, Ctrl+Alt+V / Ctrl+Alt+H on Linux): with
+  another tab selected, the two split; else the tab splits with the next tab
+  of its Space, wrapping to the Space's first, never a tab of another Space.
+  An Essential pairs with the next Essential. With nothing to pair, a new
+  tab opens in an empty pane next to it, as in Zen.
 - Chromium's split views have two panes (Zen's take four, in a grid): a
   third panel (Split Glance over a split, a split shortcut with more tabs
   selected) shows Zen's "Can't add more panels to the split view!" toast.
