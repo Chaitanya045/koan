@@ -352,7 +352,7 @@ void KoanTabAutoCloser::Check() {
         });
     to_close.erase(newest);
   }
-  if (to_close.empty() || !NoticeWasShown(to_close.size())) {
+  if (to_close.empty() || !MayClose(to_close.size(), now)) {
     return;
   }
   for (const tabs::TabHandle& handle : to_close) {
@@ -388,10 +388,16 @@ void KoanTabAutoCloser::Close(tabs::TabInterface* tab) {
                             TabCloseTypes::CLOSE_NONE);
 }
 
-bool KoanTabAutoCloser::NoticeWasShown(size_t count) {
+bool KoanTabAutoCloser::MayClose(size_t count, base::Time now) {
   PrefService* prefs = profile()->GetPrefs();
-  if (prefs->GetBoolean(prefs::kAutoCloseNoticeShown)) {
-    return true;
+  if (base::Time shown = prefs->GetTime(prefs::kAutoCloseNoticeTime);
+      !shown.is_null()) {
+    // Shown, by this window or another: nothing closes until it has been in
+    // front of the user a while. A time ahead of the clock starts again.
+    if (shown > now) {
+      prefs->SetTime(prefs::kAutoCloseNoticeTime, now);
+    }
+    return auto_close::NoticeLongEnoughAgo(shown, now, *limit_);
   }
   // In the profile's front window, where it is seen.
   BrowserView* front = browser_view_;
@@ -420,7 +426,7 @@ bool KoanTabAutoCloser::NoticeWasShown(size_t count) {
                    u"Closed tabs are in the Library's History.",
       kKoanSettingsIcon, u"Settings",
       base::BindOnce(&OpenTabSettings, own_profile), kNoticeTimeout);
-  prefs->SetBoolean(prefs::kAutoCloseNoticeShown, true);
+  prefs->SetTime(prefs::kAutoCloseNoticeTime, now);
   return false;
 }
 

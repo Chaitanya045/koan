@@ -70,8 +70,11 @@ No hook patch is needed.
 6. **One-time notice.** The first check that would close anything shows a
    toast in the profile's front window ("… will close soon. Closed tabs are
    in the Library's History.", a Settings button to Tab Management, 10 s)
-   and closes nothing; the next check (5 minutes later) closes. A shorter
-   time chosen later applies at the next check.
+   and closes nothing, and records when (`koan.tabs.auto_close_notice_time`).
+   Every window's checks close only once the notice has been up a check
+   interval (5 minutes; at least its 10 s with the test switch), so neither
+   the window's next check right after it nor another window closes tabs
+   while it shows. A shorter time chosen later applies at the next check.
 7. **Never in a private window** (or any off-the-record profile): its tabs
    couldn't be found again. Normal windows only.
 8. **A Space is never emptied**: a Space is a tab group that goes with its

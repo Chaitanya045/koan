@@ -20,6 +20,10 @@ namespace {
 constexpr base::TimeDelta kDefaultCheckInterval = base::Minutes(5);
 constexpr base::TimeDelta kMinCheckInterval = base::Seconds(1);
 constexpr base::TimeDelta kDefaultFirstCheckDelay = base::Seconds(30);
+// The notice's own time on screen (KoanTabAutoCloser's kNoticeTimeout).
+constexpr base::TimeDelta kMinNoticeLead = base::Seconds(10);
+// A check that runs a moment early by the wall clock still counts.
+constexpr base::TimeDelta kNoticeSlack = base::Milliseconds(500);
 
 constexpr char kIdKey[] = "id";
 constexpr char kUrlKey[] = "url";
@@ -84,6 +88,17 @@ base::TimeDelta CheckInterval(base::TimeDelta limit) {
 
 base::TimeDelta FirstCheckDelay(base::TimeDelta limit) {
   return std::min(kDefaultFirstCheckDelay, CheckInterval(limit));
+}
+
+base::TimeDelta NoticeLead(base::TimeDelta limit) {
+  return std::max(kMinNoticeLead, CheckInterval(limit));
+}
+
+bool NoticeLongEnoughAgo(base::Time shown,
+                         base::Time now,
+                         base::TimeDelta limit) {
+  return !shown.is_null() && shown <= now &&
+         now - shown >= NoticeLead(limit) - kNoticeSlack;
 }
 
 Keep WhyKept(const TabFacts& tab,

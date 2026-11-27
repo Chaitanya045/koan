@@ -75,7 +75,9 @@ class KoanTabAutoCloseBrowserTest : public InProcessBrowserTest {
 
   // The setting at 12 hours (one second with the switch).
   void TurnOn(bool notice_shown = true) {
-    prefs()->SetBoolean(prefs::kAutoCloseNoticeShown, notice_shown);
+    prefs()->SetTime(
+        prefs::kAutoCloseNoticeTime,
+        notice_shown ? base::Time::Now() - base::Hours(1) : base::Time());
     prefs()->SetInteger(prefs::kAutoCloseTabsAfterHours, 12);
   }
 
@@ -188,8 +190,17 @@ IN_PROC_BROWSER_TEST_F(KoanTabAutoCloseBrowserTest,
   TurnOn(/*notice_shown=*/false);
   closer()->CheckNowForTesting();
   // The first check only tells the user.
-  EXPECT_TRUE(prefs()->GetBoolean(prefs::kAutoCloseNoticeShown));
+  const base::Time shown = prefs()->GetTime(prefs::kAutoCloseNoticeTime);
+  EXPECT_FALSE(shown.is_null());
   EXPECT_TRUE(HasTab(Page("Old")));
+  // A check right after it (the window's timer, or another window's check)
+  // closes nothing either: the notice is still up.
+  closer()->CheckNowForTesting();
+  EXPECT_TRUE(HasTab(Page("Old")));
+  EXPECT_EQ(shown, prefs()->GetTime(prefs::kAutoCloseNoticeTime));
+  // Once it has been up a while (the switch's 1 s checks: the notice's 10 s).
+  prefs()->SetTime(prefs::kAutoCloseNoticeTime,
+                   shown - auto_close::NoticeLead(base::Seconds(1)));
   closer()->CheckNowForTesting();
   EXPECT_TRUE(base::test::RunUntil([&] { return !HasTab(Page("Old")); }));
 }

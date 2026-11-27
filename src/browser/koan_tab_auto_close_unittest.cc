@@ -85,6 +85,42 @@ TEST(KoanTabAutoCloseTest, CheckIntervals) {
   EXPECT_EQ(base::Seconds(15), FirstCheckDelay(base::Seconds(60)));
 }
 
+// Nothing closes before the user has had the notice in front of them: not
+// at the check right after it (the window's first check and its timer can
+// run back to back), nor in another window meanwhile.
+TEST(KoanTabAutoCloseTest, TabsCloseOnlyAWhileAfterTheNotice) {
+  const base::Time now = base::Time::Now();
+  EXPECT_EQ(base::Minutes(5), NoticeLead(base::Hours(12)));
+  EXPECT_EQ(base::Seconds(15), NoticeLead(base::Seconds(60)));
+  EXPECT_EQ(base::Seconds(10), NoticeLead(base::Seconds(2)));
+
+  // Not shown yet.
+  EXPECT_FALSE(NoticeLongEnoughAgo(base::Time(), now, base::Hours(12)));
+  // Just shown, or shown a minute ago with the real setting.
+  EXPECT_FALSE(NoticeLongEnoughAgo(now, now, base::Hours(12)));
+  EXPECT_FALSE(NoticeLongEnoughAgo(now, now, base::Seconds(60)));
+  EXPECT_FALSE(
+      NoticeLongEnoughAgo(now - base::Minutes(1), now, base::Hours(12)));
+  // The next check, 5 minutes later (or a moment early by the wall clock).
+  EXPECT_TRUE(
+      NoticeLongEnoughAgo(now - base::Minutes(5), now, base::Hours(12)));
+  EXPECT_FALSE(
+      NoticeLongEnoughAgo(now - base::Seconds(298), now, base::Hours(12)));
+  EXPECT_TRUE(NoticeLongEnoughAgo(
+      now - base::Minutes(5) + base::Milliseconds(100), now, base::Hours(12)));
+  // With the test switch: a check interval, but at least the notice's 10 s.
+  EXPECT_FALSE(
+      NoticeLongEnoughAgo(now - base::Seconds(10), now, base::Seconds(60)));
+  EXPECT_TRUE(
+      NoticeLongEnoughAgo(now - base::Seconds(15), now, base::Seconds(60)));
+  EXPECT_FALSE(
+      NoticeLongEnoughAgo(now - base::Seconds(5), now, base::Seconds(2)));
+  EXPECT_TRUE(
+      NoticeLongEnoughAgo(now - base::Seconds(10), now, base::Seconds(2)));
+  // A notice time ahead of the clock doesn't count.
+  EXPECT_FALSE(NoticeLongEnoughAgo(now + base::Hours(1), now, base::Hours(12)));
+}
+
 TEST(KoanTabAutoCloseTest, AnOldNormalTabCloses) {
   EXPECT_EQ(Keep::kNone, Judge(Idle(base::Hours(12))));
   EXPECT_EQ(Keep::kNone, Judge(Idle(base::Days(40))));

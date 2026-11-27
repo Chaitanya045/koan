@@ -86,9 +86,10 @@ class KoanTabAutoCloser : public TabStripModelObserver,
       const std::vector<tabs::TabInterface*>& active) const;
   // Records `tab` for the Library and closes it.
   void Close(tabs::TabInterface* tab);
-  // Shows the one-time notice in the profile's front window, if it wasn't
-  // shown yet. Returns true if it was shown before (tabs may close).
-  bool NoticeWasShown(size_t count);
+  // Whether tabs may close at `now`: only once the one-time notice has been
+  // up a while. Shows it in the profile's front window (and returns false)
+  // if it wasn't shown yet.
+  bool MayClose(size_t count, base::Time now);
   Profile* profile() const;
 
   raw_ptr<BrowserView> browser_view_;

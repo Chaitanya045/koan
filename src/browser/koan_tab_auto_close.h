@@ -44,6 +44,19 @@ base::TimeDelta CheckInterval(base::TimeDelta limit);
 // at most 30 seconds, sooner with a shorter test limit.
 base::TimeDelta FirstCheckDelay(base::TimeDelta limit);
 
+// How long the one-time notice is in front of the user before anything
+// closes: a check interval (the next check), and at least the notice's own
+// 10 seconds.
+base::TimeDelta NoticeLead(base::TimeDelta limit);
+
+// Whether tabs may close at `now`, the notice having been shown at `shown`
+// (prefs::kAutoCloseNoticeTime; null: not yet). Every window asks, so a
+// second window doesn't close its tabs while the first shows the notice. A
+// notice time in the future (the clock moved) doesn't count yet.
+bool NoticeLongEnoughAgo(base::Time shown,
+                         base::Time now,
+                         base::TimeDelta limit);
+
 // What the closer knows about a tab.
 struct TabFacts {
   // Chromium's pinned tab: one of Zen's Essentials.

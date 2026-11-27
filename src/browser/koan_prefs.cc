@@ -70,7 +70,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kCtrlTabWithinKind, false);
   registry->RegisterBooleanPref(kCtrlTabSkipPending, false);
   registry->RegisterIntegerPref(kAutoCloseTabsAfterHours, 0);
-  registry->RegisterBooleanPref(kAutoCloseNoticeShown, false);
+  registry->RegisterTimePref(kAutoCloseNoticeTime, base::Time());
   registry->RegisterListPref(kAutoClosedTabs);
   registry->RegisterBooleanPref(kCommandPaletteSuggestions, true);
   registry->RegisterDictionaryPref(kCommandPaletteUsage);

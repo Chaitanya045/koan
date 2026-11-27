@@ -307,9 +307,11 @@ inline constexpr char kCtrlTabSkipPending[] = "koan.tabs.ctrl_tab_skip_pending";
 // koan_tab_auto_close.h has the rules.
 inline constexpr char kAutoCloseTabsAfterHours[] =
     "koan.tabs.auto_close_after_hours";
-// Whether the one-time notice before the first automatic close was shown.
-inline constexpr char kAutoCloseNoticeShown[] =
-    "koan.tabs.auto_close_notice_shown";
+// When the one-time notice before the first automatic close was shown (a
+// time; unset: not yet). Tabs close only once it has been up a while
+// (koan::auto_close::NoticeLongEnoughAgo()).
+inline constexpr char kAutoCloseNoticeTime[] =
+    "koan.tabs.auto_close_notice_time";
 // The tabs closed automatically, newest first, for the Library's closed tabs
 // (koan::auto_close::ClosedTab).
 inline constexpr char kAutoClosedTabs[] = "koan.tabs.auto_closed";
