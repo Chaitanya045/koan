@@ -13,6 +13,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
+#include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
@@ -80,6 +81,7 @@
 #include "ui/views/event_monitor.h"
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
+#include "ui/views/view_observer.h"
 #include "ui/views/view_targeter.h"
 #include "ui/views/view_targeter_delegate.h"
 #include "ui/views/view_tracker.h"
@@ -254,6 +256,58 @@ class KoanCompactModeController::ImmersiveObserver
       observation_{this};
 };
 
+// Chromium rebuilds the frame view when the theme changes (on Linux, on every
+// change, colour mode included: BrowserWidget::RegenerateFrameOnThemeChange()).
+// The new frame's caption buttons are new views, shown and taking the
+// pointer, and the frame places them in its own layout, which may come after
+// the BrowserView's (or without one). So the controller follows the buttons:
+// when the frame places one, its hidden or shown state is applied again, at
+// once (a fade would flash a button that was hidden all along).
+class KoanCompactModeController::CaptionButtonsObserver
+    : public views::ViewObserver {
+ public:
+  CaptionButtonsObserver(views::NonClientView* non_client_view,
+                         base::RepeatingClosure on_placed)
+      : non_client_view_(non_client_view), on_placed_(std::move(on_placed)) {
+    observations_.AddObservation(non_client_view);
+  }
+
+  // Follows the caption buttons of `frame`, the current frame view.
+  void ObserveFrame(views::View* frame) {
+    for (views::View* child : frame->children()) {
+      if (IsCaptionButton(child) && !observations_.IsObservingSource(child)) {
+        observations_.AddObservation(child);
+      }
+    }
+  }
+
+  // views::ViewObserver:
+  void OnChildViewAdded(views::View* observed_view,
+                        views::View* child) override {
+    // A new frame view (NonClientView::SetFrameView()), with its buttons.
+    if (observed_view == non_client_view_) {
+      ObserveFrame(child);
+    }
+  }
+  void OnViewBoundsChanged(views::View* observed_view) override {
+    if (observed_view != non_client_view_) {
+      on_placed_.Run();
+    }
+  }
+  void OnViewIsDeleting(views::View* observed_view) override {
+    if (observed_view == non_client_view_) {
+      non_client_view_ = nullptr;
+    }
+    observations_.RemoveObservation(observed_view);
+  }
+
+ private:
+  raw_ptr<views::NonClientView> non_client_view_;
+  const base::RepeatingClosure on_placed_;
+  base::ScopedMultiSourceObservation<views::View, views::ViewObserver>
+      observations_{this};
+};
+
 KoanCompactModeController::KoanCompactModeController(BrowserView* browser_view)
     : browser_view_(browser_view) {
   pref_change_registrar_.Init(GetPrefs());
@@ -327,6 +381,15 @@ void KoanCompactModeController::OnAddedToWidget() {
   if (!focus_manager_ && browser_view_->GetFocusManager()) {
     focus_manager_ = browser_view_->GetFocusManager();
     focus_manager_->AddFocusChangeListener(this);
+  }
+  if (!caption_buttons_observer_) {
+    if (views::NonClientView* non_client_view =
+            browser_view_->GetWidget()->non_client_view()) {
+      caption_buttons_observer_ = std::make_unique<CaptionButtonsObserver>(
+          non_client_view,
+          base::BindRepeating(&KoanCompactModeController::UpdateCaptionButtons,
+                              base::Unretained(this), /*animate=*/false));
+    }
   }
   UpdateActiveSoon();
 }
@@ -404,6 +467,7 @@ void KoanCompactModeController::OnBrowserViewDestroying() {
   // (KoanVerticalTabsPolicy::OnBrowserViewDestroying() ran first, so
   // IsClosing() is true from here on.)
   browser_view_->browser()->GetTabStripModel()->RemoveObserver(this);
+  caption_buttons_observer_.reset();
   // Before Deactivate(): moving the views back can move focus, and a focus
   // change opens or closes the URL bar (OnDidChangeFocus()), which rebuilds
   // views inside the removal's notifications. Teardown runs while the widget
@@ -2280,7 +2344,7 @@ bool KoanCompactModeController::HasPageSideCaptionButtons() const {
   return false;
 }
 
-void KoanCompactModeController::UpdateCaptionButtons() {
+void KoanCompactModeController::UpdateCaptionButtons(bool animate) {
   if (IsClosing()) {
     // The window is going away: nothing to show or hide.
     return;
@@ -2312,6 +2376,9 @@ void KoanCompactModeController::UpdateCaptionButtons() {
   if (!frame) {
     return;
   }
+  if (caption_buttons_observer_) {
+    caption_buttons_observer_->ObserveFrame(frame);
+  }
   // The strip above the page is open, or (compact mode) the revealed toolbar
   // has room for the buttons.
   const bool page_side_shown = !caption_strip_collapsible_ ||
@@ -2341,7 +2408,13 @@ void KoanCompactModeController::UpdateCaptionButtons() {
       toolbar_layer->parent()->StackAbove(child->layer(), toolbar_layer);
     }
     const float opacity = shown ? 1.0f : 0.0f;
-    if (child->layer()->GetTargetOpacity() != opacity) {
+    if (child->layer()->GetTargetOpacity() == opacity) {
+      continue;
+    }
+    if (!animate) {
+      child->layer()->GetAnimator()->AbortAllAnimations();
+      child->layer()->SetOpacity(opacity);
+    } else {
       views::AnimationBuilder()
           .SetPreemptionStrategy(
               ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET)
