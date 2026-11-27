@@ -137,4 +137,25 @@ bool ShowsContainerLine(const std::optional<ContainerId>& tab_container,
          tab_container != space_container;
 }
 
+EssentialsProfiles::EssentialsProfiles() = default;
+EssentialsProfiles::EssentialsProfiles(const EssentialsProfiles&) = default;
+EssentialsProfiles& EssentialsProfiles::operator=(const EssentialsProfiles&) =
+    default;
+EssentialsProfiles::~EssentialsProfiles() = default;
+
+std::optional<ContainerId> EssentialsProfiles::GridOf(
+    const std::optional<ContainerId>& tab_container) const {
+  if (separate && tab_container &&
+      tab_container->kind == ContainerKind::kUser &&
+      std::ranges::contains(spaces, *tab_container)) {
+    return tab_container;
+  }
+  return std::nullopt;
+}
+
+bool EssentialsProfiles::Shows(
+    const std::optional<ContainerId>& tab_container) const {
+  return !separate || GridOf(tab_container) == shown;
+}
+
 }  // namespace koan::containers

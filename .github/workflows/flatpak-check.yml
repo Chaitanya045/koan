@@ -9,6 +9,7 @@ on:
       - flatpak/**
       - scripts/ci/linux_package.sh
       - scripts/ci/linux_runner_setup.sh
+      - scripts/ci/linux_apt_sources.sh
       - .github/workflows/flatpak-check.yml
 
 permissions:
@@ -27,6 +28,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # A source that never answers, as packages.microsoft.com didn't in run
+      # 45980089943: the setup must still pass (it updates only Ubuntu's
+      # archive, linux_apt_sources.sh).
+      - name: Add a dead apt source
+        run: echo 'deb http://dead.invalid/apt noble main' | sudo tee /etc/apt/sources.list.d/koan-dead.list
       - name: Prepare the runner
         run: scripts/ci/linux_runner_setup.sh --package
       - name: Package a fake build
