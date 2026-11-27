@@ -5,6 +5,7 @@
 #ifndef KOAN_BROWSER_CONTAINERS_KOAN_USER_CONTAINERS_H_
 #define KOAN_BROWSER_CONTAINERS_KOAN_USER_CONTAINERS_H_
 
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -42,11 +43,26 @@ std::optional<ContainerId> SpaceContainerFromString(std::string_view text);
 // an unknown colour is blue.
 std::vector<UserContainer> ParseUserContainers(const base::ListValue& list);
 
+// The longest name a container takes, in UTF-16 code units, once trimmed.
+inline constexpr size_t kMaxUserContainerNameLength = 64;
+
+// Why a container can't take a name the user typed (trimmed of white space
+// at both ends), or kNone if it can.
+enum class UserContainerNameError {
+  kNone,
+  // Empty, or only white space.
+  kEmpty,
+  // Longer than kMaxUserContainerNameLength.
+  kTooLong,
+  // A control character (a tab, a line break).
+  kControlCharacter,
+};
+UserContainerNameError CheckUserContainerName(std::u16string_view name);
+
 // Adds a new, empty container named `name` (trimmed) to `list`, with the first
 // colour of Firefox's order (blue, turquoise, green, yellow, orange, red,
 // pink, purple) that no container has yet, else the next one round. Nullopt
-// for a name that is empty, longer than 64 characters or has a control
-// character.
+// for a name CheckUserContainerName() refuses.
 std::optional<UserContainer> AddUserContainer(base::ListValue& list,
                                               std::u16string_view name);
 

@@ -75,8 +75,10 @@ class KoanSpaceProfileMenu : public ui::SimpleMenuModel::Delegate {
 };
 
 // New Profile...: asks for the new profile's name in a dialog of `browser`'s
-// window, makes the container and runs `done` with it (Serialize()d). Never
-// runs it if the dialog is cancelled or the name is refused.
+// window, makes the container and runs `done` with it (Serialize()d). Create
+// is off while the name is empty or only spaces; a name the container can't
+// take (containers::CheckUserContainerName()), or a failure, keeps the
+// dialog open with a message. Never runs `done` if the dialog is cancelled.
 void ShowNewProfilePrompt(BrowserWindowInterface* browser,
                           base::OnceCallback<void(const std::string&)> done);
 
