@@ -23,3 +23,21 @@ the native menus, which UI DevTools can't click.
 | SC13 | Downloads, History (⌘Y) and the URL bar's suggestions in a Work tab. | A download from a Work tab completes into the normal Downloads list. Pages visited in Work show in History and the suggestions, which are shared as in Firefox's containers. |
 | SC14 | Incognito window. | No Spaces, no Profile row, no Set Profile. |
 | SC15 | Delete the Work Space (another Space keeps Work). | The other Space is still signed in as Work: deleting a Space keeps its profile and its data. |
+
+## Essentials per profile (#479)
+
+Zen's container-specific Essentials (`zen.workspaces.separate-essentials`, on). Start with two Spaces: "Personal" (no
+profile) and "Work" (profile Work), next to each other, and no Essentials. Compare each switch with a recording of
+Zen 1.24b doing the same.
+
+| # | Do | Expect |
+|---|---|---|
+| SE1 | In Work, open mail.google.com (⌘T), right-click it > Add to Essentials. | The menu item reads "0 / 12"; the tab becomes a tile. |
+| SE2 | Switch to Personal (⌃⌥→, or click its button). | The Work tile slides out with the Work Space and Personal's (empty) grid comes in; the Space below moves up by the grid's height. |
+| SE3 | In Personal, add a tab to the Essentials, then switch back and forth with ⌃⌥←/→ and with a two-finger swipe. | Each Space shows only its own tile, sliding with the Space. Mid-swipe the grid follows the fingers. |
+| SE4 | Create a third Space with profile Work, next to Work. Swipe and switch between the two Work Spaces. | Both show the Work tile; the grid stays still while the tabs below slide. |
+| SE5 | In Personal, drag a tab that has the Work profile (moved there with Move To) over the grid, and let go. | No tile forms over the grid; the tab goes back, and a toast says only this Space's profile's tabs can be its Essentials. Right-click it: "Add to Essentials" is greyed out. |
+| SE6 | In Personal, press ⌘1, then ⌃Tab a few times. | ⌘1 selects Personal's tile, not Work's. ⌃Tab never lands on the Work tile. |
+| SE7 | In Personal, type the Work tile's site in the address bar and pick "Switch to Tab". | The window switches to Work, on the Work tile. |
+| SE8 | Settings > Pinned Tabs > untick "Enable profile-specific Essentials". | At once, every Space shows both tiles, and switching Spaces keeps the grid still. Tick it again: back to SE3. |
+| SE9 | Open a second window, then quit (⌘Q) and start again. | In both windows, each tile shows only in its profile's Spaces, still signed in. |

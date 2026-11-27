@@ -66,10 +66,13 @@
 #include "content/public/browser/web_contents_user_data.h"
 #include "content/public/common/referrer.h"
 #include "koan/browser/agent/koan_agent_lease.h"
+#include "koan/browser/containers/koan_container_partition.h"
+#include "koan/browser/containers/koan_user_containers.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/koan_tab_hooks.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_essentials_profiles.h"
 #include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_pinned.h"
 #include "koan/browser/ui/views/koan_pinned_tab_views.h"
@@ -525,11 +528,45 @@ TabStripModel* KoanPinnedTabController::tab_strip_model() const {
 }
 
 int KoanPinnedTabController::EssentialsCount() const {
-  return tab_strip_model()->IndexOfFirstNonPinnedTab();
+  const containers::EssentialsProfiles& profiles =
+      GetEssentialsProfiles(browser_view_);
+  return profiles.separate ? EssentialsCountIn(profiles.shown)
+                           : tab_strip_model()->IndexOfFirstNonPinnedTab();
 }
 
-bool KoanPinnedTabController::CanAddToEssentials(int count) const {
-  return EssentialsCount() + count <= kMaxEssentials;
+int KoanPinnedTabController::EssentialsCountIn(
+    const std::optional<containers::ContainerId>& grid) const {
+  const containers::EssentialsProfiles& profiles =
+      GetEssentialsProfiles(browser_view_);
+  TabStripModel* model = tab_strip_model();
+  const int essentials = model->IndexOfFirstNonPinnedTab();
+  if (!profiles.separate) {
+    return essentials;
+  }
+  int count = 0;
+  for (int i = 0; i < essentials; ++i) {
+    if (profiles.GridOf(containers::ContainerOf(model->GetWebContentsAt(i))) ==
+        grid) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+bool KoanPinnedTabController::HasRoomInEssentials(
+    const std::optional<containers::ContainerId>& grid,
+    int count) const {
+  return EssentialsCountIn(grid) + count <= kMaxEssentials;
+}
+
+bool KoanPinnedTabController::CanAddToEssentials(const tabs::TabInterface* tab,
+                                                 int count) const {
+  const containers::EssentialsProfiles& profiles =
+      GetEssentialsProfiles(browser_view_);
+  const std::optional<containers::ContainerId> container =
+      tab ? containers::ContainerOf(tab->GetContents()) : std::nullopt;
+  return profiles.Shows(container) &&
+         HasRoomInEssentials(profiles.GridOf(container), count);
 }
 
 bool KoanPinnedTabController::InitPinnedState(tabs::TabInterface* tab,
@@ -923,7 +960,7 @@ void KoanPinnedTabController::Normalize() {
     if (tab->IsPinned()) {
       // Dragged into the tiles, or duplicated from one, past Zen's limit:
       // back into the Space.
-      if (EssentialsCount() > kMaxEssentials) {
+      if (!HasRoomInEssentials(GetEssentialsGrid(tab), 0)) {
         RemoveFromEssentials(tab);
       }
       continue;
@@ -1033,7 +1070,8 @@ void KoanPinnedTabController::UnpinFromSpace(tabs::TabInterface* tab) {
 
 void KoanPinnedTabController::AddToEssentials(tabs::TabInterface* tab) {
   const std::vector<tabs::TabInterface*> tabs = WithSplit(tab);
-  if (tab->IsPinned() || !CanAddToEssentials(static_cast<int>(tabs.size()))) {
+  if (tab->IsPinned() ||
+      !CanAddToEssentials(tab, static_cast<int>(tabs.size()))) {
     return;
   }
   for (tabs::TabInterface* each : tabs) {
@@ -1519,7 +1557,7 @@ void KoanPinnedTabController::OnTabStripModelChanged(
           // Saved once the session knows the tab (OnTabsAdded()).
           state.unsaved |= InitPinnedState(tab, state);
           // A duplicated Essential may be one too many.
-          if (!CanAddToEssentials(0)) {
+          if (!HasRoomInEssentials(GetEssentialsGrid(tab), 0)) {
             ScheduleNormalize(tab);
           }
         } else if (IsPinnedInSpace(tab) &&
@@ -1751,7 +1789,8 @@ void AddPinnedTabMenuItems(TabMenuContext& context) {
       // Zen's badge: how many of the 12 Essentials are used.
       model->SetMinorText(
           at - 1,
-          base::StrCat({base::NumberToString16(controller->EssentialsCount()),
+          base::StrCat({base::NumberToString16(controller->EssentialsCountIn(
+                            GetEssentialsGrid(tab))),
                         u" / ",
                         base::NumberToString16(
                             KoanPinnedTabController::kMaxEssentials)}));
@@ -1836,8 +1875,9 @@ bool IsPinnedTabMenuCommandEnabled(const TabStripModel* tab_strip,
   }
   switch (command_id) {
     case kAddToEssentials:
-      return controller->CanAddToEssentials(static_cast<int>(
-          WithSplitOf(controller->tab_strip_model(), tab).size()));
+      return controller->CanAddToEssentials(
+          tab, static_cast<int>(
+                   WithSplitOf(controller->tab_strip_model(), tab).size()));
     case kUnload:
       return !IsPending(tab->GetContents());
     default:

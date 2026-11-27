@@ -198,5 +198,43 @@ TEST(ContainerLineTest, OnlyAnotherUserContainerShows) {
   EXPECT_FALSE(ShowsContainerLine(agent, std::nullopt));
 }
 
+TEST(EssentialsProfilesTest, OffShowsEveryEssentialInOneGrid) {
+  EssentialsProfiles profiles;
+  profiles.shown = kWork;
+  profiles.spaces = {kWork, kHome};
+  EXPECT_EQ(std::nullopt, profiles.GridOf(kHome));
+  EXPECT_TRUE(profiles.Shows(kHome));
+  EXPECT_TRUE(profiles.Shows(std::nullopt));
+}
+
+TEST(EssentialsProfilesTest, OnlyTheActiveSpacesProfileShows) {
+  EssentialsProfiles profiles;
+  profiles.separate = true;
+  profiles.spaces = {kWork, kHome};
+  // A Space with a profile shows its profile's Essentials only.
+  profiles.shown = kWork;
+  EXPECT_TRUE(profiles.Shows(kWork));
+  EXPECT_FALSE(profiles.Shows(kHome));
+  EXPECT_FALSE(profiles.Shows(std::nullopt));
+  // A Space without one shows the Essentials without one.
+  profiles.shown = std::nullopt;
+  EXPECT_TRUE(profiles.Shows(std::nullopt));
+  EXPECT_FALSE(profiles.Shows(kWork));
+}
+
+TEST(EssentialsProfilesTest, AProfileNoSpaceHasIsInTheDefaultGrid) {
+  const ContainerId agent{.kind = ContainerKind::kAgent, .id = "tagent"};
+  const ContainerId old{.kind = ContainerKind::kUser, .id = "sold"};
+  EssentialsProfiles profiles;
+  profiles.separate = true;
+  profiles.spaces = {kWork};
+  EXPECT_EQ(kWork, profiles.GridOf(kWork));
+  EXPECT_EQ(std::nullopt, profiles.GridOf(old));
+  EXPECT_EQ(std::nullopt, profiles.GridOf(agent));
+  EXPECT_EQ(std::nullopt, profiles.GridOf(std::nullopt));
+  EXPECT_TRUE(profiles.Shows(old));
+  EXPECT_FALSE(profiles.Shows(kWork));
+}
+
 }  // namespace
 }  // namespace koan::containers

@@ -227,6 +227,10 @@ class KoanTabDrag : public ui::EventObserver {
   // The tabs dragged, in tab strip order.
   std::vector<tabs::TabInterface*> DraggedTabs() const;
   bool DragsEssentials() const;
+  // Zen's canEssentialBeAdded() for the dragged Space tabs: the first is of
+  // the profile whose grid shows (koan_essentials_profiles.h), and one more
+  // fits in it.
+  bool FitsInEssentials() const;
   bool DragsFolder() const { return dragged_folder_ != 0; }
   // The dragged folder's drop (Drop()), and opening it again after it.
   void DropFolder(const DropTarget& target);
