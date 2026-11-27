@@ -66,6 +66,10 @@
 #include "ui/base/class_property.h"
 #include "ui/views/widget/widget.h"
 
+#if BUILDFLAG(IS_LINUX)
+#include "koan/browser/ui/views/koan_system_theme_lock_linux.h"
+#endif
+
 DEFINE_UI_CLASS_PROPERTY_TYPE(koan::KoanBrowserViewController*)
 
 namespace koan {
@@ -150,6 +154,10 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
       theme_(std::make_unique<KoanThemeController>(browser_view)),
       color_scheme_sync_(
           std::make_unique<KoanColorSchemeSync>(browser_view->GetProfile())),
+#if BUILDFLAG(IS_LINUX)
+      system_theme_lock_(
+          std::make_unique<KoanSystemThemeLock>(browser_view->GetProfile())),
+#endif
       glance_(std::make_unique<KoanGlanceController>(browser_view)),
       library_(std::make_unique<KoanLibraryController>(browser_view)),
       tab_activation_(std::make_unique<KoanTabActivationTracker>(

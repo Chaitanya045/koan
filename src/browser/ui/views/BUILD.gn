@@ -802,6 +802,12 @@ source_set("impl") {
     frameworks += [ "AppKit.framework" ]
   }
   if (is_linux) {
+    # Keeps profiles off the GTK and Qt themes, so the frame is Koan's colour.
+    sources += [
+      "koan_system_theme_lock_linux.cc",
+      "koan_system_theme_lock_linux.h",
+    ]
+
     # Dragging the window from the page asks the window manager to move it
     # (koan_window_drag.cc); macOS runs a move loop instead.
     deps += [

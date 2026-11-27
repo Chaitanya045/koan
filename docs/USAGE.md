@@ -1465,6 +1465,12 @@ dev.koan.Koan` (add `--delete-data` to remove the profile too).
 - Koan sees your Downloads, Documents, Pictures, Music and Videos folders,
   not the rest of your home folder. `flatpak override --user
   --filesystem=home dev.koan.Koan` gives it more.
+- Koan's window is in Koan's colours, as on the Mac, whatever GTK or Qt
+  theme the desktop uses: light or dark follows the desktop's colour-scheme
+  setting (in the shadcn look, Settings > Look and Feel > Mode decides), and
+  changes with it while Koan runs. Chromium's "Use GTK" / "Use Qt" theme
+  choice is not offered, and a profile that used it moves back to the
+  classic theme when Koan starts.
 
 ## Agent control
 

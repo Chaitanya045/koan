@@ -5,6 +5,7 @@
 #ifndef KOAN_BROWSER_KOAN_PREFS_H_
 #define KOAN_BROWSER_KOAN_PREFS_H_
 
+class PrefRegistry;
 class PrefRegistrySimple;
 
 namespace user_prefs {
@@ -434,6 +435,15 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 // after upstream registered them.
 void OverrideUpstreamProfilePrefDefaults(
     user_prefs::PrefRegistrySyncable* registry);
+
+// Linux: a profile starts on Chromium's classic theme, not the GTK or Qt
+// one (prefs::kSystemTheme, registered by ThemeService), so the frame, the
+// sidebar, the toolbar and the gutter take Koan's colours for the look and the
+// colour mode, as on the Mac, whatever toolkit theme the desktop (or, in the
+// Flatpak, the sandbox's fallback) has. Part of
+// OverrideUpstreamProfilePrefDefaults(); KoanSystemThemeLock moves a profile
+// that is on a toolkit theme off it. Does nothing on other platforms.
+void OverrideSystemThemeDefault(PrefRegistry* registry);
 
 // The same for upstream profile prefs that keyed-service factories register,
 // which happens after chrome::RegisterProfilePrefs() (crash note 8): no

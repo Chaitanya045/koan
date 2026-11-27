@@ -29,6 +29,7 @@ test("koan_unittests") {
     "//base",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
+    "//chrome/common:constants",
     "//components/performance_manager",
     "//components/prefs",
     "//components/prefs:test_support",
@@ -52,6 +53,7 @@ test("koan_unittests") {
     "//sql",
     "//testing/gmock",
     "//testing/gtest",
+    "//ui/color:color_provider_key",
     "//url",
   ]
   data_deps = [ "//third_party/icu:icudata" ]
