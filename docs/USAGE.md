@@ -1087,6 +1087,16 @@ wait a minute or open `chrome://components` and click **Check for update**
 under **Widevine Content Decryption Module**. It updates itself from then
 on.
 
+**On Linux, restart Koan once after the download.** Chromium on Linux loads
+the CDM only when the browser starts (before its sandbox locks down), so the
+first download plays only after a restart; later updates, too, take effect
+at the next start. In the Flatpak the CDM lives in
+`~/.var/app/dev.koan.Koan/config/koan/WidevineCdm/`, and the launcher lets
+the sandbox read that folder. Netflix's VMP signature (below) is a macOS
+and Windows matter; on Linux, Netflix and other services that need a
+higher security level may play at a lower resolution or not at all, as in
+other Chromium-based browsers.
+
 **Settings > Privacy and security > Site settings > Additional content
 settings > Protected content** ("Sites can play protected content") turns
 it on or off; it is on by default, and works in Incognito windows too.
@@ -1112,6 +1122,24 @@ similar). See "VMP signing" below for where that stands.
    --skip-visual <Koan.app>` (`scripts/e2e/widevine.mjs`: the component
    installs and `requestMediaKeySystemAccess('com.widevine.alpha')`
    resolves). It needs the network, so it isn't part of the regular suite.
+
+### Checking it (Linux Flatpak)
+
+1. Install the bundle and start Koan with an empty profile
+   (`flatpak run dev.koan.Koan`; to start over, quit and delete
+   `~/.var/app/dev.koan.Koan/config/koan`).
+2. Wait a minute, open `chrome://components`: **Widevine Content Decryption
+   Module** has a version (not `0.0.0.0`). If it doesn't, click **Check for
+   update**.
+3. `~/.var/app/dev.koan.Koan/config/koan/WidevineCdm/` has a version folder
+   and `latest-component-updated-widevine-cdm`.
+4. Quit Koan completely and start it again.
+5. <https://bitmovin.com/demos/drm>: the Widevine stream plays. The error
+   `DRM_NO_KEY_SYSTEM` means the CDM didn't load (not restarted, or the
+   sandbox can't read the folder: check that `G_MESSAGES_DEBUG=cobalt
+   flatpak run dev.koan.Koan` shows `ZYPAK_EXPOSE_WIDEVINE_PATH` set to the
+   folder above).
+6. Spotify Web (<https://open.spotify.com>, signed in) plays a song.
 
 ### VMP signing
 
