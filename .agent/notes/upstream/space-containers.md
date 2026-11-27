@@ -120,7 +120,7 @@ changes.
 | Case | Decision |
 |---|---|
 | What isolates | Cookies, localStorage, sessionStorage, IndexedDB, Cache Storage, the HTTP cache, service workers, HTTP auth, the network context (sockets, HSTS state), shared workers, renderer processes. Each is per StoragePartition. |
-| What's shared | History, bookmarks, passwords, autofill, site permissions (content settings are per profile; Firefox shares them too), extensions, downloads, zoom, the omnibox's suggestions. As in Firefox's containers. |
+| What's shared | Bookmarks, passwords, autofill, site permissions (content settings are per profile; Firefox shares them too), extensions, downloads, zoom. As in Firefox's containers. History is kept apart per profile since #474 (`space-history.md`): one history, each visit tagged with its profile. |
 | Notifications / push | Since #478: a page's own notifications (`new Notification()`) are allowed in a Space's profile; service-worker notifications and push stay refused there. See "Notifications (#478)" below. Agent containers: all refused, as before. |
 | WebUSB / HID / Serial / Bluetooth | Upstream refuses them in non-default partitions. Kept (Brave keeps it too). |
 | Tab moved to another Space (menu, drag, Move To) | Keeps its partition, as in Zen. A WebContents can't change partition, and reopening would lose the page's state and form input. The colour line then shows it is in another container. |
@@ -137,8 +137,8 @@ changes.
 | Incognito | No Spaces, so no containers. No Profile row and no Set Profile. Containers are never made off the record. |
 | Deleting a Space | Its container and data stay, listed for reuse, as Zen leaves containers alone. Deleting a container (and its data) belongs to container management in Settings, a follow-up. |
 | Clear browsing data | Upstream clears the default partition only. Container data stays until the container is deleted. Documented. |
-| URL bar suggestions | Shared history and bookmarks, as in Firefox. Typed URLs open as rule 6. |
-| Switch to Tab | Switches to the tab wherever it is, across containers. Upstream and Firefox both do (`switchTabs.searchAllContainers`). Agent tabs stay hidden (existing hook). |
+| URL bar suggestions | Since #474, the history suggestions are the active Space's profile's (`space-history.md`); bookmarks are shared, as in Firefox. Typed URLs open as rule 6. |
+| Switch to Tab | Since #474, only tabs of the active Space's profile (`space-history.md`); off with Keep history apart for each profile, across containers as upstream and Firefox (`switchTabs.searchAllContainers`). Agent tabs stay hidden (existing hook). |
 | Space routing | Rules 3 and 5. The routed tab is created in the routed Space's container before routing moves it. |
 | Prerender / NoStatePrefetch / preconnect | Off in container tabs (C4, B10). The prerendered page would be built in the default partition. Accepted cost. |
 | Discard | The replacement is created in the old tab's partition (C3). |

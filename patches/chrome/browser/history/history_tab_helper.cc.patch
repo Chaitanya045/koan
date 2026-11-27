@@ -1,17 +1,27 @@
 diff --git a/chrome/browser/history/history_tab_helper.cc b/chrome/browser/history/history_tab_helper.cc
-index 1392d58..35ce47b 100644
 --- a/chrome/browser/history/history_tab_helper.cc
 +++ b/chrome/browser/history/history_tab_helper.cc
-@@ -30,6 +30,8 @@
+@@ -30,6 +30,9 @@
  #include "content/public/browser/navigation_handle.h"
  #include "content/public/browser/page.h"
  #include "content/public/browser/render_frame_host.h"
 +#include "koan/browser/containers/koan_agent_access.h"
 +#include "koan/browser/containers/koan_container_partition.h"
++#include "koan/browser/containers/koan_history_profiles.h"
  #include "content/public/browser/web_contents.h"
  #include "net/http/http_response_headers.h"
  #include "third_party/blink/public/common/features.h"
-@@ -529,7 +531,11 @@ void HistoryTabHelper::DidFinishNavigation(
+@@ -454,6 +457,9 @@
+       chrome_ui_data == nullptr ? std::nullopt : chrome_ui_data->bookmark_id(),
+       app_id_, std::move(context_annotations),
+       actor_task_id ? std::make_optional(actor_task_id.value()) : std::nullopt);
++  // Koan: the visit records its tab's Space profile (#474).
++  add_page_args.app_id =
++      koan::containers::VisitAppId(web_contents(), add_page_args.app_id);
+ 
+   if (ui::PageTransitionIsMainFrame(page_transition) &&
+       virtual_url != navigation_handle->GetURL()) {
+@@ -529,7 +535,11 @@
    // which WillNavigate[Main,Sub]Frame will do before this function is called.
    UMA_HISTOGRAM_BOOLEAN("History.ShouldUpdateHistory",
                          navigation_handle->ShouldUpdateHistory());
