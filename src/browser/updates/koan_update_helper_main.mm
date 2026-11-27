@@ -19,10 +19,14 @@
 //    (the marker and the copy are in folders the user can write);
 // 3. swaps the installed app and the staged copy with one
 //    renamex_np(RENAME_SWAP), so the old app is at the staged path
-//    afterwards, and records that in the marker;
+//    afterwards, and records that in the marker, with the old app's own
+//    designated requirement, read just before the swap;
 // 4. runs the new version's `Koan --version`: one that can't start at all
 //    (dyld, the wrong architecture) would never get as far as counting its
 //    launches, so it is swapped back at once;
+//    a swap back checks the old copy against that requirement rather than
+//    the release certificate, so it also works for an old app signed
+//    otherwise (a development build), and is refused if none was read;
 // 5. with --relaunch, opens the app again with Koan's arguments (Chromium's
 //    relaunch command line, so the session comes back), and watches the new
 //    version: if it exits before it has confirmed itself in the marker,
@@ -186,6 +190,24 @@ std::string CheckAndSwap(const InstallMarker& marker,
   return std::string();
 }
 
+// The installed app's own designated requirement, or empty if it has none
+// (unsigned) or codesign couldn't say.
+std::string ReadOwnRequirement(const base::FilePath& app) {
+  std::string output;
+  if (DisplayCodeRequirement(app, &output) != ToolResult::kOk) {
+    LOG(ERROR) << "No designated requirement for " << app << ": " << output;
+    return std::string();
+  }
+  const std::optional<std::string> requirement =
+      DesignatedRequirementFromCodesign(output);
+  if (!requirement) {
+    LOG(ERROR) << "No designated requirement for " << app << " in: " << output;
+    return std::string();
+  }
+  LOG(INFO) << "Old app's requirement: " << *requirement;
+  return *requirement;
+}
+
 // Whether the app at `app` starts as far as printing its version. A build
 // that dyld can't load (a missing framework, the wrong architecture) exits
 // before any of Koan's code could count its launches.
@@ -323,10 +345,20 @@ bool WatchNewVersion(pid_t pid, const base::FilePath& marker_path) {
 }
 
 // Puts the old copy back after the new version was swapped in (`marker` is
-// kSwapped). Whether it did.
+// kSwapped), checking it against `old_requirement`, the old app's own
+// designated requirement as this helper read it before the swap (not the
+// marker's copy, which anyone who can write the marker could change).
+// Whether it did.
 bool SwapBack(InstallMarker marker,
-              const std::string& requirement,
+              const std::string& old_requirement,
               const base::FilePath& marker_path) {
+  if (old_requirement.empty()) {
+    LOG(ERROR) << "Can't put " << marker.from_version
+               << " back: no designated requirement was read for it before "
+                  "the swap (unsigned, or codesign -d failed), so it can't "
+                  "be checked";
+    return false;
+  }
   if (!WaitUntilNothingRunsFrom(marker.app)) {
     LOG(ERROR) << marker.app << " still runs; can't put " << marker.from_version
                << " back";
@@ -408,6 +440,13 @@ int HelperMain() {
     }
     return 1;
   }
+  // Read before the swap, while the old app is still the installed one; a
+  // roll-back doesn't need it (the release certificate checks the old copy,
+  // as it checked it when it was installed).
+  if (!roll_back) {
+    marker->old_requirement = ReadOwnRequirement(app);
+  }
+  const std::string old_requirement = marker->old_requirement;
   if (const std::string error = CheckAndSwap(*marker, requirement);
       !error.empty()) {
     marker->state = MarkerState::kFailed;
@@ -426,7 +465,7 @@ int HelperMain() {
   if (!SmokeTest(app)) {
     LOG(ERROR) << marker->version << " doesn't start; putting "
                << marker->from_version << " back";
-    return SwapBack(*marker, requirement, marker_path) ? 0 : 1;
+    return SwapBack(*marker, old_requirement, marker_path) ? 0 : 1;
   }
   if (!relaunch) {
     return 0;
@@ -446,7 +485,7 @@ int HelperMain() {
   if (!marker || marker->state != MarkerState::kSwapped) {
     return 1;
   }
-  return SwapBack(*marker, requirement, marker_path) ? 0 : 1;
+  return SwapBack(*marker, old_requirement, marker_path) ? 0 : 1;
 }
 
 }  // namespace

@@ -137,6 +137,11 @@ ToolResult VerifyCodeSignature(const base::FilePath& app,
                                const std::string& requirement,
                                std::string* output);
 
+// codesign -d -r- `app`: prints the app's designated requirement
+// (DesignatedRequirementFromCodesign() reads it).
+ToolResult DisplayCodeRequirement(const base::FilePath& app,
+                                  std::string* output);
+
 // The processes this user can see, and the executable each runs (resolved,
 // as proc_pidpath() gives it).
 struct RunningProcess {

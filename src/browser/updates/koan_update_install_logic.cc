@@ -12,6 +12,7 @@
 #include "base/json/json_writer.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 
@@ -331,6 +332,9 @@ std::string SerializeMarker(const InstallMarker& marker) {
   dict.Set("staged", marker.staged.AsUTF8Unsafe());
   dict.Set("launches", marker.launches);
   dict.Set("error", marker.error);
+  if (!marker.old_requirement.empty()) {
+    dict.Set("old_requirement", marker.old_requirement);
+  }
   return base::WriteJsonWithOptions(dict,
                                     base::JSONWriter::OPTIONS_PRETTY_PRINT)
       .value_or(std::string());
@@ -350,6 +354,10 @@ std::optional<InstallMarker> ParseMarker(std::string_view json) {
   const std::string* staged = dict.FindString("staged");
   const std::optional<int> launches = dict.FindInt("launches");
   const std::string* error = dict.FindString("error");
+  const base::Value* old_requirement = dict.Find("old_requirement");
+  if (old_requirement && !old_requirement->is_string()) {
+    return std::nullopt;
+  }
   if (dict.FindInt("schema") != kMarkerSchema || !state || !version ||
       !IsValidVersion(*version) || !from_version ||
       !IsValidVersion(*from_version) || !app || !staged || !launches ||
@@ -368,10 +376,30 @@ std::optional<InstallMarker> ParseMarker(std::string_view json) {
   marker.staged = base::FilePath::FromUTF8Unsafe(*staged);
   marker.launches = *launches;
   marker.error = error ? *error : std::string();
+  marker.old_requirement =
+      old_requirement ? old_requirement->GetString() : std::string();
   if (!IsCleanAbsolutePath(marker.app) || !IsCleanAbsolutePath(marker.staged)) {
     return std::nullopt;
   }
   return marker;
+}
+
+std::optional<std::string> DesignatedRequirementFromCodesign(
+    std::string_view output) {
+  for (std::string_view line : base::SplitStringPiece(
+           output, "\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
+    for (std::string_view prefix : {"designated => ", "# designated => "}) {
+      if (base::StartsWith(line, prefix)) {
+        const std::string_view requirement = base::TrimWhitespaceASCII(
+            line.substr(prefix.size()), base::TRIM_ALL);
+        if (requirement.empty()) {
+          return std::nullopt;
+        }
+        return std::string(requirement);
+      }
+    }
+  }
+  return std::nullopt;
 }
 
 LaunchDecision DecideOnLaunch(const std::optional<InstallMarker>& marker,

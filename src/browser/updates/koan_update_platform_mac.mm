@@ -420,6 +420,12 @@ ToolResult VerifyCodeSignature(const base::FilePath& app,
                  kCodesignTimeout, output);
 }
 
+ToolResult DisplayCodeRequirement(const base::FilePath& app,
+                                  std::string* output) {
+  return RunTool({kCodesign, "-d", "-r-", app.value()}, kCodesignTimeout,
+                 output);
+}
+
 std::vector<RunningProcess> ListProcesses() {
   std::vector<RunningProcess> processes;
   const int count = proc_listallpids(nullptr, 0);

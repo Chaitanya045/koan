@@ -222,7 +222,10 @@ updating (they then offer the release page, and people install by hand):
   certificate again right before the swap.
 - **`Koan --version` exits 0.** After the swap the helper runs
   `Contents/MacOS/<CFBundleExecutable> --version` and puts the old app back
-  if it fails.
+  if it fails. Before the swap it reads the installed app's own designated
+  requirement (`codesign -d -r-`), and a swap back checks the old copy
+  against that rather than the release certificate; an old app with none
+  (unsigned) isn't put back.
 - **The manifest's address and key** (above).
 
 `scripts/tests/test_update_install.py` checks that the code, the bundle and

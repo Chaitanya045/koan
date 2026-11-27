@@ -262,6 +262,58 @@ TEST(KoanUpdateInstallTest, MarkerRejectsWhatIsNotOne) {
   EXPECT_FALSE(ParseMarker(with("launches", "-1")));
 }
 
+TEST(KoanUpdateInstallTest, MarkerKeepsTheOldRequirement) {
+  // With one.
+  InstallMarker marker = Marker(MarkerState::kSwapped);
+  marker.old_requirement =
+      R"(identifier "org.koan.Koan" and certificate leaf = H"ab12")";
+  std::string json = SerializeMarker(marker);
+  std::optional<InstallMarker> parsed = ParseMarker(json);
+  ASSERT_TRUE(parsed);
+  EXPECT_EQ(parsed->old_requirement, marker.old_requirement);
+
+  // Without one (a marker Koan wrote before the swap, or an unsigned old
+  // app): left out, and read back as empty.
+  const std::string without = SerializeMarker(Marker(MarkerState::kSwapped));
+  EXPECT_EQ(without.find("old_requirement"), std::string::npos);
+  parsed = ParseMarker(without);
+  ASSERT_TRUE(parsed);
+  EXPECT_EQ(parsed->old_requirement, "");
+
+  // Malformed: not a string.
+  marker.old_requirement = "x";
+  json = SerializeMarker(marker);
+  const std::string field = R"("old_requirement": "x")";
+  ASSERT_NE(json.find(field), std::string::npos);
+  for (const char* value : {"4", "null", "[]", "{}"}) {
+    std::string bad = json;
+    bad.replace(bad.find(field), field.size(),
+                std::string(R"("old_requirement": )") + value);
+    EXPECT_FALSE(ParseMarker(bad)) << bad;
+  }
+}
+
+TEST(KoanUpdateInstallTest, DesignatedRequirementFromCodesign) {
+  EXPECT_EQ(DesignatedRequirementFromCodesign(
+                "Executable=/Applications/Koan.app/Contents/MacOS/Koan\n"
+                "designated => identifier \"org.koan.Koan\" and anchor apple "
+                "generic and certificate leaf[subject.OU] = \"ABCDE12345\"\n"),
+            R"(identifier "org.koan.Koan" and anchor apple generic and )"
+            R"(certificate leaf[subject.OU] = "ABCDE12345")");
+  // Ad-hoc: the implicit requirement pins the code itself.
+  EXPECT_EQ(DesignatedRequirementFromCodesign(
+                "Executable=/a/Koan.app/Contents/MacOS/Koan\n"
+                "# designated => cdhash H\"0123abcd\"\n"),
+            R"(cdhash H"0123abcd")");
+  // Unsigned, a failure, or nothing after the arrow.
+  EXPECT_EQ(DesignatedRequirementFromCodesign(
+                "/a/Koan.app: code object is not signed at all\n"),
+            std::nullopt);
+  EXPECT_EQ(DesignatedRequirementFromCodesign(""), std::nullopt);
+  EXPECT_EQ(DesignatedRequirementFromCodesign("designated => \n"),
+            std::nullopt);
+}
+
 TEST(KoanUpdateInstallTest, LaunchDecisions) {
   const base::FilePath app = P("/Applications/Koan.app");
   EXPECT_EQ(DecideOnLaunch(std::nullopt, "0.0.3", app).action,

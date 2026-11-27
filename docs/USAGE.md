@@ -1560,7 +1560,8 @@ releases, not at your clone.
     fails (the new version can't start at all), it puts the old app back at
     once. If the new version exits before its 10 seconds after a restart,
     the helper puts the old app back and opens it; if it fails to get that
-    far twice, its next start does the same. That version then isn't installed
+    far twice, its next start does the same. Putting the old app back
+    checks it against its own signature, read before the swap. That version then isn't installed
     automatically for 7 days (never again after a second time); the sidebar
     offers its release page instead.
   - **When Koan can't update itself** it shows the release page's

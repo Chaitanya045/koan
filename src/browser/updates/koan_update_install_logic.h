@@ -247,12 +247,23 @@ struct InstallMarker {
   int launches = 0;
   // Why the helper failed, for the log.
   std::string error;
+  // The installed app's own designated requirement, as the helper read it
+  // before the install swap (DesignatedRequirementFromCodesign()); empty if
+  // it couldn't (an unsigned build). For the log: the helper swaps the old
+  // copy back against the value it read itself, not this one.
+  std::string old_requirement;
 };
 
 std::string SerializeMarker(const InstallMarker& marker);
 // nullopt unless `json` is a schema 1 marker with absolute paths and valid
-// versions.
+// versions (and, if it has one, an old_requirement that is a string).
 std::optional<InstallMarker> ParseMarker(std::string_view json);
+
+// The designated requirement in what `codesign -d -r- <app>` printed (the
+// `designated => …` line; an ad-hoc signature's implicit `# designated =>
+// cdhash …` counts too), or nullopt if there is none.
+std::optional<std::string> DesignatedRequirementFromCodesign(
+    std::string_view output);
 
 // A launch of the new version counts as good once it has had a window for
 // kConfirmDelay, or when it quits normally.
