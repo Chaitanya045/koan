@@ -10,6 +10,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "koan/browser/ui/views/koan_emoji_picker.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -65,6 +66,7 @@ class KoanSpaceCreationView : public views::View,
   void SetTheme(const KoanWorkspaceController::SpaceTheme& theme);
   void PickProfile();
   void SetProfile(const std::string& container);
+  void OnProfilesChanged();
   // Closes the form (soon: it is usually one of its buttons asking) and
   // creates the Space if `create`.
   void Finish(bool create);
@@ -83,6 +85,9 @@ class KoanSpaceCreationView : public views::View,
   // The new Space's container (SpaceData::container): Zen's form starts on
   // Default.
   std::string container_;
+  // The profiles, renamed or deleted in Settings while the form is open
+  // (#477).
+  PrefChangeRegistrar profiles_registrar_;
   std::unique_ptr<KoanSpaceProfileMenu> profile_menu_;
   std::unique_ptr<views::MenuRunner> profile_runner_;
   bool focus_name_pending_ = false;

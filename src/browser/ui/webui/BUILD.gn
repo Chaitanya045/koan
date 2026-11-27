@@ -10,6 +10,8 @@ source_set("webui") {
   sources = [
     "koan_new_tab_ui.cc",
     "koan_new_tab_ui.h",
+    "koan_profiles_handler.cc",
+    "koan_profiles_handler.h",
     "koan_settings_handler.cc",
     "koan_settings_handler.h",
     "koan_settings_ui.cc",

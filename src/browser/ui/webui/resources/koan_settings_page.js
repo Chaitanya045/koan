@@ -41,6 +41,13 @@ let query = '';
 // Settings > Agent Control > Saved containers (KoanAgentContainersHandler);
 // null where agent control isn't built.
 let agentContainers = null;
+// Settings > Tab Management > Profiles (KoanProfilesHandler): {profiles,
+// colors}, and what each profile keeps on disk, by id.
+let profiles = null;
+let profileSizes = {};
+// What the last action in the group did, kept while the group is redrawn
+// (a delete redraws it before it is done).
+let profilesStatus = {text: '', error: false};
 // Settings > Agent Control > Set up agents on this Mac
 // (KoanAgentSetupHandler); null where agent control isn't built.
 let agentSetup = null;
@@ -661,6 +668,220 @@ function renderAgentContainers(query) {
   ];
 }
 
+// Tab Management: profiles ---------------------------------------------------
+
+// The Spaces' profiles (Zen's containers per Space, #477): each with its
+// colour, its name, the Spaces that use it and what it keeps on disk.
+// Rename, change colour, clear its data (signs out of everything in its
+// Spaces) and delete it (Firefox's container removal: its tabs close, its
+// Spaces go back to Default as in Zen, its data is deleted).
+
+function bytesText(bytes) {
+  if (bytes === undefined) {
+    return '';
+  }
+  const units = ['bytes', 'KB', 'MB', 'GB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1000 && unit < units.length - 1) {
+    value /= 1000;
+    unit++;
+  }
+  return unit ? `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}` :
+                `${value} ${units[0]}`;
+}
+
+function listText(names) {
+  const quoted = names.map(name => `“${name}”`);
+  return quoted.length < 2 ?
+      quoted.join('') :
+      `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}`;
+}
+
+function tabsText(count) {
+  return count === 1 ? '1 open tab' : `${count} open tabs`;
+}
+
+// What a profile's row says under its name.
+function profileSummary(profile) {
+  const parts = [profile.spaces.length ?
+                     `Used by ${listText(profile.spaces)}` :
+                     'No Space uses it'];
+  if (profile.openTabs) {
+    parts.push(tabsText(profile.openTabs));
+  }
+  const size = bytesText(profileSizes[profile.id]);
+  if (size) {
+    parts.push(`${size} on this device`);
+  }
+  return parts.join(' · ');
+}
+
+// The question before a delete: what goes, and what happens to the Spaces
+// and tabs that use it.
+function deleteQuestion(profile) {
+  const lines = [`Delete the profile “${profile.name}”?`,
+                 'Its cookies, logins and site data are deleted from this ' +
+                     'device. History, bookmarks and passwords are kept.'];
+  if (profile.spaces.length) {
+    lines.push(`${listText(profile.spaces)} ` +
+               `${profile.spaces.length === 1 ? 'uses' : 'use'} it and ` +
+               'will use Default.');
+  }
+  if (profile.openTabs) {
+    lines.push(`Its ${tabsText(profile.openTabs)} will close.`);
+  }
+  return lines.join('\n\n');
+}
+
+async function reloadProfileSizes() {
+  profileSizes = await sendWithPromise('koanGetProfileSizes');
+  for (const profile of profiles?.profiles ?? []) {
+    const summary = root?.getElementById(`profile-summary-${profile.id}`);
+    if (summary) {
+      summary.textContent = profileSummary(profile);
+    }
+  }
+}
+
+function sayInProfiles(text, error = false) {
+  profilesStatus = {text, error};
+  const status = root?.getElementById('profiles-status');
+  if (status) {
+    status.textContent = text;
+    status.classList.toggle('error', error);
+  }
+}
+
+function renderProfile(profile) {
+  const say = sayInProfiles;
+  const name = h('input', {
+    type: 'text',
+    class: 'container-name profile-name',
+    value: profile.name,
+    maxLength: 64,
+    'aria-label': 'Profile name',
+  });
+  const rename = async () => {
+    const value = name.value.trim();
+    if (value === profile.name) {
+      name.value = profile.name;
+      return;
+    }
+    if (!value || !await sendWithPromise('koanRenameProfile', profile.id,
+                                         value)) {
+      name.value = profile.name;
+      say('That name isn’t allowed', true);
+      return;
+    }
+    say('');
+  };
+  name.addEventListener('change', rename);
+  name.addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+      name.blur();
+    } else if (event.key === 'Escape') {
+      name.value = profile.name;
+      name.blur();
+    }
+  });
+  const dot = h('span', {class: 'profile-dot', 'aria-hidden': 'true'});
+  const current = profiles.colors.find(c => c.color === profile.color);
+  dot.style.setProperty('--profile-color', current?.css ?? 'transparent');
+  const colors = h(
+      'div',
+      {class: 'profile-colors', role: 'radiogroup', 'aria-label': 'Colour'},
+      ...profiles.colors.map(color => {
+        const swatch = h('button', {
+          class: 'profile-color',
+          role: 'radio',
+          title: color.name,
+          'aria-label': color.name,
+          'aria-checked': String(color.color === profile.color),
+          onclick: () =>
+              sendWithPromise('koanSetProfileColor', profile.id, color.color),
+        });
+        swatch.style.setProperty('--profile-color', color.css);
+        return swatch;
+      }));
+  const clear = h('button', {
+    class: 'reset-button',
+    onclick: () => {
+      if (confirm(`Clear the data of “${profile.name}”?\n\nYou are signed ` +
+                  'out of every site in the Spaces that use it: its ' +
+                  'cookies, site data and cache are deleted. Its tabs stay ' +
+                  'open, and the profile stays.')) {
+        run('koanClearProfileData', `Cleared “${profile.name}”.`,
+            'Clearing…');
+      }
+    },
+  }, 'Clear Data…');
+  const remove = h('button', {
+    class: 'reset-button destructive',
+    onclick: () => {
+      if (confirm(deleteQuestion(profile))) {
+        run('koanDeleteProfile', `Deleted “${profile.name}”.`, 'Deleting…');
+      }
+    },
+  }, 'Delete Profile…');
+  const run = async (message, done, working) => {
+    clear.disabled = remove.disabled = true;
+    say(working);
+    const ok = await sendWithPromise(message, profile.id);
+    clear.disabled = remove.disabled = false;
+    say(ok ? done : 'Something went wrong', !ok);
+    reloadProfileSizes();
+  };
+  return h(
+      'div', {class: 'row profile'},
+      h('div', {class: 'profile-header'}, dot, name),
+      h('p', {class: 'description', id: `profile-summary-${profile.id}`},
+        profileSummary(profile)),
+      colors, h('div', {class: 'profile-actions'}, clear, remove));
+}
+
+function renderProfiles(query) {
+  if (!profiles ||
+      (query && !matches(query, 'profiles', 'containers', 'cookies',
+                         'site data', 'logins', 'delete profile',
+                         ...profiles.profiles.map(p => p.name)))) {
+    return [];
+  }
+  const status = h('span', {
+    class: `theme-status${profilesStatus.error ? ' error' : ''}`,
+    id: 'profiles-status',
+  }, profilesStatus.text);
+  const rows = profiles.profiles.map(renderProfile);
+  return [h(
+      'section', {class: 'group', id: 'group-profiles'},
+      h('h2', {}, 'Profiles'),
+      h('p', {class: 'description'},
+        'Profiles are used to separate cookies and site data between ' +
+            'spaces. Pick one for a Space in Create a Space, or with Set ' +
+            'Profile in the Space’s menu. History, bookmarks, passwords and ' +
+            'extensions are shared.'),
+      ...(rows.length ? rows :
+                        [h('p', {class: 'description indent'},
+                           'No profiles yet. Make one with New Profile… in ' +
+                               'a Space’s Set Profile menu.')]),
+      h('div', {class: 'row theme-paste'},
+        h('div', {class: 'theme-actions'}, status)))];
+}
+
+// Tab Management's groups, with Profiles after Workspaces (Spaces use them).
+function withProfiles(groups, query) {
+  const profileGroups = renderProfiles(query);
+  if (!profileGroups.length) {
+    return groups;
+  }
+  const at = groups.findIndex(el => el.id === 'group-workspaces');
+  if (at < 0) {
+    return [...groups, h('h1', {}, 'Profiles'), ...profileGroups];
+  }
+  return [...groups.slice(0, at + 1), ...profileGroups,
+          ...groups.slice(at + 1)];
+}
+
 function renderPane(pane, query) {
   // Chromium's menu lists every pane (settings_menu.html hook); one whose
   // rows are all hidden (agent control off by policy) says so.
@@ -673,6 +894,9 @@ function renderPane(pane, query) {
     return renderShortcuts(query);
   }
   const groups = renderGroups(pane, query);
+  if (pane.id === 'tabs') {
+    return withProfiles(groups, query);
+  }
   return pane.id === 'agents' ?
       [...groups, ...renderAgentSetup(query), ...renderAgentContainers(query)] :
       groups;
@@ -733,6 +957,11 @@ const ready = (async () => {
     agentContainers = containers;
     render();
   });
+  sendWithPromise('koanGetProfiles').then(list => {
+    profiles = list;
+    render();
+    reloadProfileSizes();
+  });
   sendWithPromise('koanGetAgentSetup').then(setup => {
     agentSetup = setup;
     render();
@@ -750,6 +979,29 @@ const ready = (async () => {
     if ((query || currentPane === 'agents') &&
         !root?.activeElement?.classList.contains('container-name')) {
       render();
+    }
+  });
+  addWebUiListener('koan-profiles-changed', list => {
+    profiles = list;
+    // Don't take the text out of a name being typed.
+    if ((query || currentPane === 'tabs') &&
+        !root?.activeElement?.classList.contains('profile-name')) {
+      render();
+    }
+    reloadProfileSizes();
+  });
+  // Spaces and tabs change in the windows: what uses a profile is fetched
+  // again when the page is shown.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && profiles) {
+      sendWithPromise('koanGetProfiles').then(list => {
+        profiles = list;
+        if ((query || currentPane === 'tabs') &&
+            !root?.activeElement?.classList.contains('profile-name')) {
+          render();
+        }
+        reloadProfileSizes();
+      });
     }
   });
   addWebUiListener('koan-shortcuts-changed', shortcuts => {

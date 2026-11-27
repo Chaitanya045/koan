@@ -922,6 +922,9 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
     // The site's data in each profile's own partition: the default one (and
     // with it the site's permissions and engagement, which every profile
     // shares) for the default profile, a user container's for its profile.
+    constexpr uint64_t kOrigins =
+        content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB |
+        content::BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB;
     const auto remove =
         [&](std::optional<content::StoragePartitionConfig> partition) {
           auto filter = content::BrowsingDataFilterBuilder::Create(
@@ -933,11 +936,25 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
             filter->SetStoragePartitionConfig(*partition);
             types &=
                 content::BrowsingDataRemover::DATA_TYPE_ON_STORAGE_PARTITION;
+          } else {
+            // A removal that names no partition also clears every profile's
+            // (koan::containers::RemoveUserContainersData(), #477), so the
+            // default partition's own data goes in a removal that names it,
+            // and the rest, which no profile has, in one that doesn't.
+            std::unique_ptr<content::BrowsingDataFilterBuilder> own =
+                filter->Copy();
+            own->SetStoragePartitionConfig(
+                content::StoragePartitionConfig::CreateDefault(profile_));
+            profile_->GetBrowsingDataRemover()->RemoveWithFilter(
+                base::Time(), base::Time::Max(),
+                types &
+                    content::BrowsingDataRemover::DATA_TYPE_ON_STORAGE_PARTITION,
+                kOrigins, std::move(own));
+            types &=
+                ~content::BrowsingDataRemover::DATA_TYPE_ON_STORAGE_PARTITION;
           }
           profile_->GetBrowsingDataRemover()->RemoveWithFilter(
-              base::Time(), base::Time::Max(), types,
-              content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB |
-                  content::BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB,
+              base::Time(), base::Time::Max(), types, kOrigins,
               std::move(filter));
         };
     if (!shown || shown->empty()) {

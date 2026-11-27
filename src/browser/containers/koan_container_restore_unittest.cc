@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "base/no_destructor.h"
 #include "content/public/browser/security_principal.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/storage_partition_config.h"
@@ -49,6 +50,28 @@ TEST_F(ContainerRestoreTest, RestoredTabs) {
        }) {
     EXPECT_FALSE(SiteInstanceForRestoredTab(&context_, extra_data));
   }
+}
+
+// A deleted profile's tab (#477) restores into nothing: the restore hook then
+// blanks it, and its partition isn't made again.
+TEST_F(ContainerRestoreTest, DeletedProfilesTabsDontComeBack) {
+  const ContainerId kept{.kind = ContainerKind::kUser,
+                         .id = NewContainerId(true)};
+  const ContainerId deleted{.kind = ContainerKind::kUser,
+                            .id = NewContainerId(true)};
+  static base::NoDestructor<std::string> kept_id;
+  *kept_id = kept.id;
+  SetUserContainerCheck(
+      [](content::BrowserContext*, const ContainerId& container) {
+        return container.id == *kept_id;
+      });
+  EXPECT_TRUE(SiteInstanceForRestoredTab(
+      &context_, {{kContainerSessionKey, Serialize(kept)}}));
+  EXPECT_FALSE(SiteInstanceForRestoredTab(
+      &context_, {{kContainerSessionKey, Serialize(deleted)}}));
+  SetUserContainerCheck(nullptr);
+  EXPECT_TRUE(SiteInstanceForRestoredTab(
+      &context_, {{kContainerSessionKey, Serialize(deleted)}}));
 }
 
 }  // namespace

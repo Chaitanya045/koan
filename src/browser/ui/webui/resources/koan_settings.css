@@ -466,3 +466,64 @@ button.reset-button {
 .description.indent {
   margin-inline-start: 24px;
 }
+
+/* Tab Management: profiles (#477) ---------------------------------------- */
+
+.row.profile {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding-block: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The profile's colour, as its dot in the Set Profile menu. */
+.profile-dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--profile-color);
+}
+
+.profile-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+button.profile-color {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: var(--profile-color) content-box;
+  cursor: pointer;
+}
+
+button.profile-color[aria-checked="true"] {
+  border-color: var(--foreground);
+}
+
+button.profile-color:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--ring) 50%, transparent);
+}
+
+.profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+button.reset-button.destructive {
+  color: var(--destructive);
+}

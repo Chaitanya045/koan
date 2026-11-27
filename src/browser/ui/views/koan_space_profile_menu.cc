@@ -138,6 +138,13 @@ std::vector<containers::UserContainer> GetUserContainers(Profile* profile) {
       PrefsOf(profile)->GetList(prefs::kUserContainers));
 }
 
+std::string SpaceContainerIfListed(Profile* profile, std::string_view stored) {
+  const std::optional<containers::ContainerId> container =
+      containers::ListedSpaceContainer(
+          PrefsOf(profile)->GetList(prefs::kUserContainers), stored);
+  return container ? containers::Serialize(*container) : std::string();
+}
+
 std::u16string SpaceProfileName(Profile* profile,
                                 const std::string& container) {
   const std::optional<containers::ContainerId> id =

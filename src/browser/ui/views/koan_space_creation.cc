@@ -19,8 +19,11 @@
 #include "base/task/sequenced_task_runner.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/path_effect.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "components/prefs/pref_service.h"
+#include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/views/koan_emoji_picker.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
@@ -251,6 +254,15 @@ KoanSpaceCreationView::KoanSpaceCreationView(
       std::make_unique<KoanSpaceProfileButton>(base::BindRepeating(
           &KoanSpaceCreationView::PickProfile, base::Unretained(this))));
   SetProfile(std::string());
+  // The button names the profile as it is now; a deleted one is Default.
+  profiles_registrar_.Init(controller_->browser_view()
+                               ->GetProfile()
+                               ->GetOriginalProfile()
+                               ->GetPrefs());
+  profiles_registrar_.Add(
+      prefs::kUserContainers,
+      base::BindRepeating(&KoanSpaceCreationView::OnProfilesChanged,
+                          base::Unretained(this)));
 
   theme_button_ = AddChildView(std::make_unique<KoanSpaceFormButton>(
       base::BindRepeating(&KoanSpaceCreationView::EditTheme,
@@ -378,6 +390,11 @@ void KoanSpaceCreationView::SetProfile(const std::string& container) {
   container_ = container;
   profile_button_->SetText(
       SpaceProfileName(controller_->browser_view()->GetProfile(), container_));
+}
+
+void KoanSpaceCreationView::OnProfilesChanged() {
+  SetProfile(SpaceContainerIfListed(controller_->browser_view()->GetProfile(),
+                                    container_));
 }
 
 void KoanSpaceCreationView::Finish(bool create) {

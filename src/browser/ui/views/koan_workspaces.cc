@@ -98,6 +98,7 @@
 #include "koan/browser/ui/views/koan_space_header.h"
 #include "koan/browser/ui/views/koan_space_menu.h"
 #include "koan/browser/ui/views/koan_space_navigation.h"
+#include "koan/browser/ui/views/koan_space_profile_menu.h"
 #include "koan/browser/ui/views/koan_space_routes.h"
 #include "koan/browser/ui/views/koan_space_routing.h"
 #include "koan/browser/ui/views/koan_space_swipe.h"
@@ -481,6 +482,8 @@ KoanWorkspaceController::KoanWorkspaceController(BrowserView* browser_view)
   if (IsEnabled()) {
     // Agent control opens agents' tabs in containers, in windows like this.
     containers::InstallAgentTabOpener();
+    // A deleted profile's tabs don't restore into it (#477).
+    containers::InstallUserContainerCheck();
     tab_strip_model()->AddObserver(this);
     session_restored_subscription_ =
         SessionRestore::RegisterOnSessionRestoredCallback(
@@ -556,10 +559,32 @@ void KoanWorkspaceController::OnAddedToWidget() {
       prefs::kWorkspacesSeparateEssentials,
       base::BindRepeating(&KoanWorkspaceController::ScheduleUpdate,
                           base::Unretained(this)));
+  // A profile renamed, recoloured or deleted in Settings (#477).
+  pref_change_registrar_.Add(
+      prefs::kUserContainers,
+      base::BindRepeating(&KoanWorkspaceController::OnUserContainersChanged,
+                          base::Unretained(this)));
 }
 
 void KoanWorkspaceController::OnTintPrefChanged() {
   ApplySpaceColor();
+}
+
+void KoanWorkspaceController::OnUserContainersChanged() {
+  // The colour lines (PaintSidebarTab()) take the new colours.
+  TabStripModel* model = tab_strip_model();
+  for (int i = 0; i < model->count(); ++i) {
+    tabs::TabInterface* tab = model->GetTabAtIndex(i);
+    const std::optional<containers::ContainerId> container =
+        tab->GetContents() ? containers::ContainerOf(tab->GetContents())
+                           : std::nullopt;
+    if (container && container->kind == containers::ContainerKind::kUser) {
+      model->NotifyTabChanged(tab, TabChangeType::kAll);
+    }
+  }
+  // A deleted profile's Spaces are Default now: their empty tabs follow
+  // (MatchEmptyTabsToSpaceContainers()), and the bar and menus redraw.
+  ScheduleUpdate();
 }
 
 void KoanWorkspaceController::OnWidgetActivationChanged(views::Widget* widget,
@@ -983,7 +1008,8 @@ KoanWorkspaceController::ReadSpace(const tab_groups::TabGroupId& space) const {
       .icon = std::move(icon),
       .theme = SpaceTheme{.stored = theme == kDefaultThemeData ? std::string()
                                                                : theme},
-      .container = NormalizeSpaceContainer(
+      .container = SpaceContainerIfListed(
+          browser_view_->GetProfile(),
           SessionValueOfTabs(space, kSpaceContainerSessionKey,
                              /*except=*/nullptr)
               .value_or(std::string()))};
@@ -2267,8 +2293,8 @@ bool KoanWorkspaceController::RecreateStoredSpaces(
         SpaceData{.name = std::move(name),
                   .icon = std::move(icon),
                   .theme = {.stored = theme ? *theme : std::string()},
-                  .container = NormalizeSpaceContainer(
-                      container ? *container : std::string())},
+                  .container = SpaceContainerIfListed(
+                      profile, container ? *container : std::string())},
         dict->FindBool("active").value_or(false));
     // Its id (none in an entry stored before Spaces had ids; a duplicate in
     // a hand-edited pref is dropped).

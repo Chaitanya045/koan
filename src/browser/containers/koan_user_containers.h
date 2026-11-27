@@ -11,6 +11,7 @@
 #include <string_view>
 #include <vector>
 
+#include "base/containers/span.h"
 #include "base/values.h"
 #include "components/tab_groups/tab_group_color.h"
 #include "koan/browser/containers/koan_container_partition.h"
@@ -74,6 +75,30 @@ UserContainerNameError CheckUserContainerName(std::u16string_view name);
 // for a name CheckUserContainerName() refuses.
 std::optional<UserContainer> AddUserContainer(base::ListValue& list,
                                               std::u16string_view name);
+
+// Settings > Tab Management > Profiles (#477). The colours a profile can
+// have, in Firefox's order.
+base::span<const tab_groups::TabGroupColorId> UserContainerColors();
+
+// Renames `id`'s entry of `list` to `name` (trimmed, refused as
+// AddUserContainer() refuses it), or sets its colour (one of
+// UserContainerColors()). False, and `list` unchanged, for a container the
+// list doesn't have, a refused name or colour.
+bool RenameUserContainer(base::ListValue& list,
+                         const ContainerId& id,
+                         std::u16string_view name);
+bool SetUserContainerColor(base::ListValue& list,
+                           const ContainerId& id,
+                           tab_groups::TabGroupColorId color);
+
+// Takes `id`'s entries out of `list`. False if it had none.
+bool RemoveUserContainer(base::ListValue& list, const ContainerId& id);
+
+// A Space's container (SpaceContainerFromString()) that `list` still has:
+// a deleted profile's Spaces, and whatever still names it (a reopened
+// window's tabs, the stored Spaces), read as Default.
+std::optional<ContainerId> ListedSpaceContainer(const base::ListValue& list,
+                                                std::string_view stored);
 
 // What a new tab opens in, as CreateTargetContents() sees it
 // (koan::SiteInstanceForNewTab(), koan_space_containers.h).

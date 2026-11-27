@@ -1,0 +1,23 @@
+diff --git a/chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.cc b/chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.cc
+--- a/chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.cc
++++ b/chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.cc
+@@ -164,6 +164,7 @@
+ #include "device/fido/platform_credential_store.h"
+ #include "extensions/buildflags/buildflags.h"
+ #include "google_apis/gaia/gaia_urls.h"
++#include "koan/browser/containers/koan_containers.h"
+ #include "media/base/media_switches.h"
+ #include "media/mojo/services/video_decode_perf_history.h"
+ #include "media/mojo/services/webrtc_video_perf_history.h"
+@@ -1517,6 +1518,11 @@
+       }
+     }
+   }
++
++  // Koan: the same for the user's containers, the Spaces' profiles.
++  koan::containers::RemoveUserContainersData(profile_, delete_begin,
++                                             delete_end, remove_mask,
++                                             origin_type_mask, *filter_builder);
+ #endif  // !BUILDFLAG(IS_ANDROID)
+ 
+   //////////////////////////////////////////////////////////////////////////////

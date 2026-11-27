@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/browsing_data/BUILD.gn b/chrome/browser/browsing_data/BUILD.gn
+--- a/chrome/browser/browsing_data/BUILD.gn
++++ b/chrome/browser/browsing_data/BUILD.gn
+@@ -175,6 +175,7 @@
+     "//components/strings",
+     "//components/url_matcher",
+     "//components/web_cache/browser",
++    "//koan/browser/containers",
+     "//media/mojo/services",
+     "//services/tracing/public/cpp/background_tracing",
+     "//ui/strings:ui_strings__strings_grit",

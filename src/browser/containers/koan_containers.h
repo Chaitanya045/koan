@@ -5,15 +5,19 @@
 #ifndef KOAN_BROWSER_CONTAINERS_KOAN_CONTAINERS_H_
 #define KOAN_BROWSER_CONTAINERS_KOAN_CONTAINERS_H_
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "base/functional/callback_forward.h"
+#include "base/time/time.h"
 #include "koan/browser/containers/koan_container_partition.h"
 
 class Profile;
 
 namespace content {
+class BrowsingDataFilterBuilder;
 class NavigationEntry;
 class WebContents;
 }  // namespace content
@@ -70,6 +74,46 @@ void InstallAgentTabOpener();
 // and the user's own, koan_user_containers.h), because a loaded partition is
 // never collected and nothing else lists Koan's.
 void LoadSavedContainers(Profile* profile);
+
+// --- The user's own containers: Settings > Tab Management > Profiles (#477,
+// .agent/notes/upstream/space-containers.md "Managing profiles") ---
+
+// Called by every window with Spaces (KoanWorkspaceController), before its
+// tabs restore; once is enough: SetUserContainerCheck() with a check against
+// the profile's list (prefs::kUserContainers).
+void InstallUserContainerCheck();
+
+// Clear this profile's data: everything `container` (a user container of
+// `profile`) holds, of all time (cookies, every kind of site storage, service
+// workers, the HTTP, code and HTTP auth caches), and nothing outside its
+// partition. Its open tabs stay open. Runs `done` when it is all cleared.
+void ClearUserContainerData(Profile* profile,
+                            const ContainerId& container,
+                            base::OnceClosure done);
+
+// Deleting a profile, once it is out of the list and its tabs are closing:
+// clears it as ClearUserContainerData() does if its partition is loaded, then
+// deletes its folder (BrowserContext::AsyncObliterateStoragePartition()). A
+// folder still in use stays until the next start, when nothing loads it and
+// Chromium's storage partition garbage collection deletes it; this asks for
+// that collection (prefs::kShouldGarbageCollectStoragePartitions) and writes
+// it to disk before deleting anything, so a crash in between leaves the folder
+// to the collection too. Runs `done` when the data is gone.
+void DeleteUserContainerData(Profile* profile,
+                             const ContainerId& container,
+                             base::OnceClosure done);
+
+// ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(), for a removal that
+// names no partition (Clear browsing data, Forget About This Site, the
+// browsingData extension API): the same removal, for the types kept in a
+// partition (cookies, site data, caches), in each of the user's containers,
+// as Chromium does for isolated web apps.
+void RemoveUserContainersData(Profile* profile,
+                              base::Time delete_begin,
+                              base::Time delete_end,
+                              uint64_t remove_mask,
+                              uint64_t origin_type_mask,
+                              content::BrowsingDataFilterBuilder& filter);
 
 }  // namespace koan::containers
 

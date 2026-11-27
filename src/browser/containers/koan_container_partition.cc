@@ -38,6 +38,8 @@ constexpr std::string_view kUserSessionPrefix = "user:";
 const int kAgentLeasedKey = 0;
 // The mark SetAgentTab() puts on an agent's own tab in the user's partition.
 const int kAgentTabKey = 0;
+// SetUserContainerCheck()'s. Set once, on the UI thread, before tabs restore.
+UserContainerCheck g_user_container_check = nullptr;
 
 class AgentTabMark : public base::SupportsUserData::Data {
  public:
@@ -315,10 +317,16 @@ scoped_refptr<content::SiteInstance> SiteInstanceForRestoredTab(
   }
   const std::optional<ContainerId> container = Parse(it->second);
   if (!container || container->kind != ContainerKind::kUser ||
-      !container->persistent()) {
+      !container->persistent() ||
+      (g_user_container_check &&
+       !g_user_container_check(context, *container))) {
     return nullptr;
   }
   return CreateSiteInstance(context, *container, GURL());
+}
+
+void SetUserContainerCheck(UserContainerCheck check) {
+  g_user_container_check = check;
 }
 
 bool AllowsPrerender(const content::WebContents& contents) {
