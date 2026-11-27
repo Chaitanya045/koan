@@ -2,7 +2,8 @@
 # Copyright 2026 The Koan Authors
 # Use of this source code is governed by the MIT license that can be
 # found in the LICENSE file.
-"""Koan's Flatpak may read exactly the folders its import looks in (#493).
+"""Koan's Flatpak may read exactly the folders its import looks in (#493),
+and the agent may upload from none of them (#514).
 
 The Linux browser table in src/browser/importer/koan_import_sources.cc and
 the read-only --filesystem entries in flatpak/dev.koan.Koan.yml must name
@@ -17,6 +18,8 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 SOURCES = ROOT / 'src/browser/importer/koan_import_sources.cc'
 MANIFEST = ROOT / 'flatpak/dev.koan.Koan.yml'
+# The agent's upload refuses the folders RefusedHomeFolders() lists (#514).
+UPLOAD_LOGIC = ROOT / 'src/browser/agent/koan_agent_upload_logic.cc'
 
 # The Flatpak apps' icons (koan_import_icons_linux.cc), not a browser's data.
 ICON_ARGS = {
@@ -33,6 +36,23 @@ def linux_table_dirs(source):
   table = table[:table.index('};')]
   return re.findall(r'(?:Gecko|ChromiumBased)\(\s*u"[^"]+",\s*"([^"]+)"',
                     table)
+
+
+def refused_home_folders(source):
+  """The folders RefusedHomeFolders() lists (all platforms' and Linux's), or
+  None if the file has no such function."""
+  start = source.find('std::vector<base::FilePath> RefusedHomeFolders(')
+  if start < 0:
+    return None
+  body = source[start:source.index('\n}\n', start)]
+  return re.findall(r'"([^"]+)"', body)
+
+
+def outside_refused(dirs, refused):
+  """The import folders under none of the refused folders."""
+  def under(d, r):
+    return d == r or d.startswith(r.rstrip('/') + '/')
+  return [d for d in dirs if not any(under(d, r) for r in refused)]
 
 
 def manifest_home_args(manifest):
@@ -74,6 +94,31 @@ class FlatpakImportPathsTest(unittest.TestCase):
       self.assertNotIn(d.rstrip('/'), {'', '.config', '.var/app', '.var'})
       self.assertFalse(d.startswith('/'), d)
       self.assertNotIn('..', d.split('/'), d)
+
+
+class ImportFoldersRefusedForUploadsTest(unittest.TestCase):
+  """Every folder Koan imports from (other browsers' profiles: cookies,
+  saved passwords) is one the agent may never upload from (#514)."""
+
+  def test_import_table_inside_refused_folders(self):
+    if not UPLOAD_LOGIC.exists():
+      self.skipTest('no koan_agent_upload_logic.cc yet (#514)')
+    refused = refused_home_folders(UPLOAD_LOGIC.read_text())
+    if refused is None:
+      self.skipTest('no RefusedHomeFolders() yet (#514)')
+    self.assertIn('.var/app', refused)
+    dirs = linux_table_dirs(SOURCES.read_text())
+    self.assertTrue(dirs)
+    self.assertEqual([], outside_refused(dirs, refused))
+
+  def test_outside_refused(self):
+    self.assertEqual(
+        ['.config/new-browser'],
+        outside_refused(['.zen', '.mozilla/firefox', '.config/new-browser',
+                         '.var/app/com.google.Chrome/config/google-chrome'],
+                        ['.zen', '.mozilla', '.var/app']))
+    # A prefix of a name isn't its folder.
+    self.assertEqual(['.zenith'], outside_refused(['.zenith'], ['.zen']))
 
 
 if __name__ == '__main__':
