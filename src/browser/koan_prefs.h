@@ -373,6 +373,13 @@ inline constexpr char kDragWindowFromContent[] =
 inline constexpr char kSpaceRoutes[] = "koan.space_routing.routes";
 inline constexpr char kSpaceRoutingExternalDefault[] =
     "koan.space_routing.external_default";
+// Where links from other apps open when no route takes them (#472): in a
+// Space (kExternalLinksInSpace, the routing above) or in a quick window
+// (kExternalLinksInQuickWindow, Arc's Little Arc; koan_quick_window.h).
+inline constexpr char kExternalLinksOpenIn[] =
+    "koan.space_routing.external_links_open_in";
+inline constexpr char kExternalLinksInSpace[] = "space";
+inline constexpr char kExternalLinksInQuickWindow[] = "quick-window";
 // Renaming any sidebar tab by double-clicking its label, and "Change Label…"
 // in its menu (zen.tabs.rename-tabs).
 inline constexpr char kRenameTabs[] = "koan.tabs.rename_tabs";

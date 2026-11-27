@@ -85,6 +85,9 @@ constexpr auto kZenOrder = base::MakeFixedFlatMap<std::string_view, int>({
     {"open-private-window", 11},
     {"open-new-window", 12},
     {"new-blank-window", 13},
+    // Koan's (Arc's Little Arc, #472): right after New Blank Window (the
+    // registry's sort is stable).
+    {"new-quick-window", 13},
     {"pin-tab", 14},
     {"unpin-tab", 15},
     {"open-space-routing", 16},
@@ -257,6 +260,10 @@ void AppendGlobalCommands(const KoanBrowserViewController* owner,
       IsEnabled(controller, IDC_NEW_WINDOW) && features::IsWorkspacesEnabled(),
       ShortcutCommand(controller, "new-blank-window", u"New Blank Window",
                       kNewWindowIcon, Action::kNewBlankWindow));
+  // Arc's New Little Arc Window (#472): the URL bar, for a quick window.
+  add_if(features::IsUrlBarEnabled(),
+         ShortcutCommand(controller, "new-quick-window", u"New Quick Window",
+                         kNewWindowIcon, Action::kNewQuickWindow));
   add_if(tab && !pinned, ShortcutCommand(controller, "pin-tab", u"Pin Tab",
                                          kKeepIcon, Action::kTogglePinTab));
   add_if(pinned, ShortcutCommand(controller, "unpin-tab", u"Unpin Tab",

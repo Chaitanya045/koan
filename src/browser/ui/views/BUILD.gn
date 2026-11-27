@@ -28,6 +28,7 @@ source_set("views") {
     "koan_page_notifications.h",
     "koan_pinned.h",
     "koan_pinned_tabs_hooks.h",
+    "koan_quick_window.h",
     "koan_session_data.h",
     "koan_sidebar_animation.h",
     "koan_sidebar_header.h",
@@ -170,6 +171,16 @@ source_set("space_routes") {
   public_deps = [ "//base" ]
 }
 
+# The quick window's rules (koan_quick_window_rules.h): pure, for the unit
+# tests.
+source_set("quick_window_rules") {
+  sources = [
+    "koan_quick_window_rules.cc",
+    "koan_quick_window_rules.h",
+  ]
+  public_deps = [ "//ui/gfx/geometry" ]
+}
+
 # Zen's page-load progress bar over time (koan_loading_bar.h): pure, for the
 # unit tests.
 source_set("loading_bar") {
@@ -300,6 +311,7 @@ test("koan_views_unittests") {
     "koan_lights_geometry_unittest.cc",
     "koan_loading_bar_unittest.cc",
     "koan_pinned_site_unittest.cc",
+    "koan_quick_window_rules_unittest.cc",
     "koan_sidebar_corners_unittest.cc",
     "koan_sidebar_curve_unittest.cc",
     "koan_space_drag_logic_unittest.cc",
@@ -324,6 +336,7 @@ test("koan_views_unittests") {
     ":lights_geometry",
     ":loading_bar",
     ":pinned_site",
+    ":quick_window_rules",
     ":sidebar_corners",
     ":sidebar_curve",
     ":space_drag_logic",
@@ -480,6 +493,8 @@ source_set("impl") {
     "koan_pinned_tab_views.h",
     "koan_pinned_tabs.cc",
     "koan_pinned_tabs.h",
+    "koan_quick_window_controller.cc",
+    "koan_quick_window_controller.h",
     "koan_scroll_capture.h",
     "koan_scroll_direction.h",
     "koan_session_data.cc",
@@ -605,6 +620,7 @@ source_set("impl") {
     ":lights_geometry",
     ":loading_bar",
     ":pinned_site",
+    ":quick_window_rules",
     ":sidebar_corners",
     ":sidebar_curve",
     ":space_drag_logic",
@@ -665,8 +681,10 @@ source_set("impl") {
     "//chrome/browser/ui/tabs",
     "//chrome/browser/ui/tabs:tab_enums",
     "//chrome/browser/ui/tabs:tab_group",
+    "//chrome/browser/ui/tabs:tab_model",
     "//chrome/browser/ui/tabs:tab_strip",
     "//chrome/browser/ui/tabs:utils",
+    "//chrome/browser/ui/startup:startup_tab",
     "//chrome/browser/ui/tabs/alert:tab_alert",
     "//chrome/browser/ui/toolbar",
     "//chrome/browser/ui/views:message_box_dialog",

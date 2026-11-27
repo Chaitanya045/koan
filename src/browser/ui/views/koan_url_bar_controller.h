@@ -104,6 +104,15 @@ class KoanUrlBarController
   // with whether a row was taken. Returns false, and drops `on_closed`, if
   // the bar can't open.
   bool OpenForEmptySplit(base::OnceCallback<void(bool picked)> on_closed);
+  // New Quick Window (koan_quick_window_controller.h, Arc's empty Little
+  // Arc): the bar opens as for a new tab (OpenForNewTab(), whatever
+  // replace-newtab says), and what the user opens from it opens in a quick
+  // window (TakeQuickWindowPick()); closing it opens nothing. Again while
+  // open: closes it. False if the bar can't open here.
+  bool OpenForQuickWindow();
+  // Whether what the user opens now should open in a quick window; ends that
+  // session if so.
+  bool TakeQuickWindowPick();
   // Zen's "search tabs" (Shift+Cmd+A): the bar opens with the open tabs as its
   // scope (Chromium's "@tabs"). False if the bar can't open now (the caller
   // falls back to focusing the omnibox).
@@ -253,6 +262,8 @@ class KoanUrlBarController
   void EndNewTabSession(bool committed);
   // Zen draws the "+ New Tab" row as selected during a new-tab session.
   void SetNewTabRowSelected(bool selected);
+  // OpenForNewTab() past its replace-newtab check.
+  bool StartNewTabSession();
 
   const raw_ptr<BrowserView> browser_view_;
   const raw_ptr<KoanCompactModeController> compact_mode_;
@@ -264,6 +275,10 @@ class KoanUrlBarController
   bool edit_in_pill_ = false;
 
   bool new_tab_ = false;
+  // The new-tab session is New Quick Window's (OpenForQuickWindow()). It
+  // outlasts a pick's end of the session (TakeNewTabDisposition()) until
+  // TakeQuickWindowPick(), right after it.
+  bool quick_window_ = false;
   // Runs when the new-tab session ends, for an empty split's
   // (OpenForEmptySplit()).
   base::OnceCallback<void(bool picked)> new_tab_closed_;

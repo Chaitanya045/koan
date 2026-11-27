@@ -64,8 +64,10 @@ void OnFocusLocationBarCommand(BrowserWindowInterface* browser);
 // in the Glance page: returns true after loading `url` there, so the caller
 // skips its own navigation. False otherwise (no Glance session, a new-tab
 // disposition such as Alt+Enter, or not a web URL, which closes the card and
-// goes to the tab). Called from ChromeOmniboxClient::OnAutocompleteAccept(),
-// after MaybeAdjustOmniboxDisposition().
+// goes to the tab). The same for the bar New Quick Window opened
+// (KoanUrlBarController::OpenForQuickWindow()): the pick opens in a quick
+// window. Called from ChromeOmniboxClient::OnAutocompleteAccept(), after
+// MaybeAdjustOmniboxDisposition().
 bool MaybeOpenOmniboxMatchInGlance(BrowserWindowInterface* browser,
                                    const GURL& url,
                                    ui::PageTransition transition,

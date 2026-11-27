@@ -34,6 +34,7 @@ class KoanDownloadAnimation;
 class KoanFolderController;
 class KoanGlanceController;
 class KoanPinnedTabController;
+class KoanQuickWindowController;
 class KoanLibraryController;
 class KoanLoadingIndicator;
 class KoanMediaController;
@@ -121,6 +122,11 @@ class KoanBrowserViewController : public views::ViewObserver,
   KoanCommandPalette* command_palette() const { return command_palette_.get(); }
   // Agent control's indicator (it also marks the sidebar's agent tabs).
   KoanAgentIndicator* agent_indicator() const { return agent_indicator_.get(); }
+  // A quick window's own UI (koan_quick_window_controller.h); null in other
+  // windows.
+  KoanQuickWindowController* quick_window() const {
+    return quick_window_.get();
+  }
   // Koan features' data for this window's session (koan_session_data.h).
   std::map<std::string, std::string>& session_data() { return session_data_; }
 
@@ -185,6 +191,8 @@ class KoanBrowserViewController : public views::ViewObserver,
   // "An agent is connected"; it also starts agent control with the first
   // window (koan/browser/agent/koan_agent_service.h).
   std::unique_ptr<KoanAgentIndicator> agent_indicator_;
+  // Quick windows only.
+  std::unique_ptr<KoanQuickWindowController> quick_window_;
   // Last: it calls into the controllers above.
   std::unique_ptr<KoanShortcutController> shortcuts_;
   // Its commands run the shortcuts above.

@@ -73,6 +73,7 @@
 #include "koan/browser/ui/views/koan_omnibox_disposition.h"
 #include "koan/browser/ui/views/koan_pinned.h"
 #include "koan/browser/ui/views/koan_pinned_site.h"
+#include "koan/browser/ui/views/koan_quick_window_controller.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_nav_view.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
@@ -503,7 +504,6 @@ bool KoanUrlBarController::OpenForTabSearch() {
 }
 
 bool KoanUrlBarController::OpenForNewTab() {
-  LocationBarView* bar = location_bar();
   if (!CanOpenBar() || !browser_view_->GetProfile()
                             ->GetOriginalProfile()
                             ->GetPrefs()
@@ -515,6 +515,42 @@ bool KoanUrlBarController::OpenForNewTab() {
     Close();
     return true;
   }
+  return StartNewTabSession();
+}
+
+bool KoanUrlBarController::OpenForQuickWindow() {
+  if (!CanOpenBar()) {
+    return false;
+  }
+  if (new_tab_) {
+    // Again: closes it. A bar open for a new tab becomes one for a quick
+    // window.
+    if (quick_window_) {
+      Close();
+    } else {
+      quick_window_ = true;
+    }
+    return true;
+  }
+  quick_window_ = true;
+  if (!StartNewTabSession()) {
+    quick_window_ = false;
+    return false;
+  }
+  return true;
+}
+
+bool KoanUrlBarController::TakeQuickWindowPick() {
+  if (!quick_window_) {
+    return false;
+  }
+  quick_window_ = false;
+  EndNewTabSession(/*committed=*/true);
+  return true;
+}
+
+bool KoanUrlBarController::StartNewTabSession() {
+  LocationBarView* bar = location_bar();
   new_tab_ = true;
   // The keyboard: floating, even if the pill was being edited.
   edit_in_pill_ = false;
@@ -995,6 +1031,9 @@ void KoanUrlBarController::SetNewTabRowSelected(bool selected) {
 }
 
 void KoanUrlBarController::EndNewTabSession(bool committed) {
+  if (!committed) {
+    quick_window_ = false;
+  }
   if (!new_tab_) {
     return;
   }
@@ -1849,6 +1888,24 @@ bool MaybeOpenOmniboxMatchInGlance(BrowserWindowInterface* browser,
       browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
   KoanBrowserViewController* controller =
       browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+  // New Quick Window's bar (OpenForQuickWindow()): the pick opens in a quick
+  // window, except an open tab's row, which switches to it.
+  if (controller && controller->url_bar()->TakeQuickWindowPick() &&
+      disposition != WindowOpenDisposition::kSwitchToTab) {
+    if (OpenQuickWindowFromUrlBar(browser, url, transition, extra_headers)) {
+      // Not while the omnibox runs the match.
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](base::WeakPtr<KoanBrowserViewController> controller) {
+                if (controller) {
+                  controller->url_bar()->Close();
+                }
+              },
+              controller->GetWeakPtr()));
+      return true;
+    }
+  }
   if (!controller || !controller->url_bar()->is_glance_edit()) {
     return false;
   }

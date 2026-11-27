@@ -108,6 +108,8 @@ constexpr Info kActions[] = {
     {Action::kNewWindow, "new-window", "windowAndTabManagement", "New Window"},
     {Action::kNewBlankWindow, "new-blank-window", "windowAndTabManagement",
      "New Blank Window", features::IsWorkspacesEnabled},
+    {Action::kNewQuickWindow, "new-quick-window", "windowAndTabManagement",
+     "New Quick Window", features::IsUrlBarEnabled},
     {Action::kNewTab, "new-tab", "windowAndTabManagement", "New Tab",
      features::IsUrlBarEnabled},
     {Action::kQuit, "quit-app", "windowAndTabManagement", "Quit Application",
@@ -208,6 +210,14 @@ std::vector<Binding> DefaultBindings() {
       // Cmd+Shift+N (a private window there).
       bind(ui::VKEY_N, kAccel, Action::kNewWindow),
       bind(ui::VKEY_N, kAccel | kShift, Action::kNewBlankWindow),
+  // Koan-only: Arc's New Little Arc Window, Cmd+Option+N on macOS (Chrome's
+  // New Split View key there, which Zen's split keys replace; the menu
+  // gives it up). Elsewhere Ctrl+Alt+N is Create Space, so Ctrl+Alt+Shift+N.
+#if BUILDFLAG(IS_MAC)
+      bind(ui::VKEY_N, kAccel | kAlt, Action::kNewQuickWindow),
+#else
+      bind(ui::VKEY_N, kAccel | kAlt | kShift, Action::kNewQuickWindow),
+#endif
       bind(ui::VKEY_P, kAccel | kShift, Action::kNewPrivateWindow),
       // Zen inherits these from Firefox; Chrome leaves the keys free. Mute is
       // Control+M on macOS too (Firefox's "control" modifier, not "accel").
