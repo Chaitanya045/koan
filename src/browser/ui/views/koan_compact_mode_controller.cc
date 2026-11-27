@@ -604,7 +604,7 @@ KoanCompactModeController::TakeExpandedLock() {
     return nullptr;
   }
   VLOG(1) << "Koan: sidebar lock taken";
-  return tab_strip->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
+  return TakeSidebarExpandedLock(browser_view_);
 }
 
 bool KoanCompactModeController::PeekSidebar() {

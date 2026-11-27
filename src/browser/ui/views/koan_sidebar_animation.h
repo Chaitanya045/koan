@@ -97,6 +97,8 @@ class SidebarHold {
 
  private:
   friend std::unique_ptr<SidebarHold> HoldSidebarOpen(views::View* view);
+  friend std::unique_ptr<ExpandOnHoverLock> TakeSidebarExpandedLock(
+      views::View* browser_view);
   SidebarHold();
   struct Impl;
   std::unique_ptr<Impl> impl_;
@@ -113,6 +115,14 @@ void ReleaseExpandOnHoverLockSoon(std::unique_ptr<ExpandOnHoverLock>& lock);
 // `view` is the BrowserView or a view in its window. Null if there is no
 // vertical tab strip.
 std::unique_ptr<SidebarHold> HoldSidebarOpen(views::View* view);
+
+// A lock keeping the sidebar of `browser_view` (the BrowserView) out, for UI
+// that needs it shown (compact mode's reveals, the Create-a-Space form). It
+// also lets go of the window's holds whose menu has closed and that are still
+// waiting for the pointer (SidebarHold::ReleaseWhenPointerMoves()), which
+// would otherwise outrank it. Null if there is no tab strip region.
+std::unique_ptr<ExpandOnHoverLock> TakeSidebarExpandedLock(
+    views::View* browser_view);
 
 }  // namespace koan
 
