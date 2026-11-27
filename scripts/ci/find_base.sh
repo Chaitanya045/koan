@@ -26,11 +26,34 @@ export BRANCH="${BRANCH:-develop}"
 
 output() { echo "base_run=$1"; [[ -z ${GITHUB_OUTPUT:-} ]] || echo "base_run=$1" >> "$GITHUB_OUTPUT"; }
 
-# Filtered here, not with ?status=success: that filter has left out a
-# successful run (tnfssc/koan 45281812693) for hours after it finished.
-runs="$(gh api "repos/$GH_REPO/actions/workflows/$WORKFLOW/runs?per_page=50" \
-  --jq '.workflow_runs[] | select(.conclusion == "success" and .head_branch == env.BRANCH
-    and (.event == "schedule" or .event == "workflow_dispatch")) | .id' 2>/dev/null || true)"
+# Only BRANCH's schedule and workflow_dispatch runs are asked for (branch=
+# and event=, one request per event), newest first. Every label added to any
+# pull request starts a run of the workflow (most are skipped at once), so
+# the newest 50 runs of any kind pushed the last develop run off the page
+# (2026-11-27: full Linux builds for #469, #470 and #519 although develop's
+# base was there; #537). event= keeps develop's other runs from doing the
+# same. Up to PAGES pages of 100 per event; a base is kept 14 days, so the
+# first page is nearly always enough.
+# The conclusion is still filtered here, not with ?status=success: that
+# filter has left out a successful run (tnfssc/koan 45281812693) for hours
+# after it finished. The branch and event are filtered again too.
+PAGES="${PAGES:-3}"
+candidates() {
+  local event page got
+  for event in schedule workflow_dispatch; do
+    for ((page = 1; page <= PAGES; page++)); do
+      got="$(gh api "repos/$GH_REPO/actions/workflows/$WORKFLOW/runs?branch=$BRANCH&event=$event&per_page=100&page=$page" \
+        --jq '.workflow_runs[] | [.created_at, .id, .conclusion, .head_branch, .event] | @tsv' \
+        2>/dev/null || true)"
+      [[ -n $got ]] || break
+      echo "$got"
+      (( $(wc -l <<<"$got") == 100 )) || break
+    done
+  done
+}
+# Both events' runs merged, newest first (created_at is ISO 8601 UTC).
+runs="$(candidates | sort -r | awk -F '\t' -v b="$BRANCH" '$3 == "success" && $4 == b &&
+  ($5 == "schedule" || $5 == "workflow_dispatch") && !seen[$2]++ { print $2 }')"
 for id in $runs; do
   [[ $id != "$RUN" ]] || continue
   names="$(gh api "repos/$GH_REPO/actions/runs/$id/artifacts?per_page=100" \

@@ -29,6 +29,7 @@
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tabs/public/tab_interface.h"
+#include "koan/browser/containers/koan_user_containers.h"
 #include "koan/browser/ui/views/koan_emoji_picker.h"
 #include "koan/browser/ui/views/koan_swipe_edge_actions.h"
 #include "koan/browser/ui/views/koan_swipe_tracker.h"
@@ -257,6 +258,12 @@ class KoanWorkspaceController : public TabStripModelObserver,
   std::string GetSpaceContainer(const tab_groups::TabGroupId& space) const;
   void SetSpaceContainer(const tab_groups::TabGroupId& space,
                          const std::string& container);
+  // Zen's container-specific Essentials (#479, koan_essentials_profiles.h):
+  // which profile's Essentials this window's grid shows, as of the last
+  // update.
+  const containers::EssentialsProfiles& essentials_profiles() const {
+    return essentials_profiles_;
+  }
   void SetSpaceTheme(const tab_groups::TabGroupId& space,
                      const SpaceTheme& theme);
   // A Space's stored data. The one place that knows how it is stored (in
@@ -507,6 +514,21 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // replaced by a new one in the right partition, at its place and with its
   // selection.
   void MatchEmptyTabsToSpaceContainers();
+  // Zen's container-specific Essentials (#479), in
+  // koan_essentials_profiles.cc. UpdateEssentialsProfiles() works out which
+  // profile's Essentials the grid shows (the active Space's) and lays the
+  // grid out again at once when that changed. ShowActiveEssential(): an
+  // Essential of another profile that is active (Switch to Tab, an
+  // extension, a restored window's selection) shows the first Space of its
+  // profile, as Zen's switchTabIfNeeded(); one hidden by a change of the
+  // Space's profile or of the setting gives way to the Space's last active
+  // tab.
+  containers::EssentialsProfiles ComputeEssentialsProfiles() const;
+  void UpdateEssentialsProfiles();
+  void ShowActiveEssential();
+  // The grid `space` shows (nullopt: the default profile's).
+  std::optional<containers::ContainerId> EssentialsGridOfSpace(
+      const tab_groups::TabGroupId& space) const;
 
   tab_groups::TabGroupId NewSpaceGroup(const std::vector<int>& indices);
   // UnloadSpace() without the toast; returns how many tabs stayed loaded.
@@ -658,6 +680,15 @@ class KoanWorkspaceController : public TabStripModelObserver,
   float add_space_progress_ = 0;
   std::unique_ptr<KoanSpaceSwipe> swipe_;
   base::OneShotTimer swipe_timer_;
+
+  // Zen's container-specific Essentials (#479): the window's grids, the
+  // Space they were worked out for and whether they changed without a switch
+  // (ShowActiveEssential()), and whether the grid slides with the Space (the
+  // two Spaces' profiles differ; Zen's shouldAnimateEssentials) or stays.
+  containers::EssentialsProfiles essentials_profiles_;
+  std::optional<tab_groups::TabGroupId> essentials_space_;
+  bool essentials_changed_in_place_ = false;
+  bool slides_essentials_ = false;
 
   // The old Spaces sliding out, and the views the animation gave a layer.
   std::vector<std::unique_ptr<SlideOutLayers>> slide_outs_;

@@ -20,6 +20,7 @@
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_vertical_tabs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
+#include "koan/browser/ui/views/koan_essentials_profiles.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/class_property.h"
 #include "ui/color/color_provider.h"
@@ -142,6 +143,9 @@ std::vector<views::View*> OrderWithGap(
 std::vector<views::View*> EssentialsLayoutChildren(
     const views::View* grid,
     std::vector<views::View*> children) {
+  std::erase_if(children, [](const views::View* child) {
+    return !IsEssentialsTileShown(child);
+  });
   const EssentialsDragGap* gap = grid && features::IsSidebarEnabled()
                                      ? grid->GetProperty(kEssentialsDragGapKey)
                                      : nullptr;
@@ -155,6 +159,16 @@ std::vector<views::View*> EssentialsLayoutChildren(
     }
   }
   return OrderWithGap(children, moving, gap->slot);
+}
+
+void AddHiddenEssentials(const views::View* grid,
+                         const std::vector<views::View*>& children,
+                         views::ProposedLayout& layout) {
+  for (views::View* child : children) {
+    if (!IsEssentialsTileShown(child)) {
+      layout.child_layouts.emplace_back(child, /*visible=*/false, gfx::Rect());
+    }
+  }
 }
 
 int ClampEssentialsColumns(int columns) {

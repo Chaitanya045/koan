@@ -571,6 +571,14 @@ constexpr Row kRows[] = {
      .pref = prefs::kPinnedTabRestoreToPinnedUrl,
      .label = "Restore pinned tabs to their originally pinned URL on startup",
      .is_available = features::IsPinnedTabsEnabled},
+    // Zen's "Enable container-specific essentials"
+    // (zen.workspaces.separate-essentials, on), in the same group.
+    {.group = "pinned-tabs",
+     .control = Control::kCheckbox,
+     .pref = prefs::kWorkspacesSeparateEssentials,
+     .label = "Enable profile-specific Essentials (each Space shows the "
+              "Essentials of its profile)",
+     .is_available = features::IsWorkspacesEnabled},
     // Zen's about:config pref zen.tabs.open-pinned-in-new-tab (on).
     {.group = "pinned-tabs",
      .control = Control::kCheckbox,

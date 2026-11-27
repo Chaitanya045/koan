@@ -184,6 +184,13 @@ inline constexpr char kWorkspacesScrollModifierKey[] =
 inline constexpr char kWorkspacesSwipeEdgeActions[] =
     "koan.workspaces.swipe_actions.edge_actions";
 
+// Zen's zen.workspaces.separate-essentials (on): the Essentials grid shows
+// only the Essentials of the active Space's profile, and Spaces with the same
+// profile share a grid (#479, koan_essentials_profiles.h). Off, every Space
+// shows every Essential.
+inline constexpr char kWorkspacesSeparateEssentials[] =
+    "koan.workspaces.separate_essentials";
+
 // Obsolete: until the tint became per window (a window's user colour
 // override, KoanWorkspaceController::ApplySpaceColor()), Koan set the Space's
 // colour as the profile's user colour and kept the user's own here (0: none).
