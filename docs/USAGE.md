@@ -416,6 +416,11 @@ The Space buttons only show once there is more than one Space. With more
 Spaces than fit, the switcher scrolls sideways: scroll over it with the
 touchpad or the mouse wheel, and the current Space always scrolls into view.
 
+Double-click or middle-click the empty space below the last tab to open
+the URL bar for a new tab, as in Zen; drag from there to move the window
+(macOS and Linux alike). A double-click on the empty part of the top row
+still maximises (zooms) the window.
+
 Right-clicking an empty part of the sidebar opens Zen's toolbar menu:
 **Compact Mode** (below) and **Tabs on the right**. Dragging the sidebar's
 edge resizes it; dragging it closed hides it in compact mode, as in Zen

@@ -14,12 +14,14 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_multi_source_observation.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/tabs/tab_change_type.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "ui/events/event_handler.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/views/view.h"
 #include "ui/views/view_observer.h"
 
@@ -103,10 +105,15 @@ class KoanSidebarTabsController : public TabStripModelObserver,
   // Zen's clicks in the sidebar (ZenCustomizableUI, tabs-mjs.patch,
   // navigator-toolbox-js.patch): a double-click on its edge resets its width;
   // a middle-click or double-click on the empty space below the tabs opens a
-  // new tab (the URL bar with replace-newtab), and on macOS a press there
-  // moves the window (zen.view.draggable-sidebar). Marks what it takes as
-  // handled.
+  // new tab (the URL bar with replace-newtab), and a press there moves the
+  // window (zen.view.draggable-sidebar): on macOS at once, on Linux once it
+  // is dragged (OnEmptySpaceDragged()). Marks what it takes as handled.
   void OnSidebarPressed(ui::MouseEvent* event);
+#if BUILDFLAG(IS_LINUX)
+  // A drag from the empty space: past Koan's window drag threshold, the
+  // window manager moves the window, as from the title bar.
+  void OnEmptySpaceDragged(ui::MouseEvent* event);
+#endif
   void ClearUnpinnedTabs();
   // "Close all unpinned tabs" with the user's shortcut for it.
   std::u16string GetClearTooltip() const;
@@ -127,6 +134,11 @@ class KoanSidebarTabsController : public TabStripModelObserver,
   // Each one after the first is a haptic tick, as Zen's drop target changes
   // are (ZenDragAndDrop: the first is skipped, "too annoying").
   int drag_moves_ = 0;
+#if BUILDFLAG(IS_LINUX)
+  // Where (in the widget) the left button went down on the empty space, while
+  // it is down and the window hasn't started moving.
+  std::optional<gfx::Point> empty_space_press_;
+#endif
   raw_ptr<KoanSidebarTabRowsView> rows_ = nullptr;
   // The New Tab row after the tabs, with Zen's
   // zen.view.show-newtab-button-top off. Always with `rows_`, in their parent.
