@@ -15,7 +15,7 @@
 // Run with scripts/e2e/run.sh space_profile_new_tab.
 import { CTRL, ALT, browserCall, check, evalIn, finish, openMenus, pages, readPref,
          sleep, typeInto, viewMouse, viewTree, waitFor } from './lib/koan.mjs';
-import { fatalInLog, key, spaceButtons, startServer } from './lib/mac.mjs';
+import { fatalInLog, key, rootMouse, spaceButtons, startServer } from './lib/mac.mjs';
 
 const ROUNDS = Number(process.env.ROUNDS || 20);
 const PATHS = (process.env.PATHS || 'form,set').split(',');
@@ -90,10 +90,10 @@ async function newProfileFromMenu(name, parent = null) {
   // gives the headless screen the height to show it whole.)
   // At the item's far end: a submenu overlaps its parent at its start.
   const last = menu.items.at(-1);
-  for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
-    await viewMouse(menu.root, type, last.ax + last.w - 20, last.ay + last.h / 2,
-                    type === 'mouseMoved' ? 'none' : 'left');
-  }
+  // (rootMouse(): the menu's root as the clicking session numbers it.)
+  await rootMouse(menu.root, ['mouseMoved'], last.ax + last.w - 20, last.ay + last.h / 2, 'none');
+  await rootMouse(menu.root, ['mousePressed', 'mouseReleased'], last.ax + last.w - 20,
+                  last.ay + last.h / 2);
   const field = await waitFor(async () => (await viewTree()).find(
       v => v.cls === 'Textfield' && v.shown && v.path.includes('BubbleDialogModelHostContentsView')),
       5000);
@@ -192,7 +192,7 @@ if (PATHS.includes('set')) {
     const menu = await waitFor(async () => openMenus(await viewTree())[0], 5000);
     // Change Name…, Change Icon…, Theme…, Set Profile.
     if (!menu || menu.items.length < 4) { failures.push(`${i}: no Space menu`); continue; }
-    await viewMouse(menu.root, 'mouseMoved', menu.items[3].ax + 8,
+    await rootMouse(menu.root, ['mouseMoved'], menu.items[3].ax + 8,
                     menu.items[3].ay + menu.items[3].h / 2, 'none');
     if (!await waitFor(async () => openMenus(await viewTree()).length > 1, 5000)) {
       failures.push(`${i}: no Set Profile submenu`);
