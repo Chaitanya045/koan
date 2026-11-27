@@ -141,6 +141,13 @@ class KoanToastView : public views::View {
         kToastHeight);
   }
 
+  // The toast puts it on a layer of its own, which a theme change (the Mode,
+  // or the system's light/dark) doesn't repaint (#564).
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    SchedulePaint();
+  }
+
   void OnPaintBackground(gfx::Canvas* canvas) override {
     // A vertical gradient whose top colour stop sits 40% above the toast,
     // like Zen's linear-gradient(to bottom, primary -40%, ...).

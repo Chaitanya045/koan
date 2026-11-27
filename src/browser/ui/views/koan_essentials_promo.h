@@ -71,6 +71,7 @@ class KoanTabDropIndicatorView : public views::View {
 
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override;
+  void OnThemeChanged() override;
 
  private:
   gfx::Rect slot_;

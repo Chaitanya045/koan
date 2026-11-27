@@ -276,6 +276,14 @@ class KoanSplitHeaderView : public views::View {
                      kHeaderHeight + 2 * kShadowMargin);
   }
 
+  // The controller puts it on a layer of its own, which a theme change (the
+  // Mode, or the system's light/dark) doesn't repaint: the header and its
+  // buttons would keep the old colours until hovered (#564).
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    SchedulePaint();
+  }
+
   // views::View:
   void Layout(PassKey) override {
     const gfx::Rect header = HeaderBounds();
@@ -388,6 +396,13 @@ class KoanSplitRearrangeView : public views::View,
     zone_to_.reset();
     pointer_.reset();
     thumbnail_ = gfx::ImageSkia();
+    SchedulePaint();
+  }
+
+  // The controller puts it on a layer of its own, which a theme change (the
+  // Mode, or the system's light/dark) doesn't repaint (#564).
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
     SchedulePaint();
   }
 

@@ -115,6 +115,13 @@ class KoanEssentialsAudioBadge : public views::Button {
     }
   }
 
+  // Once it shows, the badge paints to a layer of its own, which a theme
+  // change (the Mode, or the system's light/dark) doesn't repaint (#564).
+  void OnThemeChanged() override {
+    views::Button::OnThemeChanged();
+    SchedulePaint();
+  }
+
   // views::Button:
   void PaintButtonContents(gfx::Canvas* canvas) override {
     const ui::ColorProvider* colors = GetColorProvider();

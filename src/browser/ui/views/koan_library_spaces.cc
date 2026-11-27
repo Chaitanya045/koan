@@ -309,6 +309,14 @@ class SpaceCard : public views::View {
   std::u16string GetName() const { return name_; }
   void set_name(std::u16string name) { name_ = std::move(name); }
 
+  // The card paints to a layer of its own, which a theme change (the Mode,
+  // or the system's light/dark) doesn't repaint: it and its tabs would keep
+  // the old colours (#564).
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    SchedulePaint();
+  }
+
   // views::View:
   void OnPaintBackground(gfx::Canvas* canvas) override {
     const ui::ColorProvider* provider = GetColorProvider();
@@ -349,6 +357,13 @@ class SpacesStrip : public views::View {
     SetPaintToLayer();
     layer()->SetFillsBoundsOpaquely(false);
     layer()->SetMasksToBounds(true);
+  }
+
+  // The strip's layer, which a theme change (the Mode, or the system's
+  // light/dark) doesn't repaint, has the add button in it (#564).
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    SchedulePaint();
   }
 
   int GetContentWidth() const {
