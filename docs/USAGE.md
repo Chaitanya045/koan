@@ -608,9 +608,9 @@ belongs to a Space, and new tabs open in the active one.
   per profile. Spaces with the same profile share them. New tabs in the
   Space open in its profile: ⌘T, the address bar, bookmarks, history,
   links from other apps and New Split. Links you open from a page stay in
-  that page's profile, and a routed link takes its Space's. History,
-  bookmarks, passwords, site permissions, extensions and downloads stay
-  shared. A tab you move to another Space keeps its profile, and then shows
+  that page's profile, and a routed link takes its Space's. Bookmarks,
+  passwords, autofill, site permissions, extensions and downloads stay
+  shared. History is kept apart (below). A tab you move to another Space keeps its profile, and then shows
   a thin line in its profile's colour at its edge. Changing a Space's
   profile changes where its new tabs open; its open tabs keep theirs.
   Deleting a Space keeps its profile and its data, so another Space can
@@ -629,6 +629,19 @@ belongs to a Space, and new tabs open in the active one.
   on in a profile. In practice, sites that notify through a service worker,
   as many mail and calendar apps do, still can't notify in a profile
   ([#530](https://github.com/koan-browser/koan/issues/530)).
+- **History per profile** (Koan's own; Settings > Tab Management >
+  Workspaces > **Keep history apart for each profile**, on). Each visit
+  records the profile of its tab. In a Space with a profile, the address
+  bar suggests only that profile's pages: history, past searches, the
+  shortcuts it learned, the most visited sites of the empty bar, and
+  Switch to Tab only for that profile's tabs (also in the tabs search). A
+  Space without a profile shows the Default profile's, which includes
+  everything visited before this came, and imported history. A page
+  visited in two profiles shows in both. A tab moved to another Space
+  keeps its profile and its visits stay that profile's. Bookmarks stay
+  shared, so a bookmarked page is still suggested as a bookmark. Off,
+  every profile's history shows everywhere, as before. Chromium's Clear
+  browsing data and `chrome://history` cover every profile's history.
 - **Unload Space** (right-click the header or a Space button) frees the
   Space's tabs; they reload when you select them. Unload All Other Spaces
   frees all the others. Tabs on screen and tabs in use (playing sound, in
@@ -1099,14 +1112,17 @@ with three sections down its side, and opens on the one you used last:
   The Library widens to fit the cards.
 - **History** (⌘Y or ⌘⇧H): the last 120 days by day. Search, or **Filter**:
   when (today since midnight, this week, this month), sort (by date, site, most visited,
-  last visited) and what to look through (history or the tabs closed
-  recently). Click a page to open it in a new tab; ⌘-click or
+  last visited), what to look through (history or the tabs closed
+  recently) and, once you have a profile, which profile (each opening
+  shows the active Space's; All profiles shows everything). Click a page to open it in a new tab; ⌘-click or
   middle-click opens it in the background and keeps the Library open.
   Hover a row for its visit time and the forget / reopen buttons;
   right-click for "Forget About This Site" (its history, cookies, site data
   and cache). Right-click the History tab to clear history from the last
   hour, 12 hours, today, week, month or everything (it asks first, naming
-  the range), or to open `chrome://history`. Where policy forbids deleting
+  the range), or to open `chrome://history`. Forgetting and clearing act
+  on the profile the filter shows, and the question names it ("in the
+  Work profile"); with All profiles they act on every profile. Where policy forbids deleting
   history (AllowDeletingBrowserHistory) nothing here offers to, as on
   Chrome's History page.
 
