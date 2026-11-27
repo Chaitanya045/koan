@@ -98,7 +98,17 @@ async function newProfileFromMenu(name, parent = null) {
       v => v.cls === 'Textfield' && v.shown && v.path.includes('BubbleDialogModelHostContentsView')),
       5000);
   if (!field) return 'no New Profile dialog';
-  await typeInto(field, name);
+  // The name must arrive: a window that comes or goes (a toast) renumbers the
+  // nodes, and keys sent to the old number are lost; Create with no name then
+  // closes the dialog without a profile.
+  const dialogField = async () => (await viewTree()).find(
+      v => v.cls === 'Textfield' && v.shown && v.path.includes('BubbleDialogModelHostContentsView'));
+  for (let tries = 0; tries < 3 && (await dialogField())?.props.Text !== name; tries++) {
+    const now = await dialogField();
+    if (now?.props.Text) break;
+    await typeInto(now, name);
+  }
+  if ((await dialogField())?.props.Text !== name) return 'the profile name did not reach the dialog';
   const create = shown(await viewTree(), 'MdTextButton').find(
       v => v.props.Text === 'Create' && v.path.includes('DialogClientView'));
   if (!create) return 'no Create button in the New Profile dialog';
@@ -194,7 +204,10 @@ if (PATHS.includes('set')) {
     if (!menu || menu.items.length < 4) { failures.push(`${i}: no Space menu`); continue; }
     await rootMouse(menu.root, ['mouseMoved'], menu.items[3].ax + 8,
                     menu.items[3].ay + menu.items[3].h / 2, 'none');
-    if (!await waitFor(async () => openMenus(await viewTree()).length > 1, 5000)) {
+    if (!await waitFor(async () => openMenus(await viewTree()).length > 1, 3000) &&
+        (await rootMouse(menu.root, ['mousePressed', 'mouseReleased'], menu.items[3].ax + 8,
+                         menu.items[3].ay + menu.items[3].h / 2),
+         !await waitFor(async () => openMenus(await viewTree()).length > 1, 3000))) {
       failures.push(`${i}: no Set Profile submenu`);
       continue;
     }
