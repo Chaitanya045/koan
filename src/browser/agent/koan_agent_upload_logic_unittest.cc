@@ -135,6 +135,14 @@ TEST(KoanAgentUploadLogicTest, CredentialStoresAreRefused) {
            ".local/share/kwalletd/kdewallet.kwl",
            ".pki/nssdb/key4.db",
            ".mozilla/firefox/abc.default/logins.json",
+           // Firefox 147 and later, and its forks, keep new profiles under
+           // $XDG_CONFIG_HOME; the Snap keeps its own.
+           ".config/mozilla/firefox/abc.default/logins.json",
+           "snap/firefox/common/.mozilla/firefox/abc.default/key4.db",
+           ".config/zen/abc.default/cookies.sqlite",
+           ".floorp/abc.default/logins.json",
+           ".config/librewolf/abc.default/key4.db",
+           ".waterfox/abc.default/logins.json",
            ".config/google-chrome/Default/Login Data",
            ".config/chromium/Default/Cookies",
            ".config/BraveSoftware/Brave-Browser/Default/Cookies",
