@@ -135,21 +135,25 @@ bool ShowsTabThrobber(content::BrowserContext* context);
 // `region`'s coordinates) is client area that upstream would make window
 // caption: the Create-a-Space form (IsInSpaceForm()), Koan's views in the top
 // row (IsOnSidebarHeaderView()) and, on macOS and Linux, the empty space
-// below the tabs, so that their clicks reach the views (on macOS a caption
+// below the tabs (on macOS the tab list's own empty part; on Linux also the
+// space below the tab list, upstream's bottom container but its buttons,
+// which is most of what is visible), so that their clicks reach the views
+// (on macOS a caption
 // point never does, AppKit takes it; on Linux the frame's
 // WindowEventFilterLinux takes a caption click before the views, and a
 // double-click there maximises the window). Koan moves the window from the
 // empty space itself (KoanSidebarTabsController): on macOS on a press, on
 // Linux on a drag.
 bool IsSidebarClientArea(const views::View* tab_strip_view,
-                         const views::View* region,
+                         views::View* region,
                          const gfx::Point& point);
 
 // Whether `point` (in `region`'s coordinates) is the sidebar's empty space:
 // the view under it is inside `tab_strip_view`'s scroll view of unpinned
 // tabs, and not on a tab, a split view, a group or folder header, a Space
 // header, a button or the New Tab and Clear rows (Zen's
-// .zen-workspace-empty-space). By the view under the point, not by the view
+// .zen-workspace-empty-space); on Linux also the space below the tab list
+// (see IsSidebarClientArea()). By the view under the point, not by the view
 // a press is dispatched to: a press a view turns down goes on to its parents
 // (RootView::OnMousePressed()), e.g. a ⌘-click that deselects a tab, and the
 // tab's parents are empty space.

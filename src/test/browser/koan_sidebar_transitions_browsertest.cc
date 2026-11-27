@@ -9,6 +9,7 @@
 // Space follows. The frames in between are the video flow's
 // (scripts/mac/video/flows/essentials.mjs).
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -16,6 +17,7 @@
 
 #include "base/run_loop.h"
 #include "base/test/run_until.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/animation/browser_animation_controller.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -32,6 +34,7 @@
 #include "chrome/browser/ui/views/tabs/common/tab_strip_view.h"
 #include "chrome/browser/ui/views/tabs/common/tab_view.h"
 #include "chrome/browser/ui/views/tabs/tab/tab_title.h"
+#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/split_tabs/split_tab_visual_data.h"
@@ -50,6 +53,7 @@
 #include "ui/compositor/layer.h"
 #include "ui/gfx/animation/animation.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/views/controls/button/button.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/test/views_test_utils.h"
 #include "ui/views/view.h"
@@ -268,18 +272,24 @@ IN_PROC_BROWSER_TEST_F(KoanSidebarTransitionsBrowserTest,
 
 // Issue #517: on Linux the empty space below the tabs was the window's
 // caption, so the frame (WindowEventFilterLinux) took its clicks before the
-// views: a double-click there maximised the window and no tab opened. Through
-// the window's own hit test, the empty space is client area on macOS and
-// Linux (its double and middle clicks reach KoanSidebarTabsController, which
-// also moves the window from it), and the top row's empty part stays caption,
-// where a double-click maximises (Linux) or zooms (macOS) the window. Also
-// guards the upstream behaviour the fix relies on:
-// VerticalTabStripRegionView::IsPositionInWindowCaption() asking
-// koan::IsSidebarClientArea() first.
+// views: a double-click there maximised the window and no tab opened. Most
+// of that space isn't the tab list (upstream's scroll view is only as tall as
+// its tabs) but upstream's VerticalTabStripBottomContainer below it, all
+// caption but its buttons. Through the window's own hit test, with one tab:
+// on Linux the middle of the space between the last tab and the sidebar's
+// bottom bar is client area and the sidebar's empty space (its double and
+// middle clicks reach KoanSidebarTabsController, which also moves the window
+// from it); the tab list's own empty part is client area on macOS and Linux;
+// the bottom bar's buttons stay client area and are no empty space; and the
+// top row's empty part stays caption, where a double-click maximises (Linux)
+// or zooms (macOS) the window. Also guards the upstream behaviour the fix
+// relies on: VerticalTabStripRegionView::IsPositionInWindowCaption() asking
+// koan::IsSidebarClientArea() first, and the bottom container being the
+// flexible part of the column the tab list is in.
 IN_PROC_BROWSER_TEST_F(KoanSidebarTransitionsBrowserTest,
                        EmptySpaceIsClientAreaAndTopRowIsCaption) {
   ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
-  OpenTabs(1);
+  ASSERT_EQ(browser()->GetTabStripModel()->count(), 1);
   auto* region = views::AsViewClass<VerticalTabStripRegionView>(
       browser_view()->tab_strip_view());
   TabStripView* strip = FindView<TabStripView>(browser_view());
@@ -291,6 +301,10 @@ IN_PROC_BROWSER_TEST_F(KoanSidebarTransitionsBrowserTest,
   }));
   const views::ScrollView* scroll = strip->unpinned_tabs_scroll_view();
   ASSERT_TRUE(scroll);
+  views::View* bottom = region->GetBottomContainer();
+  ASSERT_TRUE(bottom);
+  views::View* column = bottom->parent();
+  ASSERT_EQ(strip->parent(), column);
   const gfx::Rect scroll_bounds = views::View::ConvertRectToTarget(
       scroll, region, scroll->GetLocalBounds());
   views::Widget* widget = browser_view()->GetWidget();
@@ -300,22 +314,74 @@ IN_PROC_BROWSER_TEST_F(KoanSidebarTransitionsBrowserTest,
         region, widget->GetRootView(), point));
   };
 
-  // The empty space: the lowest point of the scroll view, in its middle,
-  // that is no row.
+#if BUILDFLAG(IS_LINUX)
+  const gfx::Rect strip_bounds =
+      views::View::ConvertRectToTarget(strip, region, strip->GetLocalBounds());
+  const gfx::Rect bottom_bounds = views::View::ConvertRectToTarget(
+      bottom, region, bottom->GetLocalBounds());
+  // The space a user sees as empty: with one tab, most of the sidebar.
+  ASSERT_GT(bottom_bounds.bottom() - strip_bounds.bottom(), 100)
+      << "the tab list " << strip_bounds.ToString() << ", below it "
+      << bottom_bounds.ToString();
+  const gfx::Point middle(region->width() / 2,
+                          (strip_bounds.bottom() + bottom_bounds.bottom()) / 2);
+  EXPECT_TRUE(IsSidebarEmptySpace(strip, region, middle))
+      << middle.ToString() << ", the view there: " << ViewsAt(region, middle);
+  EXPECT_TRUE(IsSidebarClientArea(strip, region, middle));
+  EXPECT_FALSE(region->IsPositionInWindowCaption(middle));
+  EXPECT_EQ(hit_test(middle), HTCLIENT)
+      << middle.ToString() << ", the view there: " << ViewsAt(region, middle);
+#endif
+
+  // The tab list's own empty part, below its last row (a few pixels with one
+  // tab).
   std::optional<gfx::Point> empty;
-  for (int y = scroll_bounds.bottom() - 2; y > scroll_bounds.y() && !empty;
-       y -= 2) {
+  for (int y = scroll_bounds.bottom() - 1; y > scroll_bounds.y() && !empty;
+       --y) {
     const gfx::Point point(scroll_bounds.CenterPoint().x(), y);
     if (IsSidebarEmptySpace(strip, region, point)) {
       empty = point;
     }
   }
-  ASSERT_TRUE(empty) << "no empty space in " << scroll_bounds.ToString();
-  EXPECT_TRUE(IsSidebarClientArea(strip, region, *empty))
-      << empty->ToString() << ", the view there: " << ViewsAt(region, *empty);
-  EXPECT_FALSE(region->IsPositionInWindowCaption(*empty));
-  EXPECT_EQ(hit_test(*empty), HTCLIENT)
-      << empty->ToString() << ", the view there: " << ViewsAt(region, *empty);
+  if (empty) {
+    EXPECT_TRUE(IsSidebarClientArea(strip, region, *empty));
+    EXPECT_EQ(hit_test(*empty), HTCLIENT)
+        << empty->ToString() << ", the view there: " << ViewsAt(region, *empty);
+  }
+
+  // The buttons below the tab list (upstream's in the bottom container, if
+  // any shows; Koan's bottom bar, the column's views after it): client area,
+  // as they were, and no empty space.
+  int buttons = 0;
+  auto check_buttons = [&](auto& self, views::View* view) -> void {
+    if (!view->GetVisible()) {
+      return;
+    }
+    if (views::IsViewClass<views::Button>(view) && view->IsDrawn() &&
+        !view->GetVisibleBounds().IsEmpty()) {
+      ++buttons;
+      const gfx::Point centre = views::View::ConvertPointToTarget(
+          view, region, view->GetVisibleBounds().CenterPoint());
+      EXPECT_FALSE(IsSidebarEmptySpace(strip, region, centre))
+          << view->GetClassName() << " at " << centre.ToString();
+      EXPECT_EQ(hit_test(centre), HTCLIENT)
+          << view->GetClassName() << " at " << centre.ToString()
+          << ", the view there: " << ViewsAt(region, centre);
+      return;
+    }
+    for (views::View* child : view->children()) {
+      self(self, child);
+    }
+  };
+  check_buttons(check_buttons, bottom);
+  const auto& column_views = column->children();
+  for (auto it = std::find(column_views.begin(), column_views.end(), bottom);
+       it != column_views.end(); ++it) {
+    if (*it != bottom) {
+      check_buttons(check_buttons, *it);
+    }
+  }
+  EXPECT_GT(buttons, 0) << "no button below the tabs";
 
   // The top row's empty part (above the tabs, as near the row's middle as
   // there is one): caption, for the window.

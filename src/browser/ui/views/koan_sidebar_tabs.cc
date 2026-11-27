@@ -36,6 +36,7 @@
 #include "chrome/browser/ui/views/tabs/common/tab_view.h"
 #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view.h"
 #include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
+#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_bottom_container.h"
 #include "components/prefs/pref_service.h"
 #include "components/tabs/public/tab_group.h"
 #include "components/vector_icons/vector_icons.h"
@@ -815,6 +816,50 @@ bool ShowsTabThrobber(content::BrowserContext* context) {
               ->GetBoolean(prefs::kHideTabThrobber);
 }
 
+#if BUILDFLAG(IS_LINUX)
+// Whether `point` (in `region`'s coordinates) is the sidebar's empty space
+// below the tab list: the part of upstream's bottom container (the flexible
+// spacer between the tabs and Koan's bottom bar) that is none of its
+// buttons, and the gap between the tab list and it. Upstream's tab list is
+// only as tall as its tabs, so this is most of what a user sees as empty,
+// and VerticalTabStripBottomContainer::IsPositionInWindowCaption() makes
+// all of it caption. A press there goes to the container (or, in the gap,
+// to the column) and on to the region's handlers.
+bool IsSidebarSpaceBelowTabs(const views::View* tab_strip_view,
+                             views::View* region,
+                             const gfx::Point& point) {
+  auto* sidebar = views::AsViewClass<VerticalTabStripRegionView>(region);
+  views::View* bottom = sidebar ? sidebar->GetBottomContainer() : nullptr;
+  views::View* column = bottom ? bottom->parent() : nullptr;
+  if (!features::IsSidebarEnabled() || !tab_strip_view || !column ||
+      tab_strip_view->parent() != column || !column->GetVisible() ||
+      !bottom->GetVisible() || !region->GetLocalBounds().Contains(point)) {
+    return false;
+  }
+  const gfx::Point in_column =
+      views::View::ConvertPointToTarget(region, column, point);
+  if (!column->GetLocalBounds().Contains(in_column) ||
+      in_column.y() < tab_strip_view->bounds().bottom() ||
+      in_column.y() >= bottom->bounds().bottom()) {
+    return false;
+  }
+  // Not on the column's other views (Koan's bottom bar, media controls ...)
+  // nor on the container's buttons.
+  for (views::View* parent : {column, bottom}) {
+    for (const views::View* child : parent->children()) {
+      if (child != bottom && child->GetVisible() &&
+          child->HitTestPoint(
+              views::View::ConvertPointToTarget(column, child, in_column))) {
+        return false;
+      }
+    }
+  }
+  // And nothing else over it (the edge's resize area, say).
+  const views::View* target = region->GetEventHandlerForPoint(point);
+  return target == bottom || target == column;
+}
+#endif
+
 bool IsSidebarEmptySpace(const views::View* tab_strip_view,
                          views::View* region,
                          const gfx::Point& point) {
@@ -825,6 +870,11 @@ bool IsSidebarEmptySpace(const views::View* tab_strip_view,
       !region->GetLocalBounds().Contains(point)) {
     return false;
   }
+#if BUILDFLAG(IS_LINUX)
+  if (IsSidebarSpaceBelowTabs(tab_strip_view, region, point)) {
+    return true;
+  }
+#endif
   const views::View* target = region->GetEventHandlerForPoint(point);
   for (const views::View* view = target; view; view = view->parent()) {
     if (view == scroll) {
@@ -844,7 +894,7 @@ bool IsSidebarEmptySpace(const views::View* tab_strip_view,
 }
 
 bool IsSidebarClientArea(const views::View* tab_strip_view,
-                         const views::View* region,
+                         views::View* region,
                          const gfx::Point& point) {
   if (IsInSpaceForm(tab_strip_view, region, point)) {
     return true;
@@ -854,6 +904,13 @@ bool IsSidebarClientArea(const views::View* tab_strip_view,
   if (IsOnSidebarHeaderView(region, point)) {
     return true;
   }
+#if BUILDFLAG(IS_LINUX)
+  // The empty space below the tab list (on the Mac too, most likely: to be
+  // checked there).
+  if (IsSidebarSpaceBelowTabs(tab_strip_view, region, point)) {
+    return true;
+  }
+#endif
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
   // Upstream makes the scroll view's empty part below its contents caption
   // (TabStripView::IsPositionInWindowCaption()); the rest of it is client
