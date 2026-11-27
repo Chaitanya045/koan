@@ -36,11 +36,15 @@ namespace {
 DECLARE_ELEMENT_IDENTIFIER_VALUE(kKoanNewProfileNameField);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kKoanNewProfileNameField);
 
+// Apart from the Space menu's (koan_space_menu.cc), which holds this one as
+// Set Profile: views' menus run a command by its id, looked up in the whole
+// menu (MenuModelAdapter::ExecuteCommand()), so an id of the Space menu's
+// would run the Space menu's command.
 enum ProfileMenuCommand {
-  kDefaultProfile = 1,
+  kDefaultProfile = 10000,
   kNewProfile,
   // The user's containers.
-  kFirstProfile = 100,
+  kFirstProfile = 10100,
 };
 
 // The colour dot before a profile's name (as Chromium's tab group menus).

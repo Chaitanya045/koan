@@ -105,7 +105,15 @@ isn't in its Space's container: a new blank page is made in the right partition,
 and with the same selection, and the old one is closed. This one rule covers every way a Space
 gets an empty tab: Create Space (made before the Space has its data), a Space recreated from
 `koan.workspaces.list`, a closed Space coming back, the adopted last tab, and a container changed
-on an existing Space (Set Profile, or another window's sync).
+on an existing Space (Set Profile, or another window's sync). Create Space and Set Profile also
+run it at once, before they return (#543): until then the empty tab is in the partition of the
+Space that was active, and a bookmark or a link dropped on it in that task would load there.
+
+The profile menu (Default, the profiles, New Profile…) is a submenu of the Space menu, so its
+command ids are apart from the Space menu's: views runs a menu command by looking its id up in the
+whole menu, parent first (`MenuModelAdapter::ExecuteCommand()`). With the same ids, Set Profile ▸
+Default ran Change Name and ▸ New Profile… ran Change Icon (#543; macOS's native menus were not
+affected).
 
 **The indicator** (`PaintSidebarTab`, no new patch). A 2 px line in the container's colour sits
 at the start edge of a tab row, inset by half the corner radius; Essentials get 3 px, clipped to
