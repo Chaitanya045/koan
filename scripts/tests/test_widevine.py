@@ -84,5 +84,29 @@ class MacArgsTest(unittest.TestCase):
     self.assertIn('enable_cdm_host_verification = true', args)
 
 
+class LinuxArgsTest(unittest.TestCase):
+  """The Linux release build and its Flatpak (issue #494)."""
+
+  def test_release_build_enables_widevine_without_host_verification(self):
+    args = (ROOT / 'build/koan-release.gn').read_text().splitlines()
+    self.assertIn('enable_widevine = true', args)
+    # Upstream has host verification on macOS and Windows only, and the CDM
+    # can't be bundled unbranded: the component updater downloads it.
+    self.assertFalse(
+        [a for a in args if a.startswith('enable_cdm_host_verification')])
+    self.assertFalse([a for a in args if a.startswith('bundle_widevine_cdm')])
+
+  def test_flatpak_exposes_the_profiles_widevine_folder(self):
+    # cobalt exposes $XDG_CONFIG_HOME/<ConfigDir>/<WidevinePath> to zypak's
+    # sandbox; Chromium downloads into <user data dir>/WidevineCdm, and the
+    # Linux user data dir is ~/.var/app/dev.koan.Koan/config/koan.
+    ini = (ROOT / 'flatpak/cobalt.ini').read_text().splitlines()
+    self.assertIn('ConfigDir=koan', ini)
+    self.assertIn('ExposeWidevine=true', ini)
+    self.assertFalse(
+        [l for l in ini if l.startswith('WidevinePath=')
+         and l != 'WidevinePath=WidevineCdm'])
+
+
 if __name__ == '__main__':
   unittest.main()

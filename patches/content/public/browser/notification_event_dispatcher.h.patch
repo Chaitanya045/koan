@@ -1,0 +1,23 @@
+diff --git a/content/public/browser/notification_event_dispatcher.h b/content/public/browser/notification_event_dispatcher.h
+--- a/content/public/browser/notification_event_dispatcher.h
++++ b/content/public/browser/notification_event_dispatcher.h
+@@ -16,6 +16,7 @@
+ namespace content {
+ 
+ class BrowserContext;
++class RenderFrameHost;
+ enum class PersistentNotificationStatus;
+ 
+ // This is the dispatcher to be used for firing events related to notifications.
+@@ -65,6 +66,11 @@
+       const std::string& notification_id,
+       base::OnceClosure completed_closure) = 0;
+ 
++  // Koan: the frame whose page shows the non-persistent notification
++  // `notification_id`, while that page is alive; null otherwise.
++  virtual RenderFrameHost* GetNonPersistentNotificationFrame(
++      const std::string& notification_id) = 0;
++
+  protected:
+   virtual ~NotificationEventDispatcher() {}
+ };

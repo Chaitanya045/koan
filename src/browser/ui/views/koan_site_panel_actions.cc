@@ -26,6 +26,7 @@
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
+#include "koan/browser/ui/views/koan_page_notifications.h"
 #include "koan/browser/ui/views/koan_strip_on_share.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -38,13 +39,17 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/text_constants.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/border.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/highlight_path_generator.h"
+#include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/box_layout_view.h"
+#include "ui/views/style/typography.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
@@ -235,6 +240,26 @@ class KoanSitePanelActionsView : public views::BoxLayoutView {
 BEGIN_METADATA(KoanSitePanelActionsView)
 END_METADATA
 
+// Under the row, on a page in a Space's profile: why the site's push
+// notifications don't arrive (#478, koan_page_notifications.h).
+class KoanSitePanelProfileNote : public views::Label {
+  METADATA_HEADER(KoanSitePanelProfileNote, views::Label)
+
+ public:
+  KoanSitePanelProfileNote()
+      : views::Label(kProfileNotificationNote,
+                     views::style::CONTEXT_DIALOG_BODY_TEXT,
+                     views::style::STYLE_SECONDARY) {
+    SetMultiLine(true);
+    SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    SetBorder(views::CreateEmptyBorder(
+        gfx::Insets::TLBR(0, kRowSideInset, kRowBottomInset, kRowSideInset)));
+  }
+};
+
+BEGIN_METADATA(KoanSitePanelProfileNote)
+END_METADATA
+
 }  // namespace
 
 void AddSitePanelActions(views::BubbleDialogDelegateView* bubble,
@@ -245,6 +270,10 @@ void AddSitePanelActions(views::BubbleDialogDelegateView* bubble,
   if (!bubble || !contents || !browser_view ||
       !views::IsViewClass<PageInfoBubbleView>(bubble)) {
     return;
+  }
+  // The note first: adding the row then sizes the bubble for both.
+  if (ShowsProfileNotificationNote(contents)) {
+    bubble->AddChildViewAt(std::make_unique<KoanSitePanelProfileNote>(), 0);
   }
   bubble->AddChildViewAt(
       std::make_unique<KoanSitePanelActionsView>(browser_view, contents), 0);

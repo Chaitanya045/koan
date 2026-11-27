@@ -17,8 +17,10 @@ import { browserCall, check, evalIn, finish, IS_MAC, pages, sleep, waitFor } fro
 import fs from 'node:fs';
 
 if (!IS_MAC) {
-  // Koan enables Widevine in build/koan-mac.gn only.
-  console.log('SKIP not macOS: Widevine is enabled in the Mac build only');
+  // The Linux release build (build/koan-release.gn) has Widevine too, but
+  // loads a downloaded CDM only at the next start, and the e2e dev build
+  // (build/koan.gn) has none: docs/USAGE.md, "Checking it (Linux Flatpak)".
+  console.log('SKIP not macOS: on Linux the CDM loads only after a restart');
   process.exit(77);
 }
 

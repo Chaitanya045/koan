@@ -1,0 +1,20 @@
+diff --git a/chrome/browser/notifications/platform_notification_service_impl.cc b/chrome/browser/notifications/platform_notification_service_impl.cc
+--- a/chrome/browser/notifications/platform_notification_service_impl.cc
++++ b/chrome/browser/notifications/platform_notification_service_impl.cc
+@@ -52,6 +52,7 @@
+ #include "content/public/browser/storage_partition.h"
+ #include "content/public/browser/storage_partition_config.h"
+ #include "extensions/buildflags/buildflags.h"
++#include "koan/browser/ui/views/koan_page_notifications.h"
+ #include "services/metrics/public/cpp/ukm_builders.h"
+ #include "third_party/blink/public/common/notifications/notification_resources.h"
+ #include "third_party/blink/public/common/notifications/platform_notification_data.h"
+@@ -277,6 +278,8 @@
+   message_center::Notification notification =
+       CreateNotificationFromData(origin, notification_id, notification_data,
+                                  notification_resources, document_url);
++  // Koan: names the Space of a page in a Space's profile.
++  koan::OnShowingPageNotification(profile_, notification);
+   auto metadata = std::make_unique<NonPersistentNotificationMetadata>();
+   metadata->document_url = document_url;
+ 

@@ -175,6 +175,69 @@ TEST(KoanImportSourcesTest, Detect) {
   EXPECT_TRUE(DetectSourceProfiles(base::FilePath(), "").empty());
 }
 
+// Arc with two profiles (#481): "All profiles" first (its "User Data"
+// folder), then each profile; all say their Spaces have their own
+// profiles. A third profile without data is never read.
+TEST(KoanImportSourcesTest, ArcAllProfiles) {
+  base::ScopedTempDir temp;
+  ASSERT_TRUE(temp.CreateUniqueTempDir());
+  const base::FilePath root = temp.GetPath();
+  const base::FilePath arc = root.AppendASCII("Arc/User Data");
+  Write(arc.AppendASCII("Local State"),
+        R"({"profile": {"last_used": "Default",
+            "profiles_order": ["Default", "Profile 1", "Profile 2"],
+            "info_cache": {"Default": {"name": "Personal"},
+                           "Profile 1": {"name": "Work"},
+                           "Profile 2": {"name": "Unused"}}}})");
+  Write(arc.AppendASCII("Default/Bookmarks"), "{}");
+  Write(arc.AppendASCII("Profile 1/History"), "");
+  ASSERT_TRUE(base::CreateDirectory(arc.AppendASCII("Profile 2")));
+  Write(root.AppendASCII("Arc/StorableSidebar.json"), "{}");
+
+  const std::vector<SourceProfile> sources =
+      DetectSourceProfiles(root, "en-US");
+  EXPECT_EQ(
+      (std::vector<std::u16string>{std::u16string(u"Arc/") + kAllProfilesName,
+                                   u"Arc/Personal", u"Arc/Work"}),
+      Names(sources));
+  ASSERT_EQ(3u, sources.size());
+  EXPECT_EQ(arc, sources[0].source_path);
+  EXPECT_EQ(kChromiumImporterType, sources[0].importer_type);
+  for (const SourceProfile& source : sources) {
+    EXPECT_TRUE(source.services_supported & kSpacesImportItem);
+    EXPECT_TRUE(source.services_supported & kSpaceProfilesNote);
+    EXPECT_TRUE(source.services_supported & user_data_importer::FAVORITES);
+  }
+  EXPECT_EQ(u"Arc", FindBrowser(root, arc)->name);
+
+  // The profiles an "All profiles" import reads.
+  const std::vector<ProfileDir> profiles = ChromiumProfilesWithData(arc);
+  ASSERT_EQ(2u, profiles.size());
+  EXPECT_EQ(arc.AppendASCII("Default"), profiles[0].path);
+  EXPECT_EQ(u"Work", profiles[1].name);
+
+  // One profile left: no "All profiles", no note.
+  ASSERT_TRUE(base::DeletePathRecursively(arc.AppendASCII("Profile 1")));
+  const std::vector<SourceProfile> one = DetectSourceProfiles(root, "en-US");
+  ASSERT_EQ(1u, one.size());
+  EXPECT_EQ(arc.AppendASCII("Default"), one[0].source_path);
+  EXPECT_FALSE(one[0].services_supported & kSpaceProfilesNote);
+}
+
+// "All profiles" is told from a profile by its path (under the test root).
+TEST(KoanImportSourcesTest, IsAllProfilesPath) {
+  base::ScopedTempDir temp;
+  ASSERT_TRUE(temp.CreateUniqueTempDir());
+  base::test::ScopedCommandLine command_line;
+  command_line.GetProcessCommandLine()->AppendSwitchPath(
+      switches::kImportTestRoot, temp.GetPath());
+  const base::FilePath arc = temp.GetPath().AppendASCII("Arc/User Data");
+  EXPECT_TRUE(IsAllProfilesPath(arc));
+  EXPECT_FALSE(IsAllProfilesPath(arc.AppendASCII("Default")));
+  EXPECT_FALSE(IsAllProfilesPath(temp.GetPath().AppendASCII("zen")));
+  EXPECT_FALSE(IsAllProfilesPath(temp.GetPath().AppendASCII("Elsewhere")));
+}
+
 // The hook in ImporterList: Koan's sources before Chromium's, the welcome's
 // pick first; found only under the test root, never the user's folders.
 TEST(KoanImportSourcesTest, AddSourceProfiles) {
