@@ -1466,6 +1466,37 @@ dev.koan.Koan` (add `--delete-data` to remove the profile too).
   not the rest of your home folder. `flatpak override --user
   --filesystem=home dev.koan.Koan` gives it more.
 
+### Saved passwords, cookies and the keyring
+
+Koan encrypts saved passwords, cookies and other private profile data with
+a key it keeps in your desktop's keyring. The key is Koan's own, not
+Chromium's, so Koan never shares it with a Chromium or another
+Chromium-based browser on the same computer:
+
+- **GNOME Keyring, KeePassXC and other Secret Service keyrings:** the item
+  "Koan Safe Storage" (in Seahorse: Passwords and Keys > Login), with the
+  attribute `application` = `koan`.
+- **KWallet (KDE):** the entry "Koan Safe Storage" in the folder
+  "Koan Keys" of your network wallet.
+- With no keyring (or with `--password-store=basic` in
+  `koan-flags.conf`), Koan falls back to a fixed key, as Chromium does,
+  which protects nothing on disk. Use a keyring.
+
+**Profiles from nightlies before this change** (built before #503) used
+Chromium's item, "Chromium Safe Storage" (application `chromium`, KWallet
+folder "Chromium Keys"). Koan doesn't read or copy that item: it may belong
+to a Chromium on the same computer, and copying it would keep Koan's key
+shared with that browser. So after you update, such a profile loses its
+saved passwords, the cookies set before the update (you are signed out of
+sites) and saved card numbers; everything else (tabs, Spaces, bookmarks,
+history) stays. Data written while no keyring was reachable still decrypts.
+To keep your passwords, export them from the old nightly first
+(`chrome://password-manager/settings`, Export passwords), then import the
+file into the new one on the same page (Import passwords), and delete the
+file. Koan leaves
+the old "Chromium Safe Storage" item alone; delete it in Seahorse only if no
+Chromium on this computer uses it.
+
 ## Agent control
 
 **Agent ready** (Settings > Agent Control, on by default) lets a local agent,

@@ -1,0 +1,11 @@
+diff --git a/components/os_crypt/async/browser/BUILD.gn b/components/os_crypt/async/browser/BUILD.gn
+--- a/components/os_crypt/async/browser/BUILD.gn
++++ b/components/os_crypt/async/browser/BUILD.gn
+@@ -138,6 +138,7 @@
+       "//components/os_crypt/async/common",
+       "//crypto",
+       "//dbus",
++      "//koan/common:branding",
+     ]
+     public_deps = [ "//build:branding_buildflags" ]
+   }
