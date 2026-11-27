@@ -46,8 +46,8 @@ inline constexpr uint16_t kSpaceProfilesNote = 1 << 8;
 
 // The profile name of Arc's "every profile in one run" source (#481; Zen's
 // "All profiles"), whose source_path is Arc's "User Data" folder itself.
-inline constexpr char16_t kAllProfilesName[] =
-    u"All profiles (the Spaces, bookmarks, history and passwords of each)";
+// Short, as Zen's: the import dialog's list cuts a longer name off.
+inline constexpr char16_t kAllProfilesName[] = u"All profiles";
 
 enum class Engine {
   // A Firefox profile layout (profiles.ini, places.sqlite).
