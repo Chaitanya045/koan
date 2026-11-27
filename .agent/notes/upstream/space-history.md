@@ -82,6 +82,7 @@ for behaviour only, and none of their code is in Koan.
 | History sync | Not in Koan (no Google sync). Upstream would sync the tag. |
 | Suggestions while the index loads | Right after start, for a moment: everything in the default profile's URL bar, no history suggestion in another's. |
 | Address variants | Known limit: right after start, a page's `http`/`www` variant visited only in the default profile counts with the variant visited in a profile under the same key, so the default profile's URL bar may hide it until it is visited again there. |
+| Visited-link colour (`:visited`) | Not kept apart: Chromium keeps visited links per browser profile, so a link to a page visited in one profile is drawn as visited on the same site in another (seen on the build of d7fab2a3: a link clicked only in Work is purple in a Default Space; the nightly does the same). Chromium already limits `:visited` to the same site and frame, and a page can't read the colour, so what it shows is small and only to the person at the screen. Keeping it apart would mean a visited-link store per partition. |
 
 ## Hooks
 

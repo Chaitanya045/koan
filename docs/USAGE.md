@@ -641,7 +641,9 @@ belongs to a Space, and new tabs open in the active one.
   keeps its profile and its visits stay that profile's. Bookmarks stay
   shared, so a bookmarked page is still suggested as a bookmark. Off,
   every profile's history shows everywhere, as before. Chromium's Clear
-  browsing data and `chrome://history` cover every profile's history.
+  browsing data and `chrome://history` cover every profile's history. One
+  thing is not kept apart: a link to a page you visited is drawn in the
+  visited colour on that same site in every profile.
 - **Unload Space** (right-click the header or a Space button) frees the
   Space's tabs; they reload when you select them. Unload All Other Spaces
   frees all the others. Tabs on screen and tabs in use (playing sound, in
