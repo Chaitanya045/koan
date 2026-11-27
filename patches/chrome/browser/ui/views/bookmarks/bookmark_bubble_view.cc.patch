@@ -1,0 +1,29 @@
+diff --git a/chrome/browser/ui/views/bookmarks/bookmark_bubble_view.cc b/chrome/browser/ui/views/bookmarks/bookmark_bubble_view.cc
+--- a/chrome/browser/ui/views/bookmarks/bookmark_bubble_view.cc
++++ b/chrome/browser/ui/views/bookmarks/bookmark_bubble_view.cc
+@@ -64,6 +64,7 @@
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/common/url_constants.h"
++#include "koan/browser/ui/views/koan_bookmark_spaces_hooks.h"
+ #include "ui/base/interaction/element_identifier.h"
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/models/dialog_model.h"
+@@ -401,6 +402,8 @@
+         node, dialog_model()
+                   ->GetComboboxByUniqueId(kBookmarkFolderFieldId)
+                   ->selected_index());
++    // Koan: the Spaces row (koan_bookmark_spaces_hooks.h).
++    koan::ApplyBookmarkSpacesField(*dialog_model(), model, node);
+ 
+     if (auto* const user_education =
+             BrowserUserEducationInterface::From(browser_)) {
+@@ -545,6 +548,8 @@
+               base::BindRepeating(&BookmarkBubbleDelegate::OnComboboxAction,
+                                   base::Unretained(bubble_delegate))))
+       .SetInitiallyFocusedField(initially_focused_field);
++  // Koan: Zen's Spaces row, under Folder (koan_bookmark_spaces_hooks.h).
++  koan::AddBookmarkSpacesField(dialog_model_builder, profile, bookmark_node);
+ 
+   if (commerce::CanTrackPrice(product_info)) {
+     bool is_price_tracked = shopping_service->IsSubscribedFromCache(

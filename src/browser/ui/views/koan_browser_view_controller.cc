@@ -40,6 +40,7 @@
 #include "components/search_engines/template_url_starter_pack_data.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/ui/views/koan_agent_indicator.h"
+#include "koan/browser/ui/views/koan_bookmark_spaces.h"
 #include "koan/browser/ui/views/koan_color_scheme_sync.h"
 #include "koan/browser/ui/views/koan_command_palette.h"
 #include "koan/browser/ui/views/koan_command_policy.h"
@@ -186,6 +187,7 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
                               base::Unretained(download_animation_.get())))),
       welcome_(std::make_unique<KoanWelcome>(browser_view)),
       window_sync_(std::make_unique<KoanWindowSyncClient>(browser_view)),
+      bookmark_spaces_(std::make_unique<KoanBookmarkSpaces>(browser_view)),
       agent_indicator_(std::make_unique<KoanAgentIndicator>(browser_view)),
       shortcuts_(std::make_unique<KoanShortcutController>(browser_view, this)),
       command_palette_(std::make_unique<KoanCommandPalette>(this)) {
@@ -245,6 +247,7 @@ void KoanBrowserViewController::TearDown() {
   vertical_tabs_->OnBrowserViewDestroying();
   // Before the Spaces and pinned tabs it reconciles go.
   window_sync_->OnBrowserViewDestroying();
+  bookmark_spaces_->OnBrowserViewDestroying();
   command_palette_->OnBrowserViewDestroying();
   shortcuts_->OnBrowserViewDestroying();
   compact_mode_->OnBrowserViewDestroying();
@@ -301,6 +304,7 @@ void KoanBrowserViewController::OnViewAddedToWidget(
     folders_->OnAddedToWidget();
     // Once the window's Spaces are set up.
     window_sync_->OnAddedToWidget();
+    bookmark_spaces_->OnAddedToWidget();
     theme_->OnAddedToWidget();
     shortcuts_->OnAddedToWidget();
     command_palette_->OnAddedToWidget();

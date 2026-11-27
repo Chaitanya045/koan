@@ -89,6 +89,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kLoadingIndicator, true);
   registry->RegisterBooleanPref(kHideTabThrobber, true);
   registry->RegisterBooleanPref(kBookmarksBarShow, false);
+  registry->RegisterBooleanPref(kBookmarksPerSpace, true);
   registry->RegisterStringPref(kNewTabPage, kNewTabPageKoan);
   registry->RegisterBooleanPref(kWelcomeScreenSeen, false);
   registry->RegisterBooleanPref(kImportDialogSpaces, true);

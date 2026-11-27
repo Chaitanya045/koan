@@ -724,6 +724,33 @@ With `koan.window_sync.prefer_blank_windows` (Zen's
 `prefer-unsynced-windows`, off by default) the two swap: New Window (⌘N)
 opens a blank window and New Blank Window a synced one.
 
+**Bookmarks per Space** (Zen's, #480): a bookmark or a folder can belong to
+some of your Spaces. The bookmarks bar, its folder menus and » menu, All
+Bookmarks, the ⋮ menu's Bookmarks, the macOS Bookmarks menu and the URL bar's
+bookmark suggestions then show the active Space's bookmarks and those in no
+Space; switching Space switches them. New bookmarks are in no Space, so they
+show everywhere. To choose:
+
+- **⌘D** (the bookmark bubble): the **Spaces** row under Folder, "All
+  Spaces" or one Space. It is saved with Done, like the name and folder.
+- **Right-click** a bookmark or folder (on the bar or in a bookmark menu),
+  or several selected ones: **Spaces…** opens a list with a checkbox per
+  Space. Tick several to put the bookmark in several Spaces. Tick none to
+  show it everywhere.
+
+A folder in a Space hides everything in it in the other Spaces. The bookmark
+manager (⌥⌘B, chrome://bookmarks), the bookmarks side panel and extensions
+always see every bookmark. Deleting a Space takes it off its bookmarks (one
+left with no Space shows everywhere); renaming it changes nothing. Private
+windows, New Blank Windows and an agent's Space show every bookmark. The
+Spaces are kept in Chromium's Bookmarks file with each bookmark, so they
+survive a restart; an HTML bookmarks export doesn't keep them. Turn it off in
+Settings > Tab Management > Workspaces ("Bookmarks per Space…",
+`koan.bookmarks.per_space`): every bookmark shows, and the Spaces you chose
+come back when you turn it on again. Not yet: the bookmark manager doesn't
+show each bookmark's Spaces, and an import from Zen doesn't bring Zen's
+assignments.
+
 Chrome's tab group commands do Zen's thing in a Space window: ⌘⌃P
 (New tab group) opens the Create-a-Space form, ⌘⌃W (Close group) asks to
 delete the Space, ⌘⌃X / ⌘⌃Z go to the next / previous Space, ⌘⌃C opens a

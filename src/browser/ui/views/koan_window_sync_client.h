@@ -61,6 +61,10 @@ class KoanWindowSyncClient : public KoanWindowSync::Window,
   // Whether the sync is changing this window right now (KoanWindowSync::
   // IsApplying()): its controllers leave what changes alone.
   bool IsApplying() const;
+  // The sync id of `space` (window_sync::SpaceRecord::id, the same in every
+  // window), or empty: the window isn't synced, hasn't given the Space one
+  // yet, or it is an agent's Space, which stays out of the sync.
+  std::string GetSpaceSyncId(const tab_groups::TabGroupId& space) const;
 
   // KoanWindowSync::Window:
   KoanWindowSync::WindowId window_id() const override;

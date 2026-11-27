@@ -188,6 +188,12 @@ bool KoanWindowSyncClient::IsApplying() const {
   return sync_ && sync_->IsApplying(this);
 }
 
+std::string KoanWindowSyncClient::GetSpaceSyncId(
+    const tab_groups::TabGroupId& space) const {
+  auto it = space_ids_.find(space);
+  return sync_ && it != space_ids_.end() ? it->second : std::string();
+}
+
 KoanWindowSync::WindowId KoanWindowSyncClient::window_id() const {
   return browser_view_->browser()->GetSessionID().id();
 }

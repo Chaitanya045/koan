@@ -1,0 +1,33 @@
+diff --git a/chrome/browser/ui/cocoa/bookmarks/bookmark_menu_bridge.mm b/chrome/browser/ui/cocoa/bookmarks/bookmark_menu_bridge.mm
+--- a/chrome/browser/ui/cocoa/bookmarks/bookmark_menu_bridge.mm
++++ b/chrome/browser/ui/cocoa/bookmarks/bookmark_menu_bridge.mm
+@@ -21,6 +21,7 @@
+ #include "components/bookmarks/browser/bookmark_model.h"
+ #include "components/bookmarks/browser/bookmark_node.h"
+ #include "components/bookmarks/managed/managed_bookmark_service.h"
++#include "koan/browser/ui/views/koan_bookmark_spaces_hooks.h"
+ #import "ui/base/cocoa/macos27_sdk.h"
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/resource/resource_bundle.h"
+@@ -93,7 +94,9 @@
+ 
+ void BookmarkMenuBridge::UpdateRootMenuIfInvalid() {
+   CHECK(menu_root_);
+-  if (!IsMenuValid()) {
++  // Koan: it shows the active Space's bookmarks, so it is built again each
++  // time it opens (koan_bookmark_spaces_hooks.h).
++  if (!IsMenuValid() || koan::RebuildsBookmarkMenuOnOpen(profile_)) {
+     BuildRootMenu(/*recurse=*/false);
+   }
+ }
+@@ -328,6 +331,10 @@
+ void BookmarkMenuBridge::AddNodeToMenu(const BookmarkNode* node,
+                                        NSMenu* menu,
+                                        bool recurse) {
++  // Koan: not a bookmark of other Spaces (koan_bookmark_spaces_hooks.h).
++  if (koan::HidesBookmarkInMenuBar(profile_, node)) {
++    return;
++  }
+   if (node->is_folder()) {
+     AddSubmenu(menu, BookmarkParentFolder::FromFolderNode(node), folder_image_,
+                recurse);

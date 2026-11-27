@@ -78,6 +78,7 @@
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/koan_space_title.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
+#include "koan/browser/ui/views/koan_bookmark_spaces.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_emoji_picker.h"
@@ -1223,6 +1224,10 @@ void KoanWorkspaceController::OnDeleteConfirmed(
     const tab_groups::TabGroupId& space,
     bool confirmed) {
   if (confirmed) {
+    if (GetSpace(space) && CanDeleteSpace()) {
+      // Zen's bookmarks of the Space go back to no Space.
+      KoanBookmarkSpaces::OnSpaceDeleted(browser_view_, space);
+    }
     CloseSpaceTabs(space, TabCloseTypes::CLOSE_USER_GESTURE);
   }
 }

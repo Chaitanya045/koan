@@ -27,6 +27,7 @@ namespace koan {
 
 class AiStarterPackFilter;
 class KoanAgentIndicator;
+class KoanBookmarkSpaces;
 class KoanColorSchemeSync;
 class KoanCommandPalette;
 class KoanCompactModeController;
@@ -182,6 +183,8 @@ class KoanBrowserViewController : public views::ViewObserver,
   std::unique_ptr<KoanWelcome> welcome_;
   // Zen's window sync: after the Spaces and pinned tabs it reconciles.
   std::unique_ptr<KoanWindowSyncClient> window_sync_;
+  // Bookmarks per Space: follows the Spaces and window sync's ids for them.
+  std::unique_ptr<KoanBookmarkSpaces> bookmark_spaces_;
   // "An agent is connected"; it also starts agent control with the first
   // window (koan/browser/agent/koan_agent_service.h).
   std::unique_ptr<KoanAgentIndicator> agent_indicator_;

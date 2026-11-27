@@ -1,0 +1,24 @@
+diff --git a/chrome/browser/ui/views/bookmarks/bookmark_menu_delegate.cc b/chrome/browser/ui/views/bookmarks/bookmark_menu_delegate.cc
+--- a/chrome/browser/ui/views/bookmarks/bookmark_menu_delegate.cc
++++ b/chrome/browser/ui/views/bookmarks/bookmark_menu_delegate.cc
+@@ -44,6 +44,7 @@
+ #include "components/prefs/pref_service.h"
+ #include "components/profile_metrics/browser_profile_type.h"
+ #include "components/url_formatter/url_formatter.h"
++#include "koan/browser/ui/views/koan_bookmark_spaces_hooks.h"
+ #include "ui/actions/actions.h"
+ #include "ui/base/accelerators/menu_label_accelerator_util.h"
+ #include "ui/base/dragdrop/drag_drop_types.h"
+@@ -976,6 +977,12 @@
+     BuildMenuForFolderAt(BookmarkParentFolder::FromFolderNode(node),
+                          folder_icon, parent_menu, index);
+   }
++  // Koan: built but hidden, a bookmark of other Spaces keeps the menu's
++  // items in line with the folder's children (koan_bookmark_spaces_hooks.h).
++  if (auto it = node_to_menu_map_.find(BookmarkFolderOrURL(node));
++      it != node_to_menu_map_.end() && koan::HidesBookmark(browser_, node)) {
++    it->second->SetVisible(false);
++  }
+ }
+ 
+ void BookmarkMenuDelegate::BuildMenu(const BookmarkParentFolder& folder,

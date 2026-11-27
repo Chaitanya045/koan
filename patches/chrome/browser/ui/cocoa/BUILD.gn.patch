@@ -1,10 +1,11 @@
 --- a/chrome/browser/ui/cocoa/BUILD.gn
 +++ b/chrome/browser/ui/cocoa/BUILD.gn
-@@ -189,6 +189,7 @@
+@@ -189,6 +189,8 @@
      "//components/tab_groups",
      "//components/tabs:impl",
      "//content/public/browser",
 +    "//koan/browser/ui/cocoa:hooks",
++    "//koan/browser/ui/views",
      "//mojo/public/cpp/bindings",
      "//skia",
      "//ui/base",
