@@ -277,15 +277,21 @@ jobs:
   # more (a failed one keeps them, for "Re-run failed jobs", until they
   # expire: source 3 days, out 2). Without keep_base, its source goes too.
   # With it, its source and finished out/Release stay 14 days for later
-  # runs to build on, and older runs' copies go (only develop's: a run on
-  # another ref never deletes them). The Flatpak and the logs stay.
+  # runs to build on, and older develop runs' copies go (a run on another
+  # ref never deletes them), but not right away: a run that picked the
+  # previous base when its fetch started only downloads its out/Release
+  # when build 1 starts, hours later, and deleting it in between made that
+  # build a full one (#569). So scripts/ci/prune_bases.sh keeps a base
+  # until a newer one has existed for 12 h (its header has the details).
+  # The Flatpak and the logs stay.
   cleanup:
     name: Delete build archives
-    needs: [check]
+    needs: [fetch, check]
     if: ${{ !cancelled() && needs.check.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
+      contents: read
       actions: write
     env:
       GH_TOKEN: ${{ github.token }}
@@ -294,6 +300,11 @@ jobs:
       KEEP_BASE: ${{ inputs.keep_base }}
       BRANCH: ${{ github.ref_name }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.fetch.outputs.sha }}
+          persist-credentials: false
+
       - name: Delete
         run: |
           # This run's own archives matching the pattern.
@@ -310,13 +321,4 @@ jobs:
             exit 0
           fi
           delete_own '^koan-linux-out-[0-9]+\\.'
-          for name in koan-linux-source.tar.zst koan-linux-out-final.tar.zst; do
-            gh api --paginate "repos/$GH_REPO/actions/artifacts?name=$name" \
-              --jq ".artifacts[] | select(.workflow_run.id < $RUN and .workflow_run.head_branch == \"$BRANCH\") | \"\(.id) \(.workflow_run.id)\"" |
-              while read -r id run; do
-                # Only finished runs: a running chain still needs its source.
-                [[ $(gh api "repos/$GH_REPO/actions/runs/$run" --jq .status) == completed ]] || continue
-                echo "deleting $name of run $run"
-                gh api -X DELETE "repos/$GH_REPO/actions/artifacts/$id"
-              done
-          done
+          scripts/ci/prune_bases.sh linux.yml koan-linux
