@@ -33,6 +33,7 @@
 #include "content/public/test/browser_test.h"
 #include "koan/browser/koan_shortcut_table.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_spaces.h"
@@ -596,6 +597,52 @@ IN_PROC_BROWSER_TEST_F(KoanSplitViewBrowserTest,
   EXPECT_FALSE(work->IsSplit());
   ASSERT_TRUE(last->IsSplit());
   EXPECT_EQ(last->GetSplit(), first->GetSplit());
+}
+
+// Zen's visibleTabs leave out a collapsed folder's tabs: on the last tab of
+// a Space the shortcut skips a tab in a folder nested in a collapsed one
+// (Koan's folders aren't tab groups, so upstream's IsTabCollapsed() doesn't
+// know them) and wraps to the Space's first shown tab.
+IN_PROC_BROWSER_TEST_F(KoanSplitViewBrowserTest,
+                       SplitShortcutSkipsATabInACollapsedFolder) {
+  TabStripModel* tab_strip = browser()->GetTabStripModel();
+  tabs::TabInterface* work =
+      PageThenWorkSpace(browser(), GURL("chrome://version/"));
+  ASSERT_TRUE(work);
+  tabs::TabInterface* home = tab_strip->GetActiveTab();
+  KoanFolderController* folders = KoanFolderController::FromBrowser(browser());
+  ASSERT_TRUE(folders);
+  std::vector<tabs::TabInterface*> pages;
+  for (int i = 0; i < 2; ++i) {
+    ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+        browser(), GURL("chrome://chrome-urls/"),
+        WindowOpenDisposition::kNewForegroundTab,
+        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+    pages.push_back(tab_strip->GetActiveTab());
+  }
+  tabs::TabInterface* in_folder = pages[0];
+  tabs::TabInterface* last = pages[1];
+  const int outer = folders->CreateFolder({}, /*parent=*/0,
+                                          folders->GetActiveSpace(), u"Outer",
+                                          /*rename=*/false);
+  folders->CreateFolder({in_folder}, outer, folders->GetActiveSpace(), u"Inner",
+                        /*rename=*/false);
+  tab_strip->ActivateTabAt(tab_strip->GetIndexOfTab(last));
+  folders->SetCollapsed(outer, true);
+  // The folder's tab moved to the top of the Space, ahead of the others.
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return tab_strip->GetIndexOfTab(in_folder) < tab_strip->GetIndexOfTab(home);
+  }));
+  ASSERT_EQ(tab_strip->GetActiveTab(), last);
+  ASSERT_TRUE(folders->GetRootMostCollapsed(folders->GetFolderOf(in_folder)));
+  ASSERT_GT(tab_strip->GetIndexOfTab(work), tab_strip->GetIndexOfTab(last));
+
+  ASSERT_TRUE(RunSplitShortcut(browser()));
+  EXPECT_FALSE(in_folder->IsSplit());
+  EXPECT_FALSE(work->IsSplit());
+  ASSERT_TRUE(last->IsSplit());
+  EXPECT_EQ(last->GetSplit(), home->GetSplit());
+  EXPECT_TRUE(folders->GetFolder(outer)->collapsed);
 }
 
 }  // namespace koan

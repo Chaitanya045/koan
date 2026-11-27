@@ -35,6 +35,7 @@
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
+#include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
 #include "koan/browser/ui/views/koan_keyboard_state.h"
 #include "koan/browser/ui/views/koan_library.h"
@@ -626,6 +627,11 @@ bool KoanShortcutController::Split(int layout_index) {
   // of another Space is never taken (#553): an Essential (pinned) is in
   // every Space, any other tab in its group's.
   const std::optional<tab_groups::TabGroupId> space = active_tab->GetGroup();
+  // Koan's folders aren't tab groups, so IsTabCollapsed() doesn't see them:
+  // a tab in a collapsed folder (or one nested in a collapsed folder) isn't
+  // shown either.
+  const KoanFolderController* folders =
+      KoanFolderController::FromBrowser(browser_view_->browser());
   std::vector<SplitPartnerCandidate> candidates;
   std::vector<int> others;
   for (int i = 0; i < model->count(); ++i) {
@@ -633,7 +639,9 @@ bool KoanShortcutController::Split(int layout_index) {
     const SplitPartnerCandidate candidate{
         .in_active_space = tab->IsPinned() || tab->GetGroup() == space,
         .pinned = tab->IsPinned(),
-        .hidden = model->IsTabCollapsed(i) || IsHiddenTab(tab),
+        .hidden = model->IsTabCollapsed(i) || IsHiddenTab(tab) ||
+                  (folders &&
+                   folders->GetRootMostCollapsed(folders->GetFolderOf(tab))),
         .split = tab->IsSplit(),
     };
     candidates.push_back(candidate);
