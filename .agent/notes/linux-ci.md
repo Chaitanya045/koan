@@ -34,7 +34,12 @@ flatpak-check ┘                (.flatpak)          (nightly-linux)
 - `linux-build.yml`: unpack source and the previous `out/Release`,
   `linux_build_slice.sh` (SIGINT to siso 65 min before the 6 h limit), then
   pack and upload out, or (last slice) a headless smoke test and the
-  Flatpak.
+  Flatpak. Like the Mac's, a slice that has far more to do than the
+  previous one left fails after 10 min (`build_progress.py`), and its logs
+  get `siso_explain`. The Mac chain's stall on runner image dates (#534,
+  macos-ci.md "Resuming") doesn't apply here: the compile steps' inputs are
+  all in the source archive (Chromium's clang and sysroot), not on the
+  runner.
 
 Build config: `build/koan-release.gn` (`KOAN_CONFIG=release`, set by
 `scripts/ci/linux_env.sh`): no component build, no DCHECKs, no symbols,
@@ -57,8 +62,8 @@ ones only: a running chain still needs its source). A labelled pull
 request's run, or a manual run of another ref, may still *build on* the
 base (`scripts/ci/find_base.sh linux.yml koan-linux`, which only picks
 successful `schedule` and `workflow_dispatch` runs of `develop` that still
-have both archives), but keeps its source 3 days, uploads no finished
-build, and its cleanup deletes only its own source and out slices. So
+have both archives; "How the base is found" in macos-ci.md), but keeps
+its source 3 days, uploads no finished build, and its cleanup deletes only its own source and out slices. So
 objects built from unmerged code never end up in the published Flatpak, and
 a pull request that moves `CHROMIUM_VERSION` can't delete `develop`'s base.
 Forks' pull requests are never built.
@@ -96,6 +101,30 @@ images, and frees the root disk from 86 to 126 GB (of 145; run
 one at `/mnt`, the setup adds 4 GB of swap there and puts the archives on
 it (`KOAN_SCRATCH`, else `RUNNER_TEMP`). Ubuntu's ImageMagick 6 has no `magick`, which `apply_branding.sh`
 calls; the setup puts a `magick` that runs `convert` on PATH.
+
+**Package sources.** The image ships third-party apt sources (Microsoft's
+and others) the setup installs nothing from; an `apt-get update` over all
+of them failed run 45980089943 on a 403 from packages.microsoft.com
+(#532). `scripts/ci/linux_apt_sources.sh /etc/apt <dir>` copies only the
+source files whose every URI is on `ubuntu.com` into a directory (the
+image's `ubuntu.sources` names `mirror+file:/etc/apt/apt-mirrors.txt`, so
+mirror lists are followed: every mirror must be on `ubuntu.com`; run
+45983942868 failed on that before the script knew it), and the
+setup's `apt-get update` and `install` read only that
+(`Dir::Etc::SourceList=/dev/null`, `Dir::Etc::SourceParts=<dir>`), with
+`Acquire::Retries=3` and up to 4 tries of the update, 15 s apart. Finding
+no Ubuntu source, or Ubuntu's archive failing all 4 tries, still fails the
+job. `scripts/tests/test_linux_apt_sources.py` covers the filtering on a
+fake `/etc/apt`, and `flatpak-check.yml` adds a dead source
+(`dead.invalid`) before running the setup, so every pull request that
+touches it shows on a real runner that a dead third-party source is
+ignored. The other downloads are retried too: Flathub's remote and
+`org.flatpak.Builder` in the setup (4 tries), the Flatpak's runtime, SDK
+and base app (`--install-deps-only`) and the manifest's sources
+(`--download-only`) in `linux_package.sh` (4 tries each, before the build,
+so a real build failure isn't retried), and the actionlint download in
+`ci.yml` (`curl --retry`, as `check_gn_format.sh` and the other check
+scripts already did).
 
 The tool caches (vpython, CIPD) go to `.cache/linux` (`linux_env.sh`) so
 they travel in the source archive, as `.cache/mac` does. HOME stays the
