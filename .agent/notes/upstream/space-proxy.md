@@ -61,9 +61,12 @@ Three PRs:
 with an explicit scheme are valid (SOCKS4 resolves names locally; `direct://`, QUIC and chains are refused); anything
 else reads as no proxy. PR 2 adds an SSH remote to the same dict.
 
-**The runtime state** (`RuntimeProxy`): a server, or disconnected. Not saved. `EffectiveProxy(saved, runtime)`: no
-setting is no proxy (the profile's settings); a runtime state counts only while there is a setting, so removing the
-setting always takes the proxy away; else the runtime state, else the saved server.
+**The runtime state** (`RuntimeProxy`): a server, or disconnected. Not saved. `EffectiveProxy(saved, runtime,
+disconnected_for_run)`: no setting is no proxy (the profile's settings); a runtime state counts only while there is a
+setting, so removing the setting always takes the proxy away; else the runtime state, else the saved server. The one
+exception is the dev switch's `disconnected` (`disconnected_for_run`): it fails the container for that run with or
+without a setting, since a test of the fail mode must not load pages. Only the switch sets it and nothing saves it, so
+no user path can leave a container disconnected after its setting is removed.
 
 **The config** (`ContainerProxyConfig()`): `PROXY_LIST` of the one server, `<-loopback>`, nothing else. Disconnected is
 the same with an empty list.
@@ -94,8 +97,8 @@ proxies->ProxyFor(container);                                        // what it 
 ```
 
 **Dev switch** (until the UI): `--koan-container-proxy="<profile name>=<value>"`, applied when the profile's first
-container network context is made: a server is saved as the setting, `none` removes it, `disconnected` sets the runtime
-state for that run.
+container network context is made: a server is saved as the setting, `none` removes it, `disconnected` disconnects the
+container for that run, saved proxy or not.
 
 ## What else could leave the container's proxy
 
@@ -104,24 +107,35 @@ state for that run.
 | Pages, subresources, service workers, shared workers, downloads, WebSockets | The partition's network context: through the proxy. |
 | QUIC | Not spoken to SOCKS/HTTP proxies; the TCP job goes through the proxy. |
 | DNS prefetch (`<link rel=dns-prefetch>`), preconnect | The preconnect manager looks up the proxy first and skips DNS when there is one (disconnected included). Preconnects go through the stream factory, so the proxy. The loading predictor is off in containers (B10). |
+| Search prefetch (typing a query with Google and preloading on, the defaults) | **Off for container tabs**, every container, proxy or not. `SearchPrefetchService` fetches the results page with the default partition's loader factory (`streaming_search_prefetch_url_loader.cc`): outside the proxy, with the default partition's cookies. Koan starts none for a container's tab (`MaybePrefetchURL`), and `SearchPrefetchURLLoaderInterceptor` serves none into one (a query prefetched in a default tab and then entered in a container's tab), REBASE row "no search prefetch". The query itself still goes out as a suggest request (Omnibox, below). |
+| Browser-side preconnects on a container tab's behalf | **Off for container tabs**, every container. The loading predictor's hints (`PrepareForPageLoad`, `PreconnectURLIfAllowed`) take no partition, so they preconnect, resolve names and warm service workers in the default partition: direct, with this Mac's DNS, so typing `localhost:3000` would have opened a socket to the Mac's port 3000. Koan skips the omnibox's (`DoPreconnect`), the bookmark bar's and the new tab page tiles' hover hints, the navigation predictor's preconnect to a visible page's origin, and a link's pointer-down preconnect, REBASE row "no default-partition preconnects". |
+| Bookmark bar / new tab page prefetch, DSE preload 2 | Off by default upstream (`kBookmarkTriggerForPrefetch`, `kNewTabPageTriggerForPrefetch`, `kDsePreload2`); not covered. A browser-initiated content prefetch for a container's tab would be made in the default partition (`PrefetchService` refuses only a non-default *initiator* frame). If upstream turns one on, it needs the same check. |
 | Prerender, NoStatePrefetch | Off in containers (C4, B10). |
 | Extensions' `chrome.proxy` | Can't reach a container with a proxy: the relay ignores upstream while it has one. Without a proxy, the container follows the profile as before. `onProxyError` still hears about the container's proxy errors (the error pipe stays the monitor's). |
 | ProxySettings policy, enterprise proxy | Same as extensions: a container's own proxy wins. Documented; Koan has no managed users. |
 | WebRTC | **Not covered.** UDP (host and srflx candidates, media) goes direct whatever the proxy; only TCP sockets go through it. The fix is `webrtc_ip_handling_policy = disable_non_proxied_udp` for container tabs, but renderer preferences are per profile (`renderer_preferences_util::UpdateFromSystemSettings(prefs, profile)`, rewritten by `PrefWatcher`), so it needs another patch. Follow-up. |
-| Omnibox | Typed URLs open in the Space's container (rule 6). Omnibox suggestions, the intranet "did you mean" probe and favicons for history use the profile's default partition, as for every container. |
+| Omnibox | Typed URLs open in the Space's container (rule 6). Omnibox suggestions (so the typed text, sent to the search engine as you type), the intranet "did you mean" probe and favicons for history use the profile's default partition, as for every container: outside the Space's proxy. |
+| Safe Browsing | **Not covered; metadata only.** Hash-prefix real-time lookups (Standard protection, on by default: `kHashPrefixRealTimeLookups`) send hash prefixes of the container's URLs through Google's OHTTP relay, and full real-time URL checks (Enhanced protection, or "Make searches and browsing better") send the URLs to Google, both from the browser's own contexts (`RealTimeUrlLookupServiceFactory::GetNetworkContext()` is the default partition's), not the container's. So Google (or the relay, which sees this Mac's address) learns which sites the Space visits, from this Mac's address, though the pages themselves go through the proxy. Safe Browsing's list updates are the profile's, not per page. |
+| SCT auditing | **Not covered; metadata only.** With Enhanced protection, `SCTReportingService` reports a sample of the certificates (SCTs) of sites the container connects to, through the system network context, so Google learns those sites from this Mac's address. |
 | Disconnected | Every new request fails with `ERR_NO_SUPPORTED_PROXIES`; open connections through the old proxy stay until they close (the proxy is gone anyway when its tunnel is). A page already loaded keeps running, and its WebRTC UDP (above) is the one way out. |
 
 ## Tests
 
 - **Unit** (`koan_containers_unittests`): `ContainerProxyTest` (canonical servers, setting round trip, effective proxy,
-  every URL through the proxy, loopback too, disconnected is empty, the switch, partition paths),
+  every URL through the proxy, loopback too, disconnected is empty, the switch and its `disconnected` with no setting,
+  partition paths),
   `ContainerProxyPathTest` (content's partition layout, an upstream guard), `UserContainersTest.ProxyIsReadValidated`,
-  `UserContainersTest.SetProxySavesAndRemoves`.
+  `UserContainersTest.SetProxySavesAndRemoves`; `ContainerContentsTest.TabsAndFramesInContainers` (the predicate the
+  search prefetch and preconnect hooks ask).
 - **Browser** (`koan_browsertests`, `KoanContainerProxyBrowserTest`): a context made before the setting switches live;
   the runtime state replaces the server and goes back; other containers and the default partition stay direct; a dead
   proxy is `ERR_PROXY_CONNECTION_FAILED` and disconnected is `ERR_NO_SUPPORTED_PROXIES`, while the same page loads
-  directly elsewhere.
+  directly elsewhere; a container's frame gets no pointer-down preconnect delegate, a default tab's does.
+  `KoanContainerProxySwitchBrowserTest`: `--koan-container-proxy=<name>=disconnected` fails a container with no saved
+  proxy.
 - **Mac manual:** `ssh -D 1080 linuxbox`, a Space with a profile named "Linux", run with
   `--koan-container-proxy="Linux=socks5://127.0.0.1:1080"`; `localhost:3000` in that Space is the box's dev server, in
   another Space the Mac's. Kill the ssh: the Space's pages fail, nothing loads from the Mac. Relaunch with
-  `"Linux=disconnected"`: every page in that Space fails at once.
+  `"Linux=disconnected"`: every page in that Space fails at once, with the proxy removed (`"Linux=none"` first) too.
+  With the tunnel down, type `localhost:3000` and a search query in that Space without pressing Enter: `lsof -i :3000`
+  on the Mac shows no connection from Koan, and Enter on the query fails rather than showing a prefetched results page.

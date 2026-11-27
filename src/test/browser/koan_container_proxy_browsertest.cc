@@ -13,12 +13,16 @@
 
 #include "base/strings/string_number_conversions.h"
 #include "base/test/test_future.h"
+#include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "content/public/browser/anchor_element_preconnect_delegate.h"
 #include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
@@ -174,6 +178,29 @@ IN_PROC_BROWSER_TEST_F(KoanContainerProxyBrowserTest, NeverGoesDirect) {
 
   // A container without a proxy still loads.
   EXPECT_EQ(net::OK, LoadIn(other, page));
+}
+
+// The browser's own preloading for a page (space-proxy.md, "What else could
+// leave the container's proxy"): a pointer-down on a link in a container's
+// page makes no preconnect, which the loading predictor would make in the
+// default partition, outside the container's proxy. A default tab keeps it.
+IN_PROC_BROWSER_TEST_F(KoanContainerProxyBrowserTest,
+                       NoPointerDownPreconnectInAContainer) {
+  const ContainerId box = AddContainer(u"Linux box");
+  const GURL url(kLocalDevServer);
+  std::unique_ptr<content::WebContents> contents =
+      content::WebContents::Create(content::WebContents::CreateParams(
+          profile(), containers::CreateSiteInstance(profile(), box, url)));
+  ASSERT_TRUE(containers::IsContainerFrame(contents->GetPrimaryMainFrame()));
+
+  ChromeContentBrowserClient client;
+  EXPECT_FALSE(client.CreateAnchorElementPreconnectDelegate(
+      *contents->GetPrimaryMainFrame()));
+  EXPECT_TRUE(client.CreateAnchorElementPreconnectDelegate(
+      *browser()
+           ->GetTabStripModel()
+           ->GetActiveWebContents()
+           ->GetPrimaryMainFrame()));
 }
 
 }  // namespace

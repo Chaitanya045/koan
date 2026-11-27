@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 565bd580ba6172469d31079a4e455eb05020488c..cdaf40bfcbba825c5766bd38f4e07741ba25d0da 100644
+index 565bd580ba6172469d31079a4e455eb05020488c..57f2ef37caa16b28a05084c599201edcfb5b150a 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -411,6 +411,12 @@
@@ -125,3 +125,15 @@ index 565bd580ba6172469d31079a4e455eb05020488c..cdaf40bfcbba825c5766bd38f4e07741
  #endif  //! BUILDFLAG(IS_ANDROID)
  
  #if BUILDFLAG(ENABLE_EXTENSIONS)
+@@ -8841,6 +8901,11 @@ bool ChromeContentBrowserClient::IsFindInPageDisabledForOrigin(
+ std::unique_ptr<content::AnchorElementPreconnectDelegate>
+ ChromeContentBrowserClient::CreateAnchorElementPreconnectDelegate(
+     content::RenderFrameHost& render_frame_host) {
++  // Koan: no pointer-down preconnect in a container: the predictor preconnects
++  // in the default partition, outside its proxy.
++  if (koan::containers::IsContainerFrame(&render_frame_host)) {
++    return nullptr;
++  }
+   return std::make_unique<AnchorElementPreloader>(render_frame_host);
+ }
+ 

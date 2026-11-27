@@ -129,9 +129,12 @@ void SetAgentTab(content::WebContents* contents, const ContainerId& task);
 void SetAgentLeased(content::WebContents* contents, bool leased);
 
 // Whether the frame, tab or SiteInstance is in a container of either kind.
-// Paths that would load its pages in the default partition, with the user's
-// cookies, check this: NoStatePrefetch, the loading predictor's prewarming,
-// web-app navigation capturing. Null is not.
+// Paths that would load its pages or connect for it in the default
+// partition, with the user's cookies and outside a Space's proxy, check this:
+// NoStatePrefetch, the loading predictor's prewarming, search prefetch (start
+// and serving), the omnibox's, bookmark bar's, new tab page's, navigation
+// predictor's and pointer-down preconnects, web-app navigation capturing.
+// Null is not.
 bool IsContainerFrame(content::RenderFrameHost* frame);
 bool IsContainerContents(const content::WebContents* contents);
 bool IsContainerSiteInstance(content::SiteInstance* site_instance);

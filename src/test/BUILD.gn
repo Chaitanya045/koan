@@ -92,6 +92,7 @@ source_set("browsertests_impl") {
     "//base",
     "//base/test:test_support",
     "//chrome/browser",
+    "//chrome/browser:chrome_content_browser_client",
     "//chrome/browser/bookmarks",
     "//chrome/browser/importer",
     "//chrome/browser/metrics",

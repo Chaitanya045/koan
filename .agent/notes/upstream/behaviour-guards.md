@@ -23,8 +23,8 @@ Found by reading the tests (check titles in quotes), not by running them.
 
 ## Totals
 
-Hook table, 54 rows: guarded 32, partly 12, none 10. Runnable on the Mac now:
-8; Linux e2e only: 36; no guard: 10.
+Hook table, 56 rows: guarded 32, partly 14, none 10. Runnable on the Mac now:
+10; Linux e2e only: 36; no guard: 10.
 Issue #183's three examples: guarded 2, partly 1.
 
 ## The gaps, by what to add
@@ -104,6 +104,8 @@ Issue #183's three examples: guarded 2, partly 1.
 | Sidebar tab rows after a Space's pinned tabs | Rows view is a child of the focused `TabGroupView`, laid out top to bottom with a running `height`; drag/link drops skip children with no collection node; group animation tolerates a child that leaves | e2e/pinned "...in that Space's pinned section, above its New Tab row", "...and its rows sit right below its header, with no pinned tabs"; e2e/sidebar_tabs "...right below the Space header (no pinned tabs)"; e2e/vertical_tabs_teardown "A close with the new-Space form open: alive". Drop targeting: none | guarded | no (Linux e2e) |
 | Sidebar tab rows snap into a Space | `ShouldSnapToTarget` is still consulted: the animating layout manager grows a child missing from its starting layout from height 0 unless the delegate says otherwise | none (no test looks at the tab rows' animation when a Space is switched) | none | - |
 | Containers: a proxy per Space (#445) | Every partition's network context gets its proxy pipe in `ConfigureNetworkContextParamsInternal` with `relative_partition_path` = `Storage/ext/<domain>/def`; net bypasses loopback unless `<-loopback>`; an empty `PROXY_LIST` fails with `ERR_NO_SUPPORTED_PROXIES` instead of going direct | koan_containers_unittests `ContainerProxyPathTest.ContentPutsAContainerWhereTheHookLooks`, `ContainerProxyTest.NetBypassesLoopbackUnlessTold`, `ContainerProxyTest.DisconnectedHasNothingToConnectThrough`; koan_browsertests `KoanContainerProxyBrowserTest.*` (live switch, never direct) | guarded | yes (unit tests; browser tests on request) |
+| Containers: no search prefetch for or into a container's tab | Every search prefetch still starts in the private `SearchPrefetchService::MaybePrefetchURL()` and is made in the default partition; a prefetched response still reaches a navigation only through `SearchPrefetchURLLoaderInterceptor::MaybeCreateLoaderForRequest()`; the hooks ask `IsContainerContents()` | koan_containers_unittests `ContainerContentsTest.TabsAndFramesInContainers` (the predicate only; nothing fails if upstream adds another start or serving path) | partly | yes (unit test) |
+| Containers: no default-partition preconnects for a container's tab | `LoadingPredictor::PrepareForPageLoad()` still preconnects, preresolves and warms service workers in the default partition, and its tab-driven callers are still the omnibox, bookmark bar, new tab page tiles, the navigation predictor and the pointer-down `Preconnector`, which does nothing with a null delegate | koan_browsertests `KoanContainerProxyBrowserTest.NoPointerDownPreconnectInAContainer` (the pointer-down hook); koan_containers_unittests `ContainerContentsTest.TabsAndFramesInContainers` (the predicate). The other four hooks: none; a new caller of `PrepareForPageLoad` needs the REBASE row's re-grep | partly | yes (unit test; browser test on request) |
 
 ## The three behaviours named in #183
 
