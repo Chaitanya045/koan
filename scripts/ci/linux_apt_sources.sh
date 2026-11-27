@@ -8,8 +8,8 @@
 # <apt dir>/sources.list and <apt dir>/sources.list.d/*.list and *.sources,
 # and writes to <out dir> (emptied first) only the files whose every URI is
 # on ubuntu.com (archive.ubuntu.com, its azure. and other mirrors,
-# security.ubuntu.com, ports.ubuntu.com). Other files are skipped and named
-# on stderr.
+# security.ubuntu.com, ports.ubuntu.com), following mirror+file: lists.
+# Other files are skipped and named on stderr.
 #
 # Why: the GitHub runner image ships third-party sources (Microsoft's and
 # others) the build installs nothing from, and an `apt-get update` over all
@@ -56,9 +56,25 @@ uris() {
   esac
 }
 
-# Whether a URI's host is ubuntu.com or one of its subdomains.
+# Whether a URI's host is ubuntu.com or one of its subdomains. A
+# mirror+file:<list> URI (the runner image's ubuntu.sources uses
+# mirror+file:/etc/apt/apt-mirrors.txt) counts when every mirror in the list
+# does; a list under /etc/apt is read from <apt dir>, so a test's fake works.
 ubuntu_uri() {
-  local host="${1#*://}"
+  local uri="$1"
+  uri="${uri#mirror+}"
+  if [[ $uri == file:* ]]; then
+    local list="${uri#file:}" m n=0
+    [[ $list != /etc/apt/* ]] || list="$APT_DIR/${list#/etc/apt/}"
+    [[ -f $list ]] || return 1
+    while read -r m; do
+      ubuntu_uri "$m" || return 1
+      n=$((n + 1))
+    done < <(awk '!/^[[:space:]]*(#|$)/ { print $1 }' "$list")
+    [[ $n -gt 0 ]]
+    return
+  fi
+  local host="${uri#*://}"
   host="${host%%/*}"
   host="${host##*@}"
   host="${host%%:*}"

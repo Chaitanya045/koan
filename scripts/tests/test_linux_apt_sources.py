@@ -83,6 +83,32 @@ class AptSourcesTest(unittest.TestCase):
     self.assertIn('microsoft-prod.list', r.stderr)
     self.assertIn('dead.list', r.stderr)
 
+  def test_mirror_list(self):
+    # The runner image's ubuntu.sources (run 45983942868).
+    sources = UBUNTU_SOURCES.replace(
+        'http://azure.archive.ubuntu.com/ubuntu/',
+        'mirror+file:/etc/apt/apt-mirrors.txt')
+    self.write('sources.list.d/ubuntu.sources', sources)
+    self.write('sources.list.d/microsoft-prod.list', MICROSOFT_LIST)
+    self.write('apt-mirrors.txt',
+               'http://azure.archive.ubuntu.com/ubuntu/\tpriority:1\n'
+               'https://archive.ubuntu.com/ubuntu/\tpriority:2\n'
+               'https://security.ubuntu.com/ubuntu/\tpriority:3\n')
+    r = self.run_script()
+    self.assertEqual(r.returncode, 0, r.stderr)
+    self.assertEqual(self.kept(), ['ubuntu.sources'])
+
+  def test_mirror_list_with_other_host_is_skipped(self):
+    self.write('sources.list.d/ubuntu.sources', UBUNTU_SOURCES)
+    self.write('sources.list.d/m.sources',
+               'Types: deb\nURIs: mirror+file:/etc/apt/m.txt\n'
+               'Suites: noble\nComponents: main\n')
+    self.write('m.txt', 'http://archive.ubuntu.com/ubuntu/\n'
+               'http://mirror.example.com/ubuntu/\n')
+    r = self.run_script()
+    self.assertEqual(r.returncode, 0, r.stderr)
+    self.assertEqual(self.kept(), ['ubuntu.sources'])
+
   def test_one_line_sources_list(self):
     self.write('sources.list',
                '# comment\n'

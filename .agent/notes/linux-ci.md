@@ -101,7 +101,10 @@ calls; the setup puts a `magick` that runs `convert` on PATH.
 and others) the setup installs nothing from; an `apt-get update` over all
 of them failed run 45980089943 on a 403 from packages.microsoft.com
 (#532). `scripts/ci/linux_apt_sources.sh /etc/apt <dir>` copies only the
-source files whose every URI is on `ubuntu.com` into a directory, and the
+source files whose every URI is on `ubuntu.com` into a directory (the
+image's `ubuntu.sources` names `mirror+file:/etc/apt/apt-mirrors.txt`, so
+mirror lists are followed: every mirror must be on `ubuntu.com`; run
+45983942868 failed on that before the script knew it), and the
 setup's `apt-get update` and `install` read only that
 (`Dir::Etc::SourceList=/dev/null`, `Dir::Etc::SourceParts=<dir>`), with
 `Acquire::Retries=3` and up to 4 tries of the update, 15 s apart. Finding
