@@ -19,6 +19,12 @@ test("koan_unittests") {
     "//koan/browser/koan_library_logic_unittest.cc",
     "//koan/browser/koan_prefs_unittest.cc",
     "//koan/browser/koan_space_title_unittest.cc",
+    "//koan/browser/remote/koan_ssh_askpass_unittest.cc",
+    "//koan/browser/remote/koan_ssh_command_unittest.cc",
+    "//koan/browser/remote/koan_ssh_config_unittest.cc",
+    "//koan/browser/remote/koan_ssh_failure_unittest.cc",
+    "//koan/browser/remote/koan_ssh_tunnel_system_events_unittest.cc",
+    "//koan/browser/remote/koan_ssh_tunnel_unittest.cc",
     "//koan/browser/ui/webui/koan_settings_url_unittest.cc",
     "//koan/browser/updates/koan_update_logic_unittest.cc",
     "//koan/browser/window_sync/koan_window_sync_model_unittest.cc",
@@ -44,16 +50,27 @@ test("koan_unittests") {
     "//koan/browser/importer:reader",
     "//koan/browser/importer:sources",
     "//koan/browser/importer:spaces",
+    "//koan/browser/remote",
+    "//koan/browser/remote:system_events",
+    "//koan/browser/remote:test_support",
     "//koan/browser/ui/webui:settings_url",
     "//koan/browser/updates:update_logic",
     "//koan/browser/window_sync:model",
     "//koan/common:glance_trigger",
     "//koan/version",
+    "//net",
     "//sql",
     "//testing/gmock",
     "//testing/gtest",
     "//url",
   ]
+  if (is_posix) {
+    sources += [
+      "//koan/browser/remote/koan_ssh_askpass_server_unittest.cc",
+      "//koan/browser/remote/koan_ssh_tunnel_platform_posix_unittest.cc",
+    ]
+    deps += [ "//koan/browser/remote:platform" ]
+  }
   data_deps = [ "//third_party/icu:icudata" ]
 }
 
