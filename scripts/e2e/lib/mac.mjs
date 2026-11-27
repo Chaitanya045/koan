@@ -21,7 +21,8 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { ACCEL, ALT, CTRL, IS_MAC, META, SHIFT, browserCall, connect, createSpace as koanCreateSpace,
-         decodePng, onPage, pages, sleep, viewMouse, viewTree, waitFor } from './koan.mjs';
+         centerOf, decodePng, half, onPage, pages, sleep, viewMouse, viewTree, waitFor,
+         whole } from './koan.mjs';
 
 export { ACCEL, ALT, CTRL, IS_MAC, META, SHIFT };
 
@@ -201,8 +202,8 @@ export const rootOf = w => w.views.find(v => /RootView$/.test(v.cls));
 // handlers, context menus, drag controllers). `at` is in the view.
 export async function clickThroughRoot(vs, view, { button = 'left', at } = {}) {
   const root = rootOf({ views: vs.filter(v => v.widget === view.widget) });
-  const x = Math.round(view.ax + (at?.x ?? Math.min(view.w / 2, 24)));
-  const y = Math.round(view.ay + (at?.y ?? view.h / 2));
+  const x = whole(view.ax + (at?.x ?? Math.min(half(view.w), 24)));
+  const y = whole(view.ay + (at?.y ?? half(view.h)));
   await rootMouse(root, ['mousePressed', 'mouseReleased'], x, y, button);
   await sleep(800);
 }
@@ -238,7 +239,7 @@ export async function rootMouse(root, types, x, y, button = 'left') {
   const nodeId = doc ? freshRootId(doc, root) : root.nodeId;
   for (const type of types) {
     await ui.send('DOM.dispatchMouseEvent', { nodeId,
-        event: { type, x: Math.round(x), y: Math.round(y), button, wheelDirection: 'none' } });
+        event: { type, x: whole(x), y: whole(y), button, wheelDirection: 'none' } });
   }
   ui.close();
 }
@@ -265,7 +266,7 @@ export async function focusUrlBar(page) {
     const pill = vs.find(v => v.cls === 'KoanUrlPill' && v.shown && v.w > 0 && v.h > 0);
     if (sidebarOut && pill) {
       how = 'a click on the pill';
-      await clickThroughRoot(vs, pill, { at: { x: Math.round(pill.w / 2), y: Math.round(pill.h / 2) } });
+      await clickThroughRoot(vs, pill, { at: centerOf(pill, { local: true }) });
     } else if (realInput() && await makeKey(page) && await realKey('l', 'c', 300)) {
       how = 'a real Cmd+L';
     } else {
@@ -316,7 +317,7 @@ export async function selectTabRow(title) {
   const row = tabViewTitled(await viewTree(), title);
   if (!row) return false;
   for (const type of ['mousePressed', 'mouseReleased']) {
-    await viewMouse(row, type, Math.round(row.w / 2), Math.round(row.h / 2));
+    await viewMouse(row, type, half(row.w), half(row.h));
   }
   return true;
 }
@@ -838,7 +839,7 @@ export async function parkPointer(page) {
   if (!IS_MAC) return true;
   let at = await realPointerInWindow(page);
   if (!at) return false;
-  const x = Math.round(at.b.width / 2), y = Math.round(at.b.height * 2 / 3);
+  const x = half(at.b.width), y = whole(at.b.height * 2 / 3);
   const near = a => Math.abs(a.x - x) < 120 && Math.abs(a.y - y) < 120;
   if (!near(at) && realInput()) {
     await ptr('move', at.b.left + x, at.b.top + y, 100);
@@ -883,10 +884,10 @@ export async function calibrate(page, vs, webview, windowTarget) {
       addEventListener('mousemove', e => { window.__koanMove =
           { sx: e.screenX, sy: e.screenY, cx: e.clientX, cy: e.clientY }; }, true);` }));
   // Guess: the root view at the window's top-left; aim at the page's middle.
-  const gx = w.bounds.left + webview.ax + webview.w / 2;
-  const gy = w.bounds.top + webview.ay + webview.h / 2;
-  if (!(await ptr('move', Math.round(gx), Math.round(gy), 200))) return null;
-  await ptr('move', Math.round(gx) + 3, Math.round(gy) + 2, 100);
+  const gx = whole(w.bounds.left + centerOf(webview).x);
+  const gy = whole(w.bounds.top + centerOf(webview).y);
+  if (!(await ptr('move', gx, gy, 200))) return null;
+  await ptr('move', gx + 3, gy + 2, 100);
   await sleep(300);
   const m = (await onPage(page, c => c.send('Runtime.evaluate',
       { expression: 'window.__koanMove', returnByValue: true }))).result?.result?.value;
@@ -912,10 +913,11 @@ export async function goToAgentTab(title, page, settle = 900) {
                vs.find(v => v.cls === 'KoanAgentCornerDot' && v.shown && v.w > 0);
   if (!chip) return { ok: false, why: 'no agent chip or corner dot on screen', items: [] };
   // The corner dot is a widget of its own: its origin from the window's.
-  let at = { x: origin.x + chip.ax + chip.w / 2, y: origin.y + chip.ay + chip.h / 2 };
+  const c = centerOf(chip);
+  let at = { x: origin.x + c.x, y: origin.y + c.y };
   if (chip.cls === 'KoanAgentCornerDot') {
     const r = await rootOfWidgetOnScreen(chip.wname);
-    if (r) at = { x: r.x + chip.ax + chip.w / 2, y: r.y + chip.ay + chip.h / 2 };
+    if (r) at = { x: r.x + c.x, y: r.y + c.y };
   }
   if (!(await realClick(at.x, at.y, 300))) return { ok: false, why: `chip: ${realWhyNot}`, items: [] };
   const menu = await waitNativeMenu(true, KOAN_PID, 4000);

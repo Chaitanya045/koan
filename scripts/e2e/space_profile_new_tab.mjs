@@ -13,7 +13,7 @@
 // ROUNDS (default 20) rounds of each of PATHS (default form,set), with no
 // wait between the last click and the new tab.
 // Run with scripts/e2e/run.sh space_profile_new_tab.
-import { CTRL, ALT, browserCall, check, evalIn, finish, openMenus, pages, readPref,
+import { centerOf, half, CTRL, ALT, browserCall, check, evalIn, finish, openMenus, pages, readPref,
          sleep, typeInto, viewMouse, viewTree, waitFor } from './lib/koan.mjs';
 import { fatalInLog, key, rootMouse, spaceButtons, startServer } from './lib/mac.mjs';
 
@@ -39,8 +39,9 @@ const mark = (page, tag) => evalIn(page, `document.cookie = 'where=${tag}; max-a
 
 const shown = (vs, cls) => vs.filter(v => v.cls === cls && v.shown);
 const click = async view => {
-  await viewMouse(view, 'mousePressed', Math.round(view.w / 2), Math.round(view.h / 2));
-  await viewMouse(view, 'mouseReleased', Math.round(view.w / 2), Math.round(view.h / 2));
+  const c = centerOf(view, { local: true });
+  await viewMouse(view, 'mousePressed', c.x, c.y);
+  await viewMouse(view, 'mouseReleased', c.x, c.y);
 };
 const buttons = async () => spaceButtons(await viewTree());
 
@@ -91,9 +92,9 @@ async function newProfileFromMenu(name, parent = null) {
   // At the item's far end: a submenu overlaps its parent at its start.
   const last = menu.items.at(-1);
   // (rootMouse(): the menu's root as the clicking session numbers it.)
-  await rootMouse(menu.root, ['mouseMoved'], last.ax + last.w - 20, last.ay + last.h / 2, 'none');
+  await rootMouse(menu.root, ['mouseMoved'], last.ax + last.w - 20, last.ay + half(last.h), 'none');
   await rootMouse(menu.root, ['mousePressed', 'mouseReleased'], last.ax + last.w - 20,
-                  last.ay + last.h / 2);
+                  last.ay + half(last.h));
   const field = await waitFor(async () => (await viewTree()).find(
       v => v.cls === 'Textfield' && v.shown && v.path.includes('BubbleDialogModelHostContentsView')),
       5000);
@@ -203,10 +204,10 @@ if (PATHS.includes('set')) {
     // Change Name…, Change Icon…, Theme…, Set Profile.
     if (!menu || menu.items.length < 4) { failures.push(`${i}: no Space menu`); continue; }
     await rootMouse(menu.root, ['mouseMoved'], menu.items[3].ax + 8,
-                    menu.items[3].ay + menu.items[3].h / 2, 'none');
+                    menu.items[3].ay + half(menu.items[3].h), 'none');
     if (!await waitFor(async () => openMenus(await viewTree()).length > 1, 3000) &&
         (await rootMouse(menu.root, ['mousePressed', 'mouseReleased'], menu.items[3].ax + 8,
-                         menu.items[3].ay + menu.items[3].h / 2),
+                         menu.items[3].ay + half(menu.items[3].h)),
          !await waitFor(async () => openMenus(await viewTree()).length > 1, 3000))) {
       failures.push(`${i}: no Set Profile submenu`);
       continue;

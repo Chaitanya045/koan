@@ -16,7 +16,7 @@
 // probe checks first that such a drag reaches the drag at all,
 // and the multi-select (Cmd+click) and Esc legs, which need AppKit's
 // events, are skipped. Run by scripts/mac/suite.sh.
-import { browserCall, check, finish, pages, sleep, viewTree, visiblePage, waitFor } from './lib/koan.mjs';
+import { centerOf, half, whole, browserCall, check, finish, pages, sleep, viewTree, visiblePage, waitFor } from './lib/koan.mjs';
 import { alive, calibrate, createSpace, fatalInLog, hold, ptr, ptrHas, realInput, realInputWhyNot,
          realKey, rootMouse, rootOf, skipped, spaceButtons, startServer, tabViewTitled }
     from './lib/mac.mjs';
@@ -48,8 +48,8 @@ async function show(name) {
   const b = spaceButtons(v).find(x => x.name === name);
   if (!b) return false;
   const root = rootOf({ views: v.filter(x => x.widget === b.view.widget) });
-  await rootMouse(root, ['mousePressed', 'mouseReleased'], b.view.ax + b.view.w / 2,
-                  b.view.ay + b.view.h / 2);
+  const c = centerOf(b.view);
+  await rootMouse(root, ['mousePressed', 'mouseReleased'], c.x, c.y);
   return waitFor(async () => active(await viewTree()) === name, 3000);
 }
 const shownTitles = v => v.filter(x => x.cls === 'TabTitle' && x.shown).map(x => x.props.Text);
@@ -88,7 +88,7 @@ async function drag(title, to, { holdMs = 0, esc = false } = {}) {
   if (!tab) return { error: `no tab "${title}"` };
   let during = '';
   const root = rootOf({ views: v.filter(x => x.widget === tab.widget) });
-  const from = { x: tab.ax + Math.min(40, tab.w / 2), y: tab.ay + tab.h / 2 };
+  const from = { x: tab.ax + Math.min(40, half(tab.w)), y: tab.ay + half(tab.h) };
   if (real()) {
     // (hold.m, not ptr's down/dragto/up: the bench's ptr can predate them,
     // and hold is the drag the essentials_drag flow runs there.)
@@ -156,7 +156,7 @@ async function drag(title, to, { holdMs = 0, esc = false } = {}) {
 }
 const buttonPoint = (v, name) => {
   const b = spaceButtons(v).find(x => x.name === name)?.view;
-  return b && { x: b.ax + b.w / 2, y: b.ay + b.h / 2 };
+  return b && centerOf(b);
 };
 // Just inside the sidebar's right (or left) edge, over the tab list.
 const edgePoint = (v, side) => {
@@ -235,8 +235,8 @@ if (canDrag) {
       for (const [i, t] of sel.entries()) {
         const tab = tabViewTitled(v, t);
         if (!tab) return false;
-        await ptr(i === 0 ? 'click' : 'cmdclick', Math.round(origin.x + tab.ax + 40),
-                  Math.round(origin.y + tab.ay + tab.h / 2));
+        await ptr(i === 0 ? 'click' : 'cmdclick', whole(origin.x + tab.ax + 40),
+                  whole(origin.y + tab.ay + half(tab.h)));
         await sleep(400);
       }
       return true;

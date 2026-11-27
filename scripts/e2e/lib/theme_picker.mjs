@@ -1,7 +1,8 @@
 // Helpers for the theme picker's end-to-end tests (theme.mjs,
 // theme_glass.mjs): native views through UI DevTools, keys to a widget like
 // real keys, the command palette, the picker and its window background.
-import { UI_PORT, browserCall, connect, evalIn, key, keyToWidget, pages, settingsCall, sleep, waitFor }
+import { UI_PORT, browserCall, connect, evalIn, key, keyToWidget, pages, settingsCall, sleep, waitFor,
+         whole }
     from './koan.mjs';
 import { focusUrlBar, keyWindowReport } from './mac.mjs';
 
@@ -63,7 +64,7 @@ export async function ui(method, params) {
 // so the root view targets the view under it (menus, drags).
 export const mouse = (view, type, x, y, button = 'left') =>
   ui('DOM.dispatchMouseEvent', { nodeId: view.root.nodeId,
-      event: { type, x: Math.round(view.ax + x), y: Math.round(view.ay + y), button,
+      event: { type, x: whole(view.ax + x), y: whole(view.ay + y), button,
                wheelDirection: 'none' } });
 
 export async function click(view, x = 10, y = 10, button = 'left', wait = 700) {

@@ -4,7 +4,7 @@
 // same right-click and are read and clicked through Accessibility
 // (lib/mac.mjs nativeMenu()).
 import {
-  NATIVE_MENUS, UI_PORT, browserCall, check, connect, finish, pages, sendKey, sleep, visiblePage,
+  half, whole, NATIVE_MENUS, UI_PORT, browserCall, check, connect, finish, pages, sendKey, sleep, visiblePage,
 } from './koan.mjs';
 import {
   KOAN_PID, calibrate, closeNativeMenu, keyWindowReport, makeKey, nativeMenuReport,
@@ -77,7 +77,7 @@ export async function origin(s, n) {
 export async function click(s, n, button = 'left') {
   const { root, x, y } = await origin(s, n);
   const p = await props(s, n);
-  const at = { x: Math.round(x + Math.min(p.Width / 2, 20)), y: Math.round(y + p.Height / 2) };
+  const at = { x: whole(x + Math.min(half(p.Width), 20)), y: whole(y + half(p.Height)) };
   const event = type => ({ nodeId: root.nodeId, event: { type, ...at, button, wheelDirection: 'none' } });
   if (button === 'right' && NATIVE_MENUS) {
     // UI DevTools takes one client at a time (UiDevToolsServer ignores a
@@ -147,7 +147,7 @@ async function openNativeMenu(event, at) {
   }
   // After a real right-click the pointer leaves the sidebar again (resting on
   // a collapsed folder would open its search).
-  const away = real && [bounds.left + bounds.width - 60, bounds.top + bounds.height / 2];
+  const away = real && [whole(bounds.left + bounds.width - 60), whole(bounds.top + half(bounds.height))];
   nativeOpen = { items: menu?.items ?? null, c, release: event('mouseReleased'), away };
   if (!menu) {
     console.log(`  (no native menu ${menuStuck ? 'to drive' : 'opened'}: ${menuStuck ||
