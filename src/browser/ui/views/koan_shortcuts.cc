@@ -41,6 +41,7 @@
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
 #include "koan/browser/ui/views/koan_spaces.h"
+#include "koan/browser/ui/views/koan_split_partner.h"
 #include "koan/browser/ui/views/koan_split_view.h"
 #include "koan/browser/ui/views/koan_tab_unload.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
@@ -620,11 +621,24 @@ bool KoanShortcutController::Split(int layout_index) {
     return true;
   }
   // Split the selected tabs (Zen's behaviour with a multi-selection), else
-  // the active tab with the next one; with nothing to pair, a new tab.
+  // the active tab with the next one of its Space (PickSplitPartner()); with
+  // nothing to pair, a new tab. Spaces are tab groups in one strip, so a tab
+  // of another Space is never taken (#553): an Essential (pinned) is in
+  // every Space, any other tab in its group's.
+  const std::optional<tab_groups::TabGroupId> space = active_tab->GetGroup();
+  std::vector<SplitPartnerCandidate> candidates;
   std::vector<int> others;
   for (int i = 0; i < model->count(); ++i) {
-    if (i != active && model->IsTabSelected(i) &&
-        !model->GetTabAtIndex(i)->IsSplit()) {
+    tabs::TabInterface* tab = model->GetTabAtIndex(i);
+    const SplitPartnerCandidate candidate{
+        .in_active_space = tab->IsPinned() || tab->GetGroup() == space,
+        .pinned = tab->IsPinned(),
+        .hidden = model->IsTabCollapsed(i) || IsHiddenTab(tab),
+        .split = tab->IsSplit(),
+    };
+    candidates.push_back(candidate);
+    if (i != active && model->IsTabSelected(i) && candidate.in_active_space &&
+        !candidate.split) {
       others.push_back(i);
     }
   }
@@ -633,10 +647,11 @@ bool KoanShortcutController::Split(int layout_index) {
     ShowSplitLimitToast(browser_view_);
     return true;
   }
-  if (others.empty() && active + 1 < model->count() &&
-      !model->GetTabAtIndex(active + 1)->IsSplit() &&
-      model->IsTabPinned(active + 1) == model->IsTabPinned(active)) {
-    others.push_back(active + 1);
+  if (others.empty()) {
+    if (const std::optional<size_t> partner =
+            PickSplitPartner(candidates, static_cast<size_t>(active))) {
+      others.push_back(static_cast<int>(*partner));
+    }
   }
   if (others.empty()) {
     chrome::NewSplitTab(browser_view_->browser(), layout,
