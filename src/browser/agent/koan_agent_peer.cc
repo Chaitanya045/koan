@@ -36,7 +36,6 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <linux/magic.h>
-#include <linux/openat2.h>
 #include <poll.h>
 #include <sys/stat.h>
 #include <sys/statfs.h>
@@ -428,6 +427,23 @@ namespace {
 #ifndef STATX_ATTR_MOUNT_ROOT
 #define STATX_ATTR_MOUNT_ROOT 0x00002000
 #endif
+// openat2(), Linux 5.6: 437 on x86-64 and arm64, guarded as
+// sandbox/linux/system_headers does. Chromium's sysroot module map does not
+// let <linux/openat2.h> be included (-Wprivate-header), so its struct
+// open_how and the RESOLVE_* flags used here are declared as the kernel's
+// include/uapi/linux/openat2.h has them.
+#ifndef __NR_openat2
+#define __NR_openat2 437
+#endif
+struct KoanOpenHow {
+  uint64_t flags;
+  uint64_t mode;
+  uint64_t resolve;
+};
+static_assert(sizeof(KoanOpenHow) == 24, "struct open_how is 24 bytes");
+constexpr uint64_t kResolveNoXdev = 0x01;        // RESOLVE_NO_XDEV
+constexpr uint64_t kResolveNoMagicLinks = 0x02;  // RESOLVE_NO_MAGICLINKS
+constexpr uint64_t kResolveBeneath = 0x08;       // RESOLVE_BENEATH
 
 constexpr int kMaxAncestors = 12;
 // The procfs root's inode (PROC_ROOT_INO in the kernel).
@@ -481,9 +497,9 @@ base::ScopedFD OpenBelow(dev_t device,
                          int dir,
                          const std::string& name,
                          uint64_t flags) {
-  open_how how = {};
+  KoanOpenHow how = {};
   how.flags = flags | O_CLOEXEC;
-  how.resolve = RESOLVE_NO_XDEV | RESOLVE_NO_MAGICLINKS | RESOLVE_BENEATH;
+  how.resolve = kResolveNoXdev | kResolveNoMagicLinks | kResolveBeneath;
   base::ScopedFD fd(static_cast<int>(HANDLE_EINTR(
       syscall(__NR_openat2, dir, name.c_str(), &how, sizeof(how)))));
   struct stat info;
