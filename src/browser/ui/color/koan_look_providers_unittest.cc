@@ -199,6 +199,19 @@ TEST_P(KoanLookProvidersTest, TheEmptyTabIsACardOnTheWindow) {
   EXPECT_NE(provider_.GetColor(ui::kColorSysHeader), page);
 }
 
+TEST_P(KoanLookProvidersTest, TheFrameIsTheLooksSidebar) {
+  Build();
+  // The frame, the sidebar, the toolbar and the gutter around the page are
+  // one surface in the look's `sidebar` colour, active or not. On Linux the
+  // GTK and Qt themes would replace the frame colour (#486), so a profile
+  // stays on the classic theme (system_theme kDefault, as in this key:
+  // koan::prefs::OverrideSystemThemeDefault(), KoanSystemThemeLock).
+  const SkColor sidebar = look::CurrentTokens(dark())[look::Token::kSidebar];
+  EXPECT_EQ(sidebar, provider_.GetColor(ui::kColorFrameActive));
+  EXPECT_EQ(sidebar, provider_.GetColor(ui::kColorFrameInactive));
+  EXPECT_EQ(sidebar, provider_.GetColor(kColorToolbar));
+}
+
 TEST_P(KoanLookProvidersTest, SidebarOffBuildsToo) {
   base::test::ScopedFeatureList features;
   features.InitAndDisableFeature(features::kKoanSidebar);

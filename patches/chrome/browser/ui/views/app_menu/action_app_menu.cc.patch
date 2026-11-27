@@ -1,0 +1,27 @@
+diff --git a/chrome/browser/ui/views/app_menu/action_app_menu.cc b/chrome/browser/ui/views/app_menu/action_app_menu.cc
+index 892187a19bad16ef57bfc10bebf7023e2896dc69..a43bc15396b8ea85298396337d17bce7aa7c1829 100644
+--- a/chrome/browser/ui/views/app_menu/action_app_menu.cc
++++ b/chrome/browser/ui/views/app_menu/action_app_menu.cc
+@@ -28,6 +28,7 @@
+ #include "chrome/browser/ui/views/app_menu/app_menu_search_controller.h"
+ #include "chrome/browser/ui/views/app_menu/app_menu_zoom_view.h"
+ #include "chrome/browser/ui/views/chrome_layout_provider.h"
++#include "koan/browser/ui/views/koan_sidebar_header.h"
+ #include "ui/actions/actions.h"
+ #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
+ #include "ui/base/l10n/l10n_util.h"
+@@ -264,8 +265,13 @@ void ActionAppMenu::RunMenu(views::Widget* parent,
+ 
+   metrics_.OnMenuOpened();
+ 
++  // Koan: from its button in the sidebar, the menu opens towards the page.
+   menu_runner_->RunMenuAt(parent, host, anchor_screen_bounds,
+-                          views::MenuAnchorPosition::kTopRight, source_type,
++                          host && koan::AlignsAppMenuWithLeadingEdge(
++                                      host->button())
++                              ? views::MenuAnchorPosition::kTopLeft
++                              : views::MenuAnchorPosition::kTopRight,
++                          source_type,
+                           /*native_view_for_gestures=*/gfx::NativeView(),
+                           /*corners=*/std::nullopt,
+                           "Chrome.AppMenu.MenuHostInitToNextFramePresented");

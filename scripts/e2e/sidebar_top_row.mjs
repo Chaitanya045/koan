@@ -34,8 +34,11 @@ const go = async url => {
 check('Loads page A, then page B (so Back has somewhere to go)', !!(await go(A)) && !!(await go(B)));
 await sleep(800);
 
-const navButtons = vs => vs.filter(v => v.shown && v.path.at(-1) === 'KoanSidebarNavButtons')
+// The row's own buttons; on Linux the row starts with Zen's app menu
+// button (KoanAppMenuButton, #488), checked on its own below.
+const inRow = vs => vs.filter(v => v.shown && v.path.at(-1) === 'KoanSidebarNavButtons')
     .sort((a, b) => a.ax - b.ax);
+const navButtons = vs => inRow(vs).filter(v => v.cls !== 'KoanAppMenuButton');
 const pillButton = (vs, tip) => vs.find(v => v.shown && v.path.includes('KoanUrlPill') &&
     v.props?.TooltipText === tip);
 const extensionButton = vs => vs.find(v => v.shown && v.path.at(-1) === 'KoanSidebarExtensionsView');
@@ -48,6 +51,18 @@ const row = navButtons(vs);
 check('The top row has back, forward and reload', row.length === 3,
       row.map(v => v.props?.TooltipText).join(', '));
 if (row.length !== 3) finish();
+{
+  const all = inRow(vs);
+  const menu = all.filter(v => v.cls === 'KoanAppMenuButton');
+  if (IS_MAC) {
+    check('No app menu button in the row (the menu bar has its items)', menu.length === 0);
+  } else {
+    check('The row starts with the app menu button, before back',
+          menu.length === 1 && all[0] === menu[0] &&
+              menu[0].props?.TooltipText === 'Open application menu',
+          all.map(v => `${v.cls}:${v.props?.TooltipText}`).join(', '));
+  }
+}
 
 // The page's tab in front (the buttons act on the shown tab: the suite's
 // profile starts on another, so UI DevTools' Back stayed on it and Copy URL

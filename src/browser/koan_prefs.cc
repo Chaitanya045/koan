@@ -9,12 +9,14 @@
 #include "base/path_service.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/performance_manager/public/user_tuning/prefs.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_registry.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/universal_optout/prefs.h"
@@ -22,6 +24,7 @@
 #include "koan/browser/agent/koan_agent_limits.h"
 #include "koan/browser/containers/koan_agent_access_prefs.h"
 #include "koan/browser/koan_features.h"
+#include "ui/color/system_theme.h"
 
 namespace koan::prefs {
 
@@ -132,6 +135,20 @@ void OverrideUpstreamProfilePrefDefaults(
     registry->SetDefaultPrefValue(::prefs::kVerticalTabsUncollapsedWidth,
                                   base::Value(kSidebarDefaultWidth));
   }
+  OverrideSystemThemeDefault(registry);
+}
+
+void OverrideSystemThemeDefault(PrefRegistry* registry) {
+#if BUILDFLAG(IS_LINUX)
+  // Upstream's default is the desktop's toolkit theme (GTK on GNOME, Qt on
+  // KDE: ui::GetDefaultSystemTheme()), which paints the frame, the toolbar
+  // and their text with the toolkit's colours whatever Koan's look and colour
+  // mode are (#486). Zen's Linux window is its own colour too
+  // (ZenGradientGenerator.mjs getBrowserBg()).
+  registry->SetDefaultPrefValue(
+      ::prefs::kSystemTheme,
+      base::Value(static_cast<int>(ui::SystemTheme::kDefault)));
+#endif
 }
 
 void OverrideServiceProfilePrefDefaults(

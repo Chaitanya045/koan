@@ -59,10 +59,11 @@ namespace koan {
 
 namespace {
 
-// Actions that open a window, a tab or a form, which a held key must not
-// repeat.
+// Actions that open a window, a tab or a form, or quit, which a held key
+// must not repeat.
 bool CreatesSomething(shortcuts::Action action) {
   switch (action) {
+    case shortcuts::Action::kQuit:
     case shortcuts::Action::kNewTab:
     case shortcuts::Action::kNewWindow:
     case shortcuts::Action::kNewBlankWindow:
@@ -251,6 +252,9 @@ bool KoanShortcutController::CanRun(Action action) const {
       return chrome::IsCommandEnabled(browser, IDC_NEW_WINDOW);
     case Action::kNewPrivateWindow:
       return chrome::IsCommandEnabled(browser, IDC_NEW_INCOGNITO_WINDOW);
+    case Action::kQuit:
+      // As Run(): a Koan key quits on Linux only.
+      return BUILDFLAG(IS_LINUX) && chrome::IsCommandEnabled(browser, IDC_EXIT);
     case Action::kMuteSite:
       return chrome::IsCommandEnabled(browser, IDC_WINDOW_MUTE_SITE);
     case Action::kBookmarks:
@@ -387,6 +391,17 @@ bool KoanShortcutController::Run(Action action) {
       return true;
     case Action::kNewPrivateWindow:
       return Command(IDC_NEW_INCOGNITO_WINDOW);
+    case Action::kQuit:
+#if BUILDFLAG(IS_LINUX)
+      // Chrome's Exit (the app menu's), as Firefox's key_quitApplication:
+      // every window closes and the session is saved for the next start.
+      // Chrome asks first only about downloads in progress (macOS's "Warn
+      // before quitting" is its menu bar's ⌘Q, which this isn't).
+      return Command(IDC_EXIT);
+#else
+      // No Koan key quits elsewhere (on macOS ⌘Q is the menu bar's).
+      return false;
+#endif
     case Action::kMuteSite:
       return Command(IDC_WINDOW_MUTE_SITE);
     case Action::kBookmarks:

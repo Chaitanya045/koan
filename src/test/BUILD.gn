@@ -2,6 +2,7 @@
 # Use of this source code is governed by the MIT license that can be
 # found in the LICENSE file.
 
+import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
 
@@ -19,6 +20,7 @@ test("koan_unittests") {
     "//koan/browser/koan_library_logic_unittest.cc",
     "//koan/browser/koan_prefs_unittest.cc",
     "//koan/browser/koan_space_title_unittest.cc",
+    "//koan/browser/ui/webui/koan_settings_rows_unittest.cc",
     "//koan/browser/ui/webui/koan_settings_url_unittest.cc",
     "//koan/browser/updates/koan_update_logic_unittest.cc",
     "//koan/browser/window_sync/koan_window_sync_model_unittest.cc",
@@ -29,6 +31,7 @@ test("koan_unittests") {
     "//base",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
+    "//chrome/common:constants",
     "//components/performance_manager",
     "//components/prefs",
     "//components/prefs:test_support",
@@ -44,6 +47,7 @@ test("koan_unittests") {
     "//koan/browser/importer:reader",
     "//koan/browser/importer:sources",
     "//koan/browser/importer:spaces",
+    "//koan/browser/ui/webui:settings_rows",
     "//koan/browser/ui/webui:settings_url",
     "//koan/browser/updates:update_logic",
     "//koan/browser/window_sync:model",
@@ -52,15 +56,25 @@ test("koan_unittests") {
     "//sql",
     "//testing/gmock",
     "//testing/gtest",
+    "//ui/color:color_provider_key",
     "//url",
   ]
   data_deps = [ "//third_party/icu:icudata" ]
+
   if (is_linux) {
     sources += [ "//koan/browser/ui/fonts/koan_fonts_linux_unittest.cc" ]
     deps += [
       "//koan/browser/ui/fonts",
       "//ui/base",
       "//ui/gfx",
+    ]
+  }
+
+  if (is_linux && use_dbus) {
+    sources += [ "//koan/common/koan_linux_safe_storage_unittest.cc" ]
+    deps += [
+      "//components/os_crypt/async/browser:freedesktop_secret_key_provider",
+      "//koan/common:branding",
     ]
   }
 }
@@ -82,6 +96,7 @@ source_set("browsertests_impl") {
     "browser/koan_command_palette_browsertest.cc",
     "browser/koan_essentials_drop_browsertest.cc",
     "browser/koan_essentials_profiles_browsertest.cc",
+    "browser/koan_fullscreen_browsertest.cc",
     "browser/koan_glance_settings_browsertest.cc",
     "browser/koan_import_browsertest.cc",
     "browser/koan_playing_page_adoption_browsertest.cc",
@@ -90,6 +105,7 @@ source_set("browsertests_impl") {
     "browser/koan_sidebar_top_row_browsertest.cc",
     "browser/koan_sidebar_transitions_browsertest.cc",
     "browser/koan_space_containers_browsertest.cc",
+    "browser/koan_space_notifications_browsertest.cc",
     "browser/koan_spaces_browsertest.cc",
     "browser/koan_split_view_browsertest.cc",
     "browser/koan_tab_management_browsertest.cc",
@@ -101,15 +117,21 @@ source_set("browsertests_impl") {
     "//base/test:test_support",
     "//chrome/browser",
     "//chrome/browser/bookmarks",
+    "//chrome/browser/content_settings:content_settings_factory",
     "//chrome/browser/importer",
     "//chrome/browser/metrics",
+    "//chrome/browser/notifications",
+    "//chrome/browser/notifications:test_support",
     "//chrome/browser/password_manager/factories",
     "//chrome/browser/prefs",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/sessions:test_support",
     "//chrome/browser/ui:browser_tabstrip",
     "//chrome/browser/ui/browser_window",
+    "//chrome/browser/ui/exclusive_access",
+    "//chrome/browser/ui/fullscreen",
     "//chrome/browser/ui/navigator",
+    "//chrome/browser/ui/startup",
     "//chrome/browser/ui/tabs",
     "//chrome/browser/ui/tabs:tab_enums",
     "//chrome/browser/ui/tabs:tab_strip",
@@ -128,15 +150,20 @@ source_set("browsertests_impl") {
     "//components/autofill/core/browser:test_support",
     "//components/bookmarks/browser",
     "//components/bookmarks/test",
+    "//components/content_settings/core/browser",
+    "//components/content_settings/core/common",
     "//components/keyed_service/core",
     "//components/password_manager/core/browser:password_form",
     "//components/password_manager/core/browser/password_store:password_store_interface",
     "//components/password_manager/core/browser/password_store:test_support",
+    "//components/permissions",
+    "//components/permissions:test_support",
     "//components/prefs",
     "//components/signin/public/base",
     "//components/split_tabs",
     "//components/tab_groups",
     "//components/tabs:public",
+    "//components/url_formatter",
     "//components/user_data_importer/common",
     "//content/public/browser",
     "//content/public/common",
@@ -164,6 +191,7 @@ source_set("browsertests_impl") {
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/blink/public/common",
+    "//third_party/blink/public/mojom:mojom_core",
     "//ui/actions",
     "//ui/base",
     "//ui/base:types",
@@ -173,6 +201,7 @@ source_set("browsertests_impl") {
     "//ui/gfx",
     "//ui/gfx/codec",
     "//ui/gfx/geometry",
+    "//ui/message_center/public/cpp",
     "//ui/views",
     "//ui/views:test_support",
     "//url",

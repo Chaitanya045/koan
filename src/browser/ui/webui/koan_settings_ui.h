@@ -34,8 +34,9 @@ void ExtendSettingsUI(content::WebUI& web_ui, content::WebUIDataSource& source);
 // Settings > Import, Chromium's import dialog (#363; import_data_handler.cc
 // hook): Koan's own items of a source with `services_supported`, in the
 // dialog's BrowserProfile ("koanSpaces": Spaces and pinned tabs, the
-// checkbox of import_data_dialog.html.ts's hook); and the Koan items the
-// dialog's checkboxes ask for (`types`: each checkbox's pref name, whether
+// checkbox of import_data_dialog.html.ts's hook; "koanSpaceProfiles": its
+// Spaces have their own profiles, said on the last step); and the Koan items
+// the dialog's checkboxes ask for (`types`: each checkbox's pref name, whether
 // it is checked).
 void AddImportDialogItems(uint16_t services_supported,
                           base::DictValue& browser_profile);

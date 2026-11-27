@@ -1,8 +1,20 @@
 diff --git a/chrome/browser/resources/settings/people_page/import_data_dialog.html.ts b/chrome/browser/resources/settings/people_page/import_data_dialog.html.ts
-index 89321068222f0387855a126a3fd8ea2deca1a4bf..bd6f8a98d16ce75f5c81bd10c99452fe8c9d943b 100644
+index 89321068222f0387855a126a3fd8ea2deca1a4bf..dcdd92196d515ed5c46004b34b89ee201bcf3e71 100644
 --- a/chrome/browser/resources/settings/people_page/import_data_dialog.html.ts
 +++ b/chrome/browser/resources/settings/people_page/import_data_dialog.html.ts
-@@ -70,6 +70,12 @@ export function getHtml(this: SettingsImportDataDialogElement) {
+@@ -23,6 +23,11 @@ export function getHtml(this: SettingsImportDataDialogElement) {
+                 pref-key="bookmark_bar.show_on_all_tabs">
+             </settings-toggle-button>
+           </div>
++          <!-- Koan: Spaces with their own profiles (koan_settings_ui.h). -->
++          <div id="koanSpaceProfilesNote" class="description"
++              ?hidden="${!this.selected_.koanSpaceProfiles}">
++            $i18n{koanImportSpaceProfiles}
++          </div>
+         </div>
+ 
+         <div ?hidden="${this.hasImportStatus_(ImportDataStatus.SUCCEEDED)}">
+@@ -70,6 +75,12 @@ export function getHtml(this: SettingsImportDataDialogElement) {
                  pref-key="import_dialog_autofill_form_data"
                  label="$i18n{importAutofillFormData}" no-set-pref>
              </settings-checkbox>

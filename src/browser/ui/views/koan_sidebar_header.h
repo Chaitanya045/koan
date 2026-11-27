@@ -79,6 +79,17 @@ bool ShowSidebarButtonContextMenu(BrowserWindowInterface* browser,
                                   const gfx::Point& screen_point,
                                   ui::mojom::MenuSourceType source_type);
 
+// Whether Chromium's app menu, opened from `button`, lines up with the
+// button's leading edge and extends towards the trailing side
+// (views::MenuAnchorPosition::kTopLeft), rather than with its trailing edge
+// as from the toolbar's ⋮ at the window's trailing end (kTopRight, which
+// AppMenu and ActionAppMenu hard-code). True for Koan's app menu button in
+// the sidebar's top row (KoanAppMenuButton, Linux) while the sidebar is on
+// the leading side, so the menu opens over the page and not off the window;
+// false with tabs on the right and for any other button. The menu
+// controller mirrors both for right-to-left layouts.
+bool AlignsAppMenuWithLeadingEdge(const views::View* button);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_SIDEBAR_HEADER_H_

@@ -4,12 +4,15 @@
 
 #include "koan/browser/koan_prefs.h"
 
+#include "build/build_config.h"
+#include "chrome/common/pref_names.h"
 #include "components/performance_manager/public/user_tuning/prefs.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/color/system_theme.h"
 
 namespace koan {
 
@@ -43,5 +46,27 @@ TEST(KoanPrefsTest, MemorySaverIsOnByDefault) {
       local_state.GetInteger(
           performance_manager::user_tuning::prefs::kMemorySaverModeState));
 }
+
+#if BUILDFLAG(IS_LINUX)
+// On Linux a profile starts on Chromium's classic theme, whose frame and
+// toolbar are Koan's colours, not on the desktop's GTK or Qt theme (#486).
+TEST(KoanPrefsTest, LinuxStartsOnTheClassicThemeNotTheToolkitOne) {
+  sync_preferences::TestingPrefServiceSyncable prefs;
+  // As ThemeService::RegisterProfilePrefs() does on a GNOME desktop.
+  prefs.registry()->RegisterIntegerPref(
+      ::prefs::kSystemTheme, static_cast<int>(ui::SystemTheme::kGtk));
+
+  prefs::OverrideSystemThemeDefault(prefs.registry());
+  EXPECT_EQ(static_cast<int>(ui::SystemTheme::kDefault),
+            prefs.GetInteger(::prefs::kSystemTheme));
+
+  // A value already stored is the profile's; KoanSystemThemeLock moves the
+  // profile off it when the browser starts.
+  prefs.SetInteger(::prefs::kSystemTheme,
+                   static_cast<int>(ui::SystemTheme::kQt));
+  EXPECT_EQ(static_cast<int>(ui::SystemTheme::kQt),
+            prefs.GetInteger(::prefs::kSystemTheme));
+}
+#endif
 
 }  // namespace koan
