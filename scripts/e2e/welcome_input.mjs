@@ -15,7 +15,7 @@
 // listeners). Without real input, the same keys and clicks go through CDP
 // (the page's side only) and the AppKit checks are reported as skipped.
 // welcome_input.flags forces the first run. Run by scripts/mac/suite.sh.
-import { CDP_PORT, check, evalIn, finish, onPage, sleep, viewTree, waitFor } from './lib/koan.mjs';
+import { centerOf, half, CDP_PORT, check, evalIn, finish, onPage, sleep, viewTree, waitFor } from './lib/koan.mjs';
 import { IS_MAC, alive, calibrate, fatalInLog, key, makeKey, realClick, realInput,
          realInputWhyNot, realKey, realPointer, skipped, windowOf } from './lib/mac.mjs';
 
@@ -42,8 +42,11 @@ const focused = () => js(`(() => { const a = document.activeElement;
     return a ? a.tagName + (a.id ? '#' + a.id : '') + (a.name ? '[' + a.name + ']' : '') +
                (a.value ? '=' + a.value : '') : ''; })()`);
 // The centre of `selector` in the page.
-const centre = selector => js(`(() => { const r = document.querySelector(${JSON.stringify(selector)})
-    ?.getBoundingClientRect(); return r && { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+const centre = async selector => {
+  const r = await js(`(() => { const r = document.querySelector(${JSON.stringify(selector)})
+      ?.getBoundingClientRect(); return r && { x: r.x, y: r.y, width: r.width, height: r.height }; })()`);
+  return r && centerOf(r);
+};
 const overlay = async () => (await viewTree()).find(
     v => v.cls === 'WebView' && v.shown && v.path.at(-1) === 'BrowserView');
 
@@ -156,7 +159,7 @@ if (realOk()) {
   const w0 = await windowBounds();
   const md0 = (await seen()).mousedown;
   const o = await overlay();
-  await realClick(origin.x + o.ax + o.w / 2, origin.y + o.ay + 12, 900);
+  await realClick(origin.x + o.ax + half(o.w), origin.y + o.ay + 12, 900);
   const w1 = await windowBounds();
   check('W-1c: a click in the top band reaches the page', (await seen()).mousedown > md0);
   check('...and the window did not move', w0 && w1 && w0.left === w1.left && w0.top === w1.top,

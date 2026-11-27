@@ -20,7 +20,7 @@
 //
 //   scripts/e2e/run.sh spaces
 import {
-  ACCEL, ALT, CTRL, IS_MAC, META, NATIVE_MENUS, NATIVE_MENU_WHY, SHIFT, UI_PORT, browserCall,
+  centerOf, whole, ACCEL, ALT, CTRL, IS_MAC, META, NATIVE_MENUS, NATIVE_MENU_WHY, SHIFT, UI_PORT, browserCall,
   check, connect, evalIn, finish, key as pageKey, keyToWidget, menuMouse, openMenus,
   pages as pageTargets, readPref, sleep, toastTexts, typeInto, viewEvent, viewMouse, viewTree,
   visiblePage, waitFor, windowTints,
@@ -484,7 +484,7 @@ if (IS_MAC && realInput()) {
   const page = await visiblePage();
   const b = page && (await windowOf(page.id))?.bounds;
   if (b) {
-    await ptr('move', Math.round(b.left + b.width * 3 / 4), Math.round(b.top + b.height / 2), 100);
+    await ptr('move', whole(b.left + b.width * 3 / 4), whole(b.top + b.height / 2), 100);
   }
 }
 if (cancel) {
@@ -604,8 +604,7 @@ check('...and deletes the Space, showing another',
 async function rootClick(view) {
   const vs = await views();
   const root = vs.find(v => v.cls === 'BrowserRootView' && v.widget === view.widget);
-  const x = Math.round(view.ax + view.w / 2);
-  const y = Math.round(view.ay + view.h / 2);
+  const { x, y } = centerOf(view);
   await mouse(root, 'mouseMoved', x, y);
   await mouse(root, 'mousePressed', x, y);
   await mouse(root, 'mouseReleased', x, y);

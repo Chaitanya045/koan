@@ -14,7 +14,7 @@
 // keyboardFocus()), and the same values are set by pressing the slider.
 //
 //   scripts/e2e/run.sh theme_glass
-import { IS_MAC, check, finish } from './lib/koan.mjs';
+import { half, IS_MAC, check, finish } from './lib/koan.mjs';
 import { skipped } from './lib/mac.mjs';
 import {
   NO_KEYBOARD_FOCUS, VK, click, closePicker, keyboardFocus, pagePrefersDark, palette, picker,
@@ -64,7 +64,7 @@ const pressSlider = async value => {
   // The ends exactly: a press past them.
   const x = value <= MIN ? 0 : value >= 1 ? slider.w - 1
                           : Math.round(5 + thumb / 2 + progress(value) * (slider.w - 10 - thumb));
-  await click(slider, x, Math.round(slider.h / 2));
+  await click(slider, x, half(slider.h));
 };
 
 // The slider works without colours on glass. Tab to it; End is 1.

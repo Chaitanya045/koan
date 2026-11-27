@@ -13,7 +13,7 @@
 // (fullscreen_multiple, fullscreen_single); this one checks the bookmarks
 // bar there.
 import {
-  ACCEL, ALT, CTRL, IS_MAC, SHIFT, UI_PORT, browserCall, check, connect, evalIn, finish, front,
+  half, ACCEL, ALT, CTRL, IS_MAC, SHIFT, UI_PORT, browserCall, check, connect, evalIn, finish, front,
   key, onPage, pages, propsOf, showPane, sleep, toastTexts, typeInto, viewMouse, viewTree,
   waitFor,
 } from './lib/koan.mjs';
@@ -78,7 +78,7 @@ async function freshTestPage() {
 async function clickLink(page, id, modifiers = 0) {
   const box = await evalIn(page, `(() => {
     const r = document.getElementById('${id}').getBoundingClientRect();
-    return { x: r.x + 20, y: r.y + r.height / 2 };
+    return { x: Math.floor(r.x + 20), y: Math.floor(r.y + r.height / 2) };
   })()`);
   await onPage(page, async c => {
     for (const type of ['mousePressed', 'mouseReleased']) {
@@ -634,8 +634,8 @@ const floating = v => !!v.vs.find(x => x.cls === 'KoanUrlBarBackdrop' && x.shown
 async function openBar() {
   const pill = (await win()).shown('KoanUrlPill');
   if (pill) {
-    await viewMouse(pill, 'mousePressed', 30, pill.h / 2);
-    await viewMouse(pill, 'mouseReleased', 30, pill.h / 2);
+    await viewMouse(pill, 'mousePressed', 30, half(pill.h));
+    await viewMouse(pill, 'mouseReleased', 30, half(pill.h));
     await sleep(1000);
   }
   return win();
@@ -701,8 +701,8 @@ const replace = 'koan.urlbar.replace_newtab';
 const pageCount = async () => (await pages()).length;
 async function newTabRowClick() {
   const r = newTabRow(await win());
-  await viewMouse(r, 'mousePressed', 20, r.h / 2);
-  await viewMouse(r, 'mouseReleased', 20, r.h / 2);
+  await viewMouse(r, 'mousePressed', 20, half(r.h));
+  await viewMouse(r, 'mouseReleased', 20, half(r.h));
   await sleep(1200);
 }
 let count = await pageCount();

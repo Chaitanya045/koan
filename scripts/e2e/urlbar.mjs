@@ -22,7 +22,7 @@
 // profile was started with. With SHOTS=<dir> (see run.sh) it saves
 // screenshots of each state there.
 import { copyFileSync, readdirSync, statSync } from 'node:fs';
-import { browserCall, setKoanPref, viewEvent, viewTree, visiblePage, waitFor, ACCEL, IS_MAC,
+import { half, whole, browserCall, setKoanPref, viewEvent, viewTree, visiblePage, waitFor, ACCEL, IS_MAC,
          sendKey } from './lib/koan.mjs';
 import { menuKey } from './lib/mac.mjs';
 
@@ -111,8 +111,8 @@ async function click(view) {
 // Clicks `view` through its widget's root view, so the event is hit-tested
 // like a real click (menus need that).
 async function rootClick(view) {
-  const x = Math.round(view.ax + Math.min(view.w / 2, 20));
-  const y = Math.round(view.ay + view.h / 2);
+  const x = whole(view.ax + Math.min(half(view.w), 20));
+  const y = whole(view.ay + half(view.h));
   for (const type of ['mousePressed', 'mouseReleased']) {
     await uiEvent(view.root, 'DOM.dispatchMouseEvent',
                   { type, x, y, button: 'left', wheelDirection: 'none' });

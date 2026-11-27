@@ -10,8 +10,9 @@ import { spawn } from 'node:child_process';
 import { openSync, readFileSync, writeFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import {
-  ALT, CDP_PORT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, finish, key as keyTo,
-  pages, sleep, visiblePage, waitFor, ACCEL, IS_MAC, META, NATIVE_MENUS, NATIVE_MENU_WHY,
+  ALT, CDP_PORT, CTRL, SHIFT, UI_PORT, browserCall, centerOf, check, connect, finish, key as keyTo,
+  pages, pickMenu, sleep, visiblePage, waitFor, whole, ACCEL, IS_MAC, META, NATIVE_MENUS,
+  NATIVE_MENU_WHY,
 } from './lib/koan.mjs';
 import { skipped } from './lib/mac.mjs';
 // Library History: Ctrl+H, on macOS Cmd+Y (koan_shortcut_table.cc).
@@ -68,11 +69,11 @@ async function mouse(view, type, x, y, button = 'left') {
   await ui.send('DOM.enable');
   await ui.send('DOM.getDocument', { depth: -1 });
   await ui.send('DOM.dispatchMouseEvent', { nodeId: view.nodeId,
-      event: { type, x, y, button, wheelDirection: 'none' } });
+      event: { type, x: whole(x), y: whole(y), button, wheelDirection: 'none' } });
   ui.close();
 }
 async function click(view, button = 'left') {
-  const x = Math.floor(view.w / 2), y = Math.floor(view.h / 2);
+  const { x, y } = centerOf(view, { local: true });
   await mouse(view, 'mousePressed', x, y, button);
   await mouse(view, 'mouseReleased', x, y, button);
 }
@@ -115,28 +116,6 @@ async function library() {
   };
 }
 const seeded = s => s.titles.filter(t => t?.startsWith('Seeded')).sort();
-
-// Picks the items at `indices` in turn, each in the newest (sub)menu. UI
-// DevTools can't read their labels (MenuItemView paints them), so by
-// position. Returns what went wrong, or null.
-async function pickMenu(...indices) {
-  for (const index of indices) {
-    const vs = await views();
-    const root = vs.findLast(v => v.cls.endsWith('RootView') && v.cls !== 'BrowserRootView' &&
-                                  vs.some(i => i.cls === 'MenuItemView' && i.path[0] === v.cls));
-    const items = vs.slice(vs.indexOf(root))
-        .filter(v => v.cls === 'MenuItemView' && v.path[0] === root?.cls);
-    const item = items[index];
-    if (!item) return `no item ${index} of ${items.length}`;
-    const at = [item.x - root.x + 10, item.y - root.y + item.h / 2];
-    await mouse(root, 'mouseMoved', ...at);
-    await sleep(600);
-    await mouse(root, 'mousePressed', ...at);
-    await mouse(root, 'mouseReleased', ...at);
-    await sleep(800);
-  }
-  return null;
-}
 
 // --- Restarting Koan on the same profile, with the database or prefs
 // edited while it's down. ---

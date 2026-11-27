@@ -25,7 +25,7 @@
 // it on by default).
 import { readFileSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { ACCEL, CDP_PORT, IS_MAC, NATIVE_MENUS, NATIVE_MENU_WHY, browserCall, createSpace,
+import { half, ACCEL, CDP_PORT, IS_MAC, NATIVE_MENUS, NATIVE_MENU_WHY, browserCall, createSpace,
          menuMouse, openMenus, pages, sleep, typeInto, viewMouse, viewTree, waitFor, check,
          finish } from './lib/koan.mjs';
 import { skipped } from './lib/mac.mjs';
@@ -204,7 +204,7 @@ p = picker(t);
 check('Add brings a third dot', p.p.Dots.split(';').length === 3, p.p.Dots);
 
 const slider = shown(t, 'KoanThemeOpacitySlider')[0];
-await click(slider, slider.w - 6, Math.round(slider.h / 2));
+await click(slider, slider.w - 6, half(slider.h));
 t = await tree();
 p = picker(t);
 check('The opacity slider goes up to 0.8', Math.abs(+p.p.Opacity - 0.8) < 0.001, p.p.Opacity);
@@ -212,7 +212,7 @@ check('The opacity slider goes up to 0.8', Math.abs(+p.p.Opacity - 0.8) < 0.001,
 const dial = shown(t, 'KoanThemeGrainDial')[0];
 // The handle sits at the top of the dial (8px margin around the dial, 73px,
 // 66px on macOS): from there to 3 o'clock.
-const dialCentre = Math.floor(dial.w / 2);
+const dialCentre = half(dial.w);
 await drag(dial, [dialCentre, 8], [dial.w - 2, dialCentre]);
 t = await tree();
 p = picker(t);
@@ -377,7 +377,7 @@ check('After a restart, the Space has its theme', !!saved && p?.p.Dots === saved
           t.filter(v => v.cls === 'Label' && inCustom(v)).map(v => v.p.Text).join('|'));
     const slider = t.find(v => v.cls === 'KoanThemeOpacitySlider' && v.shown);
     for (const x of [0.2, 0.7, 0.4]) {
-      if (slider) await click(slider, Math.round(slider.w * x), Math.round(slider.h / 2));
+      if (slider) await click(slider, Math.round(slider.w * x), half(slider.h));
     }
     check('The slider works with the row shown', !!picker(await tree()));
     t = await tree();
