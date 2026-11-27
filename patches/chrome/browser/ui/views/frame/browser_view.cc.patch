@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index 7b568f6..56f0160 100644
+index 7b568f6..21df210 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
 @@ -310,6 +310,8 @@
@@ -76,7 +76,18 @@ index 7b568f6..56f0160 100644
  #if BUILDFLAG(IS_MAC)
    // The top container while in immersive fullscreen on macOS lives in another
    // Widget (OverlayWidgetMac). This means that BrowserView does not need to
-@@ -6031,7 +6050,11 @@ void BrowserView::OnImmersiveFullscreenEntered() {
+@@ -4820,7 +4839,9 @@ int BrowserView::NonClientHitTest(const gfx::Point& point) {
+   // otherwise within the bounds of this view, the point is considered to be
+   // within the client area.
+   gfx::Rect bounds_from_toolbar_top = bounds();
+-  bounds_from_toolbar_top.Inset(gfx::Insets::TLBR(GetClientAreaTop(), 0, 0, 0));
++  // Koan: never above the BrowserView, where Koan slides the toolbar away.
++  bounds_from_toolbar_top.Inset(gfx::Insets::TLBR(
++      koan::ClientAreaTopForHitTest(GetClientAreaTop()), 0, 0, 0));
+   if (bounds_from_toolbar_top.Contains(point)) {
+     return HTCLIENT;
+   }
+@@ -6031,7 +6052,11 @@ void BrowserView::OnImmersiveFullscreenEntered() {
      control->CloseMenu();
    }
  
