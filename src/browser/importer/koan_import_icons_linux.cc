@@ -61,8 +61,7 @@ void AddDir(std::vector<base::FilePath>& dirs, const base::FilePath& dir) {
 // The icon at `file` as a data: URL, or empty.
 std::string DataUrl(const base::FilePath& file) {
   std::string contents;
-  if (file.empty() ||
-      !base::ReadFileToStringWithMaxSize(file, &contents, kMaxIconBytes)) {
+  if (file.empty() || !ReadRegularFile(file, kMaxIconBytes, contents)) {
     return std::string();
   }
   return base::StrCat(

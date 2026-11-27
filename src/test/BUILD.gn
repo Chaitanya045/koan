@@ -169,6 +169,12 @@ source_set("browsertests_impl") {
     "//ui/views:test_support",
     "//url",
   ]
+  if (is_linux) {
+    # The welcome never waits for a blocked detection (#493): upstream's
+    # Firefox folder moves to a fixture only on Linux.
+    sources += [ "browser/koan_welcome_browsertest.cc" ]
+    deps += [ "//koan/browser/ui/webui" ]
+  }
 }
 
 test("koan_browsertests") {

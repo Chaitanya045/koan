@@ -4,6 +4,8 @@
 
 #include "koan/browser/importer/koan_import_sources.h"
 
+#include <sys/stat.h>
+
 #include <string>
 #include <vector>
 
@@ -328,6 +330,48 @@ TEST(KoanImportSourcesTest, AppIcons) {
   EXPECT_EQ(std::vector<std::string>{"other.app"}, AppIconNames("other.app"));
 }
 #endif  // BUILDFLAG(IS_LINUX)
+
+// Another browser's folder may hold anything: a FIFO, a folder or a huge
+// file where a list of profiles should be is skipped, never read (a FIFO's
+// read waits for a writer forever, and the welcome waited on it, #493).
+TEST(KoanImportSourcesTest, ReadsOnlySmallRegularFiles) {
+  base::ScopedTempDir temp;
+  ASSERT_TRUE(temp.CreateUniqueTempDir());
+  const base::FilePath file = temp.GetPath().AppendASCII("file");
+  Write(file, "12345");
+  std::string contents;
+  EXPECT_TRUE(ReadRegularFile(file, 5, contents));
+  EXPECT_EQ("12345", contents);
+  EXPECT_FALSE(ReadRegularFile(file, 4, contents));
+  EXPECT_FALSE(ReadRegularFile(temp.GetPath(), 1024, contents));
+  EXPECT_FALSE(
+      ReadRegularFile(temp.GetPath().AppendASCII("missing"), 1024, contents));
+  const base::FilePath fifo = temp.GetPath().AppendASCII("fifo");
+  ASSERT_EQ(0, mkfifo(fifo.value().c_str(), 0600));
+  EXPECT_FALSE(ReadRegularFile(fifo, 1024, contents));
+}
+
+TEST(KoanImportSourcesTest, DetectSkipsSpecialFiles) {
+  base::ScopedTempDir temp;
+  ASSERT_TRUE(temp.CreateUniqueTempDir());
+  const base::FilePath root = temp.GetPath();
+#if BUILDFLAG(IS_MAC)
+  const base::FilePath chrome = root.AppendASCII("Google/Chrome");
+  const base::FilePath zen = root.AppendASCII("zen");
+#else
+  const base::FilePath chrome = root.AppendASCII(".config/google-chrome");
+  const base::FilePath zen = root.AppendASCII(".zen");
+#endif
+  // Chrome's Local State a FIFO: its default profile, unnamed.
+  Write(chrome.AppendASCII("Default/History"), "");
+  ASSERT_EQ(0, mkfifo(chrome.AppendASCII("Local State").value().c_str(), 0600));
+  // Zen's profiles.ini a FIFO: no profiles.
+  ASSERT_TRUE(base::CreateDirectory(zen));
+  ASSERT_EQ(0, mkfifo(zen.AppendASCII("profiles.ini").value().c_str(), 0600));
+  const std::vector<SourceProfile> sources =
+      DetectSourceProfiles(root, "en-US");
+  EXPECT_EQ(std::vector<std::u16string>{u"Google Chrome"}, Names(sources));
+}
 
 // The hook in ImporterList: Koan's sources before Chromium's, the welcome's
 // pick first; found only under the test root, never the user's folders.

@@ -1217,7 +1217,10 @@ space around the card drags the window.
   from another browser…". Pick one, then Next, and Chromium's import dialog
   opens on that browser once the setup is over, where you choose what to
   bring. "Start fresh" (the first choice) or the step's Skip imports
-  nothing, even if you picked a browser before.
+  nothing, even if you picked a browser before. The setup never waits for the
+  list: if finding the browsers (or loading the search engines, which waits
+  for your keyring) takes more than a few seconds, the step offers "Import
+  from another browser…" and the list replaces it once it is ready.
 - **Search engine**: Brave Search is chosen; pick another if you like. It
   applies on Next. In the European Economic Area (and the other regions where
   Chromium shows a search engine choice screen) the step *is* that choice

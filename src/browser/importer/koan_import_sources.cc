@@ -4,10 +4,13 @@
 
 #include "koan/browser/importer/koan_import_sources.h"
 
+#include <sys/stat.h>
+
 #include <algorithm>
 #include <functional>
 #include <iterator>
 #include <optional>
+#include <string>
 #include <utility>
 
 #include "base/base_paths.h"
@@ -318,6 +321,9 @@ constexpr uint16_t kChromiumServices = user_data_importer::HISTORY |
                                        user_data_importer::FAVORITES |
                                        user_data_importer::PASSWORDS;
 
+// A profiles.ini or a Local State is far smaller.
+constexpr size_t kMaxProfileListBytes = 16 * 1024 * 1024;
+
 base::Time LastModified(const base::FilePath& path) {
   base::File::Info info;
   return base::GetFileInfo(path, &info) ? info.last_modified : base::Time();
@@ -355,6 +361,17 @@ Preferred& GetPreferred() {
 
 base::span<const KnownBrowser> KnownBrowsers() {
   return kBrowsers;
+}
+
+bool ReadRegularFile(const base::FilePath& path,
+                     size_t max_size,
+                     std::string& contents) {
+  base::stat_wrapper_t info;
+  if (base::File::Stat(path, &info) != 0 || !S_ISREG(info.st_mode) ||
+      static_cast<uint64_t>(info.st_size) > max_size) {
+    return false;
+  }
+  return base::ReadFileToStringWithMaxSize(path, &contents, max_size);
 }
 
 bool HasTestRoot() {
@@ -555,13 +572,16 @@ std::vector<SourceProfile> DetectSourceProfiles(const base::FilePath& root,
     std::vector<ProfileDir> profiles;
     std::string contents;
     if (browser.engine == Engine::kGecko) {
-      if (base::ReadFileToString(data_dir.AppendASCII("profiles.ini"),
-                                 &contents)) {
+      if (ReadRegularFile(data_dir.AppendASCII("profiles.ini"),
+                          kMaxProfileListBytes, contents)) {
         profiles = ParseProfilesIni(contents, data_dir);
       }
     } else if (base::DirectoryExists(data_dir)) {
       // Without a Local State (or unreadable), "Default".
-      base::ReadFileToString(data_dir.AppendASCII("Local State"), &contents);
+      if (!ReadRegularFile(data_dir.AppendASCII("Local State"),
+                           kMaxProfileListBytes, contents)) {
+        contents.clear();
+      }
       profiles = ParseLocalState(contents, data_dir);
     }
 

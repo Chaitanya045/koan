@@ -90,6 +90,13 @@ base::FilePath SearchRoot();
 // Whether --koan-import-test-root is set.
 bool HasTestRoot();
 
+// Reads `path` into `contents` if it is a regular file of at most
+// `max_size` bytes. Another browser's folder may hold anything: a FIFO or a
+// device would block the detection (and the welcome waiting on it, #493).
+bool ReadRegularFile(const base::FilePath& path,
+                     size_t max_size,
+                     std::string& contents);
+
 // The known browser whose data folder under `root` holds `profile_dir`, or
 // null.
 const KnownBrowser* FindBrowser(const base::FilePath& root,
