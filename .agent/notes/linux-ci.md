@@ -57,8 +57,8 @@ ones only: a running chain still needs its source). A labelled pull
 request's run, or a manual run of another ref, may still *build on* the
 base (`scripts/ci/find_base.sh linux.yml koan-linux`, which only picks
 successful `schedule` and `workflow_dispatch` runs of `develop` that still
-have both archives), but keeps its source 3 days, uploads no finished
-build, and its cleanup deletes only its own source and out slices. So
+have both archives; "How the base is found" in macos-ci.md), but keeps
+its source 3 days, uploads no finished build, and its cleanup deletes only its own source and out slices. So
 objects built from unmerged code never end up in the published Flatpak, and
 a pull request that moves `CHROMIUM_VERSION` can't delete `develop`'s base.
 Forks' pull requests are never built.
