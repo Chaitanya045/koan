@@ -55,6 +55,14 @@ What B does not do, and why:
   only (`GetRestoredClipRegion()`). The page card inside is rounded on all four. Rounding the window's bottom corners is
   a frame change for every Koan window on Linux (a separate issue), not a quick-window one.
 - **The address can't be selected or copied with the mouse**: it is the drag area (Arc's Little Arc's title is too).
+  On Linux a press on the caption still reaches the views (`WindowEventFilterLinux` only starts the move once the
+  pointer has moved past the drag threshold), so the omnibox would select its text, or start dragging it, instead of
+  the window moving (seen on the first build of this round): the row's event targeter sends the address's events to
+  the row, which handles none.
+- **Popups' address-row lines**: upstream draws `kColorLocationBarBorderOpaque` lines above, below and beside a
+  popup's address row (`LocationBarView::OnPaintBorder()`, `OpaqueBrowserFrameView::PaintClientEdge()`). Koan's mixer
+  maps it to `kColorToolbar`, the frame's colour, for every popup (a sign-in popup's row loses a hairline against the
+  frame), since no per-window colour exists without a patch.
   The page's own context menu, Move to Space or the share menu after the move remain.
 
 ## Where links from other apps arrive (checked in the source)

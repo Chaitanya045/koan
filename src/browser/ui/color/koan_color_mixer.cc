@@ -496,6 +496,10 @@ void AddKoanColorMixer(ui::ColorProvider* provider,
   // No lines between the surfaces.
   mixer[kColorToolbarContentAreaSeparator] = {SK_ColorTRANSPARENT};
   mixer[kColorVerticalTabStripShadow] = {SK_ColorTRANSPARENT};
+  // A popup's address row has lines above and below it and at its sides
+  // (LocationBarView::OnPaintBorder(), OpaqueBrowserFrameView::
+  // PaintClientEdge()); a quick window's row is one surface with the frame.
+  mixer[kColorLocationBarBorderOpaque] = {kColorToolbar};
 
   // Essentials tiles are filled, not outlined (koan_essentials.cc).
   mixer[kColorVerticalTabPinnedOutline] = {SK_ColorTRANSPARENT};

@@ -161,6 +161,8 @@ class KoanQuickWindowController : public ui::AcceleratorTarget,
   void ExecuteCommand(int command_id, int event_flags) override;
 
  private:
+  class RowTargeter;
+
   void CreateButtons();
   // The top row: the window's colour, and room at its ends for the traffic
   // lights (macOS) and the buttons.
@@ -170,6 +172,7 @@ class KoanQuickWindowController : public ui::AcceleratorTarget,
   bool destroying_ = false;
   raw_ptr<views::FocusManager> focus_manager_ = nullptr;
   std::unique_ptr<views::Widget> buttons_;
+  std::unique_ptr<RowTargeter> row_targeter_;
   raw_ptr<views::View> move_button_ = nullptr;
   std::vector<base::CallbackListSubscription> button_subscriptions_;
   std::unique_ptr<ui::SimpleMenuModel> menu_model_;

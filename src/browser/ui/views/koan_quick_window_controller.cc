@@ -66,6 +66,8 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/box_layout_view.h"
 #include "ui/views/layout/layout_provider.h"
+#include "ui/views/view_targeter.h"
+#include "ui/views/view_targeter_delegate.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -183,6 +185,34 @@ views::ImageButton* AddButton(
 }
 
 }  // namespace
+
+// The top row's events: the read-only address (and the location bar around
+// it) goes to the row itself, which handles no mouse event, so a press there
+// is only the window's caption (IsCaptionAt()): on Linux a press on the
+// caption still reaches the views (WindowEventFilterLinux), and the omnibox
+// would select its text or start dragging it instead of the window moving.
+// The security chip and page actions keep their events.
+class KoanQuickWindowController::RowTargeter
+    : public views::ViewTargeterDelegate {
+ public:
+  explicit RowTargeter(ToolbarView* toolbar) : toolbar_(toolbar) {}
+
+  // views::ViewTargeterDelegate:
+  views::View* TargetForRect(views::View* root,
+                             const gfx::Rect& rect) override {
+    views::View* target = ViewTargeterDelegate::TargetForRect(root, rect);
+    LocationBarView* location_bar = toolbar_->location_bar_view();
+    if (location_bar && (target == location_bar ||
+                         (location_bar->omnibox_view() &&
+                          location_bar->omnibox_view()->Contains(target)))) {
+      return toolbar_;
+    }
+    return target;
+  }
+
+ private:
+  const raw_ptr<ToolbarView> toolbar_;
+};
 
 int QuickWindowRowHeight(const BrowserView* browser_view) {
   const ToolbarView* toolbar = browser_view ? browser_view->toolbar() : nullptr;
@@ -418,6 +448,9 @@ void KoanQuickWindowController::StyleRow() {
   // The window's colour, as the main window's sidebar around its card; the
   // address takes it too (AdjustLocationBarBackground()).
   toolbar->SetBackground(views::CreateSolidBackground(kColorToolbar));
+  row_targeter_ = std::make_unique<RowTargeter>(toolbar);
+  toolbar->SetEventTargeter(
+      std::make_unique<views::ViewTargeter>(row_targeter_.get()));
   // The popup row is a FlexLayout, which keeps to its host's insets: the
   // address ends where the buttons start, so they cover neither a long
   // address nor its page actions, and on macOS it starts after the lights.
@@ -438,16 +471,9 @@ bool KoanQuickWindowController::IsCaptionAt(const gfx::Point& point) {
   if (!toolbar->HitTestPoint(in_toolbar)) {
     return false;
   }
-  const views::View* target = toolbar->GetEventHandlerForPoint(in_toolbar);
-  if (target == toolbar) {
-    return true;
-  }
-  // The address is read-only in a popup: it drags the window, as a title
-  // would. Its security chip and page actions keep their clicks.
-  LocationBarView* location_bar = toolbar->location_bar_view();
-  return location_bar && (target == location_bar ||
-                          (location_bar->omnibox_view() &&
-                           location_bar->omnibox_view()->Contains(target)));
+  // The row itself, and its read-only address (RowTargeter): it drags the
+  // window, as a title would.
+  return toolbar->GetEventHandlerForPoint(in_toolbar) == toolbar;
 }
 
 void KoanQuickWindowController::CreateButtons() {
@@ -532,6 +558,13 @@ void KoanQuickWindowController::OnBrowserViewDestroying() {
     focus_manager_ = nullptr;
   }
   move_button_ = nullptr;
+  // The toolbar is still there (BrowserView's children outlive this).
+  if (row_targeter_) {
+    if (ToolbarView* toolbar = browser_view_->toolbar()) {
+      toolbar->SetEventTargeter(nullptr);
+    }
+    row_targeter_.reset();
+  }
   // Before the buttons they watch.
   button_subscriptions_.clear();
   buttons_.reset();
