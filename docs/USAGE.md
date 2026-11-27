@@ -1217,7 +1217,7 @@ with three sections down its side, and opens on the one you used last:
   middle-click opens it in the background and keeps the Library open.
   Hover a row for its visit time and the forget / reopen buttons;
   right-click for "Forget About This Site" (its history, cookies, site data
-  and cache). Right-click the History tab to clear history from the last
+  and cache, in Default and in every Space profile). Right-click the History tab to clear history from the last
   hour, 12 hours, today, week, month or everything (it asks first, naming
   the range), or to open `chrome://history`. Forgetting and clearing act
   on the profile the filter shows, and the question names it ("in the
