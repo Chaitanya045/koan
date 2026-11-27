@@ -88,14 +88,8 @@ std::vector<base::FilePath> RefusedRoots(content::WebContents* contents) {
     roots.push_back(user_data);
   }
   roots.push_back(contents->GetBrowserContext()->GetPath());
-  const base::FilePath home = base::GetHomeDir();
-  if (!home.empty()) {
-    for (const char* folder :
-         {".koan", ".ssh", ".gnupg", "Library/Keychains", "Library/Cookies",
-          ".aws", ".azure", ".config/gcloud", ".config/gh", ".docker", ".kube",
-          ".git-credentials", ".netrc", ".npmrc", ".pypirc"}) {
-      roots.push_back(home.Append(folder));
-    }
+  for (base::FilePath& folder : RefusedHomeFolders(base::GetHomeDir())) {
+    roots.push_back(std::move(folder));
   }
   return roots;
 }

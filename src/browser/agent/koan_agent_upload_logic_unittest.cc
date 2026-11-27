@@ -4,6 +4,7 @@
 
 #include "koan/browser/agent/koan_agent_upload_logic.h"
 
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace koan::agent {
@@ -116,4 +117,39 @@ TEST(KoanAgentUploadLogicTest, WhatTheIndicatorAndTheAuditSay) {
 }
 
 }  // namespace
+// Where no upload is taken from, under the home folder: the same list on the
+// Mac as before, and Linux's own stores there (issue #489).
+TEST(KoanAgentUploadLogicTest, CredentialStoresAreRefused) {
+  const base::FilePath home("/home/example");
+  const std::vector<base::FilePath> roots = RefusedHomeFolders(home);
+  for (const char* path : {".ssh", ".gnupg/pubring.kbx", ".koan/clients/a/key",
+                           ".aws/credentials"}) {
+    EXPECT_TRUE(IsUnderAny(home.Append(path), roots)) << path;
+  }
+  EXPECT_FALSE(IsUnderAny(home.Append("Downloads/cv.pdf"), roots));
+  EXPECT_FALSE(IsUnderAny(home.Append(".sshkeys.pdf"), roots));
+  EXPECT_TRUE(RefusedHomeFolders(base::FilePath()).empty());
+#if BUILDFLAG(IS_LINUX)
+  for (const char* path : {
+           ".local/share/keyrings/login.keyring",
+           ".local/share/kwalletd/kdewallet.kwl",
+           ".pki/nssdb/key4.db",
+           ".mozilla/firefox/abc.default/logins.json",
+           ".config/google-chrome/Default/Login Data",
+           ".config/chromium/Default/Cookies",
+           ".config/BraveSoftware/Brave-Browser/Default/Cookies",
+           ".var/app/dev.koan.Koan/config/koan/Default/Cookies",
+           ".var/app/org.mozilla.firefox/.mozilla/firefox/x/key4.db",
+       }) {
+    EXPECT_TRUE(IsUnderAny(home.Append(path), roots)) << path;
+  }
+  EXPECT_FALSE(IsUnderAny(home.Append(".local/share/Trash/x.pdf"), roots));
+  EXPECT_FALSE(IsUnderAny(home.Append(".config/koan-notes.txt"), roots));
+#else
+  EXPECT_TRUE(
+      IsUnderAny(home.Append("Library/Keychains/login.keychain-db"), roots));
+  EXPECT_FALSE(IsUnderAny(home.Append(".var/app/x"), roots));
+#endif
+}
+
 }  // namespace koan::agent
