@@ -12,8 +12,6 @@ source_set("webui") {
     "koan_new_tab_ui.h",
     "koan_settings_handler.cc",
     "koan_settings_handler.h",
-    "koan_settings_rows.cc",
-    "koan_settings_rows.h",
     "koan_settings_ui.cc",
     "koan_settings_ui.h",
     "koan_welcome_handler.cc",
@@ -29,6 +27,7 @@ source_set("webui") {
   ]
   deps = [
     ":resources",
+    ":settings_rows",
     ":welcome_resources",
     "//base",
     "//base:i18n",
@@ -86,6 +85,27 @@ source_set("webui") {
       "//koan/browser/containers",
     ]
   }
+}
+
+# What the settings show, as data (koan_settings_rows.h). Kept off the views
+# and the rest of //chrome/browser so that //koan/test:koan_unittests can
+# check every row's text.
+source_set("settings_rows") {
+  sources = [
+    "koan_settings_rows.cc",
+    "koan_settings_rows.h",
+  ]
+  deps = [
+    "//base",
+    "//chrome/browser:browser_process",
+    "//chrome/common:constants",
+    "//components/performance_manager",
+    "//components/prefs",
+    "//koan/browser:features",
+    "//koan/browser:prefs",
+    "//koan/browser/containers:access_prefs",
+    "//ui/base:features",
+  ]
 }
 
 # chrome://koan-settings, the old page, as an alias of the panes (pure, unit

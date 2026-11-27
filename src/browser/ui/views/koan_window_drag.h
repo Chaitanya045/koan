@@ -21,6 +21,10 @@
 
 class BrowserView;
 
+namespace views {
+class Widget;
+}  // namespace views
+
 namespace koan {
 
 // Zen's window dragging from the page (zen.view.drag-window-from-content):
@@ -113,6 +117,17 @@ class KoanWindowDragController : public TabStripModelObserver,
 
   base::WeakPtrFactory<KoanWindowDragController> weak_factory_{this};
 };
+
+#if BUILDFLAG(IS_LINUX)
+// Does what a press and drag on the title bar does (WindowEventFilterLinux):
+// asks the window manager to move `widget`'s window, from `point_in_root` (in
+// its root window, in DIPs), while the button is down. The window manager
+// takes the pointer, so the button counts as released. Returns false where
+// there is no window manager (headless: the e2e tests) or the left button is
+// up already.
+bool StartWindowManagerMove(views::Widget* widget,
+                            const gfx::Point& point_in_root);
+#endif
 
 }  // namespace koan
 

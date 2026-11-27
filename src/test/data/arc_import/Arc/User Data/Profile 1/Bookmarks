@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "roots": {
+    "bookmark_bar": {"name": "Bookmarks bar", "type": "folder", "children": [
+      {"type": "url", "name": "Work bookmark",
+       "url": "https://work-bookmark.example/"}
+    ]},
+    "other": {"name": "Other bookmarks", "type": "folder", "children": []},
+    "synced": {"name": "Mobile bookmarks", "type": "folder", "children": []}
+  }
+}

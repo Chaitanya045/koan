@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/ui/fullscreen/BUILD.gn b/chrome/browser/ui/fullscreen/BUILD.gn
+--- a/chrome/browser/ui/fullscreen/BUILD.gn
++++ b/chrome/browser/ui/fullscreen/BUILD.gn
+@@ -28,6 +28,7 @@
+     "//chrome/browser/ui/interaction",
+     "//chrome/browser/ui/views/frame:browser_frame_view",
+     "//chrome/browser/ui/views/interaction",
++    "//koan/browser/ui/views",
+     "//ui/views",
+   ]
+ }
