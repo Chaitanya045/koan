@@ -105,8 +105,10 @@ jobs:
           df -h / /mnt
 
       # The base run's finished out/Release, matching the tree the fetch
-      # job built on. If it is gone (deleted by a newer run's cleanup), the
-      # build is still right, just full.
+      # job built on. A newer run's cleanup keeps it until a newer base has
+      # existed for 12 h (prune_bases.sh). If it is gone
+      # all the same (a re-run days later), the build is still right, just
+      # full, and the next step says so.
       - name: Download the base run's build
         id: base
         if: inputs.slice == 1 && inputs.base_run != ''
@@ -127,6 +129,16 @@ jobs:
           scripts/ci/linux_archive.sh unpack "$KOAN_SCRATCH/koan-linux-out-final.tar.zst"
           echo "Building on run $BASE_RUN's out/Release" >> "$GITHUB_STEP_SUMMARY"
           df -h /
+
+      # Loudly: a lost base makes this a full build, hours longer.
+      - name: Report a lost base
+        if: inputs.slice == 1 && inputs.base_run != '' && steps.base.outcome != 'success'
+        env:
+          BASE_RUN: ${{ inputs.base_run }}
+        run: |
+          msg="base run $BASE_RUN lost its out/Release (koan-linux-out-final.tar.zst); building from scratch"
+          echo "::warning title=Lost base::$msg"
+          echo "**Lost base:** $msg" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build
         id: build

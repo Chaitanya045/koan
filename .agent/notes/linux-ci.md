@@ -57,8 +57,9 @@ finished `out/Release`, so a nightly rebuilds only what its commits changed.
 itself, on a schedule or by hand with no other `ref`, the same condition
 that lets the release job publish `nightly-linux`. Only such a run uploads
 `koan-linux-out-final.tar.zst` and keeps its source for 14 days, and its
-cleanup deletes the source and out-final of older `develop` runs (finished
-ones only: a running chain still needs its source). A labelled pull
+cleanup deletes the source and out-final of older `develop` runs (see
+"When bases are deleted" in macos-ci.md: not while another run may still
+be building on one). A labelled pull
 request's run, or a manual run of another ref, may still *build on* the
 base (`scripts/ci/find_base.sh linux.yml koan-linux`, which only picks
 successful `schedule` and `workflow_dispatch` runs of `develop` that still
@@ -84,8 +85,11 @@ holds the `.gclient`) differs from the base's, when the runner image
 (`KOAN_TOOLCHAIN`, `ID VERSION_ID` from `/etc/os-release`: Chromium's clang
 and sysroot are pinned by `CHROMIUM_VERSION`) differs from
 `.cache/ci-toolchain` in the base's tree, or when the archive has expired.
-If the base's out/Release is gone by the time slice 1 looks for it, the
-build is still correct, just full.
+If the base's out/Release is gone by the time slice 1 looks for it
+(a newer run's cleanup keeps a base 12 h after it is superseded; "When
+bases are deleted" in macos-ci.md), the build is still correct, just full,
+and slice 1 says so loudly: a `Lost base` warning and "base run N lost its
+out/Release (...); building from scratch" in its summary.
 
 Checked locally on a fake tree (2026-11-22, with the earlier Linux-only
 scripts, since replaced by the shared ones): new, changed and removed
