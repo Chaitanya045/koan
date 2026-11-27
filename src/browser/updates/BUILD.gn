@@ -63,7 +63,22 @@ source_set("update_source") {
   ]
   deps = [
     ":buildflags",
+    ":install_logic",
     ":public_key_header",
+    "//base",
+  ]
+}
+
+# What Koan decides when it installs an update itself (the Mac, #550): the
+# download, staging and rollback state, the fallbacks and the install marker
+# (pure, unit-tested in //koan/test:koan_unittests).
+source_set("install_logic") {
+  sources = [
+    "koan_update_install_logic.cc",
+    "koan_update_install_logic.h",
+  ]
+  public_deps = [
+    ":update_logic",
     "//base",
   ]
 }
