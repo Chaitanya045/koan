@@ -40,11 +40,13 @@
 #include "components/split_tabs/split_tab_visual_data.h"
 #include "components/tabs/public/split_tab_data.h"
 #include "components/tabs/public/tab_group.h"
+#include "koan/browser/containers/koan_container_partition.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/ui/color/koan_look.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_content_card.h"
 #include "koan/browser/ui/views/koan_essentials.h"
+#include "koan/browser/ui/views/koan_essentials_profiles.h"
 #include "koan/browser/ui/views/koan_essentials_promo.h"
 #include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_folder_views.h"
@@ -62,6 +64,7 @@
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_split_view.h"
 #include "koan/browser/ui/views/koan_tab_drag_hooks.h"
+#include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -544,9 +547,13 @@ bool KoanTabDrag::Start(views::View* pressed, bool for_testing) {
   // The tile the image becomes over the Essentials, and the row an Essential
   // becomes out of them (Zen sizes it like the first normal tab): a Space
   // row's look, with the Essential's icon and title.
-  views::View* first_tile = model->IndexOfFirstNonPinnedTab() > 0
-                                ? RowViewFor(model->GetTabAtIndex(0))
-                                : nullptr;
+  views::View* first_tile = nullptr;
+  for (int i = 0; !first_tile && i < model->IndexOfFirstNonPinnedTab(); ++i) {
+    // (The grid shows one profile's tiles, koan_essentials_profiles.h.)
+    if (IsEssentialShown(model->GetTabAtIndex(i))) {
+      first_tile = RowViewFor(model->GetTabAtIndex(i));
+    }
+  }
   tile_size_ = EssentialDragTileSize(
       first_tile ? std::make_optional(first_tile->size()) : std::nullopt,
       region->width(), source_row ? source_row->height() : 0);
@@ -716,9 +723,9 @@ void KoanTabDrag::DragTo(const gfx::Point& screen_point,
   // #makeDragImageEssential() / #makeDragImageNonEssential(), at once).
   {
     KoanPinnedTabController* pinned = pinned_tabs();
-    const bool over_grid =
-        !IsSidebarCollapsed() && !DragsFolder() && IsOverEssentials(point) &&
-        (essentials || (pinned && pinned->CanAddToEssentials()));
+    const bool over_grid = !IsSidebarCollapsed() && !DragsFolder() &&
+                           IsOverEssentials(point) &&
+                           (essentials || (pinned && FitsInEssentials()));
     image_.SetTile(over_grid ? tile_size_ : gfx::Size(),
                    essentials ? grab_ : EssentialTileGrab(grab_));
   }
@@ -763,6 +770,18 @@ void KoanTabDrag::Drop() {
   views::View* region = this->region();
   const std::optional<tab_groups::TabGroupId> active =
       controller_->GetActiveSpace();
+  // Another profile's tab let go over the grid, which Zen refuses without a
+  // word (canEssentialBeAdded()): Koan says why it went back.
+  if (!essentials && !tabs.empty() && pinned && !IsSidebarCollapsed() &&
+      IsOverEssentials(last_point_) &&
+      !GetEssentialsProfiles(browser_view_)
+           .Shows(containers::ContainerOf(tabs.front()->GetContents()))) {
+    if (KoanBrowserViewController* koan =
+            KoanBrowserViewController::From(browser_view_)) {
+      koan->toast()->Show(
+          u"Only tabs of this Space's profile can be its Essentials");
+    }
+  }
   if (target.kind == DropTarget::Kind::kNone && !essentials && !tabs.empty() &&
       region && region->GetLocalBounds().Contains(last_point_) && active &&
       tabs.front()->GetGroup() != active) {
@@ -985,6 +1004,12 @@ std::vector<tabs::TabInterface*> KoanTabDrag::DraggedTabs() const {
     return model->GetIndexOfTab(tab);
   });
   return tabs;
+}
+
+bool KoanTabDrag::FitsInEssentials() const {
+  KoanPinnedTabController* pinned = pinned_tabs();
+  const std::vector<tabs::TabInterface*> tabs = DraggedTabs();
+  return pinned && !tabs.empty() && pinned->CanAddToEssentials(tabs.front());
 }
 
 bool KoanTabDrag::DragsEssentials() const {
@@ -1257,7 +1282,7 @@ void KoanTabDrag::UpdateTarget(const gfx::Point& point) {
     // (canEssentialBeAdded()); a tab over a full grid drops back into the
     // Space. Not a folder, nor a split pane from its grip.
     if (IsOverEssentials(point) && !DragsFolder() && !pane_drag_ &&
-        (essentials || pinned->CanAddToEssentials())) {
+        (essentials || FitsInEssentials())) {
       target.kind = DropTarget::Kind::kEssentials;
       // With tiles, Zen's gap shows where they go (no line); else the promo.
       const std::optional<gfx::Rect> slot =
