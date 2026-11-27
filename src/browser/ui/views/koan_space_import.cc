@@ -253,17 +253,21 @@ class SpaceImport {
     if (const std::optional<tab_groups::TabGroupId> active =
             spaces->GetActiveSpace();
         may_take_active && active && !HasPins(*active)) {
+      const std::string own = spaces->GetSpaceContainer(*active);
       // It takes the imported Space's profile; without one (Zen), it keeps
       // its own. Its empty tab follows (MatchEmptyTabsToSpaceContainers()).
-      if (const std::optional<KoanWorkspaceController::SpaceData> current =
-              spaces->ReadSpace(*active);
-          current && !imported) {
-        data.container = current->container;
+      if (!imported) {
+        data.container = own;
       }
-      container = data.container;
-      spaces->WriteSpace(*active, data);
-      spaces->ApplySpaceColor();
-      return active;
+      // A profile the user gave the Space stays: the imported Space of
+      // another profile is made new (Zen never takes the active Space for
+      // a container Space).
+      if (own.empty() || own == data.container) {
+        container = data.container;
+        spaces->WriteSpace(*active, data);
+        spaces->ApplySpaceColor();
+        return active;
+      }
     }
     container = data.container;
     // At the end of the Spaces, with an empty tab, as Zen's new Space.

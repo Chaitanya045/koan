@@ -29,7 +29,8 @@ struct ImportedSpaces;
 //   with its pinned URL, title and label;
 // - each Space and Essential in its profile when the plan names one (Arc's
 //   profiles, #481): the user's container of that name, made if missing
-//   (Zen's containerIdForArcProfile()); none for Arc's default profile;
+//   (Zen's containerIdForArcProfile()); none for Arc's default profile. An
+//   active Space the user gave another profile isn't taken;
 // - the plan's link rules (Arc's Air Traffic Control) as Space routes to the
 //   Spaces made, after the user's own, and its default for links from other
 //   apps while the user has none.

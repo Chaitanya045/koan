@@ -49,6 +49,7 @@
 #include "components/password_manager/core/browser/password_store/password_store_interface.h"
 #include "components/password_manager/core/browser/password_store/password_store_results_observer.h"
 #include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/tabs/public/tab_interface.h"
 #include "components/user_data_importer/common/importer_data_types.h"
 #include "content/public/browser/web_contents.h"
@@ -855,6 +856,31 @@ IN_PROC_BROWSER_TEST_F(KoanArcProfilesImportBrowserTest, ImportsOneProfile) {
             ParseSpaceRoutes(prefs()->GetList(prefs::kSpaceRoutes)));
   EXPECT_EQ("", prefs()->GetString(prefs::kSpaceRoutingExternalDefault));
   EXPECT_FALSE(PinnedTab("https://home-pinned.example/"));
+}
+
+// A Space the user gave a profile of its own keeps it: the first imported
+// Space, of another profile, is made new.
+IN_PROC_BROWSER_TEST_F(KoanArcProfilesImportBrowserTest,
+                       KeepsTheActiveSpacesOwnProfile) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  std::optional<containers::UserContainer> mine;
+  {
+    ScopedListPrefUpdate update(prefs(), prefs::kUserContainers);
+    mine = containers::AddUserContainer(update.Get(), u"Mine");
+  }
+  ASSERT_TRUE(mine);
+  const std::string own = containers::Serialize(mine->id);
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  const tab_groups::TabGroupId active = *spaces->GetActiveSpace();
+  spaces->SetSpaceContainer(active, own);
+  const std::u16string name = spaces->GetSpace(active)->name;
+
+  Import(FindProfile(u"Work"), importer::kSpacesImportItem);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 3));
+  EXPECT_THAT(SpaceNames(browser()),
+              testing::ElementsAre(name, u"Projects", u"Clients"));
+  EXPECT_EQ(own, spaces->GetSpaceContainer(active));
+  EXPECT_EQ(ContainerNamed("Work"), spaces->GetSpaces()[1].container);
 }
 
 }  // namespace koan
