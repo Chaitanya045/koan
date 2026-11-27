@@ -601,7 +601,9 @@ belongs to a Space, and new tabs open in the active one.
 - **Profiles: separate logins per Space** (Zen's containers per Space).
   Pick one with the Create-a-Space form's **Profile** row, or right-click
   the header > **Set Profile**. You get Default (no profile), your profiles
-  (each with a colour) and **New Profile…** (name it, then Create). A
+  (each with a colour) and **New Profile…** (name it, then Create:
+  Create waits for a name, and a name longer than 64 characters is
+  refused with a message, the dialog staying open). A
   Space with a profile keeps its own cookies and site data: you can be
   signed into a site in one Space and signed out, or signed in as someone
   else, in another, and a site's saved settings (its localStorage) are kept

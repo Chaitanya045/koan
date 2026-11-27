@@ -87,6 +87,24 @@ TEST(UserContainersTest, AddRefusesBadNames) {
   EXPECT_TRUE(AddUserContainer(list, std::u16string(64, u'x')));
 }
 
+// What the New Profile dialog (koan_space_profile_menu.cc) refuses, and why:
+// its Create is off while the name is empty, and the others get a message.
+TEST(UserContainersTest, CheckNameSaysWhy) {
+  using enum UserContainerNameError;
+  EXPECT_EQ(kEmpty, CheckUserContainerName(u""));
+  EXPECT_EQ(kEmpty, CheckUserContainerName(u"   "));
+  EXPECT_EQ(kEmpty, CheckUserContainerName(u" \t\n "));
+  EXPECT_EQ(kNone, CheckUserContainerName(u"Work"));
+  EXPECT_EQ(kNone, CheckUserContainerName(u"  Work  "));
+  // 64 characters is the most, white space at the ends not counted.
+  EXPECT_EQ(kNone, CheckUserContainerName(std::u16string(64, u'x')));
+  EXPECT_EQ(kNone,
+            CheckUserContainerName(u"  " + std::u16string(64, u'x') + u"  "));
+  EXPECT_EQ(kTooLong, CheckUserContainerName(std::u16string(65, u'x')));
+  EXPECT_EQ(kControlCharacter, CheckUserContainerName(u"a\nb"));
+  EXPECT_EQ(kControlCharacter, CheckUserContainerName(u"a\u0007b"));
+}
+
 // The rules of .agent/notes/upstream/space-containers.md, by number.
 TEST(NewTabContainerTest, Rules) {
   const std::string work = "user:swork";
