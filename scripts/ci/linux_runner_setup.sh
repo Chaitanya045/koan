@@ -71,7 +71,7 @@ apt_sources="$RUNNER_TEMP/koan-apt-sources"
 "$(dirname "$0")/linux_apt_sources.sh" /etc/apt "$apt_sources"
 apt_opts=(-o "Dir::Etc::SourceList=/dev/null" -o "Dir::Etc::SourceParts=$apt_sources"
   -o Acquire::Retries=3)
-retry apt-get update sudo apt-get update -qq "${apt_opts[@]}"
+retry "apt-get update" sudo apt-get update -qq "${apt_opts[@]}"
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
   "${apt_opts[@]}" "${pkgs[@]}" >/dev/null
 
