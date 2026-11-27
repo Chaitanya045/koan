@@ -417,7 +417,8 @@ tab first, one per press.
 
 Drag the sidebar's edge to resize it (163 to 500 px, as in Zen). At the
 bottom is Zen's bottom bar: the Library button on the left, **+** on the
-right, which opens the Create menu (Create Space, Create Folder, New Split
+right (the other way round with tabs on the right, so the Library button is
+at the window's edge, where the open Library's back button is), which opens the Create menu (Create Space, Create Folder, New Split
 and New Tab), and the Space switcher in the middle: one narrow button per
 Space, centred. The current Space shows its emoji (or a dot if it has none)
 in colour, the others a small grey dot that turns into their emoji while

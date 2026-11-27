@@ -14,12 +14,15 @@
 #include "base/i18n/rtl.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/color/koan_look.h"
 #include "koan/browser/ui/vector_icons/koan_icon_sizes.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_haptics.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_space_drag_logic.h"
@@ -324,6 +327,13 @@ KoanSpaceBarView::KoanSpaceBarView(KoanWorkspaceController* controller)
   create_button_ = AddChildView(std::move(create));
   GetViewAccessibility().SetRole(ax::mojom::Role::kRadioGroup);
   GetViewAccessibility().SetName(u"Spaces");
+  // The sidebar changing sides leaves this view's bounds as they are, so it
+  // isn't laid out again by itself.
+  side_registrar_.Init(controller->browser_view()->GetProfile()->GetPrefs());
+  side_registrar_.Add(
+      prefs::kTabsOnRight,
+      base::BindRepeating([](views::View* bar) { bar->InvalidateLayout(); },
+                          base::Unretained(this)));
 }
 
 KoanSpaceBarView::~KoanSpaceBarView() = default;
@@ -652,8 +662,17 @@ void KoanSpaceBarView::Layout(PassKey) {
 }
 
 void KoanSpaceBarView::LayoutRow(const gfx::Rect& area) {
-  // (In LTR terms; mirrored for right-to-left.)
-  const auto place = [this](views::View* view, const gfx::Rect& rect) {
+  // (In LTR terms; mirrored for right-to-left.) With the sidebar on the
+  // right, Zen reverses the row (#zen-sidebar-foot-buttons, flex-direction:
+  // row-reverse): the leading button (the Library's) is at the window's edge,
+  // the corner where the open Library has its back button, and a second
+  // click there closes it. The switcher's own buttons keep their order.
+  const bool reversed = IsSidebarOnRight(this);
+  const auto place = [this, &area, reversed](views::View* view,
+                                             gfx::Rect rect) {
+    if (reversed) {
+      rect.set_x(area.x() + area.right() - rect.right());
+    }
     view->SetBoundsRect(GetMirroredRect(rect));
   };
   // Zen's row: the leading button at the start, "+" at the end, the Space
