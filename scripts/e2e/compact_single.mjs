@@ -59,8 +59,12 @@ await checkSingleToolbarCompact('Ctrl+S', false);
 // pointer is over the window (SidebarHold::ReleaseWhenPointerMoves()), as it
 // is after a person clicks the item. Headless Ozone's pointer is always at
 // (0, 0) and UI DevTools' events never move it, so compact_single.flags puts
-// the window at (-20, -20): the pointer is over the window, clear of its
-// 8 px edges.
+// the window up and to the left: the pointer is over the page near its top,
+// clear of the window's edges and of the sidebar on either side.
+//
+// The side is only a pref in Zen (zen.tabs.vertical.right-side): the pin
+// (`zen-user-show`) stays across the change (#567), on the new side, and the
+// next press of the key lets the sidebar slide away.
 async function tabsOnRight(onRight, name) {
   if (NATIVE_MENUS) {
     await setKoanPref('koan.tabs.on_right', onRight);
@@ -69,32 +73,21 @@ async function tabsOnRight(onRight, name) {
     const missing = await sidebarMenu(TABS_ON_RIGHT);
     check(name, !missing, missing ?? '');
     await sleep(1500);
+    const vs = await views();
+    const bv = findShown(vs, 'BrowserView');
+    const strip = find(vs, 'VerticalTabStripRegionView');
+    check(`...the sidebar stays pinned, now on the ${onRight ? 'right' : 'left'}`,
+          strip?.w > 0 && bv &&
+              (onRight ? strip.x + strip.w === bv.x + bv.w : strip.x === bv.x),
+          strip && bv && `${strip.x}+${strip.w} in ${bv.x}+${bv.w}`);
     await press(VK.S, ACCEL | ALT, 's');
   }
   await sleep(3500);
 }
-// #567: the side change goes through compact mode's Deactivate()/Activate(),
-// which drops the pin: the key above pins the sidebar again instead of
-// unpinning it, and the sidebar can stay out with nothing holding it (on the
-// left even through Ctrl+Alt+B). Until that is fixed, compact mode is turned
-// off and on, which hides it, so that the steps after it start from a hidden
-// sidebar. (With the fix the sidebar is already hidden and nothing is sent.)
-async function hideLeftoverSidebar() {
-  const strip = (await views()).find(v => v.cls === 'VerticalTabStripRegionView');
-  if (strip?.w > 0) {
-    await press(VK.S, ACCEL, 's');
-    await press(VK.S, ACCEL, 's');
-    await sleep(1500);
-  }
-}
 await tabsOnRight(true, 'The sidebar\'s menu has Tabs on the right');
-// Fails until #567 is fixed (the sidebar stays out).
 await checkSingleToolbarCompact('Tabs on the right', true);
-await hideLeftoverSidebar();
 await tabsOnRight(false, '...and opens again to put them back on the left');
-// Fails until #567 is fixed (the sidebar stays out).
 await checkSingleToolbarCompact('Tabs on the left', false);
-await hideLeftoverSidebar();
 
 // Multiple toolbars and back while compact mode is on.
 await press(VK.B, CTRL | ALT, 'b');

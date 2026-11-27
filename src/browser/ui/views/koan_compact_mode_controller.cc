@@ -545,7 +545,18 @@ void KoanCompactModeController::OnTabsOnRightChanged() {
   // The hot zones and which window buttons hide depend on the side.
   if (mode_ != Mode::kNone) {
     const Mode mode = mode_;
+    // This isn't compact mode turning off: in Zen the side is just a pref
+    // (zen.tabs.vertical.right-side), and `zen-user-show` and
+    // `zen-has-empty-tab` stay. Their locks are carried over rather than let
+    // go of and taken again, which would also start a collapse and an expand.
+    std::unique_ptr<ExpandOnHoverLock> peek_lock = std::move(peek_lock_);
+    const bool peek_requested = peek_requested_;
+    std::unique_ptr<ExpandOnHoverLock> empty_tab_lock =
+        std::move(empty_tab_lock_);
     Deactivate();
+    peek_lock_ = std::move(peek_lock);
+    peek_requested_ = peek_requested;
+    empty_tab_lock_ = std::move(empty_tab_lock);
     Activate(mode);
   }
   // Everything in the window is laid out again, mirrored or not; the
@@ -560,6 +571,16 @@ void KoanCompactModeController::OnTabsOnRightChanged() {
     top_container->InvalidateLayout();
   }
   OnContentCardChanged();
+  // At once, not at the next frame: upstream's expand-on-hover state asks
+  // whether the pointer is on the sidebar (View::IsMouseHovered()) when a lock
+  // is let go of, and the sidebar's menu that changed the side lets go of its
+  // hold right after this (OnContextMenuClosed()). Measured against the
+  // sidebar's old place, under the pointer that clicked the item, the sidebar
+  // would count as hovered and stay out on the new side, with no hover that
+  // could end.
+  if (!IsClosing() && browser_view_->GetWidget()) {
+    browser_view_->GetWidget()->LayoutRootViewIfNecessary();
+  }
 }
 
 void KoanCompactModeController::OnSidebarCollapseSettled() {
