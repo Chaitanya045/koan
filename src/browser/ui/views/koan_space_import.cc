@@ -140,14 +140,13 @@ class SpaceImport {
       const std::string container =
           ContainerFor(tab.profile).value_or(std::string());
       const std::string grid = separate ? container : std::string();
-      int& count =
-          in_grid
-              .try_emplace(grid,
-                           window_->pinned->EssentialsCountIn(
-                               containers::SpaceContainerFromString(grid)))
-              .first->second;
-      if (count < KoanPinnedTabController::kMaxEssentials) {
-        ++count;
+      int& used = in_grid
+                      .try_emplace(
+                          grid, window_->pinned->EssentialsCountIn(
+                                    containers::SpaceContainerFromString(grid)))
+                      .first->second;
+      if (used < KoanPinnedTabController::kMaxEssentials) {
+        ++used;
         AddTab(tab, model()->IndexOfFirstNonPinnedTab(), std::nullopt,
                container, {});
       } else {
