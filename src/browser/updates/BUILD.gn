@@ -2,38 +2,42 @@
 # Use of this source code is governed by the MIT license that can be
 # found in the LICENSE file.
 
-# The Koan commit a build is made from: koan_lastchange.h, rewritten when the
-# clone's HEAD moves (the script's depfile names its reflog).
-action("lastchange") {
-  script = "lastchange.py"
-  outputs = [ "$target_gen_dir/koan_lastchange.h" ]
-  depfile = "$target_gen_dir/koan_lastchange.d"
+import("//build/buildflag_header.gni")
+
+declare_args() {
+  # Test only: the update check also takes --koan-update-manifest-url and
+  # --koan-update-public-key (koan_update_source.h), to try it against a local
+  # manifest signed with a throwaway key. Never set in build/*.gn: CI turns
+  # it on only for a run that is neither a release nor kept as a base for the
+  # nightlies (KOAN_UPDATE_TEST_HOOKS, scripts/build.sh), so nothing that is
+  # published has it. scripts/tests/test_update_test_hooks.py checks that.
+  koan_update_test_hooks = false
+}
+
+assert(!koan_update_test_hooks || !is_official_build,
+       "koan_update_test_hooks is for test builds, never an official one")
+
+buildflag_header("buildflags") {
+  header = "buildflags.h"
+  flags = [ "KOAN_UPDATE_TEST_HOOKS=$koan_update_test_hooks" ]
+}
+
+# The release signing key's public half, built in from the text file
+# (public_key_header.py checks it is one Ed25519 key).
+action("public_key_header") {
+  script = "public_key_header.py"
+  inputs = [ "koan_update_public_key.txt" ]
+  outputs = [ "$target_gen_dir/koan_update_public_key.h" ]
   args = [
+    "--input",
+    rebase_path(inputs[0], root_build_dir),
     "--output",
     rebase_path(outputs[0], root_build_dir),
-    "--depfile",
-    rebase_path(depfile, root_build_dir),
   ]
 }
 
-# The stamp, for the update check and the "Update Complete!" notification.
-# Only this file sees the generated header, so a new commit recompiles one
-# file.
-source_set("build_info") {
-  sources = [
-    "koan_build_info.cc",
-    "koan_build_info.h",
-  ]
-  public_deps = [ "//base" ]
-  deps = [
-    ":lastchange",
-    ":update_logic",
-    "//components/version_info",
-  ]
-}
-
-# Whether a newer commit is on GitHub, and the URLs (pure, unit-tested in
-# //koan/test:koan_unittests).
+# The manifest's SemVer, parsing, signature and URL checks, and when to tell
+# (pure, unit-tested in //koan/test:koan_unittests).
 source_set("update_logic") {
   sources = [
     "koan_update_logic.cc",
@@ -42,5 +46,24 @@ source_set("update_logic") {
   public_deps = [
     "//base",
     "//url",
+  ]
+  deps = [ "//third_party/boringssl" ]
+}
+
+# Where the manifest comes from and the key it is checked against. Only this
+# file sees the key and the test hooks flag.
+source_set("update_source") {
+  sources = [
+    "koan_update_source.cc",
+    "koan_update_source.h",
+  ]
+  public_deps = [
+    ":update_logic",
+    "//url",
+  ]
+  deps = [
+    ":buildflags",
+    ":public_key_header",
+    "//base",
   ]
 }

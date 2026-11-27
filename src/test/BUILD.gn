@@ -23,6 +23,7 @@ test("koan_unittests") {
     "//koan/browser/ui/webui/koan_settings_rows_unittest.cc",
     "//koan/browser/ui/webui/koan_settings_url_unittest.cc",
     "//koan/browser/updates/koan_update_logic_unittest.cc",
+    "//koan/browser/updates/koan_update_source_unittest.cc",
     "//koan/browser/window_sync/koan_window_sync_model_unittest.cc",
     "//koan/common/koan_glance_trigger_unittest.cc",
     "//koan/version/koan_version_unittest.cc",
@@ -50,6 +51,7 @@ test("koan_unittests") {
     "//koan/browser/ui/webui:settings_rows",
     "//koan/browser/ui/webui:settings_url",
     "//koan/browser/updates:update_logic",
+    "//koan/browser/updates:update_source",
     "//koan/browser/window_sync:model",
     "//koan/common:glance_trigger",
     "//koan/version",
@@ -59,6 +61,7 @@ test("koan_unittests") {
     "//ui/color:color_provider_key",
     "//url",
   ]
+  data = [ "//koan/browser/updates/koan_update_public_key.txt" ]
   data_deps = [ "//third_party/icu:icudata" ]
 
   if (is_linux) {
