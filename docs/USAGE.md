@@ -584,8 +584,19 @@ belongs to a Space, and new tabs open in the active one.
   Deleting a Space keeps its profile and its data, so another Space can
   use it. Each profile has its own Essentials (see Pinned tabs and
   Essentials); an Essential whose profile no Space has any more shows in
-  the Spaces without a profile. Clear browsing data doesn't clear profiles yet, and notifications
-  don't work in a profile. Incognito windows have no profiles.
+  the Spaces without a profile. Clear browsing data doesn't clear profiles
+  yet. Incognito windows have no profiles.
+- **Notifications in a profile.** A site in a Space with a profile can ask
+  to notify you and show notifications while its tab is open, as in any
+  tab. Allow or Block is the site's answer in every Space. Its
+  notifications name the Space after the site ("mail.example.com · Work").
+  Clicking a site's notification, in any Space, shows its Space and tab. Push notifications, which a
+  site sends while it is closed, and notifications from a site's service
+  worker don't work in a profile yet: the site panel (the URL bar's site
+  icon) says so. Some sites only offer push; they can't turn notifications
+  on in a profile. In practice, sites that notify through a service worker,
+  as many mail and calendar apps do, still can't notify in a profile
+  ([#530](https://github.com/koan-browser/koan/issues/530)).
 - **Unload Space** (right-click the header or a Space button) frees the
   Space's tabs; they reload when you select them. Unload All Other Spaces
   frees all the others. Tabs on screen and tabs in use (playing sound, in
