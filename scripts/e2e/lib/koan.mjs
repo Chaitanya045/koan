@@ -446,6 +446,10 @@ export async function boundsOf(cls) {
 // views() saw is another view's, often one of the same class: on macOS the
 // sidebar's hot zone's id named the top edge's. The view is found again in
 // this session, by its class and its bounds.
+//
+// The point is rounded: UI DevTools drops an event at a fractional point
+// (the middle of a 29 px menu item, since Geist became the native font in
+// #519), and the menu stayed open without a word.
 export async function mouseOn(view, type, x = 10, y = 10, button = 'left') {
   if (!view) throw new Error(`mouseOn(): no view to send ${type} to (not found)`);
   const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
@@ -472,7 +476,7 @@ export async function mouseOn(view, type, x = 10, y = 10, button = 'left') {
     }
   }
   await ui.send('DOM.dispatchMouseEvent', { nodeId: nodeId ?? view.nodeId,
-      event: { type, x, y, button, wheelDirection: 'none' } });
+      event: { type, x: Math.round(x), y: Math.round(y), button, wheelDirection: 'none' } });
   ui.close();
 }
 

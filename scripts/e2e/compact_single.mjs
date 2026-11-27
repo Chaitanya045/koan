@@ -47,10 +47,20 @@ check('The URL pill shows the page\'s icon', iconBefore === 'true', iconBefore);
 await press(VK.S, ACCEL, 's');
 await checkSingleToolbarCompact('Ctrl+S', false);
 
-// Tabs on the right from the menu of the peeked sidebar, then back: the
-// menu opens twice in the window. On macOS the menu is a native NSMenu that
-// UI DevTools can't reach (NATIVE_MENUS), so the pref is set as the menu
-// item sets it, without peeking the sidebar for its menu.
+// Tabs on the right from the menu of the pinned sidebar, then back: the
+// menu opens twice in the window. Ctrl+Alt+S pins the sidebar out until it is
+// pressed again (Zen's `zen-user-show`, since #98; it used to hide itself
+// after a few seconds), so it is pressed again once the menu is done. On
+// macOS the menu is a native NSMenu that UI DevTools can't reach
+// (NATIVE_MENUS), so the pref is set as the menu item sets it, without
+// pinning the sidebar for its menu.
+//
+// The closed menu holds the sidebar out until the pointer moves, unless the
+// pointer is over the window (SidebarHold::ReleaseWhenPointerMoves()), as it
+// is after a person clicks the item. Headless Ozone's pointer is always at
+// (0, 0) and UI DevTools' events never move it, so compact_single.flags puts
+// the window at (-20, -20): the pointer is over the window, clear of its
+// 8 px edges.
 async function tabsOnRight(onRight, name) {
   if (NATIVE_MENUS) {
     await setKoanPref('koan.tabs.on_right', onRight);
@@ -58,13 +68,33 @@ async function tabsOnRight(onRight, name) {
     await press(VK.S, ACCEL | ALT, 's');
     const missing = await sidebarMenu(TABS_ON_RIGHT);
     check(name, !missing, missing ?? '');
+    await sleep(1500);
+    await press(VK.S, ACCEL | ALT, 's');
   }
   await sleep(3500);
 }
+// #567: the side change goes through compact mode's Deactivate()/Activate(),
+// which drops the pin: the key above pins the sidebar again instead of
+// unpinning it, and the sidebar can stay out with nothing holding it (on the
+// left even through Ctrl+Alt+B). Until that is fixed, compact mode is turned
+// off and on, which hides it, so that the steps after it start from a hidden
+// sidebar. (With the fix the sidebar is already hidden and nothing is sent.)
+async function hideLeftoverSidebar() {
+  const strip = (await views()).find(v => v.cls === 'VerticalTabStripRegionView');
+  if (strip?.w > 0) {
+    await press(VK.S, ACCEL, 's');
+    await press(VK.S, ACCEL, 's');
+    await sleep(1500);
+  }
+}
 await tabsOnRight(true, 'The sidebar\'s menu has Tabs on the right');
+// Fails until #567 is fixed (the sidebar stays out).
 await checkSingleToolbarCompact('Tabs on the right', true);
+await hideLeftoverSidebar();
 await tabsOnRight(false, '...and opens again to put them back on the left');
+// Fails until #567 is fixed (the sidebar stays out).
 await checkSingleToolbarCompact('Tabs on the left', false);
+await hideLeftoverSidebar();
 
 // Multiple toolbars and back while compact mode is on.
 await press(VK.B, CTRL | ALT, 'b');
