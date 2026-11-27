@@ -13,6 +13,7 @@
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
+#include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
@@ -40,6 +41,7 @@
 #include "koan/browser/ui/views/koan_toast.h"
 #include "koan/browser/ui/views/koan_update_installer.h"
 #include "koan/browser/ui/views/koan_zen_sidebar_notification.h"
+#include "koan/browser/updates/koan_update_install_logic.h"
 #include "koan/browser/updates/koan_update_logic.h"
 #include "koan/browser/updates/koan_update_platform.h"
 #include "koan/browser/updates/koan_update_source.h"
@@ -157,6 +159,16 @@ class Updater {
 
   bool IsReadyToInstall() const { return installer_ && installer_->IsReady(); }
 
+  // Whether another Koan runs from the app (`callback`; false without an
+  // installer).
+  void CheckOtherInstances(base::OnceCallback<void(bool)> callback) {
+    if (!installer_) {
+      std::move(callback).Run(false);
+      return;
+    }
+    installer_->CheckOtherInstances(std::move(callback));
+  }
+
  private:
   PrefService* local_state() { return g_browser_process->local_state(); }
 
@@ -194,10 +206,29 @@ class Updater {
     // verified again: with this build's key.
     ReadManifest(local_state()->GetString(prefs::kUpdatesLatestManifest));
     registrar_.Init(local_state());
-    registrar_.Add(
-        prefs::kUpdatesCheckEnabled,
-        base::BindRepeating(&Updater::ScheduleCheck, base::Unretained(this)));
+    registrar_.Add(prefs::kUpdatesCheckEnabled,
+                   base::BindRepeating(&Updater::OnCheckSettingChanged,
+                                       base::Unretained(this)));
+    if (installer_) {
+      registrar_.Add(prefs::kUpdatesAutoInstall,
+                     base::BindRepeating(&UpdateInstaller::OnSettingsChanged,
+                                         base::Unretained(installer_.get())));
+    }
     ScheduleCheck();
+  }
+
+  // "Check for updates" changed: the installer stops a download when it is
+  // turned off, and a release found before is taken again when it is back
+  // on (rather than at the next check, up to 12 hours later).
+  void OnCheckSettingChanged() {
+    ScheduleCheck();
+    if (!installer_) {
+      return;
+    }
+    installer_->OnSettingsChanged();
+    if (CanCheck()) {
+      ReadManifest(local_state()->GetString(prefs::kUpdatesLatestManifest));
+    }
   }
 
   bool CanCheck() {
@@ -429,24 +460,51 @@ bool IsUpdateReadyToInstall() {
   return GetUpdater().IsReadyToInstall();
 }
 
+namespace {
+
+void ContinueRestart(base::WeakPtr<BrowserView> browser_view,
+                     bool other_instance_running) {
+  const gfx::NativeWindow window =
+      browser_view ? browser_view->GetNativeWindow() : gfx::NativeWindow();
+  switch (DecideRestart(IsUpdateReadyToInstall(), other_instance_running,
+                        AgentIsUsingKoan())) {
+    case RestartAction::kNone:
+      return;
+    case RestartAction::kQuitOtherFirst:
+      // The helper can't replace the app while that one runs from it, so a
+      // restart now would only bring this version back.
+      chrome::ShowWarningMessageBoxAsync(
+          window, u"Quit the other Koan first",
+          u"Another Koan runs from this app, with its own profile folder. "
+          u"Quit it, then restart to update.");
+      return;
+    case RestartAction::kAsk:
+      // Nothing restarts on its own, and not under an agent without asking.
+      chrome::ShowQuestionMessageBoxAsync(
+          window, u"Restart to update Koan?",
+          u"An agent is using Koan. Restart anyway?",
+          base::BindOnce([](chrome::MessageBoxResult result) {
+            if (result == chrome::MESSAGE_BOX_RESULT_YES &&
+                IsUpdateReadyToInstall()) {
+              chrome::AttemptRelaunch();
+            }
+          }));
+      return;
+    case RestartAction::kRestart:
+      chrome::AttemptRelaunch();
+      return;
+  }
+}
+
+}  // namespace
+
 void RestartToUpdate(BrowserView* browser_view) {
   if (!IsUpdateReadyToInstall()) {
     return;
   }
-  // Nothing restarts on its own, and not under an agent without asking.
-  if (AgentIsUsingKoan()) {
-    chrome::ShowQuestionMessageBoxAsync(
-        browser_view ? browser_view->GetNativeWindow() : gfx::NativeWindow(),
-        u"Restart to update Koan?", u"An agent is using Koan. Restart anyway?",
-        base::BindOnce([](chrome::MessageBoxResult result) {
-          if (result == chrome::MESSAGE_BOX_RESULT_YES &&
-              IsUpdateReadyToInstall()) {
-            chrome::AttemptRelaunch();
-          }
-        }));
-    return;
-  }
-  chrome::AttemptRelaunch();
+  GetUpdater().CheckOtherInstances(base::BindOnce(
+      &ContinueRestart, browser_view ? browser_view->GetAsWeakPtr()
+                                     : base::WeakPtr<BrowserView>()));
 }
 
 }  // namespace koan::updates

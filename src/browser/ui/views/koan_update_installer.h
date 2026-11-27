@@ -77,6 +77,8 @@ class UpdatePartialFile {
   bool Open(const base::FilePath& path, bool append);
   bool Write(const std::string& data);
   void Close();
+  // Closes and deletes it: it doesn't continue the file the server has.
+  void Discard();
   // Closes it, and renames it to `final_path` if it is `update`'s file (its
   // signed size and SHA-256); deletes it otherwise. Whether it was.
   bool Finish(const base::FilePath& final_path, const UpdateInfo& update);
@@ -128,6 +130,11 @@ class UpdateInstaller : public network::SimpleURLLoaderStreamConsumer {
   void Accept();
   // Whether an update is staged, waiting for a restart.
   bool IsReady() const;
+  // Finds out (off the UI thread) whether another Koan runs from the app,
+  // which the helper couldn't replace: `callback` gets whether one does.
+  void CheckOtherInstances(base::OnceCallback<void(bool)> callback);
+  // "Check for updates" or "When a new version is out" changed.
+  void OnSettingsChanged();
 
  private:
   void OnStartState(UpdateStartState state);
@@ -140,8 +147,13 @@ class UpdateInstaller : public network::SimpleURLLoaderStreamConsumer {
   void OnResponseStarted(const GURL& final_url,
                          const network::mojom::URLResponseHead& head);
   void OnWritten(base::OnceClosure resume, bool ok);
-  void AbortDownload();
-  void OnDownloadFinished(bool ok);
+  void OnFinished(bool ok);
+  // Ends this try as a failure, keeping the partial file for the next one
+  // unless `discard_partial`.
+  void AbortDownload(bool discard_partial);
+  // Stops the download and the wait for a retry, keeping the partial file.
+  void CancelDownload();
+  void OnDownloadFinished(DownloadResult result);
 
   // network::SimpleURLLoaderStreamConsumer:
   void OnDataReceived(std::string_view data, base::OnceClosure resume) override;
@@ -193,8 +205,10 @@ class UpdateInstaller : public network::SimpleURLLoaderStreamConsumer {
   base::SequenceBound<UpdatePartialFile> partial_file_;
   base::FilePath final_path_;
   base::FilePath part_path_;
-  // Bytes on disk when the request was made, those the response continues
-  // from (0 if it starts over), and those received since.
+  // Bytes on disk when the request was made, those the Range asked to
+  // continue from (0 without one), those the response continues from (0 if
+  // it starts over), and those received since.
+  int64_t on_disk_ = 0;
   int64_t partial_ = 0;
   int64_t offset_ = 0;
   int64_t received_ = 0;

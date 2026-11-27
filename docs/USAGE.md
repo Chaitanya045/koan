@@ -1547,12 +1547,20 @@ releases, not at your clone.
     holding a tab), Restart to update asks first: "An agent is using Koan.
     Restart anyway?"
   - Koan never replaces itself while it runs. The helper waits until every
-    process from the app has exited (another profile's Koan included).
+    process from the app has exited (another profile's Koan included). So
+    while another Koan runs from the app (one started with its own profile
+    folder), Restart to update says "Quit the other Koan first" instead of
+    restarting.
+  - Before it swaps, the helper checks the new copy's signature again, and
+    it only ever replaces the app it came with. If anything goes wrong on a
+    restart, it still opens Koan again.
   - **Rollback:** the old app stays (in the Updates folder) until the new
     version has started and had a window for 10 seconds, or quit normally.
-    If the new version exits before that after a restart, the helper puts
-    the old app back and opens it; if it fails to get that far twice, its
-    next start does the same. That version then isn't installed
+    Right after the swap the helper runs the new `Koan --version`; if that
+    fails (the new version can't start at all), it puts the old app back at
+    once. If the new version exits before its 10 seconds after a restart,
+    the helper puts the old app back and opens it; if it fails to get that
+    far twice, its next start does the same. That version then isn't installed
     automatically for 7 days (never again after a second time); the sidebar
     offers its release page instead.
   - **When Koan can't update itself** it shows the release page's
@@ -1561,11 +1569,20 @@ releases, not at your clone.
       ("App Translocation"; move Koan to Applications first);
     - your user can't change the folder Koan is in (a standard account and
       `/Applications`);
-    - a download fails twice, or the copy fails a check.
+    - Koan is on a volume that can't swap two files in one step (HFS+ or
+      exFAT; APFS can);
+    - a download fails twice without getting any further (a slow download
+      that keeps going resumes until it is done), or the copy fails a
+      check. A copy that couldn't be made for another reason (a full disk,
+      say) is tried again later.
   - **Check for updates, but let me choose to install them** (Settings >
     Look and Feel > Updates, under Check for updates): nothing downloads
     until you click **Update** in "Update Available!" (shown at each start
-    until you do). Then it goes on as above.
+    until you do). Then it goes on as above. Switching to it while a
+    download runs stops the download and asks; switching back starts it.
+    Turning **Check for updates** off stops a download too; an update that
+    is already ready still installs when you restart or quit, as in
+    Firefox.
 - **Trust:** Koan only believes a manifest signed with the release key built
   into it (Ed25519; the key is
   [`src/browser/updates/koan_update_public_key.txt`](../src/browser/updates/koan_update_public_key.txt)).

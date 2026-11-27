@@ -218,7 +218,11 @@ updating (they then offer the release page, and people install by hand):
 - **The helper** `Contents/Resources/bin/koan-update-helper`, signed with the
   same certificate (`mac_package.sh`), and the install marker's format
   (`install.json`, schema 1): the running (old) version's helper installs the
-  new one.
+  new one. It checks the copy's signature against the same pinned
+  certificate again right before the swap.
+- **`Koan --version` exits 0.** After the swap the helper runs
+  `Contents/MacOS/<CFBundleExecutable> --version` and puts the old app back
+  if it fails.
 - **The manifest's address and key** (above).
 
 `scripts/tests/test_update_install.py` checks that the code, the bundle and

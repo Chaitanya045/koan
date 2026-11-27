@@ -4,7 +4,6 @@
 
 #include "koan/browser/ui/views/koan_update_installer.h"
 
-#include <algorithm>
 #include <array>
 #include <utility>
 
@@ -47,7 +46,8 @@ namespace koan::updates {
 
 namespace {
 
-// A stalled download gives up after this; the next try resumes it.
+// A try gives up after this, stalled or not; the next one resumes it, at
+// once if this one got further (MadeProgress()).
 constexpr base::TimeDelta kDownloadTimeout = base::Minutes(15);
 
 constexpr net::NetworkTrafficAnnotationTag kDownloadAnnotation =
@@ -112,11 +112,34 @@ void RemoveInstall(const InstallMarker& marker,
   base::DeleteFile(updates_dir.Append(kMarkerFileName));
 }
 
+// Removes the hidden staging folders next to `app` that earlier installs
+// left (IsStaleSiblingStaging()).
+void SweepSiblingStaging(const base::FilePath& app,
+                         const std::optional<InstallMarker>& marker) {
+  if (app.empty()) {
+    return;
+  }
+  base::FileEnumerator entries(app.DirName(), /*recursive=*/false,
+                               base::FileEnumerator::DIRECTORIES);
+  for (base::FilePath entry = entries.Next(); !entry.empty();
+       entry = entries.Next()) {
+    if (IsStaleSiblingStaging(app, entry, koan::version::Full(), marker)) {
+      LOG(WARNING) << "Removing " << entry << ", left by an update";
+      base::DeletePathRecursively(entry);
+    }
+  }
+}
+
 UpdateStartState ReadStartState(InstallPlatform* platform,
                                 const base::FilePath& updates_dir) {
   UpdateStartState state;
+  // What a prepare that didn't finish (Koan quit, a tool was stopped) left.
+  platform->DetachLeftoverImages(updates_dir);
   state.location = platform->Inspect(updates_dir);
   state.marker = ReadMarker(updates_dir.Append(kMarkerFileName));
+  if (!state.location.read_only && !state.location.translocated) {
+    SweepSiblingStaging(state.location.app, state.marker);
+  }
   return state;
 }
 
@@ -137,16 +160,17 @@ UpdateDownloadStart StartDownloadOnFileThread(const base::FilePath& updates_dir,
   start.final_path = updates_dir.AppendASCII(name);
   start.part_path = updates_dir.AppendASCII(name + kPartialSuffix);
   base::CreateDirectory(updates_dir);
-  const std::array<base::FilePath::StringType, 4> keep = {
-      start.final_path.BaseName().value(), start.part_path.BaseName().value(),
-      kMarkerFileName, kHelperLogName};
+  // The marker's copy stays, also when it is another copy of Koan's (its old
+  // app, until its new version has started).
+  const std::optional<InstallMarker> marker =
+      ReadMarker(updates_dir.Append(kMarkerFileName));
   base::FileEnumerator entries(updates_dir, /*recursive=*/false,
                                base::FileEnumerator::FILES |
                                    base::FileEnumerator::DIRECTORIES |
                                    base::FileEnumerator::SHOW_SYM_LINKS);
   for (base::FilePath entry = entries.Next(); !entry.empty();
        entry = entries.Next()) {
-    if (std::ranges::find(keep, entry.BaseName().value()) == keep.end()) {
+    if (ShouldSweepUpdatesEntry(entry, name, marker)) {
       base::DeletePathRecursively(entry);
     }
   }
@@ -175,8 +199,12 @@ PrepareResult PrepareOnFileThread(InstallPlatform* platform,
     return result;
   }
   result = platform->Prepare(request);
-  // The copy is staged, or the image is no good: either way it can go.
-  base::DeleteFile(request.disk_image);
+  // The copy is staged, or the release is no good: either way the image can
+  // go. After another error (a full disk, a timeout) it stays, for the next
+  // try.
+  if (!result.error || IsRejection(*result.error)) {
+    base::DeleteFile(request.disk_image);
+  }
   if (!result.error) {
     InstallMarker marker;
     marker.state = MarkerState::kReady;
@@ -249,6 +277,13 @@ void UpdatePartialFile::Close() {
   file_.Close();
 }
 
+void UpdatePartialFile::Discard() {
+  file_.Close();
+  if (!path_.empty()) {
+    base::DeleteFile(path_);
+  }
+}
+
 bool UpdatePartialFile::Finish(const base::FilePath& final_path,
                                const UpdateInfo& update) {
   file_.Close();
@@ -268,8 +303,11 @@ UpdateInstaller::UpdateInstaller(std::unique_ptr<InstallPlatform> platform,
     : platform_(std::move(platform)),
       source_(std::move(source)),
       show_notice_(std::move(show_notice)),
+      // WithBaseSyncPrimitives(): hdiutil, ditto and codesign are waited
+      // for with a timeout (RunTool()).
       file_runner_(base::ThreadPool::CreateSequencedTaskRunner(
-          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+          {base::MayBlock(), base::WithBaseSyncPrimitives(),
+           base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})),
       marker_runner_(base::ThreadPool::CreateSequencedTaskRunner(
           {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
@@ -330,6 +368,7 @@ void UpdateInstaller::OnStartState(UpdateStartState state) {
       request.relaunch = true;
       request.relaunch_args = RelaunchArgs();
       request.roll_back = true;
+      request.code_requirement = source_.code_requirement;
       if (platform_->StartHelper(request)) {
         rolling_back_ = true;
         chrome::AttemptExit();
@@ -415,11 +454,46 @@ bool UpdateInstaller::IsReady() const {
   return flow_.stage() == Stage::kReady && !rolling_back_;
 }
 
+void UpdateInstaller::CheckOtherInstances(
+    base::OnceCallback<void(bool)> callback) {
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
+      base::BindOnce(&InstallPlatform::OtherInstanceRunning,
+                     base::Unretained(platform_.get())),
+      std::move(callback));
+}
+
+void UpdateInstaller::OnSettingsChanged() {
+  if (!started_ || rolling_back_) {
+    return;
+  }
+  if (!LocalState()->GetBoolean(prefs::kUpdatesCheckEnabled)) {
+    Run(flow_.OnChecksTurnedOff());
+    return;
+  }
+  Run(flow_.OnModeChanged(LocalState()->GetBoolean(prefs::kUpdatesAutoInstall)
+                              ? InstallMode::kAutomatic
+                              : InstallMode::kAskFirst));
+}
+
+void UpdateInstaller::CancelDownload() {
+  retry_timer_.Stop();
+  if (loader_) {
+    loader_.reset();
+    // The partial file stays, for when the download is started again.
+    partial_file_.AsyncCall(&UpdatePartialFile::Close);
+  }
+}
+
 void UpdateInstaller::Run(Step step) {
   switch (step) {
     case Step::kNone:
       return;
+    case Step::kCancel:
+      CancelDownload();
+      return;
     case Step::kAskUser:
+      CancelDownload();
       show_notice_.Run(update_, InstallNotice::kAskToUpdate);
       return;
     case Step::kDownload:
@@ -447,7 +521,8 @@ void UpdateInstaller::Run(Step step) {
 
 void UpdateInstaller::StartDownload() {
   const std::optional<std::string> name = DownloadFileName(update_);
-  if (!name || g_browser_process->IsShuttingDown()) {
+  if (!name || flow_.stage() != Stage::kDownloading ||
+      g_browser_process->IsShuttingDown()) {
     return;
   }
   file_runner_->PostTaskAndReplyWithResult(
@@ -458,10 +533,15 @@ void UpdateInstaller::StartDownload() {
 }
 
 void UpdateInstaller::OnDownloadStart(UpdateDownloadStart start) {
+  // Stopped meanwhile (the settings changed), or started twice.
+  if (flow_.stage() != Stage::kDownloading || loader_ ||
+      g_browser_process->IsShuttingDown()) {
+    return;
+  }
   final_path_ = start.final_path;
   part_path_ = start.part_path;
   if (start.complete) {
-    OnDownloadFinished(true);
+    OnDownloadFinished(DownloadResult::kOk);
     return;
   }
   Fetch(start.partial);
@@ -481,6 +561,7 @@ void UpdateInstaller::Fetch(int64_t partial) {
   if (range) {
     request->headers.SetHeader(net::HttpRequestHeaders::kRange, *range);
   }
+  on_disk_ = partial;
   partial_ = range ? partial : 0;
   offset_ = 0;
   received_ = 0;
@@ -508,9 +589,14 @@ void UpdateInstaller::OnResponseStarted(
     case BodyStart::kReplace:
       offset_ = 0;
       break;
-    case BodyStart::kReject:
+    case BodyStart::kDiscard:
+      LOG(ERROR) << "Response " << code << " (" << content_range
+                 << ") doesn't continue " << part_path_ << "; starting over";
+      AbortDownload(/*discard_partial=*/true);
+      return;
+    case BodyStart::kRetry:
       LOG(ERROR) << "Unexpected response " << code << " for " << final_url;
-      AbortDownload();
+      AbortDownload(/*discard_partial=*/false);
       return;
   }
   partial_file_.AsyncCall(&UpdatePartialFile::Open)
@@ -522,7 +608,7 @@ void UpdateInstaller::OnDataReceived(std::string_view data,
   received_ += static_cast<int64_t>(data.size());
   if (offset_ + received_ > update_.size) {
     LOG(ERROR) << "The download is longer than the signed size";
-    AbortDownload();
+    AbortDownload(/*discard_partial=*/true);
     return;
   }
   partial_file_.AsyncCall(&UpdatePartialFile::Write)
@@ -536,8 +622,9 @@ void UpdateInstaller::OnWritten(base::OnceClosure resume, bool ok) {
     return;
   }
   if (!ok) {
+    // A full disk, say: what was written is still good.
     LOG(ERROR) << "Couldn't write " << part_path_;
-    AbortDownload();
+    AbortDownload(/*discard_partial=*/false);
     return;
   }
   std::move(resume).Run();
@@ -548,33 +635,42 @@ void UpdateInstaller::OnComplete(bool success) {
   loader_.reset();
   if (!success) {
     // The partial file stays: the next try resumes it.
-    LOG(WARNING) << "The update download failed: " << net_error;
+    LOG(WARNING) << "The update download failed: " << net_error << " after "
+                 << received_ << " bytes";
     partial_file_.AsyncCall(&UpdatePartialFile::Close);
-    OnDownloadFinished(false);
+    OnDownloadFinished(MadeProgress(on_disk_, offset_, received_)
+                           ? DownloadResult::kFailedWithProgress
+                           : DownloadResult::kFailed);
     return;
   }
+  // A file that isn't the signed one (its hash) is deleted, and counts.
   partial_file_.AsyncCall(&UpdatePartialFile::Finish)
       .WithArgs(final_path_, update_)
-      .Then(base::BindOnce(&UpdateInstaller::OnDownloadFinished,
+      .Then(base::BindOnce(&UpdateInstaller::OnFinished,
                            weak_factory_.GetWeakPtr()));
+}
+
+void UpdateInstaller::OnFinished(bool ok) {
+  OnDownloadFinished(ok ? DownloadResult::kOk : DownloadResult::kFailed);
 }
 
 void UpdateInstaller::OnRetry(base::OnceClosure start_retry) {
   // The loader has no retries set (each try resumes from the file instead).
-  AbortDownload();
+  AbortDownload(/*discard_partial=*/false);
 }
 
-void UpdateInstaller::AbortDownload() {
+void UpdateInstaller::AbortDownload(bool discard_partial) {
   loader_.reset();
-  partial_file_.AsyncCall(&UpdatePartialFile::Close);
-  file_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(base::IgnoreResult(&base::DeleteFile), part_path_));
-  OnDownloadFinished(false);
+  if (discard_partial) {
+    partial_file_.AsyncCall(&UpdatePartialFile::Discard);
+  } else {
+    partial_file_.AsyncCall(&UpdatePartialFile::Close);
+  }
+  OnDownloadFinished(DownloadResult::kFailed);
 }
 
-void UpdateInstaller::OnDownloadFinished(bool ok) {
-  Run(flow_.OnDownloaded(ok));
+void UpdateInstaller::OnDownloadFinished(DownloadResult result) {
+  Run(flow_.OnDownloaded(result));
 }
 
 PrepareRequest UpdateInstaller::MakePrepareRequest() const {
@@ -589,6 +685,11 @@ PrepareRequest UpdateInstaller::MakePrepareRequest() const {
 }
 
 void UpdateInstaller::Prepare(bool staged_before) {
+  // Not while quitting: hdiutil and ditto would outlive Koan (an image left
+  // attached is detached at the next start, a half copy is redone).
+  if (g_browser_process->IsShuttingDown()) {
+    return;
+  }
   const PrepareRequest request = MakePrepareRequest();
   if (staged_before && resume_) {
     file_runner_->PostTaskAndReplyWithResult(
@@ -611,10 +712,13 @@ void UpdateInstaller::OnPrepared(PrepareResult result) {
   if (result.error) {
     LOG(ERROR) << "Couldn't stage Koan " << update_.version << ": error "
                << static_cast<int>(*result.error) << " " << result.detail;
-    // Not again for a while: the next check offers the release page.
-    HoldVersion(update_.version);
+    // A release that isn't the signed one isn't tried again for a while:
+    // the next check offers the release page. Anything else is tried again.
+    if (IsRejection(*result.error)) {
+      HoldVersion(update_.version);
+    }
   }
-  Run(flow_.OnPrepared(!result.error));
+  Run(flow_.OnPrepared(result.error));
 }
 
 void UpdateInstaller::AnnounceReady() {
@@ -708,6 +812,7 @@ void UpdateInstaller::OnAppTerminating() {
   PrefService* local_state = LocalState();
   HelperRequest request;
   request.marker = marker_path();
+  request.code_requirement = source_.code_requirement;
   request.relaunch =
       local_state->GetBoolean(::prefs::kRestartLastSessionOnShutdown);
   if (request.relaunch) {
@@ -716,6 +821,8 @@ void UpdateInstaller::OnAppTerminating() {
   if (!platform_->StartHelper(request)) {
     return;
   }
+  // From here the helper opens Koan again on every way out
+  // (koan_update_helper_main.mm), whatever fails.
   if (request.relaunch) {
     local_state->ClearPref(::prefs::kRestartLastSessionOnShutdown);
   }
