@@ -544,20 +544,8 @@ void KoanCompactModeController::OnTabsOnRightChanged() {
       pref_change_registrar_.prefs()->GetBoolean(prefs::kTabsOnRight);
   // The hot zones and which window buttons hide depend on the side.
   if (mode_ != Mode::kNone) {
-    const Mode mode = mode_;
-    // This isn't compact mode turning off: in Zen the side is just a pref
-    // (zen.tabs.vertical.right-side), and `zen-user-show` and
-    // `zen-has-empty-tab` stay. Their locks are carried over rather than let
-    // go of and taken again, which would also start a collapse and an expand.
-    std::unique_ptr<ExpandOnHoverLock> peek_lock = std::move(peek_lock_);
-    const bool peek_requested = peek_requested_;
-    std::unique_ptr<ExpandOnHoverLock> empty_tab_lock =
-        std::move(empty_tab_lock_);
-    Deactivate();
-    peek_lock_ = std::move(peek_lock);
-    peek_requested_ = peek_requested;
-    empty_tab_lock_ = std::move(empty_tab_lock);
-    Activate(mode);
+    // (In Zen the side is just a pref, zen.tabs.vertical.right-side.)
+    Reactivate(mode_);
   }
   // Everything in the window is laid out again, mirrored or not; the
   // sidebar's own views too.
@@ -581,6 +569,23 @@ void KoanCompactModeController::OnTabsOnRightChanged() {
   if (!IsClosing() && browser_view_->GetWidget()) {
     browser_view_->GetWidget()->LayoutRootViewIfNecessary();
   }
+}
+
+void KoanCompactModeController::Reactivate(Mode mode) {
+  // This isn't compact mode turning off, and Zen keeps `zen-user-show` and
+  // `zen-has-empty-tab` (it drops the pin only as compact mode turns on or
+  // off: ZenCompactMode's preference setter). Their locks are carried over
+  // rather than let go of and taken again, which would also start a collapse
+  // and an expand.
+  std::unique_ptr<ExpandOnHoverLock> peek_lock = std::move(peek_lock_);
+  const bool peek_requested = peek_requested_;
+  std::unique_ptr<ExpandOnHoverLock> empty_tab_lock =
+      std::move(empty_tab_lock_);
+  Deactivate();
+  peek_lock_ = std::move(peek_lock);
+  peek_requested_ = peek_requested;
+  empty_tab_lock_ = std::move(empty_tab_lock);
+  Activate(mode);
 }
 
 void KoanCompactModeController::OnSidebarCollapseSettled() {
@@ -1291,11 +1296,20 @@ void KoanCompactModeController::UpdateActive() {
   const bool docks_sidebar = applied_ && hides_sidebar();
   const bool sidebar_was_out =
       docks_sidebar && IsSidebarShownOut(browser_view_);
-  if (mode_ != Mode::kNone) {
-    Deactivate();
-  }
-  if (desired != Mode::kNone) {
-    Activate(desired);
+  // A change of variant that leaves the sidebar hidden (Hide both to Hide
+  // sidebar, or back) keeps the Ctrl+Alt+S pin, as in Zen, where the variant
+  // is only the zen.view.compact.hide-* prefs. One that docks the sidebar
+  // lets go of it.
+  if (mode_ == Mode::kCompact && desired == Mode::kCompact && hides_sidebar() &&
+      DesiredHideSidebar()) {
+    Reactivate(desired);
+  } else {
+    if (mode_ != Mode::kNone) {
+      Deactivate();
+    }
+    if (desired != Mode::kNone) {
+      Activate(desired);
+    }
   }
   // (Over the page's own fullscreen the top container stays out of sight.)
   PlaceTopContainer();

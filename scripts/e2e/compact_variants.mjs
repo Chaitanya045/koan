@@ -3,9 +3,10 @@
 // compact mode hiding just the toolbar; the sidebar's context menu switches
 // to hiding both and to hiding just the sidebar. On macOS that menu is a
 // native NSMenu that UI DevTools can't reach (NATIVE_MENUS), so the pref is
-// set as its items set it (koan.compact_mode.hide), and the screenshot of
-// the revealed toolbar, from Linux's frame dumps (compact_variants.flags),
-// isn't taken (the .flags' "# macOS: run" leaves the dump flag out).
+// set as its items set it (koan.compact_mode.hide), the sidebar isn't pinned
+// for it, and the screenshot of the revealed toolbar, from Linux's frame
+// dumps (compact_variants.flags), isn't taken (compact_variants.mac.flags has
+// no flags).
 //
 //   scripts/e2e/run.sh compact_variants
 import { ACCEL } from './lib/koan.mjs';
@@ -90,11 +91,21 @@ check('...hot zones along the left and top edges', zones.length === 2 &&
       zones.some(z => z.y === bv.y && z.h === 8 && z.w > bv.w / 2),
       JSON.stringify(zones.map(z => [z.x, z.y, z.w, z.h])));
 
-// The hidden sidebar slides in for the menu: pick the variant from it.
+// The hidden sidebar slides in for the menu: pin it out (Ctrl+Alt+S, Zen's
+// `zen-user-show`) and pick the variant from it.
 if (!NATIVE_MENUS) await press(VK.S, ACCEL | ALT, 's');
 missing = await compactMenu(HIDE_SIDEBAR);
 check(`...and the menu switches to Hide sidebar${MENU}`, !missing, missing ?? '');
 await sleep(4000);
+if (!NATIVE_MENUS) {
+  // The pin outlasts the variant, as in Zen, where only turning compact mode
+  // on or off drops `zen-user-show` (#579); Ctrl+Alt+S again lets go.
+  strip = find(await views(), 'VerticalTabStripRegionView');
+  check('...the pinned sidebar stays out across the change', strip?.w >= 200,
+        `width ${strip?.w}`);
+  await press(VK.S, ACCEL | ALT, 's');
+  await sleep(3000);
+}
 vs = await views();
 strip = find(vs, 'VerticalTabStripRegionView');
 top = find(vs, 'TopContainerView');
