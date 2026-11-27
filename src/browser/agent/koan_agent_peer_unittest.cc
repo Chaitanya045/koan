@@ -25,6 +25,23 @@
 #include "base/timer/elapsed_timer.h"
 #include "net/base/sockaddr_storage.h"
 #include "net/base/sockaddr_util_posix.h"
+#elif BUILDFLAG(IS_LINUX)
+#include <fcntl.h>
+#include <poll.h>
+#include <sys/stat.h>
+#include <sys/un.h>
+
+#include <string>
+#include <vector>
+
+#include "base/containers/span.h"
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
+#include "base/files/scoped_temp_dir.h"
+#include "base/path_service.h"
+#include "base/posix/unix_domain_socket.h"
+#include "base/process/launch.h"
+#include "base/process/process.h"
 #endif
 
 namespace koan::agent {
@@ -233,6 +250,261 @@ TEST(KoanAgentPeerTest, WhatIsNotAPeerFailsClosed) {
   EXPECT_FALSE(resolver->Resolve(PeerToken(3, 1)));
   EXPECT_FALSE(resolver->Resolve(PeerToken(sizeof(audit_token_t), 0)));
   EXPECT_FALSE(resolver->Resolve(PeerToken(sizeof(audit_token_t) + 1, 0)));
+}
+
+#elif BUILDFLAG(IS_LINUX)
+
+namespace {
+
+// SO_PEERPIDFD (Linux 6.5). Without it the resolver refuses every peer, which
+// is the right answer there and nothing to test.
+bool KernelHasPeerPidfd() {
+  int fds[2];
+  if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0) {
+    return false;
+  }
+  base::ScopedFD a(fds[0]);
+  base::ScopedFD b(fds[1]);
+  int pidfd = -1;
+  socklen_t length = sizeof(pidfd);
+  if (getsockopt(a.get(), SOL_SOCKET, 77 /* SO_PEERPIDFD */, &pidfd, &length) !=
+      0) {
+    return false;
+  }
+  close(pidfd);
+  return true;
+}
+
+base::FilePath ThisExecutable() {
+  base::FilePath exe;
+  EXPECT_TRUE(base::PathService::Get(base::FILE_EXE, &exe));
+  return base::MakeAbsoluteFilePath(exe);
+}
+
+void ExpectIsThisProcess(const ResolvedPeer& peer) {
+  EXPECT_EQ(peer.identity.uid, geteuid());
+  EXPECT_EQ(base::FilePath(peer.identity.process.path), ThisExecutable());
+  // No signature on Linux: the file, by inode, ctime and size.
+  struct stat info;
+  ASSERT_EQ(stat(ThisExecutable().value().c_str(), &info), 0);
+  EXPECT_EQ(peer.identity.process.signing_identity,
+            FileIdentity(info.st_ino, info.st_ctim.tv_sec, info.st_ctim.tv_nsec,
+                         info.st_size));
+  for (const ProcessInfo& ancestor : peer.identity.ancestors) {
+    EXPECT_FALSE(ancestor.signing_identity.empty());
+  }
+}
+
+}  // namespace
+
+TEST(KoanAgentPeerTest, PidfdInfoIsRead) {
+  EXPECT_EQ(PidFromPidfdInfo("pos:\t0\nflags:\t02000002\nmnt_id:\t15\n"
+                             "ino:\t1057\nPid:\t4242\nNSpid:\t4242\t7\n"),
+            4242);
+  // Not visible in that namespace, and exited.
+  EXPECT_EQ(PidFromPidfdInfo("Pid:\t0\nNSpid:\t0\n"), 0);
+  EXPECT_EQ(PidFromPidfdInfo("Pid:\t-1\n"), -1);
+  EXPECT_FALSE(PidFromPidfdInfo("pos:\t0\nflags:\t02\n"));
+  EXPECT_FALSE(PidFromPidfdInfo("Pid:\tsoon\n"));
+  EXPECT_FALSE(PidFromPidfdInfo(""));
+}
+
+TEST(KoanAgentPeerTest, ProcStatIsReadPastTheCommandName) {
+  // A name may hold spaces and ") ": the fields start after the last ')'.
+  const std::optional<ProcStat> stat = ParseProcStat(
+      "4242 (we ird) name) S 77 4242 4242 0 -1 4194560 100 0 0 0 1 2 0 0 20 "
+      "0 1 0 987654 12345678 300 18446744073709551615\n");
+  ASSERT_TRUE(stat);
+  EXPECT_EQ(stat->parent, 77);
+  EXPECT_EQ(stat->start_time, 987654u);
+  EXPECT_FALSE(ParseProcStat("4242 (name) S 77 4242"));
+  EXPECT_FALSE(ParseProcStat("no parenthesis here"));
+  EXPECT_FALSE(ParseProcStat(""));
+}
+
+TEST(KoanAgentPeerTest, AFileIdentityNamesInodeCtimeAndSize) {
+  EXPECT_EQ(FileIdentity(1234, 1700000000, 5, 99), "file:1234:1700000000.5:99");
+  EXPECT_NE(FileIdentity(1234, 1700000000, 5, 99),
+            FileIdentity(1234, 1700000000, 6, 99));
+}
+
+TEST(KoanAgentPeerTest, ThisProcessIsResolvedThroughItsOwnProc) {
+  if (!KernelHasPeerPidfd()) {
+    GTEST_SKIP() << "no SO_PEERPIDFD (Linux 6.5+)";
+  }
+  const std::unique_ptr<PeerResolver> resolver = CreatePlatformPeerResolver();
+  ASSERT_TRUE(resolver);
+  int fds[2];
+  ASSERT_EQ(socketpair(AF_UNIX, SOCK_STREAM, 0, fds), 0);
+  base::ScopedFD ours(fds[0]);
+  base::ScopedFD theirs(fds[1]);
+  const std::optional<PeerToken> token = resolver->TokenForSocket(ours.get());
+  ASSERT_TRUE(token);
+  const std::optional<ResolvedPeer> peer = resolver->Resolve(*token);
+  ASSERT_TRUE(peer);
+  ExpectIsThisProcess(*peer);
+  EXPECT_TRUE(resolver->Unchanged(*peer));
+  // A token is resolved once.
+  EXPECT_FALSE(resolver->Resolve(*token));
+  // A copy of the peer keeps its descriptors.
+  const ResolvedPeer copy = *peer;
+  EXPECT_TRUE(resolver->Unchanged(copy));
+  ResolvedPeer tampered = *peer;
+  tampered.identity.process.path = "/bin/ls";
+  EXPECT_FALSE(resolver->Unchanged(tampered));
+  tampered = *peer;
+  tampered.descriptors.reset();
+  EXPECT_FALSE(resolver->Unchanged(tampered));
+}
+
+// The gateway's resolver: the client's hello carries its /proc, which is used
+// once the kernel says it is a procfs in which this process is visible.
+TEST(KoanAgentPeerTest, TheHelloIsTakenAndNothingElse) {
+  if (!KernelHasPeerPidfd()) {
+    GTEST_SKIP() << "no SO_PEERPIDFD (Linux 6.5+)";
+  }
+  const std::unique_ptr<PeerResolver> resolver =
+      CreatePlatformPeerResolver(PeerHello::kExpected);
+  int fds[2];
+  ASSERT_EQ(socketpair(AF_UNIX, SOCK_STREAM, 0, fds), 0);
+  base::ScopedFD ours(fds[0]);
+  base::ScopedFD theirs(fds[1]);
+  ASSERT_TRUE(SendPeerHello(theirs.get()));
+  ASSERT_EQ(write(theirs.get(), "\0\0", 2), 2);
+  const std::optional<PeerToken> token = resolver->TokenForSocket(ours.get());
+  ASSERT_TRUE(token);
+  const std::optional<ResolvedPeer> peer = resolver->Resolve(*token);
+  ASSERT_TRUE(peer);
+  ExpectIsThisProcess(*peer);
+  // The hello byte is gone; the first frame's bytes are not.
+  char bytes[3] = {1, 1, 1};
+  EXPECT_EQ(recv(ours.get(), bytes, sizeof(bytes), MSG_DONTWAIT), 2);
+  EXPECT_EQ(bytes[0], 0);
+  EXPECT_EQ(bytes[1], 0);
+}
+
+TEST(KoanAgentPeerTest, AClientWithoutAHelloKeepsItsFirstByte) {
+  if (!KernelHasPeerPidfd()) {
+    GTEST_SKIP() << "no SO_PEERPIDFD (Linux 6.5+)";
+  }
+  const std::unique_ptr<PeerResolver> resolver =
+      CreatePlatformPeerResolver(PeerHello::kExpected);
+  int fds[2];
+  ASSERT_EQ(socketpair(AF_UNIX, SOCK_STREAM, 0, fds), 0);
+  base::ScopedFD ours(fds[0]);
+  base::ScopedFD theirs(fds[1]);
+  ASSERT_EQ(write(theirs.get(), "\0", 1), 1);
+  const std::optional<ResolvedPeer> peer =
+      resolver->Resolve(*resolver->TokenForSocket(ours.get()));
+  // This process is visible in its own /proc: found without a hello.
+  ASSERT_TRUE(peer);
+  char byte = 1;
+  EXPECT_EQ(recv(ours.get(), &byte, 1, MSG_DONTWAIT), 1);
+  EXPECT_EQ(byte, 0);
+}
+
+TEST(KoanAgentPeerTest, AHelloThatIsNotAProcIsRefused) {
+  if (!KernelHasPeerPidfd()) {
+    GTEST_SKIP() << "no SO_PEERPIDFD (Linux 6.5+)";
+  }
+  const std::unique_ptr<PeerResolver> resolver =
+      CreatePlatformPeerResolver(PeerHello::kExpected);
+  const auto refused = [&](const std::vector<int>& sent) {
+    int fds[2];
+    EXPECT_EQ(socketpair(AF_UNIX, SOCK_STREAM, 0, fds), 0);
+    base::ScopedFD ours(fds[0]);
+    base::ScopedFD theirs(fds[1]);
+    const uint8_t byte = kPeerHelloByte;
+    EXPECT_TRUE(base::UnixDomainSocket::SendMsg(
+        theirs.get(), base::span_from_ref(byte), sent));
+    return !resolver->Resolve(*resolver->TokenForSocket(ours.get()));
+  };
+  // A directory that is not a procfs root, a procfs entry that is not its
+  // root, a file, no descriptor at all, and two of them.
+  base::ScopedFD tmp(open("/tmp", O_PATH | O_DIRECTORY | O_CLOEXEC));
+  base::ScopedFD self(open("/proc/self", O_PATH | O_DIRECTORY | O_CLOEXEC));
+  base::ScopedFD null(open("/dev/null", O_RDONLY | O_CLOEXEC));
+  base::ScopedFD proc(open("/proc", O_PATH | O_DIRECTORY | O_CLOEXEC));
+  ASSERT_TRUE(tmp.is_valid() && self.is_valid() && null.is_valid() &&
+              proc.is_valid());
+  EXPECT_TRUE(refused({tmp.get()}));
+  EXPECT_TRUE(refused({self.get()}));
+  EXPECT_TRUE(refused({null.get()}));
+  EXPECT_TRUE(refused({}));
+  EXPECT_TRUE(refused({proc.get(), proc.get()}));
+  // The real thing is accepted.
+  EXPECT_FALSE(refused({proc.get()}));
+}
+
+TEST(KoanAgentPeerTest, ARealChildIsResolvedAndIsGoneWhenItExits) {
+  if (!KernelHasPeerPidfd()) {
+    GTEST_SKIP() << "no SO_PEERPIDFD (Linux 6.5+)";
+  }
+  const std::unique_ptr<PeerResolver> resolver = CreatePlatformPeerResolver();
+  // A program that is not this test connects to a listening socket (the
+  // kernel names the process that called connect(), not one that inherited
+  // the socket).
+  base::ScopedTempDir dir;
+  ASSERT_TRUE(dir.CreateUniqueTempDirUnderPath(base::FilePath("/tmp")));
+  const base::FilePath path = dir.GetPath().Append("s");
+  sockaddr_un address = {};
+  address.sun_family = AF_UNIX;
+  ASSERT_LT(path.value().size(), sizeof(address.sun_path));
+  base::span(address.sun_path).copy_prefix_from(base::span(path.value()));
+  base::ScopedFD listener(socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0));
+  ASSERT_EQ(bind(listener.get(), reinterpret_cast<sockaddr*>(&address),
+                 sizeof(address)),
+            0);
+  ASSERT_EQ(listen(listener.get(), 1), 0);
+  // Python is on every Linux CI image and desktop; it connects and waits.
+  base::LaunchOptions options;
+  base::Process child = base::LaunchProcess(
+      std::vector<std::string>{"/usr/bin/python3", "-c",
+                               "import socket,sys,time\n"
+                               "s=socket.socket(socket.AF_UNIX)\n"
+                               "s.connect(sys.argv[1])\n"
+                               "time.sleep(30)\n",
+                               path.value()},
+      options);
+  ASSERT_TRUE(child.IsValid());
+  pollfd wait = {listener.get(), POLLIN, 0};
+  ASSERT_EQ(poll(&wait, 1, 10000), 1) << "the child did not connect";
+  base::ScopedFD accepted(accept(listener.get(), nullptr, nullptr));
+  ASSERT_TRUE(accepted.is_valid());
+
+  const std::optional<PeerToken> token =
+      resolver->TokenForSocket(accepted.get());
+  ASSERT_TRUE(token);
+  const std::optional<ResolvedPeer> peer = resolver->Resolve(*token);
+  ASSERT_TRUE(peer);
+  EXPECT_EQ(peer->identity.uid, geteuid());
+  EXPECT_TRUE(base::FilePath(peer->identity.process.path)
+                  .BaseName()
+                  .value()
+                  .starts_with("python3"));
+  EXPECT_TRUE(peer->identity.process.signing_identity.starts_with("file:"));
+  // Its parent is this test.
+  ASSERT_FALSE(peer->identity.ancestors.empty());
+  EXPECT_EQ(base::FilePath(peer->identity.ancestors[0].path), ThisExecutable());
+  EXPECT_TRUE(resolver->Unchanged(*peer));
+
+  // Once it is gone it is not the peer any more.
+  ASSERT_TRUE(child.Terminate(0, /*wait=*/true));
+  EXPECT_FALSE(resolver->Unchanged(*peer));
+}
+
+TEST(KoanAgentPeerTest, WhatIsNotAPeerFailsClosed) {
+  const std::unique_ptr<PeerResolver> resolver = CreatePlatformPeerResolver();
+  ASSERT_TRUE(resolver);
+  base::ScopedFD file(open("/dev/null", O_RDONLY));
+  ASSERT_TRUE(file.is_valid());
+  EXPECT_FALSE(resolver->TokenForSocket(file.get()));
+  EXPECT_FALSE(resolver->TokenForSocket(-1));
+  // Tokens this resolver never handed out.
+  EXPECT_FALSE(resolver->Resolve({}));
+  EXPECT_FALSE(resolver->Resolve(PeerToken(3, 1)));
+  EXPECT_FALSE(resolver->Resolve(PeerToken(8, 0)));
+  EXPECT_FALSE(resolver->Resolve(PeerToken(8, 0xff)));
 }
 
 #else

@@ -49,14 +49,15 @@ class UnixDomainServerSocket;
 //      browser's before the connection is accepted.
 //   2. ConnectionAdmission: at most 8 connections, 4 of them unauthenticated.
 //      A connection over the limit is told Koan.busy and closed, unread.
-//   3. The peer's audit token is read at once (PeerResolver::TokenForSocket)
-//      and resolved to a process, a signing identity and ancestors off the
-//      sequence. No byte is read from the connection until that has succeeded
-//      (5 s), and it fails closed: no token or no process (told
-//      Koan.peerUnresolved, and logged), another uid or a peer that is
-//      blocked (told nothing) means the connection is closed. Once the peer is
-//      known, one program may hold only two of the unauthenticated slots
-//      (Koan.busy for the third).
+//   3. The peer's token (macOS: its audit token; Linux: its pidfd) is read at
+//      once (PeerResolver::TokenForSocket) and resolved to a process, a
+//      signing identity and ancestors off the sequence (on Linux after the
+//      client's one-byte hello, koan_agent_peer.h). No byte is read from the
+//      connection until that has succeeded (5 s), and it fails closed: no token
+//      or no process (told Koan.peerUnresolved, and logged), another uid or a
+//      peer that is blocked (told nothing) means the connection is closed. Once
+//      the peer is known, one program may hold only two of the unauthenticated
+//      slots (Koan.busy for the third).
 //   4. A Session reads and writes the connection. The session asks the gateway
 //      to look at the peer again (PeerResolver::Unchanged) before it verifies a
 //      proof and before it applies the user's approval.

@@ -13,6 +13,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 
 namespace koan::cli {
 
@@ -41,6 +42,9 @@ const std::map<std::string_view, CommandKind>& Commands() {
       {"watch", CommandKind::kWatch},
       {"wait", CommandKind::kWait},
       {"skill", CommandKind::kSkill},
+#if BUILDFLAG(IS_LINUX)
+      {"setup", CommandKind::kSetup},
+#endif
       {"__hold", CommandKind::kHold},
       {"relay", CommandKind::kRelayEnv},
       {"shell", CommandKind::kShell},
@@ -291,6 +295,12 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
       command.stop_on_error = true;
       continue;
     }
+#if BUILDFLAG(IS_LINUX)
+    if (arg == "--remove") {
+      command.remove_setup = true;
+      continue;
+    }
+#endif
     if (arg == "--full") {
       command.full = true;
       continue;
@@ -394,6 +404,9 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
   if (command.stop_on_error && command.kind != CommandKind::kShell) {
     return Error("--stop-on-error is koan shell's");
   }
+  if (command.remove_setup && command.kind != CommandKind::kSetup) {
+    return Error("--remove is koan setup's");
+  }
 
   switch (command.kind) {
     case CommandKind::kHelp:
@@ -409,6 +422,7 @@ ParseResult ParseArgs(const std::vector<std::string>& args) {
     case CommandKind::kEnd:
     case CommandKind::kSkill:
     case CommandKind::kShell:
+    case CommandKind::kSetup:
       if (!expect(0, 0)) {
         return Error("koan " + positional[0] + " takes no arguments");
       }
@@ -637,7 +651,8 @@ Koan.noSuggestions, Koan.noSuchSuggestion, Koan.offSite (a login for another
 site, or a form that sends it elsewhere), Koan.paused, Koan.notPermitted (a
 tab you may only read) or Koan.interstitial.
 )HELP"},
-      {"upload", R"HELP(koan upload <tab> <path> [<path> ...]
+      {"upload",
+       R"HELP(koan upload <tab> <path> [<path> ...]
 koan act <tab> upload <target> <path> [<path> ...]
 
 Attaches files you were given to the page's file input, as the user's pick
@@ -649,13 +664,25 @@ input, a styled button or label for a hidden input, a drop zone that opens a
 chooser when clicked), waits up to 5 s for the chooser, and answers it; it
 works as a step of a longer act. Each waits up to 5 s for a chooser.
 
-The paths are on the Mac that runs Koan, relative to the current folder or
+)HELP"
+#if BUILDFLAG(IS_MAC)
+       R"HELP(The paths are on the Mac that runs Koan, relative to the current folder or
 absolute; each must be a readable regular file (not a folder). An agent on
 another machine copies the file to the Mac first:
   scp resume.pdf mac:/tmp/resume.pdf
   ssh mac '~/Applications/Koan.app/Contents/Resources/bin/koan upload <tab> /tmp/resume.pdf'
 Files in Desktop, Documents or Downloads make macOS ask the user once to let
-Koan read that folder; /tmp or a folder of your own does not.
+Koan read that folder; /tmp or a folder of your own does not.)HELP"
+#else
+       R"HELP(The paths are on the computer that runs Koan, relative to the current folder
+or absolute; each must be a readable regular file (not a folder). An agent
+on another machine copies the file to that computer first:
+  scp resume.pdf pc:Downloads/resume.pdf
+  ssh pc '~/.local/bin/koan upload <tab> ~/Downloads/resume.pdf'
+Koan's Flatpak reads only the Documents, Downloads, Music, Pictures and
+Videos folders: put the file in one of them (/tmp is not one).)HELP"
+#endif
+       R"HELP(
 
 The chooser's rules hold: one path unless the input has `multiple` (at most
 32), and each file of a type its `accept` list allows (Koan.notAccepted on a
@@ -745,6 +772,18 @@ stopped, the tab closed, or --timeout (a duration: 90s, 10m, 1h; default
       {"skill", R"HELP(koan skill
 
 Prints the guide for agents.)HELP"},
+#if BUILDFLAG(IS_LINUX)
+      {"setup", R"HELP(koan setup [--remove]
+
+Lets the coding agents on this computer find Koan on their own, as
+Settings > Agent Control > Set up agents does: links ~/.local/bin/koan to
+this koan (for Koan's Flatpak, by the path that follows its updates) and
+adds the small koan-browser skill to the skills folder of each agent that
+is installed (Claude Code, Codex, Cursor, ~/.agents). Koan's Flatpak cannot
+write to your home folder, so Settings asks you to run this once in a
+terminal. Agents still ask you in Koan before they connect. --remove takes
+out what it added (only Koan's own link and skill files).)HELP"},
+#endif
   };
   auto it = help->find(command == "hand-back" ? "release" : command);
   if (it == help->end()) {
@@ -787,10 +826,19 @@ std::string UsageText() {
                          only), or fill the one picked as the user would;
                          secrets stay hidden (a filled one reads as dots)
   koan upload <tab> <path> [<path> ...]
-                         attach files (on this Mac) to the file chooser the
+)"
+#if BUILDFLAG(IS_MAC)
+         R"(                         attach files (on this Mac) to the file chooser the
                          page opened; act's `upload @ref <path>` clicks the
                          input first
-  koan help <command>    a command's exact form and options
+)"
+#else
+         R"(                         attach files (on this computer) to the file chooser
+                         the page opened; act's `upload @ref <path>` clicks
+                         the input first
+)"
+#endif
+         R"(  koan help <command>    a command's exact form and options
   koan take-over [tab]   ask to control a tab of yours (you approve in Koan)
   koan release <tab>     give a tab of yours back
   koan end [--task T]    end one task, or (no --task) every task: its tabs
@@ -809,7 +857,13 @@ std::string UsageText() {
                          connection; each answer ends with a line
                          "--- exit N" (JSON lines in, JSON lines out)
   koan skill             the guide for agents
-
+)"
+#if BUILDFLAG(IS_LINUX)
+         R"(  koan setup [--remove]  link ~/.local/bin/koan and add the koan-browser
+                         skill to your agents (Settings asks you to run it)
+)"
+#endif
+         R"(
 Options: --json, --user-data-dir DIR, --client ID (default: the newest
 pairing of this agent with this Koan). <tab> is an id from
 koan tabs or open, or a unique prefix of one (4 characters or more).

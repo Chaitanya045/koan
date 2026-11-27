@@ -27,6 +27,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/agent/koan_agent_page_surfaces.h"
+#include "koan/browser/agent/koan_agent_platform.h"
 #include "koan/browser/agent/koan_agent_upload_logic.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom.h"
 
@@ -253,9 +254,16 @@ AgentUploads::Checked AgentUploads::CheckFiles(
     const base::FilePath real =
         base::MakeAbsoluteFilePath(base::FilePath::FromUTF8Unsafe(shown));
     const std::string missing =
-        "no file at " + shown +
-        " on this Mac; the path is on the Mac that runs Koan (an agent "
-        "elsewhere copies the file there first, with scp)";
+        RunsInFlatpak()
+            ? "no file at " + shown +
+                  " that Koan can read; the path is on the computer that "
+                  "runs Koan, and Koan's Flatpak reads only the Documents, "
+                  "Downloads, Music, Pictures and Videos folders (copy the "
+                  "file into Downloads first)"
+            : "no file at " + shown + " on " + kThisMachine +
+                  "; the path is on " + kTheMachineThatRunsKoan +
+                  " (an agent elsewhere copies the file there first, with "
+                  "scp)";
     if (real.empty()) {
       return Refused("Koan.fileNotFound", missing);
     }

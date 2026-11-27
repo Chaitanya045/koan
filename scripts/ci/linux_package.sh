@@ -48,8 +48,11 @@ if [[ ${KOAN_CI_DUMMY:-0} == 1 ]]; then
   OUT="$WORK/dummy-out"
   mkdir -p "$OUT/locales"
   printf '#!/bin/sh\necho "Koan packaging check: $*"\n' > "$OUT/chrome"
-  cp "$OUT/chrome" "$OUT/chrome_crashpad_handler"
-  chmod +x "$OUT/chrome" "$OUT/chrome_crashpad_handler"
+  for f in chrome_crashpad_handler koan koan-relay; do
+    cp "$OUT/chrome" "$OUT/$f"
+  done
+  chmod +x "$OUT/chrome" "$OUT/chrome_crashpad_handler" "$OUT/koan" \
+    "$OUT/koan-relay"
   for f in icudtl.dat resources.pak chrome_100_percent.pak chrome_200_percent.pak \
       locales/en-US.pak; do
     : > "$OUT/$f"
@@ -66,13 +69,18 @@ if grep -q 'is_component_build = true' "$OUT/args.gn" 2>/dev/null; then
 fi
 
 echo "==> Staging $OUT"
+# koan and koan-relay: the agent's tools (//koan/cli), /app/koan/koan and
+# /app/koan/koan-relay in the Flatpak; agents on the host run them from the
+# Flatpak's files (`koan setup` links ~/.local/bin/koan). scripts/build.sh
+# builds them with chrome on Linux.
 required=(chrome chrome_crashpad_handler icudtl.dat resources.pak
-          chrome_100_percent.pak chrome_200_percent.pak locales)
+          chrome_100_percent.pak chrome_200_percent.pak locales koan
+          koan-relay)
 optional=(v8_context_snapshot.bin snapshot_blob.bin libEGL.so libGLESv2.so
           libvk_swiftshader.so vk_swiftshader_icd.json libvulkan.so.1
           libqt5_shim.so libqt6_shim.so libqt6_shim.so.6 libffmpeg.so
           MEIPreload PrivacySandboxAttestationsPreloaded WidevineCdm
-          resources koan)
+          resources)
 for f in "${required[@]}"; do
   [[ -e $OUT/$f ]] || { echo "missing $OUT/$f" >&2; exit 1; }
   cp -a "$OUT/$f" "$STAGE/"
@@ -82,7 +90,8 @@ for f in "${optional[@]}"; do
 done
 find "$STAGE/locales" -name '*.pak.info' -delete
 if [[ ${KOAN_CI_DUMMY:-0} != 1 ]]; then
-  strip --strip-unneeded "$STAGE/chrome" "$STAGE/chrome_crashpad_handler"
+  strip --strip-unneeded "$STAGE/chrome" "$STAGE/chrome_crashpad_handler" \
+    "$STAGE/koan" "$STAGE/koan-relay"
 fi
 cp LICENSE THIRD_PARTY_NOTICES.md "$STAGE/"
 du -sh "$STAGE"

@@ -82,6 +82,7 @@ source_set("webui") {
     ]
     deps += [
       "//koan/browser/agent:browser",
+      "//koan/browser/agent:platform",
       "//koan/browser/agent:setup",
       "//koan/browser/containers",
     ]

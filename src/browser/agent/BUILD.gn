@@ -167,6 +167,16 @@ source_set("indicator_logic") {
   ]
 }
 
+# How agent control names the machine ("this Mac", "this computer"), and
+# whether the browser runs in a Flatpak.
+source_set("platform") {
+  sources = [
+    "koan_agent_platform.cc",
+    "koan_agent_platform.h",
+  ]
+  public_deps = [ "//base" ]
+}
+
 # How many connections the gateway keeps open.
 source_set("admission") {
   sources = [
@@ -177,8 +187,9 @@ source_set("admission") {
 }
 
 if (is_posix) {
-  # Settings > Agent Control > "Set up agents on this Mac": the koan link and
-  # the entry skill in each agent's skills directory (koan_agent_setup.h).
+  # Settings > Agent Control > "Set up agents on this Mac" (this computer on
+  # Linux, and `koan setup` there): the koan link and the entry skill in each
+  # agent's skills directory (koan_agent_setup.h).
   source_set("setup") {
     sources = [
       "koan_agent_setup.cc",
@@ -200,8 +211,8 @@ if (is_posix) {
     ]
   }
 
-  # Who is on the other end of a connection, from the OS (macOS only; elsewhere
-  # there is no resolver and the gateway does not start).
+  # Who is on the other end of a connection, from the OS (macOS and Linux;
+  # elsewhere there is no resolver and the gateway does not start).
   source_set("peer") {
     sources = [
       "koan_agent_peer.cc",
@@ -295,6 +306,7 @@ if (is_posix) {
       ":gateway",
       ":limits",
       ":peer",
+      ":platform",
       ":screenshot_mask",
       ":secrets",
       ":socket",
@@ -479,6 +491,7 @@ source_set("facade") {
     ":contexts",
     ":events",
     ":filters",
+    ":platform",
     ":policy",
     ":reach",
     ":redact",

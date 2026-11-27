@@ -17,6 +17,7 @@
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "koan/browser/agent/koan_agent_frame.h"
 #include "koan/cli/koan_cli_actions.h"
 #include "koan/cli/koan_cli_admission.h"
@@ -413,7 +414,63 @@ TEST(KoanCliProtocolTest, Discovery) {
   EXPECT_FALSE(ParseDiscovery(R"({"socket":"relative.sock","pid":42})"));
   EXPECT_FALSE(ParseDiscovery(R"({"socket":"/a.sock","pid":0})"));
   EXPECT_FALSE(ParseDiscovery("not json"));
+  // A browser that does not name its PID namespace (the Mac, an older one):
+  // its pid is looked up as before.
+  EXPECT_TRUE(discovery->pid_namespace.empty());
+  EXPECT_TRUE(PidIsComparable(*discovery, ""));
+  EXPECT_TRUE(PidIsComparable(*discovery, "pid:[4026531836]"));
 }
+
+// A Koan in a Flatpak writes the pid it has in its sandbox: on the host that
+// is another process or none, so it is not looked up there (issue #489).
+TEST(KoanCliProtocolTest, APidFromAnotherNamespaceIsNotLookedUp) {
+  std::optional<Discovery> discovery = ParseDiscovery(
+      R"({"socket":"/home/u/.var/app/dev.koan.Koan/config/koan/AgentControl/)"
+      R"(agent.sock","pid":2,"pidNamespace":"pid:[4026532999]"})");
+  ASSERT_TRUE(discovery);
+  EXPECT_EQ(discovery->pid_namespace, "pid:[4026532999]");
+  EXPECT_FALSE(PidIsComparable(*discovery, "pid:[4026531836]"));
+  EXPECT_TRUE(PidIsComparable(*discovery, "pid:[4026532999]"));
+}
+
+#if BUILDFLAG(IS_LINUX)
+// The koan that agents on the host run is the Flatpak's own, from its files;
+// it serves the Flatpak's profile.
+TEST(KoanCliProtocolTest, TheFlatpaksKoanUsesTheFlatpaksProfile) {
+  const base::FilePath home("/home/u");
+  EXPECT_EQ(DefaultUserDataDir(home, nullptr).value(), "/home/u/.config/koan");
+  EXPECT_EQ(DefaultUserDataDir(home, nullptr, /*flatpak=*/true).value(),
+            "/home/u/.var/app/dev.koan.Koan/config/koan");
+  EXPECT_EQ(DefaultUserDataDir(home, "/tmp/p", /*flatpak=*/true).value(),
+            "/tmp/p");
+  EXPECT_TRUE(IsInKoanFlatpak(base::FilePath(
+      "/home/u/.local/share/flatpak/app/dev.koan.Koan/x86_64/master/"
+      "0123abcd/files/koan/koan")));
+  EXPECT_TRUE(IsInKoanFlatpak(base::FilePath(
+      "/var/lib/flatpak/app/dev.koan.Koan/current/active/files/koan/koan")));
+  EXPECT_FALSE(
+      IsInKoanFlatpak(base::FilePath("/home/u/koan/out/Release/koan")));
+  EXPECT_FALSE(IsInKoanFlatpak(
+      base::FilePath("/var/lib/flatpak/app/org.other.App/current/active/"
+                     "files/koan/koan")));
+  EXPECT_FALSE(IsInKoanFlatpak(
+      base::FilePath("/var/lib/flatpak/app/dev.koan.Koan/current/active")));
+}
+
+TEST(KoanCliArgsTest, SetupIsALinuxCommand) {
+  ParseResult setup = ParseArgs({"setup"});
+  ASSERT_TRUE(setup.command) << setup.error;
+  EXPECT_EQ(setup.command->kind, CommandKind::kSetup);
+  EXPECT_FALSE(setup.command->remove_setup);
+  ParseResult remove = ParseArgs({"setup", "--remove"});
+  ASSERT_TRUE(remove.command) << remove.error;
+  EXPECT_TRUE(remove.command->remove_setup);
+  EXPECT_FALSE(ParseArgs({"setup", "now"}).command);
+  EXPECT_FALSE(ParseArgs({"status", "--remove"}).command);
+  EXPECT_TRUE(HelpText("setup"));
+  EXPECT_NE(UsageText().find("koan setup"), std::string::npos);
+}
+#endif
 
 TEST(KoanCliProtocolTest, ClientsAndChoosingOne) {
   const std::string id(32, 'a');
@@ -590,11 +647,19 @@ TEST(KoanCliSkillTest, TheGuideCoversPairingTakeOverAndSsh) {
            "capability drive",
            "logins, extensions",
            "What agents can use",
+#if BUILDFLAG(IS_MAC)
            "AppleScript",
-           "debugging port",
-           "ssh",
            "~/Applications/Koan.app/Contents/Resources/bin/koan",
            "/Applications/Koan.app/Contents/Resources/bin/koan",
+#else
+           "xdotool",
+           "koan setup",
+           "dev.koan.Koan/current/active/files/koan/koan",
+           ".var/app/dev.koan.Koan/config/koan/AgentControl",
+           "not inside another sandbox",
+#endif
+           "debugging port",
+           "ssh",
            "saves the PNG",
            "never read or edit ~/.koan",
            "--snapshot",
@@ -618,6 +683,13 @@ TEST(KoanCliSkillTest, TheGuideCoversPairingTakeOverAndSsh) {
   }
   // Not the old advice: agent tabs never saw the user's logins.
   EXPECT_EQ(guide.find("never see the user's logins"), std::string::npos);
+#if !BUILDFLAG(IS_MAC)
+  // Off the Mac, nothing in it speaks of one (issue #489).
+  for (const std::string& text : {guide, UsageText(), *HelpText("upload")}) {
+    EXPECT_EQ(text.find("Mac"), std::string::npos) << text;
+    EXPECT_EQ(text.find("Koan.app"), std::string::npos) << text;
+  }
+#endif
   EXPECT_EQ(guide.find("--capabilities"), std::string::npos);
 }
 

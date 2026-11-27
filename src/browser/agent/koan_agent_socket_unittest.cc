@@ -4,6 +4,7 @@
 
 #include "koan/browser/agent/koan_agent_socket.h"
 
+#include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -15,6 +16,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
 #include "base/test/task_environment.h"
+#include "build/build_config.h"
 #include "net/base/net_errors.h"
 #include "net/socket/unix_domain_server_socket_posix.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -85,6 +87,43 @@ TEST_F(KoanAgentSocketTest, WithoutARootThePerUserTemporaryDirectoryIsUsed) {
   const base::FilePath parent = chosen->DirName().DirName();
   EXPECT_TRUE(parent == root || parent == base::FilePath("/tmp")) << parent;
 }
+
+#if BUILDFLAG(IS_LINUX)
+// Koan's Flatpak: the profile is in ~/.var/app/dev.koan.Koan, which the host
+// sees at the same path, and the fallback goes to the one runtime directory
+// the sandbox shares with the host.
+TEST_F(KoanAgentSocketTest, AFlatpakProfileFallsBackToTheSharedRuntimeDir) {
+  const base::FilePath runtime("/run/user/1000");
+  EXPECT_EQ(*SandboxRuntimeRoot(
+                base::FilePath("/home/u/.var/app/dev.koan.Koan/config/koan"),
+                runtime),
+            base::FilePath("/run/user/1000/app/dev.koan.Koan"));
+  // The default profile fits sun_path: the socket stays in it.
+  const base::FilePath profile("/home/u/.var/app/dev.koan.Koan/config/koan");
+  EXPECT_EQ(*ChooseSocketPath(profile, 1000),
+            profile.Append("AgentControl").Append("agent.sock"));
+  // Not a Flatpak's folder, or no runtime directory: no such root.
+  EXPECT_FALSE(
+      SandboxRuntimeRoot(base::FilePath("/home/u/.config/koan"), runtime));
+  EXPECT_FALSE(SandboxRuntimeRoot(
+      base::FilePath("/home/u/.var/app/dev.koan.Koan"), runtime));
+  EXPECT_FALSE(SandboxRuntimeRoot(
+      base::FilePath("/home/u/.var/app/../config/koan"), runtime));
+  EXPECT_FALSE(SandboxRuntimeRoot(
+      base::FilePath("/home/u/.var/app/dev.koan.Koan/config/koan"),
+      base::FilePath("relative")));
+}
+
+TEST_F(KoanAgentSocketTest, OnLinuxTheRuntimeDirIsThePerUserTemporaryDir) {
+  const char* runtime = getenv("XDG_RUNTIME_DIR");
+  if (runtime && runtime[0] == '/') {
+    EXPECT_EQ(UserTempRoot(),
+              base::FilePath(runtime).StripTrailingSeparators());
+  } else {
+    EXPECT_EQ(UserTempRoot(), base::FilePath("/tmp"));
+  }
+}
+#endif
 
 TEST_F(KoanAgentSocketTest, NothingFitsMeansNoPath) {
   const base::FilePath deep(std::string("/") + std::string(200, 'a'));

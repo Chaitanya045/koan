@@ -24,6 +24,7 @@
 #include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/termination_notification.h"
 #include "chrome/common/chrome_paths.h"
@@ -69,6 +70,16 @@ void WriteDiscoveryFile(base::FilePath file, base::FilePath socket_path) {
   info.Set("pid", static_cast<int>(base::GetCurrentProcId()));
   info.Set("version", version_info::GetVersionNumber());
   info.Set("agentVersion", kAgentInterfaceVersion);
+#if BUILDFLAG(IS_LINUX)
+  // The pid is this process's in its own PID namespace: in a Flatpak that is
+  // the sandbox's, and a `koan` on the host must not look it up in its own
+  // (koan_cli_protocol.h, PidIsComparable()).
+  base::FilePath pid_namespace;
+  if (base::ReadSymbolicLink(base::FilePath("/proc/self/ns/pid"),
+                             &pid_namespace)) {
+    info.Set("pidNamespace", pid_namespace.value());
+  }
+#endif
   const std::optional<std::string> json = base::WriteJson(info);
   // The socket's directory is made 0700 by the gateway before it listens; the
   // fallback socket path (a long --user-data-dir) is elsewhere, so make sure.
@@ -107,7 +118,7 @@ class AgentControlService::GatewayHost final : public ApprovalPresenter,
               base::WeakPtr<AgentControlService> service)
       : ui_(std::move(ui)),
         service_(std::move(service)),
-        resolver_(CreatePlatformPeerResolver()),
+        resolver_(CreatePlatformPeerResolver(PeerHello::kExpected)),
         store_(std::make_unique<InMemoryClientStore>()) {}
 
   ~GatewayHost() override { Stop(); }

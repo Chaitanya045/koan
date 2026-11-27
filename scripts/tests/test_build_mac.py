@@ -140,6 +140,17 @@ class DryRunTest(unittest.TestCase):
     self.assertIn('install      would', out)
     self.assertNotIn('FAIL', out)
 
+  def test_linux_chrome_builds_the_agent_tools_too(self):
+    # The Flatpak ships koan and koan-relay beside the browser (#489); the
+    # Mac's chrome target has them through koan_bundle_data.
+    out = self.plan(KOAN_FAKE_OS='linux')
+    self.assertRegex(
+        out, r'autoninja -C out/Koan -j \d+ chrome koan/cli:koan '
+        r'koan/cli:koan-relay\n')
+    self.assertNotIn('koan/cli', self.plan())
+    self.assertRegex(self.plan('koan_unittests', KOAN_FAKE_OS='linux'),
+                     r'autoninja -C out/Koan -j \d+ koan_unittests\n')
+
   def test_interrupted_fetch_resumes(self):
     self.fake_src()  # some other HEAD, no finished sync
     self.assertIn('fetch        would: resume the fetch', self.plan())

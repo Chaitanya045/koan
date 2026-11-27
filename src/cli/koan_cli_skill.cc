@@ -5,6 +5,7 @@
 #include "koan/cli/koan_cli_skill.h"
 
 #include "base/strings/string_number_conversions.h"
+#include "build/build_config.h"
 #include "koan/browser/agent/koan_agent_frame.h"
 
 namespace koan::cli {
@@ -12,7 +13,8 @@ namespace koan::cli {
 std::string SkillGuide(const std::string& notice) {
   // The notice first, so that an agent reads it before it trusts the rest;
   // the end line last, so that it knows it read all of it.
-  return notice + R"(# Using Koan, the user's browser
+  return notice +
+         R"(# Using Koan, the user's browser
 
 Koan is the user's own web browser. With `koan`, you open and work in tabs
 of your own in it, and, when the user agrees, in a tab of theirs. Your tabs
@@ -21,10 +23,19 @@ user's logins, extensions, saved passwords and site permissions (unless the
 user turned some of that off in Koan: Settings > Agent Control >
 What agents can use). Every command is `koan ...`.
 
-Never use AppleScript ("Allow JavaScript from Apple Events"), a remote
+)"
+#if BUILDFLAG(IS_MAC)
+         R"(Never use AppleScript ("Allow JavaScript from Apple Events"), a remote
 debugging port, or another browser to get at the user's pages: `koan` is
 the way in, and it is the one the user approved.
-
+)"
+#else
+         R"(Never use a remote debugging port, input tools (xdotool, ydotool) or
+another browser to get at the user's pages: `koan` is the way in, and it is
+the one the user approved.
+)"
+#endif
+         R"(
 1. `koan status`. If it says "paired: no", run `koan pair --label "<your
    name>"` and tell the user to approve it in Koan (a dialog there); wait
    for it. A plain `koan pair` asks for everything an agent can do (its own
@@ -194,9 +205,18 @@ the way in, and it is the one the user approved.
    clicks the file input, the "Upload" button or the drop zone @12 and
    answers the chooser the page opens; no panel opens. If a click already
    opened one (Koan.userNeeded: ... file chooser), `koan upload <tab>
-   <path>` answers it. Paths are on the Mac that runs Koan; on another
+   <path>` answers it. )"
+#if BUILDFLAG(IS_MAC)
+         R"(Paths are on the Mac that runs Koan; on another
    machine, copy the file over first (`scp resume.pdf mac:/tmp/`, then
-   `koan upload <tab> /tmp/resume.pdf` there). One file unless the input
+   `koan upload <tab> /tmp/resume.pdf` there). )"
+#else
+         R"(Paths are on the computer that runs Koan, and
+   Koan's Flatpak reads only the Documents, Downloads, Music, Pictures and
+   Videos folders: put the file in Downloads first (`cp resume.pdf
+   ~/Downloads/`; from another machine, `scp resume.pdf <host>:Downloads/`). )"
+#endif
+         R"(One file unless the input
    takes several; of a type it accepts (Koan.notAccepted: convert it, or
    ask). Attach only what the user gave you or asked you to send, never a
    key, a password file or anything from Koan's own folders (refused
@@ -238,7 +258,9 @@ waiting for the user: tell them what it asks, and wait. Do not try to get
 around either. A file chooser (file-picker) is the one you may answer
 yourself, with `koan upload <tab> <path>`, if you have the file.
 
-Your tabs stay open between commands for as long as your task lasts (30
+)"
+#if BUILDFLAG(IS_MAC)
+         R"(Your tabs stay open between commands for as long as your task lasts (30
 minutes without a command ends it). Some agents sandbox shell commands:
 `koan` needs your home directory (~/.koan) and the socket in Koan's profile
 directory (~/Library/Application Support/Koan/AgentControl).
@@ -263,7 +285,42 @@ login rather than mixing it with other programs. Each ssh connection costs
 a few hundred milliseconds: reuse one for every command (`ssh -o
 ControlMaster=auto -o ControlPath=/tmp/koan-ssh-%C -o ControlPersist=10m
 <mac> ...`), or send many commands through one `ssh <mac> <koan path> shell`.
-)" + "[koan:skill] end of guide v" +
+)"
+#else
+         R"(Your tabs stay open between commands for as long as your task lasts (30
+minutes without a command ends it). Some agents sandbox shell commands:
+`koan` needs your home directory (~/.koan) and the socket in Koan's profile
+directory (~/.var/app/dev.koan.Koan/config/koan/AgentControl for Koan's
+Flatpak, ~/.config/koan/AgentControl otherwise), and it must run on the
+host, not inside another sandbox: Koan looks the program up there to show
+the user who asks.
+
+## If `koan` is not found
+
+Run it by its full path, inside Koan's Flatpak:
+`~/.local/share/flatpak/app/dev.koan.Koan/current/active/files/koan/koan`
+(installed with --user) or
+`/var/lib/flatpak/app/dev.koan.Koan/current/active/files/koan/koan`.
+Settings > Agent Control > "Set up agents on this computer" gives the user
+a command that links it as ~/.local/bin/koan (`koan setup`).
+
+## From another machine (you run on a server, the user's Koan is on their computer)
+
+Run `koan` on that computer over ssh, by its full path (a non-interactive
+ssh shell may not have ~/.local/bin on its PATH), for example
+`ssh <host> ~/.local/bin/koan status`. Pair the same way, over ssh; the
+user approves in Koan on their computer. Files are there too: `koan
+screenshot <tab> -o /tmp/shot.png` saves the PNG on that computer, so copy
+it back (`scp <host>:/tmp/shot.png .`) to look at it. Every command of a
+task must come from the same agent: keep using the same ssh login rather
+than mixing it with other programs. Each ssh connection costs a few
+hundred milliseconds: reuse one for every command (`ssh -o
+ControlMaster=auto -o ControlPath=/tmp/koan-ssh-%C -o ControlPersist=10m
+<host> ...`), or send many commands through one `ssh <host> <koan path>
+shell`.
+)"
+#endif
+         + "[koan:skill] end of guide v" +
          base::NumberToString(agent::kAgentInterfaceVersion) + "\n";
 }
 

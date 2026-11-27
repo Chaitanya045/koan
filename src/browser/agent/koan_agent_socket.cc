@@ -6,12 +6,14 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stdlib.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 #include <array>
 #include <string>
+#include <vector>
 
 #include "base/files/file_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -46,8 +48,31 @@ base::FilePath UserTempRoot() {
         std::string(buffer.begin(), buffer.begin() + (length - 1)));
     return path.StripTrailingSeparators();
   }
+#elif BUILDFLAG(IS_LINUX)
+  const char* runtime = getenv("XDG_RUNTIME_DIR");
+  if (runtime && runtime[0] == '/') {
+    return base::FilePath(runtime).StripTrailingSeparators();
+  }
 #endif
   return base::FilePath("/tmp");
+}
+
+std::optional<base::FilePath> SandboxRuntimeRoot(
+    const base::FilePath& profile_dir,
+    const base::FilePath& runtime_dir) {
+  if (!runtime_dir.IsAbsolute()) {
+    return std::nullopt;
+  }
+  const std::vector<std::string> parts = profile_dir.GetComponents();
+  for (size_t i = 0; i + 2 < parts.size(); ++i) {
+    // .../.var/app/<app id>/...: an app id is reverse DNS, never "." or "..".
+    if (parts[i] == ".var" && parts[i + 1] == "app" &&
+        parts[i + 2].find('.') != std::string::npos && parts[i + 2] != "." &&
+        parts[i + 2] != ".." && i + 3 < parts.size()) {
+      return runtime_dir.Append("app").Append(parts[i + 2]);
+    }
+  }
+  return std::nullopt;
 }
 
 std::optional<base::FilePath> ChooseSocketPath(
@@ -66,6 +91,12 @@ std::optional<base::FilePath> ChooseSocketPath(
   if (tmp_root) {
     roots.push_back(*tmp_root);
   } else {
+#if BUILDFLAG(IS_LINUX)
+    if (std::optional<base::FilePath> sandbox =
+            SandboxRuntimeRoot(profile_dir, UserTempRoot())) {
+      roots.push_back(*sandbox);
+    }
+#endif
     roots.push_back(UserTempRoot());
     roots.push_back(base::FilePath("/tmp"));
   }

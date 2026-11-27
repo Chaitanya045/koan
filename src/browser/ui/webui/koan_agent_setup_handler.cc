@@ -6,6 +6,9 @@
 
 #include <stdlib.h>
 
+#include <optional>
+#include <string>
+
 #include "base/check_op.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
@@ -13,6 +16,7 @@
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "content/public/browser/web_ui.h"
+#include "koan/browser/agent/koan_agent_platform.h"
 #include "koan/browser/agent/koan_agent_setup.h"
 
 #if BUILDFLAG(IS_MAC)
@@ -42,6 +46,46 @@ base::FilePath ToolInThisApp() {
   base::PathService::Get(base::FILE_EXE, &exe);
   return exe.DirName().Append("koan");
 #endif
+}
+
+// What the page shows in a Flatpak: no setup of its own (the sandbox cannot
+// write to the home folder), but the command that does it on the host, with
+// the Flatpak's koan by the path that follows its updates.
+base::DictValue SandboxedSetup(const base::FilePath& cli) {
+  std::string info;
+  std::optional<base::FilePath> app_path;
+  if (base::ReadFileToStringWithMaxSize(base::FilePath("/.flatpak-info"), &info,
+                                        64 * 1024)) {
+    app_path = agent::FlatpakAppPath(info);
+  }
+  const std::string command =
+      app_path ? agent::ShellQuoted(agent::ToolToLink(
+                     app_path->Append("koan").Append("koan"))) +
+                     " setup"
+               : std::string(
+                     "\"$(flatpak info --show-location dev.koan.Koan)/files/"
+                     "koan/koan\" setup");
+  return base::DictValue()
+      .Set("sandboxed", true)
+      .Set("setupCommand", command)
+      .Set("cli", cli.value())
+      .Set("link", "~/.local/bin/koan")
+      .Set("cliExists", base::PathExists(cli))
+      .Set("linked", false)
+      .Set("onPath", false)
+      .Set("agents", base::ListValue())
+      .Set("problems", base::ListValue());
+}
+
+base::DictValue DoAction(agent::AgentSetup (*work)(const base::FilePath&,
+                                                   const base::FilePath&),
+                         const base::FilePath& home,
+                         const base::FilePath& cli) {
+  base::DictValue value = agent::RunsInFlatpak()
+                              ? SandboxedSetup(cli)
+                              : agent::AgentSetupToValue(work(home, cli), home);
+  value.Set("machine", agent::kThisMachine);
+  return value;
 }
 
 }  // namespace
@@ -82,15 +126,14 @@ void KoanAgentSetupHandler::Handle(Action action, const base::ListValue& args) {
       FROM_HERE,
       {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
        base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
-      base::BindOnce(work, home_, cli_),
+      base::BindOnce(&DoAction, work, home_, cli_),
       base::BindOnce(&KoanAgentSetupHandler::Reply, weak_factory_.GetWeakPtr(),
                      args[0].Clone()));
 }
 
 void KoanAgentSetupHandler::Reply(base::Value callback_id,
-                                  const agent::AgentSetup& setup) {
-  ResolveJavascriptCallback(callback_id,
-                            agent::AgentSetupToValue(setup, home_));
+                                  base::DictValue setup) {
+  ResolveJavascriptCallback(callback_id, setup);
 }
 
 }  // namespace koan

@@ -21,8 +21,10 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
 #include "base/functional/bind.h"
+#include "base/path_service.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "koan/browser/agent/koan_agent_frame.h"
 #include "koan/cli/koan_cli_actions.h"
 #include "third_party/boringssl/src/include/openssl/curve25519.h"
@@ -39,10 +41,20 @@ base::FilePath KoanDir() {
   return KoanHome(HomeDir());
 }
 
+bool IsFlatpaksKoan() {
+#if BUILDFLAG(IS_LINUX)
+  base::FilePath exe;
+  return base::PathService::Get(base::FILE_EXE, &exe) && IsInKoanFlatpak(exe);
+#else
+  return false;
+#endif
+}
+
 base::FilePath UserDataDir(const std::string& given) {
   const base::FilePath dir =
       given.empty()
-          ? DefaultUserDataDir(HomeDir(), getenv("KOAN_USER_DATA_DIR"))
+          ? DefaultUserDataDir(HomeDir(), getenv("KOAN_USER_DATA_DIR"),
+                               IsFlatpaksKoan())
           : base::FilePath(given);
   const base::FilePath absolute = base::MakeAbsoluteFilePath(dir);
   return absolute.empty() ? dir : absolute;
@@ -248,13 +260,36 @@ std::string Describe(const std::optional<Message>& answer) {
   return error.code + ": " + error.message;
 }
 
+namespace {
+
+// This process's PID namespace, as the browser writes its own into the
+// discovery file (Linux); "" elsewhere.
+std::string OwnPidNamespace() {
+#if BUILDFLAG(IS_LINUX)
+  base::FilePath link;
+  if (base::ReadSymbolicLink(base::FilePath("/proc/self/ns/pid"), &link)) {
+    return link.value();
+  }
+#endif
+  return std::string();
+}
+
+// Whether the browser that wrote `discovery` has certainly gone. Where its
+// pid means nothing here (a Koan in a Flatpak), connecting will say.
+bool BrowserIsGone(const Discovery& discovery) {
+  return PidIsComparable(discovery, OwnPidNamespace()) &&
+         kill(discovery.pid, 0) != 0 && errno == ESRCH;
+}
+
+}  // namespace
+
 std::optional<Discovery> ReadDiscovery(const base::FilePath& user_data_dir) {
   std::string json;
   if (!base::ReadFileToString(DiscoveryFile(user_data_dir), &json)) {
     return std::nullopt;
   }
   std::optional<Discovery> discovery = ParseDiscovery(json);
-  if (!discovery || (kill(discovery->pid, 0) != 0 && errno == ESRCH)) {
+  if (!discovery || BrowserIsGone(*discovery)) {
     return std::nullopt;
   }
   return discovery;
@@ -277,12 +312,18 @@ std::unique_ptr<FrameChannel> DialBrowser(const base::FilePath& user_data_dir,
     return nullptr;
   }
   // A discovery file left by a browser that is gone.
-  if (kill(discovery->pid, 0) != 0 && errno == ESRCH) {
+  if (BrowserIsGone(*discovery)) {
     *error = "Koan is not running (its discovery file is stale)";
     return nullptr;
   }
   base::ScopedFD fd = ConnectUnix(discovery->socket, error);
   if (!fd.is_valid()) {
+    return nullptr;
+  }
+  // Linux: the descriptor of this program's /proc that lets a Koan in a
+  // Flatpak look this program up (koan_agent_peer.h). Nothing elsewhere.
+  if (!agent::SendPeerHello(fd.get())) {
+    *error = "could not tell Koan which program connects (no /proc?)";
     return nullptr;
   }
   return std::make_unique<FrameChannel>(std::move(fd), agent::kMaxPayload);
@@ -350,8 +391,9 @@ bool ForgetIfStale(const base::FilePath& home,
                    const base::FilePath& user_data_dir) {
   const std::optional<ClientInfo> record = LoadClient(home, client_id);
   return record &&
-         ShouldForget(*record, user_data_dir,
-                      DefaultUserDataDir(HomeDir(), nullptr)) &&
+         ShouldForget(
+             *record, user_data_dir,
+             DefaultUserDataDir(HomeDir(), nullptr, IsFlatpaksKoan())) &&
          ForgetClient(home, client_id);
 }
 

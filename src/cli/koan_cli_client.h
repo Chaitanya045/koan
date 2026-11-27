@@ -38,6 +38,10 @@ inline constexpr base::TimeDelta kAnswerWait = base::Seconds(30);
 base::FilePath HomeDir();
 // ~/.koan.
 base::FilePath KoanDir();
+// Whether this `koan` is the one inside an installed Flatpak of Koan (Linux),
+// run on the host from the Flatpak's files: its Koan's profile is the
+// Flatpak's.
+bool IsFlatpaksKoan();
 // The browser profile: `given`, else $KOAN_USER_DATA_DIR, else Koan's; made
 // absolute if it exists, so that a pairing records one name for it.
 base::FilePath UserDataDir(const std::string& given);
