@@ -5,10 +5,12 @@
 #ifndef KOAN_BROWSER_IMPORTER_KOAN_IMPORTED_SPACES_H_
 #define KOAN_BROWSER_IMPORTER_KOAN_IMPORTED_SPACES_H_
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "url/gurl.h"
 
@@ -40,6 +42,9 @@ struct ImportedItem {
   // A folder shown collapsed.
   bool collapsed = false;
   std::vector<ImportedItem> children;
+  // An Essential's profile, as ImportedSpace::profile (a Space's tabs take
+  // their Space's).
+  std::optional<std::u16string> profile;
 };
 
 struct ImportedSpace {
@@ -59,6 +64,27 @@ struct ImportedSpace {
   std::string theme;
   // Its pinned tabs and folders, in order.
   std::vector<ImportedItem> items;
+  // The profile (Koan's user container, by name) its tabs open in: empty
+  // for none (Arc's default profile, Koan's Default); unset where the source
+  // says nothing (Zen), so the Space keeps what it has.
+  std::optional<std::u16string> profile;
+  // Its id in the source's files, which its link rules name (Arc).
+  std::string source_id;
+};
+
+// A link rule (Arc's Air Traffic Control) as one of Koan's Space routes
+// (koan_space_routes.h): links whose URL matches `reference` open in the
+// imported Space `space_id` (ImportedSpace::source_id).
+struct ImportedRoute {
+  enum class Match {
+    kContains,  // Koan's "contains".
+    kEqualTo,   // Koan's "equal-to".
+  };
+  std::string reference;
+  Match match = Match::kContains;
+  std::string space_id;
+
+  bool operator==(const ImportedRoute&) const = default;
 };
 
 struct ImportedSpaces {
@@ -75,6 +101,18 @@ struct ImportedSpaces {
   // Essentials don't have: their tabs go in order.
   std::vector<ImportedItem> essentials;
   std::vector<ImportedSpace> spaces;
+  // Link rules to the Spaces of `spaces`, in order.
+  std::vector<ImportedRoute> routes;
+  // The Space (its source_id) links from other apps open in, if the source
+  // names one of `spaces`.
+  std::optional<std::string> external_default;
+};
+
+// An Arc profile: its folder in "User Data" ("Default" for the main one)
+// and its name (Local State's profile.info_cache).
+struct ArcProfile {
+  std::string dir;
+  std::u16string name;
 };
 
 // Arc's Spaces of profile `profile_dir_name` (its folder in "User Data",
@@ -86,6 +124,23 @@ struct ImportedSpaces {
 // Little Arc windows' containers and unpinned tabs are left out.
 ImportedSpaces ParseArcSpaces(std::string_view json,
                               std::string_view profile_dir_name);
+
+// The same for every profile of `profiles`, in the sidebar's order (Arc's
+// sidebar lists every profile's Spaces together), each Space and Favorite
+// with its profile: none for "Default", else the profile's name (its folder
+// without one), which Koan's import makes a profile of (#481).
+ImportedSpaces ParseArcSpaces(std::string_view json,
+                              base::span<const ArcProfile> profiles);
+
+// Adds to `plan` Arc's link rules (Air Traffic Control, `json` from
+// StorableLinkRouting.json) that send links to one of its Spaces, in order:
+// a single "URL contains" or "URL is" condition (urlMatch) and a Space
+// destination. Rules for Little Arc or the most recent Space, with another
+// condition (the app a link came from, starts with) or several, or for a
+// Space not in `plan` are left out; so is a "most recent" default.
+// Assumed format (no Arc install was read): .agent/notes/upstream/
+// importer.md, D13.
+void AddArcLinkRules(std::string_view json, ImportedSpaces& plan);
 
 // Zen's Spaces from its session file (zen-sessions.jsonlz4, decompressed;
 // Zen 1.24's ZenSessionManager): every Space of `spaces` in order (name,
@@ -104,6 +159,8 @@ ImportedSpaces ReadZenSpaces(const base::FilePath& profile_dir);
 inline constexpr char kZenSessionsFile[] = "zen-sessions.jsonlz4";
 // Arc's sidebar, beside its "User Data" folder.
 inline constexpr char kArcSidebarFile[] = "StorableSidebar.json";
+// Arc's link rules (Air Traffic Control), beside the sidebar.
+inline constexpr char kArcLinkRoutingFile[] = "StorableLinkRouting.json";
 
 }  // namespace koan::importer
 
