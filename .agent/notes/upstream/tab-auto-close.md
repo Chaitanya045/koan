@@ -89,10 +89,11 @@ No hook patch is needed.
    session data, as the Library's filter reads it. Chromium's notice of
    that deletion (`history::DeletionInfo`) doesn't say which profile it
    was, so the Library calls `DeleteProfileHistory()`, which forgets that
-   profile's closed tabs itself, deletes the visits with
-   `ExpireHistoryBetween(…, app_id, …)`, and marks the deletion (its range
-   and pages, kept with the profile until `ExpireHistoryBetween()`'s reply,
-   which comes after the notice) so every window's closer lets its notice
+   profile's closed tabs itself, removes the visits with a `HistoryDBTask`
+   (`HistoryBackend::RemoveVisits()`, #582: a notice that names the visits
+   and pages gone, never "all history"), and marks the deletion (one of its
+   visit ids, posted to the UI sequence before the notice; kept with the
+   profile until the task is done) so every window's closer lets its notice
    go by. A deletion that names no profile (Clear browsing data, an
    extension's `chrome.history`, the Library with All profiles) still
    forgets every profile's closed tabs it covers: it clears every profile's

@@ -835,7 +835,7 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
       // The profile shown's visits to the page, or all of them.
       if (const ProfileChoice shown = ShownProfile()) {
         DeleteProfileHistory(profile_, history_, *shown, {entry.url},
-                             base::Time(), &forget_tracker_);
+                             base::Time());
       } else {
         history_->DeleteURLs({entry.url});
       }
@@ -914,8 +914,7 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
                 }
                 // Only that profile's visits; the pages stay for the others.
                 DeleteProfileHistory(section->profile_, section->history_,
-                                     *shown, urls, base::Time(),
-                                     &section->forget_tracker_);
+                                     *shown, urls, base::Time());
               },
               weak_factory_.GetWeakPtr(), shown),
           &forget_tracker_);
@@ -1018,8 +1017,7 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
     }
     if (shown) {
       // That profile's visits and closed tabs only.
-      DeleteProfileHistory(profile_, history_, *shown, {}, begin,
-                           &forget_tracker_);
+      DeleteProfileHistory(profile_, history_, *shown, {}, begin);
       return;
     }
     profile_->GetBrowsingDataRemover()->Remove(

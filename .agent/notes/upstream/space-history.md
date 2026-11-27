@@ -30,7 +30,10 @@ for behaviour only, and none of their code is in Koan.
     (`VisitDatabase::GetVisibleVisitsForURL` / the shared where-clause builder: `visits.app_id = ?`).
   - `ExpireHistoryBetween(restrict_urls, restrict_app_id, begin, end)` deletes one tag's visits, and drops
     a URL row when no visit is left. The delete directive handler and `BrowsingHistoryService`
-    (chrome://history) take an app id too.
+    (chrome://history) take an app id too. But its notice carries the range it was given: from the
+    beginning (a null begin) that is `DeletionInfo::IsAllHistory()`, and with pages a combination
+    `DeletionInfo` rejects (`DCHECK(!time_range_.IsAllTime() || !restrict_urls_.has_value())`), see
+    "Deletion notices" below (#582).
   - `URLResult::app_id()` and `VisitRow::app_id` carry it back. `GetAllAppIds()` lists the tags.
   - The schema and its migrations are upstream's.
 - **The omnibox has no per-visit data.** `HistoryQuickProvider` reads `InMemoryURLIndex` (URL rows and their
@@ -63,7 +66,7 @@ for behaviour only, and none of their code is in Koan.
 | Which profile the URL bar shows | The active Space's profile of the last active window of that browser profile (the window being typed in); in a window without Spaces (Incognito, a New Blank Window) its active tab's container. A Space without a profile shows the default's. | The URL bar of a Space, not of a tab: a tab moved in from another Space still shows the Space's suggestions. Typing a URL there opens it in that tab's own container as before. |
 | Switch to Tab | The tab matcher leaves out tabs of another profile (`IsOutsideOmniboxProfile()`): Switch to Tab buttons, the empty URL bar's open tabs and the tabs search (Shift+Cmd+A). | Same screen-sharing case. |
 | Library > History | A **Which profile?** filter after the when, sort and source filters: All profiles, Default, then each profile. Each opening picks the active Space's profile. It filters with `QueryOptions::app_id` (`''` for Default), and closed tabs by the container in their session data. Only with the setting on and at least one profile. | |
-| Forget This Page, Forget About This Site, Clear history | Act on the profile the filter shows, and say so ("... in the Work profile", "... in every profile"). One profile: `ExpireHistoryBetween(urls or range, its tag)`; the site's cookies, storage and cache in that profile's partition only (`SetStoragePartitionConfig`, partition data types only). All profiles: upstream's deletes as before, plus the site's data in every profile's partition. Default: the default partition, with the site's permissions and engagement (shared by every profile), as before. | "Can act on all": pick All profiles. |
+| Forget This Page, Forget About This Site, Clear history | Act on the profile the filter shows, and say so ("... in the Work profile", "... in every profile"). One profile: that tag's visits (to the pages, or from the range's start) removed with `HistoryBackend::RemoveVisits()` from a `HistoryDBTask` (`DeleteProfileHistory()`, #582), whose notice names the visits and pages gone and no range; the site's cookies, storage and cache in that profile's partition only (`SetStoragePartitionConfig`, partition data types only). All profiles: upstream's deletes as before, plus the site's data in every profile's partition. Default: the default partition, with the site's permissions and engagement (shared by every profile), as before. | "Can act on all": pick All profiles. |
 
 ## Hard cases
 
@@ -84,6 +87,39 @@ for behaviour only, and none of their code is in Koan.
 | Address variants | Known limit: right after start, a page's `http`/`www` variant visited only in the default profile counts with the variant visited in a profile under the same key, so the default profile's URL bar may hide it until it is visited again there. |
 | Visited-link colour (`:visited`) | Not kept apart: Chromium keeps visited links per browser profile, so a link to a page visited in one profile is drawn as visited on the same site in another (seen on the build of d7fab2a3: a link clicked only in Work is purple in a Default Space; the nightly does the same). Chromium already limits `:visited` to the same site and frame, and a page can't read the colour, so what it shows is small and only to the person at the screen. Keeping it apart would mean a visited-link store per partition. |
 
+## Deletion notices (#582)
+
+Observers of `HistoryServiceObserver::OnHistoryDeletions()` decide what to drop from the
+`DeletionInfo`. `IsAllHistory()` is `time_range().IsAllTime()`: a null begin and a null or max end, whatever
+`restrict_urls` and the app id say. So one profile's deletion must never be sent with an all-time range,
+and a range at all says "everything in it" to several observers that don't read `restrict_urls`. Seen in
+158 (pristine source, release builds):
+
+- **Drop everything on `IsAllHistory()`, before the pages:** `HistoryService::NotifyDeletions` (the
+  visited-link store: `DeleteAllURLs()` and `DeleteAllVisitedLinks()`), `InMemoryHistoryBackend` (the
+  URL bar's in-memory URL database), `InMemoryURLIndex` (HistoryQuickProvider), `HistoryFuzzyProvider`,
+  `ShortcutsBackend` (all shortcuts), `FaviconCache` (omnibox), `TopSitesImpl` (resets top sites),
+  `AutocompleteActionPredictor`, `ResourcePrefetchPredictor`, `MediaEngagementService` (all media
+  engagement), `SiteDataCacheFacade`, `SubresourceFilterHistoryObserver`,
+  `BrowsingDataHistoryObserverService` (the suspicious-site allowlist), `PersonalDataManager` (Autofill's
+  upload history), `AutofillAiModelCache`, `DiscountInfosStorage`, `CriticalActionService`,
+  `ContextClustererHistoryServiceObserver`, `HistoryEmbeddingsService`, `MultistepFilterService`,
+  `CustomLinksManagerImpl` (NTP tiles), `V5SearchHashesCache`, `PasswordProtectionServiceBase`,
+  `VerdictCacheManager`, `SegmentationPlatform`'s history observer, `SendTabToSelfBridge`, the
+  extensions `chrome.history.onVisitRemoved` (`allHistory: true`), the history sync bridges (sync is off in Koan), and in Koan
+  `SpaceHistoryIndex` and `KoanTabAutoCloser` (#509's closed tabs).
+- **Act on any valid range, ignoring the pages:** `BrowsingDataHistoryObserverService` removes the
+  auto-generated search engines made in the range (`RemoveAutoGeneratedBetween()`), and
+  `AtMemoryPersistedStateManager` resets. A range from the very first visit would clear them all.
+
+So `DeleteProfileHistory()` (koan_tab_auto_closer.cc) doesn't use `ExpireHistoryBetween()`. A
+`HistoryDBTask` reads the tag's visits (`GetAllVisitsInRange(begin, max, tag)`, kept to the pages' URL ids)
+and removes them with `HistoryBackend::RemoveVisits()`, as sync removes visits. Its notice is the shape of
+`DeleteURLs()`'s: no time range, the URL rows with no visit left in any profile, and the visit ids. Both are
+public; no patch. It runs on a tracker kept with the browser profile, so a Library closed right after the
+click doesn't cancel it. `RemoveVisits()` commits on the backend's next scheduled commit (seconds), not at
+once as `ExpireHistoryBetween()` does.
+
 ## Hooks
 
 | Patch | Change | Size |
@@ -99,8 +135,8 @@ delegate, the controller has no match filter, and the tab matcher has no observe
 - `KoanSpaceHistoryBrowserTest.VisitsRecordTheirProfile`: a default tab's visit has no tag and a profile's
   has its own. It fails if upstream starts setting `app_id` on desktop, or stops storing it.
 - `SuggestionsComeFromTheSpacesProfile`: the omnibox's result passes through the hook.
-- `LibraryFilterActsOnOne`: `QueryOptions::app_id` and `ExpireHistoryBetween(restrict_app_id)` act on one
-  tag.
+- `LibraryFilterActsOnOne`: `QueryOptions::app_id` and the Library's removal act on one tag, and the
+  removal's notice is neither all history nor a range (`LibraryRemovalsNameWhatWent` too).
 
 ## Tests
 
