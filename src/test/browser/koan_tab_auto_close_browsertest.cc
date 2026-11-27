@@ -9,15 +9,19 @@
 // aged while the browser was closed goes after the session is restored. The
 // --koan-auto-close-tabs-after switch makes "old" one second.
 
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/functional/callback_helpers.h"
 #include "base/run_loop.h"
+#include "base/task/cancelable_task_tracker.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/test/run_until.h"
+#include "base/test/test_future.h"
 #include "base/time/time.h"
+#include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
@@ -26,19 +30,28 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/base/ui_test_utils.h"
+#include "components/history/core/browser/history_service.h"
+#include "components/history/core/browser/history_types.h"
+#include "components/keyed_service/core/service_access_type.h"
 #include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/sessions/core/tab_restore_types.h"
+#include "components/tab_groups/tab_group_id.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "koan/browser/containers/koan_container_partition.h"
+#include "koan/browser/containers/koan_user_containers.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/koan_switches.h"
 #include "koan/browser/koan_tab_auto_close.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_tab_auto_closer.h"
+#include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
 #include "url/gurl.h"
 
@@ -238,6 +251,94 @@ IN_PROC_BROWSER_TEST_F(KoanTabAutoCloseBrowserTest,
   std::vector<auto_close::ClosedTab> closed = Closed();
   ASSERT_EQ(1u, closed.size());
   EXPECT_EQ(Page("Aged"), closed[0].url);
+}
+
+// The Library's Clear history for one profile (#474), "Everything": only
+// that profile's closed tabs are forgotten. Chromium's notice of the
+// deletion doesn't say which profile it was; another profile's closed tab
+// stays listed and reopens in its profile.
+IN_PROC_BROWSER_TEST_F(KoanTabAutoCloseBrowserTest,
+                       ClearingOneProfilesHistoryKeepsTheOthersClosedTabs) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  Profile* profile = browser()->GetProfile();
+  prefs()->SetBoolean(prefs::kSpacesSeparateHistory, true);
+  std::string work;
+  {
+    ScopedListPrefUpdate update(prefs(), prefs::kUserContainers);
+    std::optional<containers::UserContainer> container =
+        containers::AddUserContainer(update.Get(), u"Work");
+    ASSERT_TRUE(container);
+    work = containers::Serialize(container->id);
+  }
+  history::HistoryService* history = HistoryServiceFactory::GetForProfile(
+      profile, ServiceAccessType::EXPLICIT_ACCESS);
+  ASSERT_TRUE(history);
+  ui_test_utils::WaitForHistoryToLoad(history);
+
+  // A closed tab in the first Space (the default profile).
+  AddBackgroundTab("Home");
+  WaitPastTheLimit();
+  TurnOn();
+  closer()->CheckNowForTesting();
+  ASSERT_TRUE(base::test::RunUntil([&] { return !HasTab(Page("Home")); }));
+  // And one in a Space with the Work profile.
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  ASSERT_TRUE(spaces);
+  spaces->CreateSpace(u"Work", u"", {}, work);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  const tab_groups::TabGroupId work_space = *spaces->GetActiveSpace();
+  AddBackgroundTab("Work");
+  WaitPastTheLimit();
+  closer()->CheckNowForTesting();
+  ASSERT_TRUE(base::test::RunUntil([&] { return !HasTab(Page("Work")); }));
+  std::vector<auto_close::ClosedTab> closed = Closed();
+  ASSERT_EQ(2u, closed.size());
+  EXPECT_EQ(Page("Work"), closed[0].url);
+  EXPECT_EQ(work, closed[0].data[containers::kContainerSessionKey]);
+  EXPECT_EQ(Page("Home"), closed[1].url);
+
+  // A visit of the default profile's, so the deletion has a notice.
+  history->AddPage(GURL("https://home.example/"), base::Time::Now(),
+                   history::SOURCE_BROWSED);
+  // The default profile's history, everything, as the Library clears it.
+  base::CancelableTaskTracker tracker;
+  base::test::TestFuture<void> deleted;
+  DeleteProfileHistory(profile, history, /*history_profile=*/std::string(), {},
+                       base::Time(), &tracker);
+  // Done, and its notice heard (it comes before this flush's reply).
+  history->FlushForTest(deleted.GetCallback());
+  ASSERT_TRUE(deleted.Wait());
+  closed = Closed();
+  ASSERT_EQ(1u, closed.size());
+  EXPECT_EQ(Page("Work"), closed[0].url);
+
+  // It reopens in its Space, in the Work profile.
+  ASSERT_TRUE(
+      ReopenAutoClosedTab(browser(), closed[0].id, /*background=*/false));
+  content::WebContents* reopened = model()->GetActiveWebContents();
+  EXPECT_EQ(Page("Work"), CurrentTabUrl(reopened));
+  EXPECT_EQ(work_space, model()->GetActiveTab()->GetGroup());
+  std::optional<containers::ContainerId> container =
+      containers::ContainerOf(reopened);
+  ASSERT_TRUE(container);
+  EXPECT_EQ(work, containers::Serialize(*container));
+
+  // A deletion that names no profile (Clear browsing data, an extension's
+  // chrome.history) still forgets every profile's closed tabs in its range.
+  AddBackgroundTab("Work again");
+  WaitPastTheLimit();
+  closer()->CheckNowForTesting();
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return !HasTab(Page("Work again")); }));
+  ASSERT_EQ(1u, Closed().size());
+  history->AddPage(GURL("https://work.example/"), base::Time::Now(),
+                   history::SOURCE_BROWSED);
+  base::test::TestFuture<void> cleared;
+  history->ExpireHistoryBetween(
+      {}, std::nullopt, base::Time::Now() - base::Hours(1), base::Time(),
+      /*user_initiated=*/true, cleared.GetCallback(), &tracker);
+  ASSERT_TRUE(cleared.Wait());
+  EXPECT_TRUE(base::test::RunUntil([&] { return Closed().empty(); }));
 }
 
 }  // namespace koan

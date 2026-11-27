@@ -7,11 +7,15 @@
 #include <algorithm>
 #include <iterator>
 #include <map>
+#include <memory>
 #include <set>
 #include <utility>
 
 #include "base/command_line.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
+#include "base/memory/weak_ptr.h"
+#include "base/supports_user_data.h"
 #include "base/uuid.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -41,6 +45,7 @@
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/containers/koan_container_partition.h"
+#include "koan/browser/containers/koan_history_profiles.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/koan_switches.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
@@ -98,6 +103,72 @@ std::vector<tabs::TabInterface*> WithSplitPartners(TabStripModel* model,
 std::string TestOverride() {
   return base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
       switches::kAutoCloseTabsAfter);
+}
+
+// The deletions DeleteProfileHistory() asked for whose notice may still be
+// on its way, kept with the profile: every window's closer lets those go by.
+class ProfileHistoryDeletions : public base::SupportsUserData::Data {
+ public:
+  static ProfileHistoryDeletions* Get(Profile* profile) {
+    return static_cast<ProfileHistoryDeletions*>(
+        profile->GetOriginalProfile()->GetUserData(kUserDataKey));
+  }
+
+  static ProfileHistoryDeletions* GetOrCreate(Profile* profile) {
+    if (!Get(profile)) {
+      profile->GetOriginalProfile()->SetUserData(
+          kUserDataKey, std::make_unique<ProfileHistoryDeletions>());
+    }
+    return Get(profile);
+  }
+
+  // Until the runner returned goes, the notice of a deletion of `urls` (all
+  // pages if empty) from `begin` on is DeleteProfileHistory()'s.
+  base::ScopedClosureRunner Add(base::Time begin, const std::set<GURL>& urls) {
+    const int id = next_id_++;
+    pending_.push_back(
+        {id, begin, urls.empty() ? std::nullopt : std::make_optional(urls)});
+    return base::ScopedClosureRunner(base::BindOnce(
+        &ProfileHistoryDeletions::Remove, weak_factory_.GetWeakPtr(), id));
+  }
+
+  // Whether `info` is the notice of one of them: ExpireHistoryBetween()
+  // passes on the range and the pages as it was given them.
+  bool Covers(const history::DeletionInfo& info) const {
+    return std::ranges::any_of(pending_, [&](const Deletion& deletion) {
+      return info.time_range().begin() == deletion.begin &&
+             info.time_range().end().is_null() &&
+             info.restrict_urls() == deletion.urls;
+    });
+  }
+
+ private:
+  static constexpr char kUserDataKey[] = "koan.profile_history_deletions";
+
+  struct Deletion {
+    int id;
+    base::Time begin;
+    std::optional<std::set<GURL>> urls;
+  };
+
+  void Remove(int id) {
+    std::erase_if(pending_,
+                  [id](const Deletion& deletion) { return deletion.id == id; });
+  }
+
+  int next_id_ = 0;
+  std::vector<Deletion> pending_;
+  base::WeakPtrFactory<ProfileHistoryDeletions> weak_factory_{this};
+};
+
+// The profile (koan_history_profiles.h) whose closed tab has the Koan session
+// data `data`: the one its container names, as the Library's filter reads it.
+std::string HistoryProfileOf(const std::map<std::string, std::string>& data) {
+  const auto container = data.find(containers::kContainerSessionKey);
+  return container == data.end()
+             ? std::string()
+             : containers::HistoryProfileFromAppId(
+                   containers::HistoryAppIdForProfile(container->second));
 }
 
 void OpenTabSettings(Profile* profile) {
@@ -192,6 +263,14 @@ void KoanTabAutoCloser::OnHistoryDeletions(
   if (!browser_view_ || deletion_info.is_from_expiration()) {
     return;
   }
+  // One profile's history, from the Library: DeleteProfileHistory() has
+  // forgotten that profile's closed tabs, and this notice doesn't say which
+  // profile it was.
+  if (const ProfileHistoryDeletions* library =
+          ProfileHistoryDeletions::Get(profile());
+      library && library->Covers(deletion_info)) {
+    return;
+  }
   PrefService* prefs = profile()->GetPrefs();
   const base::ListValue& list = prefs->GetList(prefs::kAutoClosedTabs);
   if (list.empty()) {
@@ -200,7 +279,10 @@ void KoanTabAutoCloser::OnHistoryDeletions(
   std::optional<std::pair<base::Time, base::Time>> range;
   const history::DeletionTimeRange& time_range = deletion_info.time_range();
   if (time_range.IsValid() && !deletion_info.restrict_urls()) {
-    range.emplace(time_range.begin(), time_range.end());
+    // No end is up to now (ExpireHistoryBetween()'s).
+    range.emplace(time_range.begin(), time_range.end().is_null()
+                                          ? base::Time::Max()
+                                          : time_range.end());
   }
   std::set<GURL> urls;
   if (!deletion_info.IsAllHistory()) {
@@ -495,6 +577,41 @@ void ForgetAutoClosedTab(Profile* profile, const std::string& id) {
   prefs->SetList(
       prefs::kAutoClosedTabs,
       auto_close::RemoveClosedTab(prefs->GetList(prefs::kAutoClosedTabs), id));
+}
+
+void DeleteProfileHistory(Profile* profile,
+                          history::HistoryService* history,
+                          std::string_view history_profile,
+                          const std::set<GURL>& urls,
+                          base::Time begin,
+                          base::CancelableTaskTracker* tracker) {
+  PrefService* prefs = profile->GetPrefs();
+  const base::ListValue& list = prefs->GetList(prefs::kAutoClosedTabs);
+  const size_t count = list.size();
+  std::optional<std::pair<base::Time, base::Time>> range;
+  if (urls.empty() && !begin.is_null()) {
+    range.emplace(begin, base::Time::Max());
+  }
+  base::ListValue kept = auto_close::ForgetDeletedHistory(
+      list, /*all=*/urls.empty() && begin.is_null(), range, urls,
+      [&](const auto_close::ClosedTab& tab) {
+        return HistoryProfileOf(tab.data) == history_profile;
+      });
+  if (kept.size() != count) {
+    prefs->SetList(prefs::kAutoClosedTabs, std::move(kept));
+  }
+  if (!history) {
+    return;
+  }
+  // The runner goes once the deletion is done (its notice comes before) or
+  // dropped.
+  history->ExpireHistoryBetween(
+      urls, containers::HistoryAppIdForProfile(history_profile), begin,
+      base::Time(), /*user_initiated=*/true,
+      base::BindOnce(
+          [](base::ScopedClosureRunner) {},
+          ProfileHistoryDeletions::GetOrCreate(profile)->Add(begin, urls)),
+      tracker);
 }
 
 }  // namespace koan

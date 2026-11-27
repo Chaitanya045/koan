@@ -23,7 +23,6 @@
 #include <vector>
 
 #include "base/functional/bind.h"
-#include "base/functional/callback_helpers.h"
 #include "base/i18n/case_conversion.h"
 #include "base/i18n/time_formatting.h"
 #include "base/memory/raw_ptr.h"
@@ -835,10 +834,8 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
     } else if (history_) {
       // The profile shown's visits to the page, or all of them.
       if (const ProfileChoice shown = ShownProfile()) {
-        history_->ExpireHistoryBetween(
-            {entry.url}, containers::HistoryAppIdForProfile(*shown),
-            base::Time(), base::Time(), /*user_initiated=*/true,
-            base::DoNothing(), &forget_tracker_);
+        DeleteProfileHistory(profile_, history_, *shown, {entry.url},
+                             base::Time(), &forget_tracker_);
       } else {
         history_->DeleteURLs({entry.url});
       }
@@ -892,17 +889,14 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
     if (history_ && IsDeletingHistoryAllowed(profile_)) {
       history::QueryOptions options;
       options.hostname_suffix = site;
-      std::optional<std::string> app_id;
       if (shown) {
-        app_id = containers::HistoryAppIdForProfile(*shown);
-        options.app_id = app_id;
+        options.app_id = containers::HistoryAppIdForProfile(*shown);
       }
       history_->QueryHistory(
           std::u16string(), options,
           base::BindOnce(
               [](base::WeakPtr<KoanLibraryHistorySection> section,
-                 std::optional<std::string> app_id,
-                 history::QueryResults results) {
+                 const ProfileChoice& shown, history::QueryResults results) {
                 if (!section || !section->history_) {
                   return;
                 }
@@ -913,18 +907,17 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
                 if (urls.empty()) {
                   return;
                 }
-                if (!app_id) {
+                if (!shown) {
                   section->history_->DeleteURLs(
                       std::vector<GURL>(urls.begin(), urls.end()));
                   return;
                 }
                 // Only that profile's visits; the pages stay for the others.
-                section->history_->ExpireHistoryBetween(
-                    urls, app_id, base::Time(), base::Time(),
-                    /*user_initiated=*/true, base::DoNothing(),
-                    &section->forget_tracker_);
+                DeleteProfileHistory(section->profile_, section->history_,
+                                     *shown, urls, base::Time(),
+                                     &section->forget_tracker_);
               },
-              weak_factory_.GetWeakPtr(), std::move(app_id)),
+              weak_factory_.GetWeakPtr(), shown),
           &forget_tracker_);
     }
     // The site's data in each profile's own partition: the default one (and
@@ -1023,11 +1016,10 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
     } else if (hours > 0) {
       begin = now - base::Hours(hours);
     }
-    if (shown && history_) {
-      // That profile's visits only.
-      history_->ExpireHistoryBetween(
-          {}, containers::HistoryAppIdForProfile(*shown), begin, base::Time(),
-          /*user_initiated=*/true, base::DoNothing(), &forget_tracker_);
+    if (shown) {
+      // That profile's visits and closed tabs only.
+      DeleteProfileHistory(profile_, history_, *shown, {}, begin,
+                           &forget_tracker_);
       return;
     }
     profile_->GetBrowsingDataRemover()->Remove(

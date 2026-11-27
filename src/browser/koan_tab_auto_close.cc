@@ -242,14 +242,26 @@ base::ListValue ForgetDeletedHistory(
     bool all,
     std::optional<std::pair<base::Time, base::Time>> range,
     const std::set<GURL>& urls) {
+  return ForgetDeletedHistory(list, all, range, urls,
+                              [](const ClosedTab&) { return true; });
+}
+
+base::ListValue ForgetDeletedHistory(
+    const base::ListValue& list,
+    bool all,
+    std::optional<std::pair<base::Time, base::Time>> range,
+    const std::set<GURL>& urls,
+    base::FunctionRef<bool(const ClosedTab&)> in_profile) {
   base::ListValue result;
-  if (all) {
-    return result;
-  }
   for (const base::Value& value : list) {
     std::optional<ClosedTab> tab = ClosedTab::FromValue(value);
-    if (!tab || urls.contains(tab->url) ||
-        (range && tab->closed >= range->first && tab->closed < range->second)) {
+    if (!tab) {
+      continue;
+    }
+    const bool covered =
+        all || urls.contains(tab->url) ||
+        (range && tab->closed >= range->first && tab->closed < range->second);
+    if (covered && in_profile(*tab)) {
       continue;
     }
     result.Append(value.Clone());

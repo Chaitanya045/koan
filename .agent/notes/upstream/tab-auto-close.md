@@ -83,7 +83,21 @@ No hook patch is needed.
 9. **Clearing history forgets the closed tabs it covers** (all, a time
    range, or pages), as Chromium does for its recently closed list.
    Expiry doesn't count. The list is also the Library's to forget a row
-   from.
+   from. **One profile's history** (#474: the Library's Clear history,
+   Forget This Page and Forget About This Site while it shows one profile)
+   forgets only that profile's closed tabs, by the container in their
+   session data, as the Library's filter reads it. Chromium's notice of
+   that deletion (`history::DeletionInfo`) doesn't say which profile it
+   was, so the Library calls `DeleteProfileHistory()`, which forgets that
+   profile's closed tabs itself, deletes the visits with
+   `ExpireHistoryBetween(…, app_id, …)`, and marks the deletion (its range
+   and pages, kept with the profile until `ExpireHistoryBetween()`'s reply,
+   which comes after the notice) so every window's closer lets its notice
+   go by. A deletion that names no profile (Clear browsing data, an
+   extension's `chrome.history`, the Library with All profiles) still
+   forgets every profile's closed tabs it covers: it clears every profile's
+   history. Browser test:
+   `ClearingOneProfilesHistoryKeepsTheOthersClosedTabs`.
 10. **Testing switch** `--koan-auto-close-tabs-after=<seconds>`: replaces
     the set time (never Never) and checks a quarter of that often (1 s at
     least), for the manual steps and the browser tests.
@@ -103,5 +117,13 @@ No hook patch is needed.
 
 - The per-Space opt-out (decision 2).
 - Clearing history while no window is open isn't seen by the list.
+- **A restart resets the age of a background tab that was never shown.**
+  Chromium saves a tab's last-active time only when the tab is shown, and a
+  restored tab never shown gets the restore time; `koan.last_seen` is
+  written only for tabs that were on screen. So a tab opened in the
+  background and never looked at counts from the last start, and with the
+  time set to 12 hours, someone who restarts Koan more often than that never
+  has those tabs closed. It errs on the side of keeping tabs; a follow-up
+  (writing `koan.last_seen` when such a tab is made) is #577.
 - The notice is a toast; if the front window is minimised it can go unseen
   (it is still marked shown).

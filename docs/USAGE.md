@@ -1098,9 +1098,12 @@ Koan is set up to stay light (details in `PERFORMANCE.md`):
   Closed tabs are in the Library: History > Filter > Closed tabs, kept for
   120 days (up to 500), apart from ⌘⇧T's recently closed tabs. Click one
   to reopen it in its Space and profile; forget it with its row's button.
-  Clearing history forgets those it covers. To try it without waiting,
-  start Koan with `--koan-auto-close-tabs-after=<seconds>` (it shortens
-  whatever time is set, not Never).
+  Clearing history forgets those it covers; when the Library shows one
+  profile, only that profile's. A tab opened in the background and never
+  looked at counts from when Koan last started, not from when it was
+  opened (a known limit, so it may stay longer; #577). To try it without
+  waiting, start Koan with `--koan-auto-close-tabs-after=<seconds>` (it
+  shortens whatever time is set, not Never).
 
 ## Library
 

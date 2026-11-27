@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/functional/function_ref.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "url/gurl.h"
@@ -178,6 +179,15 @@ base::ListValue ForgetDeletedHistory(
     bool all,
     std::optional<std::pair<base::Time, base::Time>> range,
     const std::set<GURL>& urls);
+
+// The same for one profile's history (koan_history_profiles.h): only the
+// tabs `in_profile` says are that profile's are forgotten.
+base::ListValue ForgetDeletedHistory(
+    const base::ListValue& list,
+    bool all,
+    std::optional<std::pair<base::Time, base::Time>> range,
+    const std::set<GURL>& urls,
+    base::FunctionRef<bool(const ClosedTab&)> in_profile);
 
 }  // namespace koan::auto_close
 

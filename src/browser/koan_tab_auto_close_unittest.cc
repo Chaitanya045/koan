@@ -354,4 +354,34 @@ TEST(KoanTabAutoCloseTest, DeletingHistoryForgetsClosedTabs) {
   EXPECT_EQ("other", tabs[1].id);
 }
 
+// One profile's history (the Library's removals with a profile shown): the
+// other profiles' tabs stay, even in the range deleted.
+TEST(KoanTabAutoCloseTest, DeletingOneProfilesHistoryKeepsTheOthers) {
+  ClosedTab work = Closed("work", Now() - base::Hours(1));
+  work.data["koan.container"] = "work";
+  base::ListValue list;
+  list = AddClosedTab(list, Closed("home", Now() - base::Hours(2)), Now());
+  list = AddClosedTab(list, work, Now());
+  const auto in_work = [](const ClosedTab& tab) {
+    return tab.data.contains("koan.container");
+  };
+  std::vector<ClosedTab> tabs = ReadClosedTabs(
+      ForgetDeletedHistory(list, /*all=*/true, std::nullopt, {}, in_work),
+      Now());
+  ASSERT_EQ(1u, tabs.size());
+  EXPECT_EQ("home", tabs[0].id);
+  tabs = ReadClosedTabs(
+      ForgetDeletedHistory(list, /*all=*/false,
+                           std::make_pair(Now() - base::Days(1), Now()), {},
+                           in_work),
+      Now());
+  ASSERT_EQ(1u, tabs.size());
+  EXPECT_EQ("home", tabs[0].id);
+  // A page of the other profile's isn't the profile's.
+  EXPECT_EQ(2u,
+            ForgetDeletedHistory(list, /*all=*/false, std::nullopt,
+                                 {GURL("https://example.com/home")}, in_work)
+                .size());
+}
+
 }  // namespace koan::auto_close

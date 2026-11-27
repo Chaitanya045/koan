@@ -6,11 +6,14 @@
 #define KOAN_BROWSER_UI_VIEWS_KOAN_TAB_AUTO_CLOSER_H_
 
 #include <optional>
+#include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
+#include "base/task/cancelable_task_tracker.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
@@ -18,6 +21,7 @@
 #include "components/history/core/browser/history_service_observer.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "koan/browser/koan_tab_auto_close.h"
+#include "url/gurl.h"
 
 class BrowserView;
 class BrowserWindowInterface;
@@ -40,7 +44,8 @@ namespace koan {
 // instead, and nothing closes until the next check.
 //
 // Deleting history (all of it, a time range or pages) forgets the closed
-// tabs it covers.
+// tabs it covers: every profile's (#474), except for the Library's removals
+// from one profile (DeleteProfileHistory()).
 //
 // It also keeps the time each visible tab was last on screen with the
 // session (koan::auto_close::kLastSeenSessionKey): WebContents only knows
@@ -116,6 +121,20 @@ bool ReopenAutoClosedTab(BrowserWindowInterface* browser,
 
 // Drops the closed tab `id` from `profile`'s list ("Forget This Page").
 void ForgetAutoClosedTab(Profile* profile, const std::string& id);
+
+// The Library's removals while it shows one Space profile (#474): deletes
+// that profile's visits (`history_profile`, named as in
+// koan_history_profiles.h) to `urls`, or to every page if empty, from `begin`
+// (all of them if null) on. Chromium's notice of the deletion doesn't say
+// which profile it was, so the closed tabs it covers are forgotten here,
+// only those of `history_profile` (by the container in their session data),
+// and the windows' closers let the notice go by.
+void DeleteProfileHistory(Profile* profile,
+                          history::HistoryService* history,
+                          std::string_view history_profile,
+                          const std::set<GURL>& urls,
+                          base::Time begin,
+                          base::CancelableTaskTracker* tracker);
 
 }  // namespace koan
 
