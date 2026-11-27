@@ -34,6 +34,10 @@ class WebContents;
 
 namespace koan {
 
+namespace containers {
+struct ContainerId;
+}  // namespace containers
+
 struct TabMenuContext;
 
 // Zen's per-tab state for pinned tabs, Essentials and renamed tabs. Kept on
@@ -152,9 +156,22 @@ class KoanPinnedTabController : public TabStripModelObserver {
   void OnBrowserViewDestroying();
 
   TabStripModel* tab_strip_model() const;
+  // Zen's 12 are counted per grid: per profile with Zen's container-specific
+  // Essentials on (#479, koan_essentials_profiles.h), else all of them.
+  // The Essentials the grid shows now.
   int EssentialsCount() const;
-  // Whether `count` more Essentials fit (a split view adds two).
-  bool CanAddToEssentials(int count = 1) const;
+  // The Essentials in `grid` (nullopt: the default profile's, or the one
+  // grid with the setting off).
+  int EssentialsCountIn(
+      const std::optional<containers::ContainerId>& grid) const;
+  // Whether `count` more Essentials fit in `grid`.
+  bool HasRoomInEssentials(const std::optional<containers::ContainerId>& grid,
+                           int count = 1) const;
+  // Whether `tab` (`count` tabs: a split view adds two) may become an
+  // Essential: its profile's grid is the one shown (Zen's
+  // canEssentialBeAdded(): another profile's tab can't join the grid of this
+  // Space), and `count` more fit in it.
+  bool CanAddToEssentials(const tabs::TabInterface* tab, int count = 1) const;
 
   // Ctrl+Shift+D and the menu's Pin / Unpin: an Essential leaves the
   // Essentials, a pinned tab is unpinned, any other tab is pinned to its

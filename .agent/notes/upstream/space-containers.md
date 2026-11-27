@@ -125,7 +125,7 @@ changes.
 | WebUSB / HID / Serial / Bluetooth | Upstream refuses them in non-default partitions. Kept (Brave keeps it too). |
 | Tab moved to another Space (menu, drag, Move To) | Keeps its partition, as in Zen. A WebContents can't change partition, and reopening would lose the page's state and form input. The colour line then shows it is in another container. |
 | Tab dragged to another window | Same WebContents, same partition. |
-| Essentials | Shared by every Space, as now. Each keeps the container it had when it was pinned. New Essentials made by Navigate (an extension's pinned tab) are left to upstream. Zen's `separate-essentials` (Essentials per container) is a follow-up: hiding tiles touches the pinned grid's layout, which other work is changing. Not done, said in ZEN_PARITY. |
+| Essentials | Each keeps the container it had when it was pinned. New Essentials made by Navigate (an extension's pinned tab) are left to upstream. Zen's `separate-essentials` (Essentials per container) is done in #479: see "Essentials per profile" below. |
 | Pinned tabs | Keep their container. Session restore and `koan.workspaces.list` (`StoredTab` keeps the session data with `koan.container`) restore them into it. |
 | Glance | From a page: the page's partition (C2 via the core, unchanged). |
 | Split view | "New Split" adds a tab through Navigate with no page behind it, so it opens in the Space's container. A split of existing tabs keeps each tab's. |
@@ -174,3 +174,71 @@ controller's `Update()`, the sidebar paint hook, the session data, and the store
   - Logging out in A leaves B's own login.
   - After a restart, A is still logged in.
   - Nothing fatal is logged.
+
+## Essentials per profile (#479)
+
+Zen 1.24b, `zen.workspaces.separate-essentials` (**true** in the shipped
+defaults; the Settings checkbox "Enable container-specific essentials" sits in
+the Pinned Tabs group, `zenTabsManagement.inc.xhtml`):
+
+- `ZenSpaceManager.getEssentialsSection(container)`: one
+  `.zen-essentials-container` per userContextId; it is hidden unless the
+  active workspace's `containerTabId` is its container. A tab goes into the
+  section of its own `usercontextid`.
+- `ZenPinnedTabManager.canEssentialBeAdded()`: refused when the tab's
+  container isn't the active workspace's, or when `_numZenEssentials` (every
+  Essential of the window, all containers) is at `zen.tabs.essentials.max`.
+  The context menu item is disabled then, and a drag over the grid isn't
+  offered. Replicated adds (window sync) skip the check.
+- `switchTabIfNeeded()`: selecting an Essential of another container switches
+  to the first workspace with that container.
+- `shouldAnimateEssentials`: with the setting on, the switch animation moves
+  each section with its workspaces: a section stays when both workspaces
+  share it, slides out or in when only one has it (also under a swipe).
+- Zen reads the pref once at startup (`containerSpecificEssentials`).
+
+**Koan** (`koan_essentials_profiles.h`, `containers::EssentialsProfiles`):
+
+- `koan.workspaces.separate_essentials`, default on, row "Enable
+  profile-specific Essentials" in Settings > Pinned Tabs, where Zen has it
+  (the issue named Workspaces; Zen's source puts it with the pinned tabs).
+  Applies at once in every window (a pref observer schedules each window's
+  update).
+- An Essential's profile is `ContainerOf()` its tab. Its grid is that
+  profile's when a Space of the window has it, else the default one's.
+  Zen hides an Essential whose container no workspace has (it becomes
+  unreachable, zen-browser/desktop#8199); Koan shows it in the Spaces without
+  a profile.
+- The grid's layout leaves the hidden tiles out of the children it places
+  (the hook `GetEssentialsLayoutChildren()`, unchanged) and adds them as
+  hidden child layouts (`AddHiddenEssentialsLayouts()`, 3 new lines in the
+  same patch). On a change of the grid shown the controller snaps the grid
+  (`ResetViewsToTargetLayout()`), so no tile grows in from its hidden bounds.
+- **Decision: refuse another profile's tab** (Zen's way) rather than adding
+  it to its own profile's grid, where it would vanish from view at once:
+  "Add to Essentials" is disabled (menu, command palette), a drag over the
+  grid shows no tile, and a drop there goes back with a toast ("Only tabs of
+  this Space's profile can be its Essentials"). Zen has no toast.
+- **Decision: the limit of 12 per profile**, as the issue asks. Zen counts
+  every Essential of the window; per profile is what the grid shows, and
+  the badge ("3 / 12") is the tab's profile's.
+- Imported Essentials (#363) open in the default partition, so they land in
+  the default grid and count there.
+- ⌘1-⌘9 (`IsTabSelectable`) and Ctrl+Tab (`SelectRelativeTab`, Koan's
+  `CycleTabs()` and recently-used walk) pass over hidden Essentials
+  (`koan::IsHiddenTab()`, which the two hunks call instead of
+  `IsEmptyTab()`).
+- An Essential of a hidden grid that becomes active (Switch to Tab, an
+  extension, a restored selection) shows the first Space of its grid
+  (`ShowActiveEssential()`, Zen's `switchTabIfNeeded()`). One hidden by a
+  change of its Space's profile gives way to the Space's last active tab.
+- The switch animation adds the pinned scroll view to the sliding views when
+  the two Spaces' grids differ; a swipe moves it with the fingers only
+  toward a Space with another grid.
+- Window sync keeps each placeholder in its tab's container, and every window
+  picks its own grid from its own active Space. Session restore keeps
+  `koan.container`, so an Essential comes back in its profile.
+- Limits: with a profile on every Space, the default grid shows nowhere. A
+  hidden split-view Essential still counts toward upstream's tile width
+  (`contains_split`).
+

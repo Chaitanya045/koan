@@ -27,11 +27,13 @@ export BRANCH="${BRANCH:-develop}"
 output() { echo "base_run=$1"; [[ -z ${GITHUB_OUTPUT:-} ]] || echo "base_run=$1" >> "$GITHUB_OUTPUT"; }
 
 # Only BRANCH's schedule and workflow_dispatch runs are asked for (branch=
-# and event=, one request per event), newest first. The workflow's newest
-# runs of any kind are mostly pull_request runs, one per label put on any
-# pull request: with ?per_page=50 alone a dozen labelled pull requests pushed
-# the last develop run out of sight (#537). Up to PAGES pages of 100 per
-# event; a base is kept 14 days, so the first page is nearly always enough.
+# and event=, one request per event), newest first. Every label added to any
+# pull request starts a run of the workflow (most are skipped at once), so
+# the newest 50 runs of any kind pushed the last develop run off the page
+# (2026-11-27: full Linux builds for #469, #470 and #519 although develop's
+# base was there; #537). event= keeps develop's other runs from doing the
+# same. Up to PAGES pages of 100 per event; a base is kept 14 days, so the
+# first page is nearly always enough.
 # The conclusion is still filtered here, not with ?status=success: that
 # filter has left out a successful run (tnfssc/koan 45281812693) for hours
 # after it finished. The branch and event are filtered again too.

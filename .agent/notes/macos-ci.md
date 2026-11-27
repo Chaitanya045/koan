@@ -87,7 +87,7 @@ out-final of any other run is the second lock.
   any kind and filter them; every label put on any pull request makes a
   run of `linux.yml` and `macos.yml` (`pull_request: labeled`), so a dozen
   labelled pull requests hid the base and every build was a full one
-  (#537). Shared by both chains; tests in `scripts/tests/test_find_base.py`
+  (#537; #536 added `branch=` alone first). Shared by both chains; tests in `scripts/tests/test_find_base.py`
   (a fake `gh` over recorded runs). A pull-request build runs its own
   head's scripts, so a pull request branched before a find_base.sh fix
   needs develop merged in to get it.

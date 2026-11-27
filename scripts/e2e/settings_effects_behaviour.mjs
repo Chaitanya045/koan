@@ -190,6 +190,7 @@ const CHECKBOXES = [
   'koan.tabs.ctrl_tab_within_kind', 'koan.tabs.select_recently_used_on_close',
   'koan.workspaces.wrap_around_navigation', 'koan.workspaces.natural_scroll',
   'koan.pinned_tabs.restore_to_pinned_url', 'koan.tabs.open_pinned_in_new_tab',
+  'koan.workspaces.separate_essentials',
   'performance_tuning.tab_freezing.enabled',
   'koan.agent_control.enabled', 'koan.agent_control.strict',
   'koan.agent_control.use.logins', 'koan.agent_control.use.passwords',
