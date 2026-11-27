@@ -20,7 +20,7 @@
 #include "koan/browser/containers/koan_agent_access_prefs.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
-#include "koan/browser/ui/views/koan_window_glass.h"
+#include "ui/base/ui_base_features.h"
 
 namespace koan::settings {
 
@@ -29,6 +29,14 @@ namespace {
 // Haptic feedback is macOS's (koan::PlayHapticFeedback()).
 bool IsMacOS() {
   return BUILDFLAG(IS_MAC);
+}
+
+// Whether Koan can make windows translucent on this platform at all: macOS
+// 26 or later (Chromium's glass frame, which koan_window_glass.h builds on).
+// The setting (Chromium's local-state pref glass_frame.enabled) is shown only
+// then.
+bool IsWindowGlassSupported() {
+  return ::features::IsGlassFrameEnabled();
 }
 
 constexpr Pane kPanes[] = {
@@ -50,11 +58,17 @@ constexpr Group kGroups[] = {
      "For the shadcn style: light or dark, a base colour, an accent colour, "
      "or a theme of your own from ui.shadcn.com/themes or tweakcn.com."},
     // Koan's own: Zen's bookmarks toolbar is off (never shown) unless turned
-    // on from its View menu.
+    // on from its View menu. Linux has no View menu, only the key
+    // (IDC_SHOW_BOOKMARK_BAR in accelerator_table.cc).
     {"bookmarks-bar", "looks", "Appearance", "Bookmarks bar",
      "Like Zen, none unless you turn it on, also on the new tab page and "
+#if BUILDFLAG(IS_MAC)
      "after importing bookmarks. Turned on, it shows above every page; View > "
      "Always Show Bookmarks Bar (\u21e7\u2318B on a Mac) switches it too."},
+#else
+     "after importing bookmarks. Turned on, it shows above every page; "
+     "Ctrl+Shift+B switches it too."},
+#endif
     {"layout", "looks", "Sidebar and tabs layout", "Browser Layout",
      "Choose the layout that suits you best"},
     {"vertical-tabs", "looks", "Sidebar and tabs layout", "Vertical Tabs",
@@ -162,14 +176,19 @@ constexpr Option kDarkThemeStyles[] = {
 };
 
 // Zen's Glance trigger methods (zen-glance-trigger-*), in Zen's order. On
-// macOS Ctrl+click is a right-click, so it can't trigger anything.
+// macOS Ctrl+click is a right-click, so it can't trigger anything. Off macOS
+// "meta" is the Super key, which GNOME and KDE often keep for moving windows.
 constexpr Option kGlanceTriggers[] = {
 #if !BUILDFLAG(IS_MAC)
     {"ctrl", "Ctrl + Click"},
 #endif
     {"alt", "Alt + Click"},
     {"shift", "Shift + Click"},
+#if BUILDFLAG(IS_MAC)
     {"meta", "Meta (Command) + Click"},
+#else
+    {"meta", "Super + Click (the desktop may use it to move windows)"},
+#endif
 };
 
 // Zen's zen.urlbar.behavior choices.
@@ -251,7 +270,7 @@ constexpr Option kSpaceScrollModifiers[] = {
     {"ctrl", "Ctrl"},
     {"alt", "Alt"},
     {"shift", "Shift"},
-    {"meta", "Meta"},
+    {"meta", "Super"},
 #endif
 };
 
@@ -354,7 +373,8 @@ constexpr Row kRows[] = {
     {.group = "bookmarks-bar",
      .control = Control::kCheckbox,
      .pref = prefs::kBookmarksBarShow,
-     // Also ⇧⌘B, View > Always Show Bookmarks Bar (koan_command_policy.cc).
+     // Also ⇧⌘B, View > Always Show Bookmarks Bar on macOS, Ctrl+Shift+B
+     // elsewhere (koan_command_policy.cc).
      .label = "Show the bookmarks bar"},
     {.group = "vertical-tabs",
      .control = Control::kCheckbox,
@@ -374,14 +394,18 @@ constexpr Row kRows[] = {
      .label = "Tabs on the right",
      .is_available = features::IsSidebarEnabled},
     // Zen's zen.widget.macos.window-vibrancy (default on), here Chromium's
-    // pref; macOS's Reduce Transparency turns it off as well.
+    // pref; macOS's Reduce Transparency turns it off as well. Shown on macOS
+    // only (IsWindowGlassSupported()), so it has no text for elsewhere.
     {.group = "window-material",
      .control = Control::kCheckbox,
      .pref = ::prefs::kGlassFrameEnabled,
      .label = "Translucent window",
      .is_available = IsWindowGlassSupported,
      .local_state = true,
-     .note = "Off while macOS's Reduce Transparency is on"},
+#if BUILDFLAG(IS_MAC)
+     .note = "Off while macOS's Reduce Transparency is on"
+#endif
+    },
     {.group = "window-drag",
      .control = Control::kCheckbox,
      .pref = prefs::kDragWindowFromContent,
@@ -464,9 +488,15 @@ constexpr Row kRows[] = {
      .label = "Glass URL bar (translucent, with the page blurred behind it)",
      .is_available = features::IsUrlBarEnabled,
      .local_state = true,
+#if BUILDFLAG(IS_MAC)
      .note = "For the URL bar floating over the page (not in the top "
              "toolbar); off while macOS's Reduce Transparency is on, and in "
-             "a window that isn't active"},
+             "a window that isn't active"
+#else
+     .note = "For the URL bar floating over the page (not in the top "
+             "toolbar); off in a window that isn't active"
+#endif
+    },
     {.group = "newtab",
      .control = Control::kMenu,
      .pref = prefs::kNewTabPage,
