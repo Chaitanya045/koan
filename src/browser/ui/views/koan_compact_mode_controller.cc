@@ -300,8 +300,11 @@ void KoanCompactModeController::OnAddedToWidget() {
               base::Unretained(this)));
     }
   }
+#endif
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
   // The page's own fullscreen leaves Chromium's immersive mode on, so only
-  // the fullscreen controller says when it starts and ends.
+  // the fullscreen controller says when it starts and ends. (Linux has no
+  // immersive mode: it tells of the window's fullscreen, F11, too.)
   if (!fullscreen_subscription_) {
     if (auto* manager =
             ExclusiveAccessManager::From(browser_view_->browser())) {
@@ -1129,10 +1132,10 @@ void KoanCompactModeController::CheckFullscreenEdges() {
 }
 
 KoanCompactModeController::Mode KoanCompactModeController::DesiredMode() const {
-  // (Also in macOS' native fullscreen, where the content card stays, see
-  // UseContentCard(), and Chromium leaves the top container to Koan, see
-  // KeepsTopContainerInFullscreen(). Elsewhere fullscreen has no content
-  // card.)
+  // (Also in macOS' native fullscreen and Linux' F11, where the content card
+  // stays, see UseContentCard(), and Chromium leaves the top container to
+  // Koan, see KeepsTopContainerInFullscreen(). Elsewhere fullscreen has no
+  // content card.)
   if (!CanCompactMode()) {
     return Mode::kNone;
   }
@@ -1482,12 +1485,32 @@ void KoanCompactModeController::OnFullscreenStateChanged() {
   if (IsClosing()) {
     return;
   }
+#if BUILDFLAG(IS_LINUX)
+  // The page's fullscreen started or ended inside the window's (F11), which
+  // shows Chromium's UI only around a page that isn't fullscreen
+  // (KeepsLayoutInFullscreen()): Chromium's bookmarks bar and toolbar
+  // commands follow, as BrowserFrameViewMac::UpdateFullscreenTopUI() has them
+  // follow on macOS. (Entering and leaving the window's fullscreen updates
+  // them by itself.)
+  if (IsWindowFullscreen(browser_view_)) {
+    if (auto* manager =
+            ExclusiveAccessManager::From(browser_view_->browser())) {
+      manager->fullscreen_controller()->FullscreenTopUIStateChanged();
+    }
+  }
+#endif
   // The page's own fullscreen hides the toolbar, in every mode.
   PlaceTopContainer();
   if (mode_ == Mode::kNone) {
     return;
   }
   ClearHoverStates();
+#if BUILDFLAG(IS_LINUX)
+  // (The window's fullscreen has no window buttons to reveal: the frame
+  // draws none. Leaving it, they are hidden again until the pointer comes
+  // to the top edge, as in a window.)
+  SetCaptionStripRevealed(false);
+#endif
   UpdatePointerMonitor();
   // The page's own fullscreen drops the card (see IsContentFullscreen()): lay
   // the contents out again (its corners follow the layout).

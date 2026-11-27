@@ -20,6 +20,10 @@
 #include "base/mac/mac_util.h"
 #endif
 
+#if BUILDFLAG(IS_LINUX)
+#include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+#endif
+
 namespace koan {
 
 namespace {
@@ -38,10 +42,11 @@ gfx::Insets SidebarSideInsets(const BrowserView* browser_view,
 
 // Zen's zen.view.borderless-fullscreen (on by default; zenThemeModifier.js
 // updateElementSeparation()): in fullscreen with compact mode on and no split
-// view, the page has no gap around it and fills the screen. Only macOS keeps
-// the card in fullscreen at all (see UseContentCard()).
+// view, the page has no gap around it and fills the screen. Zen does it on
+// Linux too (F11). Only macOS and Linux keep the card in fullscreen at all
+// (see UseContentCard()).
 bool IsBorderlessFullscreen(const BrowserView* browser_view) {
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
   return IsWindowFullscreen(browser_view) && !browser_view->IsInSplitView() &&
          browser_view->GetProfile()
              ->GetOriginalProfile()
@@ -68,21 +73,34 @@ float ContentCardCornerRadius() {
 }
 
 bool UseContentCard(const BrowserView* browser_view) {
-#if BUILDFLAG(IS_MAC)
-  // On macOS the card stays in fullscreen, as in Zen: Koan's layout stays
-  // there as in a window (see KeepsTopContainerInFullscreen()), so it is a
-  // card as usual, with the sidebar beside it.
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+  // On macOS and Linux the card stays in fullscreen, as in Zen: Koan's layout
+  // stays there as in a window (see KeepsTopContainerInFullscreen()), so it
+  // is a card as usual, with the sidebar beside it.
   const bool allowed_in_fullscreen = true;
 #else
   // Elsewhere fullscreen is edge to edge.
   const bool allowed_in_fullscreen = !IsWindowFullscreen(browser_view);
 #endif
+  bool draws_sidebar = browser_view->ShouldDrawVerticalTabStrip();
+#if BUILDFLAG(IS_LINUX)
+  // Over the page's own fullscreen Koan's layout is suspended, not dropped
+  // (no card, see ContentCardInsets()), so that compact mode stays as it was
+  // and nothing slides when the page leaves it, as on macOS, where Chromium
+  // still draws the strip then. On Linux it doesn't (KeepsLayoutInFullscreen()
+  // lets Chromium hide its UI).
+  if (!draws_sidebar && IsContentFullscreen(browser_view)) {
+    const auto* const strip =
+        tabs::VerticalTabStripStateController::From(browser_view->browser());
+    draws_sidebar = strip && strip->ShouldDisplayVerticalTabs();
+  }
+#endif
   return features::IsSidebarEnabled() && browser_view->GetIsNormalType() &&
-         browser_view->ShouldDrawVerticalTabStrip() && allowed_in_fullscreen;
+         draws_sidebar && allowed_in_fullscreen;
 }
 
 gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
   if (IsContentFullscreen(browser_view)) {
     // The page's own fullscreen: it fills the screen (Koan's card is
     // suspended, see koan_compact_mode.h).

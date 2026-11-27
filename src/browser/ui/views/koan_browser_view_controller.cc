@@ -21,6 +21,12 @@
 #if BUILDFLAG(IS_MAC)
 #include "chrome/browser/ui/fullscreen_util_mac.h"
 #endif
+#if BUILDFLAG(IS_LINUX)
+#include "chrome/browser/app_mode/app_mode_utils.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
+#include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
+#include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+#endif
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/contents_container_view.h"
@@ -352,10 +358,51 @@ bool IsWindowFullscreen(const BrowserView* browser_view) {
          browser_view->IsFullscreen();
 }
 
+#if BUILDFLAG(IS_LINUX)
+namespace {
+
+// Whether the page of `browser`'s window is fullscreen, or about to be (a
+// video, or an extension's fullscreen): the same test as macOS'
+// fullscreen_utils::IsInContentFullscreen(), which only macOS builds.
+bool IsPageFullscreenOrPending(BrowserWindowInterface* browser) {
+  auto* const manager = ExclusiveAccessManager::From(browser);
+  const FullscreenController* const controller =
+      manager ? manager->fullscreen_controller() : nullptr;
+  return controller && (controller->IsWindowFullscreenForTabOrPending() ||
+                        controller->IsExtensionFullscreenOrPending());
+}
+
+}  // namespace
+#endif
+
 bool IsContentFullscreen(const BrowserView* browser_view) {
 #if BUILDFLAG(IS_MAC)
   return IsWindowFullscreen(browser_view) &&
          fullscreen_utils::IsInContentFullscreen(browser_view->browser());
+#elif BUILDFLAG(IS_LINUX)
+  // (ExclusiveAccessManager isn't const-correct, as macOS' test says.)
+  return IsWindowFullscreen(browser_view) &&
+         IsPageFullscreenOrPending(
+             const_cast<BrowserView*>(browser_view)->browser());
+#else
+  return false;
+#endif
+}
+
+bool KeepsLayoutInFullscreen(BrowserWindowInterface* browser) {
+#if BUILDFLAG(IS_LINUX)
+  // UseContentCard()'s window, asked of the browser rather than of its views,
+  // which ask this (BrowserView::ShouldDrawVerticalTabStrip()). Not in kiosk
+  // mode (--kiosk), a fullscreen without any browser UI.
+  if (!browser || !features::IsSidebarEnabled() ||
+      browser->GetType() != BrowserWindowInterface::Type::TYPE_NORMAL ||
+      IsRunningInAppMode()) {
+    return false;
+  }
+  const auto* const strip =
+      tabs::VerticalTabStripStateController::From(browser);
+  return strip && strip->ShouldDisplayVerticalTabs() &&
+         !IsPageFullscreenOrPending(browser);
 #else
   return false;
 #endif
@@ -383,7 +430,7 @@ bool IsToolbarHidden(const views::View* browser_view) {
 }
 
 bool KeepsTopContainerInFullscreen(const BrowserView* browser_view) {
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
   return browser_view && UseContentCard(browser_view);
 #else
   return false;
@@ -391,7 +438,7 @@ bool KeepsTopContainerInFullscreen(const BrowserView* browser_view) {
 }
 
 bool HidesFullscreenTopChrome(const views::View* browser_view) {
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
   const auto* view = views::AsViewClass<BrowserView>(browser_view);
   return view && IsWindowFullscreen(view) &&
          KeepsTopContainerInFullscreen(view);

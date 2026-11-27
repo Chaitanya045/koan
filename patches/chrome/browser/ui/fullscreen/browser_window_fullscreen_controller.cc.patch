@@ -1,0 +1,24 @@
+diff --git a/chrome/browser/ui/fullscreen/browser_window_fullscreen_controller.cc b/chrome/browser/ui/fullscreen/browser_window_fullscreen_controller.cc
+--- a/chrome/browser/ui/fullscreen/browser_window_fullscreen_controller.cc
++++ b/chrome/browser/ui/fullscreen/browser_window_fullscreen_controller.cc
+@@ -11,6 +11,7 @@
+ #include "chrome/browser/ui/interaction/browser_elements.h"
+ #include "chrome/browser/ui/views/frame/browser_frame_view.h"
+ #include "chrome/browser/ui/views/interaction/browser_elements_views.h"
++#include "koan/browser/ui/views/koan_compact_mode.h"
+ #include "ui/views/interaction/element_tracker_views.h"
+ #include "ui/views/view_utils.h"
+ #include "ui/views/widget/widget.h"
+@@ -82,6 +83,12 @@
+     return false;
+   }
+ 
++  // Koan: on Linux its layout stays in the window's fullscreen (F11), as in
++  // immersive mode on macOS; the page's own fullscreen still hides it all.
++  if (koan::KeepsLayoutInFullscreen(browser)) {
++    return false;
++  }
++
+   const BrowserFrameView* browser_frame_view = GetBrowserFrameView(browser);
+   if (!browser_frame_view) {
+     // Do not hide UI by default.
