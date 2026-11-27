@@ -12,6 +12,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/storage_partition_config.h"
@@ -158,16 +159,60 @@ bool IsExtensionOffInProcess(content::RenderProcessHost* process,
                                    extension_id);
 }
 
-bool IsExtensionOffInProcessId(content::ChildProcessId process_id,
-                               std::string_view extension_id) {
-  return IsExtensionOffInProcess(content::RenderProcessHost::FromID(process_id),
-                                 extension_id);
-}
-
 bool IsExtensionOffInContents(content::WebContents* contents,
                               std::string_view extension_id) {
   return contents && IsOffIn(contents->GetBrowserContext(),
                              ContainerOf(contents), extension_id);
+}
+
+content::WebContents* TabUnlessExtensionOff(content::WebContents* contents,
+                                            std::string_view extension_id) {
+  return IsExtensionOffInContents(contents, extension_id) ? nullptr : contents;
+}
+
+std::set<std::string> ExtensionsOffInContents(content::WebContents* contents) {
+  const std::optional<ContainerId> container =
+      contents ? ContainerOf(contents) : std::nullopt;
+  if (!container || container->kind != ContainerKind::kUser ||
+      !base::FeatureList::IsEnabled(features::kKoanSpaceExtensions)) {
+    return {};
+  }
+  const base::ListValue* list = UserContainersOf(contents->GetBrowserContext());
+  return list ? ExtensionsOffIn(*list, *container) : std::set<std::string>();
+}
+
+std::optional<content::StoragePartitionConfig> PartitionOfRequest(
+    content::FrameTreeNodeId navigation_frame,
+    content::ChildProcessId process_id) {
+  content::StoragePartition* partition = nullptr;
+  if (!navigation_frame.is_null()) {
+    // A navigation's request has no renderer process (WebRequestAPI's proxy
+    // gets -1 for it): the frame it navigates decides. A frame keeps its
+    // tab's partition, so the current RenderFrameHost of the node (the
+    // initial one in a new tab, the prerendered page's, the frame a service
+    // worker preloads for) is in the partition the navigation commits in.
+    content::WebContents* contents =
+        content::WebContents::FromFrameTreeNodeId(navigation_frame);
+    content::RenderFrameHost* frame =
+        contents ? contents->UnsafeFindFrameByFrameTreeNodeId(navigation_frame)
+                 : nullptr;
+    partition = frame ? frame->GetStoragePartition() : nullptr;
+  } else if (content::RenderProcessHost* process =
+                 content::RenderProcessHost::FromID(process_id)) {
+    partition = process->GetStoragePartition();
+  }
+  if (!partition || partition->GetConfig().is_default()) {
+    return std::nullopt;
+  }
+  return partition->GetConfig();
+}
+
+bool IsExtensionOffForRequest(
+    content::BrowserContext* context,
+    const std::optional<content::StoragePartitionConfig>& partition,
+    std::string_view extension_id) {
+  return partition &&
+         IsExtensionOffInPartition(context, *partition, extension_id);
 }
 
 ScopedExtensionCall::ScopedExtensionCall(std::string_view extension_id)

@@ -5,6 +5,7 @@
 #ifndef KOAN_BROWSER_CONTAINERS_KOAN_CONTAINER_EXTENSIONS_H_
 #define KOAN_BROWSER_CONTAINERS_KOAN_CONTAINER_EXTENSIONS_H_
 
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
@@ -12,13 +13,14 @@
 #include "base/auto_reset.h"
 #include "base/memory/stack_allocated.h"
 #include "base/values.h"
+#include "content/public/browser/frame_tree_node_id.h"
+#include "content/public/browser/storage_partition_config.h"
 #include "content/public/common/child_process_id.h"
 #include "koan/browser/containers/koan_container_partition.h"
 
 namespace content {
 class BrowserContext;
 class RenderProcessHost;
-class StoragePartitionConfig;
 class WebContents;
 }  // namespace content
 
@@ -27,8 +29,11 @@ class WebContents;
 // Space's profile) has the extensions that are off in it. An extension that is
 // off in a profile is never loaded into its renderer processes (no content
 // scripts, no extension APIs in its pages), sees none of its requests
-// (webRequest, declarativeNetRequest), and can't address its tabs (tab ids,
-// capture, the debugger). Default: every extension is on everywhere.
+// (webRequest, declarativeNetRequest; navigations too), doesn't see its tabs
+// (tabs.query, windows' tab lists, tab and webNavigation events, tab objects)
+// and can't address them (tab ids, the active tab, capture, the debugger,
+// activeTab, its action, commands and context menu items there). Default:
+// every extension is on everywhere.
 //
 // This is the part the hooks in //extensions and //chrome/browser/extensions
 // call, so it reads the list itself: //base, //components/prefs,
@@ -79,15 +84,45 @@ bool IsExtensionOffInPartition(content::BrowserContext* context,
                                std::string_view extension_id);
 
 // The same for a renderer process (RendererStartupHelper: whether to load the
-// extension into it; webRequest and declarativeNetRequest: a request's
-// process) and for a tab. Null is not.
+// extension into it) and for a tab. Null is not.
 bool IsExtensionOffInProcess(content::RenderProcessHost* process,
                              std::string_view extension_id);
-// A request's process (WebRequestInfo::global_id.child_id), which may be gone.
-bool IsExtensionOffInProcessId(content::ChildProcessId process_id,
-                               std::string_view extension_id);
 bool IsExtensionOffInContents(content::WebContents* contents,
                               std::string_view extension_id);
+
+// `contents`, or null if `extension_id` is off in its profile: what the tabs
+// functions that act on the current window's active tab when given no tab id
+// (tabs.update, reload, goBack, getZoom, detectLanguage, ...) get for it, so
+// they answer "No selected tab" as without one.
+content::WebContents* TabUnlessExtensionOff(content::WebContents* contents,
+                                            std::string_view extension_id);
+
+// Every extension that is off in `contents`'s profile, for a hook that decides
+// later, per extension, about something of this tab (its events, its context
+// menu). Empty for a null tab, the default partition and with the flag off.
+std::set<std::string> ExtensionsOffInContents(content::WebContents* contents);
+
+// --- webRequest and declarativeNetRequest ---
+
+// The partition of a request, decided once when the request is made
+// (WebRequestInfoInitParams, as upstream decides `is_privileged` there): for a
+// navigation, the partition of the tab whose frame `navigation_frame` is
+// navigating (main frame, subframe, a new tab whose renderer doesn't exist
+// yet, prerender, service worker navigation preload: their request has no
+// renderer process, `process_id` is invalid); for anything else, the
+// partition of the process that made it. Nullopt if that is gone, or is the
+// default partition.
+std::optional<content::StoragePartitionConfig> PartitionOfRequest(
+    content::FrameTreeNodeId navigation_frame,
+    content::ChildProcessId process_id);
+
+// Whether `extension_id` is off in `partition` (PartitionOfRequest()) of
+// `context`: WebRequestEventRouter::ListenerMatchesRequest() and
+// RulesetManager::ShouldEvaluateRulesetForRequest().
+bool IsExtensionOffForRequest(
+    content::BrowserContext* context,
+    const std::optional<content::StoragePartitionConfig>& partition,
+    std::string_view extension_id);
 
 // The extension whose API function is running on this thread:
 // ExtensionFunction::RunWithValidation() sets it around Run(), so that

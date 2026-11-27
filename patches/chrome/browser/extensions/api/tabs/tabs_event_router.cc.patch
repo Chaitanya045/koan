@@ -1,0 +1,36 @@
+diff --git a/chrome/browser/extensions/api/tabs/tabs_event_router.cc b/chrome/browser/extensions/api/tabs/tabs_event_router.cc
+index f575867..a97df63 100644
+--- a/chrome/browser/extensions/api/tabs/tabs_event_router.cc
++++ b/chrome/browser/extensions/api/tabs/tabs_event_router.cc
+@@ -27,6 +27,7 @@
+ #include "content/public/browser/web_contents.h"
+ #include "extensions/browser/event_router.h"
+ #include "extensions/common/event_args.h"
++#include "koan/browser/containers/koan_container_extensions.h"
+ #include "third_party/blink/public/common/page/page_zoom.h"
+ 
+ namespace extensions {
+@@ -61,6 +62,11 @@ bool WillDispatchTabUpdatedEvent(
+     std::optional<base::ListValue>& event_args_out,
+     mojom::EventFilteringInfoPtr& event_filtering_info_out,
+     bool* dispatch_separate_event_out) {
++  // Koan: not to an extension that is off in the tab's Space profile.
++  if (extension &&
++      koan::containers::IsExtensionOffInContents(contents, extension->id())) {
++    return false;
++  }
+   auto scrub_tab_behavior = ExtensionTabUtil::GetScrubTabBehavior(
+       extension, target_context, contents);
+   api::tabs::Tab tab_object = ExtensionTabUtil::CreateTabObject(
+@@ -93,6 +99,11 @@ bool WillDispatchTabCreatedEvent(
+     std::optional<base::ListValue>& event_args_out,
+     mojom::EventFilteringInfoPtr& event_filtering_info_out,
+     bool* dispatch_separate_event_out) {
++  // Koan: not to an extension that is off in the tab's Space profile.
++  if (extension &&
++      koan::containers::IsExtensionOffInContents(contents, extension->id())) {
++    return false;
++  }
+   ExtensionTabUtil::ScrubTabBehavior scrub_tab_behavior =
+       ExtensionTabUtil::GetScrubTabBehavior(extension, target_context,
+                                             contents);

@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/extensions/extension_tab_util.cc b/chrome/browser/extensions/extension_tab_util.cc
-index aeb80f6..9421bbb 100644
+index aeb80f6..75f6b6a 100644
 --- a/chrome/browser/extensions/extension_tab_util.cc
 +++ b/chrome/browser/extensions/extension_tab_util.cc
 @@ -54,6 +54,9 @@
@@ -12,7 +12,20 @@ index aeb80f6..9421bbb 100644
  #include "extensions/buildflags/buildflags.h"
  #include "extensions/common/constants.h"
  #include "extensions/common/error_utils.h"
-@@ -658,6 +661,16 @@ bool ExtensionTabUtil::GetTabById(int tab_id,
+@@ -484,6 +487,12 @@ ExtensionTabUtil::ScrubTabBehavior ExtensionTabUtil::GetScrubTabBehavior(
+     const Extension* extension,
+     mojom::ContextType context,
+     content::WebContents* contents) {
++  // Koan: no address, title or icon of a tab of a Space profile the extension
++  // is off in, in whatever tab object it still gets (space-extensions.md).
++  if (extension &&
++      koan::containers::IsExtensionOffInContents(contents, extension->id())) {
++    return {kScrubTabFully, kScrubTabFully};
++  }
+   int tab_id = GetTabId(contents);
+   ScrubTabBehavior behavior;
+   behavior.committed_info = GetScrubTabBehaviorImpl(
+@@ -658,6 +667,16 @@ bool ExtensionTabUtil::GetTabById(int tab_id,
        WebContents* target_contents = window->GetWebContentsAt(i);
        if (sessions::SessionTabHelper::IdForTab(target_contents).id() ==
            tab_id) {

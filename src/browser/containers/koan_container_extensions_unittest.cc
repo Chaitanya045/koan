@@ -12,6 +12,8 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/user_prefs/user_prefs.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/web_contents.h"
@@ -175,6 +177,53 @@ TEST_F(ContainerExtensionsTest, AsksTheContainersList) {
   EXPECT_FALSE(IsExtensionOffInProcess(
       default_tab->GetPrimaryMainFrame()->GetProcess(), kPasswords));
   EXPECT_FALSE(IsExtensionOffInProcess(nullptr, kPasswords));
+}
+
+// What the tab and webNavigation event hooks and the context menu filter take
+// once per tab.
+TEST_F(ContainerExtensionsTest, ListsWhatIsOffInATab) {
+  std::unique_ptr<content::WebContents> work_tab = NewTab(work_);
+  std::unique_ptr<content::WebContents> default_tab = NewTab(std::nullopt);
+  EXPECT_EQ(ExtensionsOffInContents(work_tab.get()),
+            std::set<std::string>({kPasswords}));
+  EXPECT_TRUE(ExtensionsOffInContents(default_tab.get()).empty());
+  EXPECT_TRUE(ExtensionsOffInContents(nullptr).empty());
+}
+
+// webRequest and declarativeNetRequest: a navigation's request has no
+// process (WebRequestAPI gives it -1), so its frame decides; any other
+// request's process decides. Either way it is decided once, when the request
+// is made.
+TEST_F(ContainerExtensionsTest, ARequestIsInItsFramesOrProcesssPartition) {
+  std::unique_ptr<content::WebContents> work_tab = NewTab(work_);
+  std::unique_ptr<content::WebContents> default_tab = NewTab(std::nullopt);
+  content::RenderFrameHost* work_frame = work_tab->GetPrimaryMainFrame();
+  const content::ChildProcessId no_process;
+
+  // A navigation in the profile's tab: by its frame, with no process.
+  const std::optional<content::StoragePartitionConfig> navigation =
+      PartitionOfRequest(work_frame->GetFrameTreeNodeId(), no_process);
+  ASSERT_TRUE(navigation);
+  EXPECT_EQ(*navigation, PartitionConfigFor(&context_, work_));
+  EXPECT_TRUE(IsExtensionOffForRequest(&context_, navigation, kPasswords));
+  EXPECT_FALSE(IsExtensionOffForRequest(&context_, navigation, kShopping));
+
+  // A subresource: by its process.
+  const std::optional<content::StoragePartitionConfig> subresource =
+      PartitionOfRequest(content::FrameTreeNodeId(),
+                         work_frame->GetProcess()->GetID());
+  ASSERT_TRUE(subresource);
+  EXPECT_TRUE(IsExtensionOffForRequest(&context_, subresource, kPasswords));
+
+  // The default partition, a frame or process that is gone: no partition, and
+  // so nothing is off.
+  EXPECT_FALSE(PartitionOfRequest(
+      default_tab->GetPrimaryMainFrame()->GetFrameTreeNodeId(), no_process));
+  EXPECT_FALSE(PartitionOfRequest(
+      content::FrameTreeNodeId(),
+      default_tab->GetPrimaryMainFrame()->GetProcess()->GetID()));
+  EXPECT_FALSE(PartitionOfRequest(content::FrameTreeNodeId(), no_process));
+  EXPECT_FALSE(IsExtensionOffForRequest(&context_, std::nullopt, kPasswords));
 }
 
 // GetTabById()'s check: only while an extension's function runs, and for

@@ -7,7 +7,18 @@
 
 #include <string_view>
 
+#include "base/functional/callback_forward.h"
+
 class BrowserWindowInterface;
+
+namespace content {
+class RenderFrameHost;
+struct ContextMenuParams;
+}  // namespace content
+
+namespace extensions {
+class MenuItem;
+}
 
 namespace views {
 class View;
@@ -42,6 +53,16 @@ void OnExtensionPopupClosed(const views::View* container);
 // runs for every icon on each tab switch. Defined in koan_space_extensions.cc.
 bool HidesExtensionAction(BrowserWindowInterface* browser,
                           std::string_view action_id);
+
+// The filter of the page context menu's extension items: upstream's
+// extensions::context_menu_helpers::MenuItemMatchesParams(`params`), and no
+// item of an extension that is off in `frame`'s Space profile (#473), so it
+// gets no onClicked with the page's address, selection or tab, and no
+// activeTab. The list is taken now, for the menu's lifetime. Called from
+// RenderViewContextMenu's constructor. Defined in koan_space_extensions.cc.
+base::RepeatingCallback<bool(const extensions::MenuItem*)>
+ExtensionMenuItemFilter(content::RenderFrameHost& frame,
+                        const content::ContextMenuParams& params);
 
 }  // namespace koan
 

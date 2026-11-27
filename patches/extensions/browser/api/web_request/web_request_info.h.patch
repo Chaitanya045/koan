@@ -1,0 +1,34 @@
+diff --git a/extensions/browser/api/web_request/web_request_info.h b/extensions/browser/api/web_request/web_request_info.h
+index 9e7cd68..0df99f8 100644
+--- a/extensions/browser/api/web_request/web_request_info.h
++++ b/extensions/browser/api/web_request/web_request_info.h
+@@ -16,6 +16,7 @@
+ #include "base/memory/scoped_refptr.h"
+ #include "base/values.h"
+ #include "content/public/browser/global_routing_id.h"
++#include "content/public/browser/storage_partition_config.h"
+ #include "content/public/common/child_process_id.h"
+ #include "extensions/browser/api/declarative_net_request/request_action.h"
+ #include "extensions/browser/extension_api_frame_id_map.h"
+@@ -79,6 +80,8 @@ struct WebRequestInfoInitParams {
+   std::optional<int64_t> navigation_id;
+   content::GlobalRenderFrameHostId parent_routing_id;
+   bool is_privileged = false;
++  // Koan: the request's Space profile (koan_container_extensions.h).
++  std::optional<content::StoragePartitionConfig> koan_partition;
+ 
+  private:
+   void InitializeWebViewAndFrameData(
+@@ -214,6 +217,12 @@ struct WebRequestInfo {
+   // since a navigation may have no live renderer process to consult later.
+   const bool is_privileged;
+ 
++  // Koan: the StoragePartition of the request's frame (navigations) or
++  // process, decided at construction like `is_privileged`, so that an
++  // extension off in a Space profile sees none of its requests
++  // (koan::containers::PartitionOfRequest()).
++  const std::optional<content::StoragePartitionConfig> koan_partition;
++
+   // For SecurityInfo object.
+   std::optional<net::SSLInfo> ssl_info;
+ };

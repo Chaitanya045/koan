@@ -1,5 +1,5 @@
 diff --git a/extensions/browser/api/web_request/extension_web_request_event_router.cc b/extensions/browser/api/web_request/extension_web_request_event_router.cc
-index 6e6df84..d984d86 100644
+index 6e6df84..adb072e 100644
 --- a/extensions/browser/api/web_request/extension_web_request_event_router.cc
 +++ b/extensions/browser/api/web_request/extension_web_request_event_router.cc
 @@ -56,6 +56,7 @@
@@ -16,8 +16,8 @@ index 6e6df84..d984d86 100644
  
 +  // Koan: no request of a Space profile the extension is off in
 +  // (.agent/notes/upstream/space-extensions.md).
-+  if (koan::containers::IsExtensionOffInProcessId(request.global_id.child_id,
-+                                                  listener.id.extension_id)) {
++  if (koan::containers::IsExtensionOffForRequest(
++          &browser_context, request.koan_partition, listener.id.extension_id)) {
 +    return false;
 +  }
 +

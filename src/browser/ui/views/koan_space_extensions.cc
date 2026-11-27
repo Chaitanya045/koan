@@ -21,6 +21,8 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "chrome/browser/extensions/context_menu_helpers.h"
+#include "chrome/browser/extensions/menu_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -34,8 +36,10 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/tabs/public/tab_interface.h"
+#include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/reload_type.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/storage_partition.h"
@@ -84,9 +88,10 @@ DEFINE_ELEMENT_IDENTIFIER_VALUE(kKoanSpaceExtensionsDone);
 
 constexpr char16_t kNoProfileTitle[] = u"Extensions in This Space";
 constexpr char16_t kProfileText[] =
-    u"An extension that is off can't see or change this profile's pages, in "
-    u"every Space that uses it. The profile's open tabs reload when you "
-    u"press Done.";
+    u"An extension that is off can't see or change this profile's tabs, in "
+    u"every Space that uses it. Your history, downloads and bookmarks are "
+    u"shared by every profile, so it can still read those. The profile's "
+    u"open tabs reload when you press Done.";
 constexpr char16_t kNoProfileText[] =
     u"This Space uses the Default profile, which every Space without a "
     u"profile of its own shares. Turning an extension off gives this Space a "
@@ -471,6 +476,22 @@ bool HidesExtensionAction(BrowserWindowInterface* browser,
                           std::string_view action_id) {
   return containers::IsExtensionOffInContents(ActiveContents(browser),
                                               action_id);
+}
+
+base::RepeatingCallback<bool(const extensions::MenuItem*)>
+ExtensionMenuItemFilter(content::RenderFrameHost& frame,
+                        const content::ContextMenuParams& params) {
+  return base::BindRepeating(
+      [](const std::set<std::string>& off,
+         const content::ContextMenuParams& params,
+         const extensions::MenuItem* item) {
+        return !off.contains(item->extension_id()) &&
+               extensions::context_menu_helpers::MenuItemMatchesParams(params,
+                                                                       item);
+      },
+      containers::ExtensionsOffInContents(
+          content::WebContents::FromRenderFrameHost(&frame)),
+      params);
 }
 
 KoanSpaceExtensionsGuard::KoanSpaceExtensionsGuard(BrowserView* browser_view)

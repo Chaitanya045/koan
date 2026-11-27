@@ -1,0 +1,26 @@
+diff --git a/chrome/browser/extensions/extension_keybinding_registry.cc b/chrome/browser/extensions/extension_keybinding_registry.cc
+index caf04de..0a0fce2 100644
+--- a/chrome/browser/extensions/extension_keybinding_registry.cc
++++ b/chrome/browser/extensions/extension_keybinding_registry.cc
+@@ -27,6 +27,7 @@
+ #include "extensions/common/extension_set.h"
+ #include "extensions/common/manifest_constants.h"
+ #include "extensions/common/mojom/context_type.mojom.h"
++#include "koan/browser/containers/koan_container_extensions.h"
+ 
+ #if BUILDFLAG(IS_CHROMEOS)
+ #include "chrome/browser/ui/ash/media_client/media_client_impl.h"
+@@ -245,6 +246,13 @@ void ExtensionKeybindingRegistry::CommandExecuted(
+     auto* active_tab = tab_list_interface_->GetActiveTab();
+     content::WebContents* web_contents =
+         active_tab ? active_tab->GetContents() : nullptr;
++    // Koan: no command of an extension that is off in the active tab's Space
++    // profile (its shortcut is still taken, as for an extension without a
++    // listener in that tab).
++    if (koan::containers::IsExtensionOffInContents(web_contents,
++                                                   extension_id)) {
++      return;
++    }
+     // Grant before sending the event so that the permission is granted before
+     // the extension acts on the command. NOTE: The Global Commands handler does
+     // not set the TabListInterface as it deals only with named commands (not

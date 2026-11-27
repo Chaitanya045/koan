@@ -144,6 +144,7 @@ source_set("browsertests_impl") {
     "//chrome/browser/password_manager/factories",
     "//chrome/browser/prefs",
     "//chrome/browser/profiles:profile",
+    "//chrome/browser/renderer_context_menu:test_support",
     "//chrome/browser/sessions:test_support",
     "//chrome/browser/themes",
     "//chrome/browser/ui:browser_tabstrip",

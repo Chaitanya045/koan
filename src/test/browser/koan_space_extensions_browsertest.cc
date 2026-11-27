@@ -5,10 +5,13 @@
 // Extensions per Space profile (#473,
 // .agent/notes/upstream/space-extensions.md): an extension that is off in a
 // Space's profile injects nothing into its tabs, sees none of their requests
-// (webRequest, declarativeNetRequest) and can't address them by tab id, and
-// still works in every other Space. A change applies to the profile's open tabs
-// by restarting them.
+// (webRequest, declarativeNetRequest; subresources and navigations), doesn't
+// see the tabs (tabs.query, tab and webNavigation events), can't address them
+// (tab ids, the active tab) and has no context menu item in them, and still
+// works in every other Space. A change applies to the profile's open tabs by
+// restarting them.
 
+#include <memory>
 #include <optional>
 #include <set>
 #include <string>
@@ -18,9 +21,12 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/test/run_until.h"
 #include "base/values.h"
+#include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
+#include "chrome/browser/extensions/context_menu_matcher.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/navigator/browser_navigator.h"
 #include "chrome/browser/ui/navigator/browser_navigator_params.h"
@@ -55,12 +61,16 @@ namespace koan {
 namespace {
 
 // A content script that marks the page, a webRequest listener that keeps the
-// URLs it sees, and a declarativeNetRequest rule that blocks "koan-blocked".
+// requests it sees (type and URL), webNavigation.onCommitted and
+// tabs.onUpdated listeners that keep the URLs they get, a context menu item,
+// and a declarativeNetRequest rule that blocks "koan-blocked" (fetches, page
+// loads, iframes).
 constexpr char kManifest[] = R"({
   "name": "Koan Space extensions test",
   "version": "1",
   "manifest_version": 3,
-  "permissions": ["webRequest", "declarativeNetRequest", "scripting", "tabs"],
+  "permissions": ["webRequest", "declarativeNetRequest", "scripting", "tabs",
+                  "webNavigation", "contextMenus"],
   "host_permissions": ["<all_urls>"],
   "background": {"service_worker": "background.js"},
   "content_scripts": [{
@@ -74,9 +84,18 @@ constexpr char kManifest[] = R"({
 })";
 constexpr char kBackground[] = R"(
   self.seen = [];
+  self.committed = [];
+  self.updated = [];
   chrome.webRequest.onBeforeRequest.addListener(
-      (details) => { self.seen.push(details.url); }, {urls: ['<all_urls>']});
-  chrome.test.sendMessage('ready');
+      (details) => { self.seen.push(details.type + ' ' + details.url); },
+      {urls: ['<all_urls>']});
+  chrome.webNavigation.onCommitted.addListener(
+      (details) => { self.committed.push(details.url); });
+  chrome.tabs.onUpdated.addListener(
+      (id, info, tab) => { self.updated.push(tab.url || ''); });
+  chrome.contextMenus.create(
+      {id: 'koan-item', title: 'Koan test item', contexts: ['all']},
+      () => { chrome.runtime.lastError; chrome.test.sendMessage('ready'); });
 )";
 constexpr char kContentScript[] =
     "document.documentElement.dataset.koanExtension = 'injected';";
@@ -85,7 +104,7 @@ constexpr char kRules[] = R"([{
   "priority": 1,
   "action": {"type": "block"},
   "condition": {"urlFilter": "koan-blocked",
-                "resourceTypes": ["xmlhttprequest"]}
+                "resourceTypes": ["xmlhttprequest", "main_frame", "sub_frame"]}
 }])";
 
 class KoanSpaceExtensionsBrowserTest : public InProcessBrowserTest {
@@ -154,6 +173,35 @@ class KoanSpaceExtensionsBrowserTest : public InProcessBrowserTest {
         .ExtractString();
   }
 
+  // Whether a page load of `path` (with "koan-blocked": the extension's rule
+  // blocks it) commits a page and not an error page.
+  bool PageLoads(content::WebContents* contents, const std::string& path) {
+    return content::NavigateToURL(contents,
+                                  embedded_test_server()->GetURL(path));
+  }
+
+  // The same for an iframe of `path` that the page adds: "loaded" or
+  // "blocked" (an error page, which the page can't read).
+  std::string IframeLoads(content::WebContents* contents,
+                          const std::string& path) {
+    return content::EvalJs(
+               contents,
+               base::StrCat(
+                   {"new Promise((resolve) => {"
+                    "  const frame = document.createElement('iframe');"
+                    "  frame.onload = () => {"
+                    "    let doc = null;"
+                    "    try { doc = frame.contentDocument; } catch (e) {}"
+                    "    resolve(doc && doc.title ? 'loaded' : 'blocked');"
+                    "  };"
+                    "  frame.src = '",
+                    path,
+                    "';"
+                    "  document.body.appendChild(frame);"
+                    "})"}))
+        .ExtractString();
+  }
+
   base::Value RunInBackground(const std::string& script) {
     return extensions::BackgroundScriptExecutor::ExecuteScript(
         profile(), extension_id_, script,
@@ -167,6 +215,52 @@ class KoanSpaceExtensionsBrowserTest : public InProcessBrowserTest {
                                          marker, "')));"}))
         .GetIfBool()
         .value_or(false);
+  }
+
+  // Whether `list` (self.seen, self.committed, self.updated) has an entry with
+  // `marker`.
+  bool Has(const std::string& list, const std::string& marker) {
+    return RunInBackground(
+               base::StrCat({"chrome.test.sendScriptResult(self.", list,
+                             ".some(u => u.includes('", marker, "')));"}))
+        .GetIfBool()
+        .value_or(false);
+  }
+
+  // Whether chrome.tabs.query({}) lists the tab.
+  bool Listed(content::WebContents* contents) {
+    const int id = extensions::ExtensionTabUtil::GetTabId(contents);
+    base::Value ids = RunInBackground(
+        "chrome.tabs.query({}).then("
+        "(tabs) => chrome.test.sendScriptResult(tabs.map((tab) => tab.id)));");
+    if (!ids.is_list()) {
+      return false;
+    }
+    for (const base::Value& listed : ids.GetList()) {
+      if (listed.GetIfInt() == id) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // What chrome.tabs.getZoom() without a tab id (the active tab) gives the
+  // extension: "ok" or "error".
+  std::string ActiveTabCall() {
+    base::Value result = RunInBackground(
+        "chrome.tabs.getZoom().then("
+        "() => chrome.test.sendScriptResult('ok'),"
+        "() => chrome.test.sendScriptResult('error'));");
+    return result.is_string() ? result.GetString() : std::string();
+  }
+
+  // Whether the page's context menu has an item of the extension.
+  bool HasMenuItem(content::WebContents* contents) {
+    std::unique_ptr<TestRenderViewContextMenu> menu =
+        TestRenderViewContextMenu::Create(contents,
+                                          contents->GetLastCommittedURL());
+    menu->Init();
+    return !menu->extension_items().extension_item_map().empty();
   }
 
   // What chrome.tabs.get() and chrome.scripting.executeScript() of the tab
@@ -250,6 +344,72 @@ IN_PROC_BROWSER_TEST_F(KoanSpaceExtensionsBrowserTest, OffInAProfileOnlyThere) {
                           plain_space);
   EXPECT_EQ("error", TabsGet(in_bank));
   EXPECT_EQ("loaded", FetchBlockedUrl(in_bank));
+}
+
+// The review's cases (PR #515): page loads and iframes, the tab list, tab and
+// webNavigation events, the active tab and the context menu, in a tab of the
+// profile the extension is off in and in one of another profile.
+IN_PROC_BROWSER_TEST_F(KoanSpaceExtensionsBrowserTest,
+                       NavigationsTabsAndMenusOnlyOutsideTheProfile) {
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  ASSERT_TRUE(spaces);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  ASSERT_NO_FATAL_FAILURE(LoadTestExtension());
+  const std::string bank = AddProfile(u"Bank");
+  const std::string work = AddProfile(u"Work");
+  SetOff(bank, true);
+
+  // Bank, where it is off.
+  spaces->CreateSpace(u"Bank", u"", {}, bank);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  content::WebContents* in_bank = OpenInActiveSpace("/title1.html?bank-new");
+  ASSERT_TRUE(in_bank);
+  ASSERT_EQ(containers::SpaceContainerFromString(bank),
+            containers::ContainerOf(in_bank));
+  // A page load and an iframe that the rule would block, and two it wouldn't.
+  EXPECT_TRUE(PageLoads(in_bank, "/title2.html?koan-blocked-bank"));
+  EXPECT_EQ("loaded",
+            IframeLoads(in_bank, "/title2.html?koan-blocked-bank-sub"));
+  EXPECT_TRUE(PageLoads(in_bank, "/title1.html?bank-main"));
+  EXPECT_EQ("loaded", IframeLoads(in_bank, "/title2.html?bank-sub"));
+  EXPECT_FALSE(Listed(in_bank));
+  EXPECT_EQ("error", ActiveTabCall());
+  EXPECT_FALSE(HasMenuItem(in_bank));
+
+  // Work, where it is on: the same, the other way round.
+  spaces->CreateSpace(u"Work", u"", {}, work);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 3));
+  content::WebContents* in_work = OpenInActiveSpace("/title1.html?work-new");
+  ASSERT_TRUE(in_work);
+  // (Its rules load after the install: wait for the first block.)
+  EXPECT_TRUE(base::test::RunUntil(
+      [&] { return !PageLoads(in_work, "/title2.html?koan-blocked-work"); }));
+  EXPECT_EQ("blocked", IframeLoads(in_work, "/title2.html?koan-blocked-sub"));
+  EXPECT_TRUE(PageLoads(in_work, "/title1.html?work-main"));
+  EXPECT_EQ("loaded", IframeLoads(in_work, "/title2.html?work-sub"));
+  // (Only the navigations themselves have these URLs.)
+  EXPECT_TRUE(base::test::RunUntil([&] { return Has("seen", "?work-main"); }));
+  EXPECT_TRUE(base::test::RunUntil([&] { return Has("seen", "?work-sub"); }));
+  EXPECT_TRUE(
+      base::test::RunUntil([&] { return Has("committed", "?work-main"); }));
+  EXPECT_TRUE(Has("committed", "?work-sub"));
+  EXPECT_TRUE(
+      base::test::RunUntil([&] { return Has("updated", "?work-main"); }));
+  EXPECT_TRUE(Listed(in_work));
+  EXPECT_EQ("ok", ActiveTabCall());
+  EXPECT_TRUE(base::test::RunUntil([&] { return HasMenuItem(in_work); }));
+
+  // Bank's loads and events came first, and none reached the extension.
+  for (const char* marker :
+       {"bank-new", "bank-main", "bank-sub", "koan-blocked-bank"}) {
+    SCOPED_TRACE(marker);
+    EXPECT_FALSE(Has("seen", marker));
+    EXPECT_FALSE(Has("committed", marker));
+    EXPECT_FALSE(Has("updated", marker));
+  }
+  // And Bank's tab is still hidden while another is active.
+  EXPECT_FALSE(Listed(in_bank));
+  EXPECT_FALSE(HasMenuItem(in_bank));
 }
 
 // Done applies a change to the profile's open tabs: they reload in new

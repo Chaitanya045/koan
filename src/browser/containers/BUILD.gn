@@ -56,6 +56,24 @@ source_set("partition") {
   ]
 }
 
+# The events about a tab that an extension which is off in its Space profile
+# doesn't get (koan_extension_events.h, #473): for webNavigation's helpers,
+# which can't depend on //koan/browser/ui/views. Depends on
+# //extensions/browser, so //extensions/browser can't depend on it (it uses
+# :partition).
+source_set("extension_events") {
+  sources = [
+    "koan_extension_events.cc",
+    "koan_extension_events.h",
+  ]
+  deps = [
+    ":partition",
+    "//base",
+    "//extensions/browser",
+    "//extensions/common",
+  ]
+}
+
 # The user's own containers, Zen's per-Space profiles, and which one a new tab
 # opens in (koan_user_containers.h, #318). Pure logic.
 source_set("user_containers") {
