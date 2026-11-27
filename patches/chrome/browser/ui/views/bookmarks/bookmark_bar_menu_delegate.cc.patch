@@ -1,0 +1,22 @@
+--- a/chrome/browser/ui/views/bookmarks/bookmark_bar_menu_delegate.cc
++++ b/chrome/browser/ui/views/bookmarks/bookmark_bar_menu_delegate.cc
+@@ -68,8 +68,18 @@
+   }
+ 
+   // Add missing bookmark menus if the start index decreased.
+-  for (size_t idx = start_index; idx < prev_start_idx; ++idx) {
++  // Koan (#546, an upstream bug): the start index also drops when a shown
++  // bookmark is removed from the bar, and then the children after it have
++  // already moved down: `prev_start_idx` can be past the end, and the child
++  // now at `idx` can be in this menu already.
++  for (size_t idx = start_index; idx < prev_start_idx && idx < children.size();
++       ++idx) {
+     const bookmarks::BookmarkNode* child_node = children[idx];
++    if (auto it = node_to_menu_map().find(BookmarkFolderOrURL(child_node));
++        it != node_to_menu_map().end() &&
++        it->second->GetParentMenuItem() == parent_menu) {
++      continue;
++    }
+     AddBookmarkNode(child_node, parent_menu, idx);
+   }
+ 
