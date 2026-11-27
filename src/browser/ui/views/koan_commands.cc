@@ -311,7 +311,7 @@ void AppendGlobalCommands(const KoanBrowserViewController* owner,
   // these pin and unpin.
   add_if(pinned_tabs ? tab && !essential &&
                            controller.pinned_tabs()->CanAddToEssentials(
-                               tab->IsSplit() ? 2 : 1)
+                               tab, tab->IsSplit() ? 2 : 1)
                      : tab && !pinned,
          pinned_tabs
              ? PinnedTabCommand("add-to-essentials", u"Add to Essentials",
