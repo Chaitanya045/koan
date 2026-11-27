@@ -624,8 +624,9 @@ constexpr Row kRows[] = {
      .note = "Never closes Essentials, pinned tabs, tabs in a folder, the tab "
              "each Space shows, agent tabs, or tabs in use (playing sound, in "
              "a call, sharing the screen, open in DevTools, with a form you "
-             "started, downloading). Closed tabs are in the Library: History, "
-             "Closed tabs."},
+             "started, downloading, in picture-in-picture, or on a page that "
+             "asks before you leave). Closed tabs are in the Library: "
+             "History, Closed tabs."},
     // Agents.
     {.group = "agent-control",
      .control = Control::kCheckbox,

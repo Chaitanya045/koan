@@ -181,6 +181,22 @@ IN_PROC_BROWSER_TEST_F(KoanTabAutoCloseBrowserTest,
   EXPECT_TRUE(model()->GetActiveTab());
 }
 
+// The newest background tab, never shown, isn't taken for the tab the Space
+// on screen shows (that is the active tab): it closes like the others.
+IN_PROC_BROWSER_TEST_F(KoanTabAutoCloseBrowserTest,
+                       TheNewestBackgroundTabClosesToo) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  tabs::TabInterface* active = model()->GetActiveTab();
+  AddBackgroundTab("Older");
+  AddBackgroundTab("Newest");
+  WaitPastTheLimit();
+  TurnOn();
+  closer()->CheckNowForTesting();
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !HasTab(Page("Older")) && !HasTab(Page("Newest")); }));
+  EXPECT_EQ(active, model()->GetActiveTab());
+}
+
 IN_PROC_BROWSER_TEST_F(KoanTabAutoCloseBrowserTest,
                        NothingClosesBeforeTheNotice) {
   ASSERT_TRUE(WaitForSpaceCount(browser(), 1));

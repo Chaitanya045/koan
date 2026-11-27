@@ -288,7 +288,9 @@ void KoanTabAutoCloser::Check() {
   for (tabs::TabInterface* tab : active) {
     Stamp(tab);
   }
-  // The tab each Space shows when switched to stays too.
+  // The tab each other Space shows when switched to stays too. The Space on
+  // screen shows the active tab, kept above; its "last active tab" can be a
+  // background tab opened after it and never shown, which would never close.
   KoanBrowserViewController* controller =
       KoanBrowserViewController::From(browser_view_);
   if (KoanWorkspaceController* spaces =
@@ -296,6 +298,9 @@ void KoanTabAutoCloser::Check() {
       spaces && spaces->IsEnabled()) {
     for (const KoanWorkspaceController::SpaceInfo& space :
          spaces->GetSpaces()) {
+      if (space.active) {
+        continue;
+      }
       if (tabs::TabInterface* shown = spaces->GetLastActiveTab(space.id)) {
         std::ranges::copy(WithSplitPartners(model, shown),
                           std::back_inserter(active));
