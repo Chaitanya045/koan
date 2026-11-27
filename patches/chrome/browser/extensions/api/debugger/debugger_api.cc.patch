@@ -1,24 +1,27 @@
 diff --git a/chrome/browser/extensions/api/debugger/debugger_api.cc b/chrome/browser/extensions/api/debugger/debugger_api.cc
-index 7d9cd37..edf12ef 100644
+index 7d9cd37..1bb454d 100644
 --- a/chrome/browser/extensions/api/debugger/debugger_api.cc
 +++ b/chrome/browser/extensions/api/debugger/debugger_api.cc
-@@ -54,6 +54,8 @@
+@@ -54,6 +54,9 @@
  #include "extensions/browser/extension_registry_observer.h"
  #include "extensions/browser/extension_util.h"
  #include "extensions/browser/extensions_browser_client.h"
 +#include "koan/browser/containers/koan_agent_access.h"
++#include "koan/browser/containers/koan_container_extensions.h"
 +#include "koan/browser/containers/koan_container_partition.h"
  #include "extensions/buildflags/buildflags.h"
  #include "extensions/common/constants.h"
  #include "extensions/common/error_utils.h"
-@@ -413,6 +415,13 @@ bool ExtensionMayAttachToWebContents(const Extension& extension,
+@@ -413,6 +416,15 @@ bool ExtensionMayAttachToWebContents(const Extension& extension,
                                       Profile* extension_profile,
                                       WebContents& web_contents,
                                       std::string* error) {
 +  // Koan: no extension debugs an agent tab unless the user lets agents use
-+  // extensions.
++  // extensions, nor a tab of a Space profile it is off in.
 +  if (koan::containers::BlocksAgent(
-+          &web_contents, koan::containers::AgentCapability::kExtensions)) {
++          &web_contents, koan::containers::AgentCapability::kExtensions) ||
++      koan::containers::IsExtensionOffInContents(&web_contents,
++                                                 extension.id())) {
 +    *error = kRestrictedError;
 +    return false;
 +  }

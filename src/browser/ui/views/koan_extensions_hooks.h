@@ -7,6 +7,8 @@
 
 #include <string_view>
 
+class BrowserWindowInterface;
+
 namespace views {
 class View;
 }
@@ -32,6 +34,14 @@ views::View* GetExtensionsAnchorView(const views::View* container,
 // browser up while it is idle). Called from
 // ExtensionsToolbarDesktop::OnPopupClosed(), after the popup's state is gone.
 void OnExtensionPopupClosed(const views::View* container);
+
+// Whether the toolbar shows no button for the extension `action_id` in
+// `browser`: the active tab's Space profile has it off (#473,
+// koan_container_extensions.h). Called from
+// ExtensionsToolbarDesktop::UpdateIconVisibility(), which UpdateAllIcons()
+// runs for every icon on each tab switch. Defined in koan_space_extensions.cc.
+bool HidesExtensionAction(BrowserWindowInterface* browser,
+                          std::string_view action_id);
 
 }  // namespace koan
 

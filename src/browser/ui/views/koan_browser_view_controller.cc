@@ -57,6 +57,7 @@
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
+#include "koan/browser/ui/views/koan_space_extensions.h"
 #include "koan/browser/ui/views/koan_split_header.h"
 #include "koan/browser/ui/views/koan_tab_activation.h"
 #include "koan/browser/ui/views/koan_tab_auto_closer.h"
@@ -170,6 +171,8 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
       tab_activation_(std::make_unique<KoanTabActivationTracker>(
           browser_view->browser()->GetTabStripModel())),
       tab_auto_closer_(std::make_unique<KoanTabAutoCloser>(browser_view)),
+      space_extensions_(
+          std::make_unique<KoanSpaceExtensionsGuard>(browser_view)),
       media_(std::make_unique<KoanMediaController>(browser_view)),
       download_animation_(
           std::make_unique<KoanDownloadAnimation>(browser_view)),

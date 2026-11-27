@@ -21,6 +21,7 @@
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/drag_controller.h"
 #include "ui/views/view.h"
@@ -56,6 +57,9 @@ namespace koan {
 // context menu), so popups, keyboard shortcuts and chrome.action behave as
 // in the toolbar. The popup points at the button (GetExtensionsAnchorView()
 // in koan_extensions_hooks.h).
+//
+// An extension that is off in the active tab's Space profile has no button
+// (#473, koan_container_extensions.h).
 //
 // As in Chromium's toolbar, a button can be dragged along the pill to reorder
 // the pinned extensions (ToolbarActionsModel::MovePinnedAction(), with the
@@ -203,6 +207,9 @@ class KoanSidebarExtensionsView : public views::View,
   // After a click, until the popup is up: the one state that has no event to
   // tell it is over.
   base::OneShotTimer press_hold_timer_;
+  // The extensions that are off in a Space's profile have no button while
+  // one of its tabs is active (#473): the list's changes.
+  PrefChangeRegistrar pref_change_registrar_;
   // The extensions menu where kExtensionsMenuAccessControl is on.
   std::unique_ptr<ExtensionsMenuCoordinator> menu_coordinator_;
   bool rebuild_pending_ = false;

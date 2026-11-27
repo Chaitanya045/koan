@@ -1,0 +1,26 @@
+diff --git a/extensions/browser/api/web_request/extension_web_request_event_router.cc b/extensions/browser/api/web_request/extension_web_request_event_router.cc
+index 6e6df84..d984d86 100644
+--- a/extensions/browser/api/web_request/extension_web_request_event_router.cc
++++ b/extensions/browser/api/web_request/extension_web_request_event_router.cc
+@@ -56,6 +56,7 @@
+ #include "extensions/browser/process_map.h"
+ #include "extensions/browser/rules_registry_ids.h"
+ #include "extensions/browser/safe_browsing_delegate.h"
++#include "koan/browser/containers/koan_container_extensions.h"
+ #include "extensions/buildflags/buildflags.h"
+ #include "extensions/common/api/web_request/web_request_activity_log_constants.h"
+ #include "extensions/common/api/web_request/web_request_constants.h"
+@@ -3081,6 +3082,13 @@ bool WebRequestEventRouter::ListenerMatchesRequest(
+     return false;
+   }
+ 
++  // Koan: no request of a Space profile the extension is off in
++  // (.agent/notes/upstream/space-extensions.md).
++  if (koan::containers::IsExtensionOffInProcessId(request.global_id.child_id,
++                                                  listener.id.extension_id)) {
++    return false;
++  }
++
+   if (request.is_web_view) {
+     if (listener.id.render_process_id != request.web_view_embedder_process_id ||
+         listener.id.web_view_instance_id != request.web_view_instance_id) {

@@ -1,16 +1,17 @@
 diff --git a/chrome/browser/extensions/api/tabs/tabs_api.cc b/chrome/browser/extensions/api/tabs/tabs_api.cc
-index a63c3270bfb16a7eeb613d9e5d1cc41803ed693a..872555047dbef2b1eb0ceaaa88691f2b95779745 100644
+index de78a21..beb9025 100644
 --- a/chrome/browser/extensions/api/tabs/tabs_api.cc
 +++ b/chrome/browser/extensions/api/tabs/tabs_api.cc
-@@ -67,6 +67,7 @@
+@@ -68,6 +68,8 @@
  #include "extensions/common/manifest_handlers/incognito_info.h"
  #include "extensions/common/mojom/api_permission_id.mojom-shared.h"
  #include "extensions/common/permissions/permissions_data.h"
++#include "koan/browser/containers/koan_container_extensions.h"
 +#include "koan/browser/ui/views/koan_spaces.h"
  #include "services/metrics/public/cpp/ukm_builders.h"
  #include "services/metrics/public/cpp/ukm_recorder.h"
  #include "third_party/abseil-cpp/absl/container/flat_hash_set.h"
-@@ -644,6 +645,11 @@ base::ListValue TabsQueryFunction::BuildTabList(
+@@ -645,6 +647,11 @@ base::ListValue TabsQueryFunction::BuildTabList(
        ::tabs::TabInterface* tab = tab_list->GetTab(i);
        CHECK(tab);
  
@@ -22,3 +23,15 @@ index a63c3270bfb16a7eeb613d9e5d1cc41803ed693a..872555047dbef2b1eb0ceaaa88691f2b
        if (!MatchesTab(tab, url_patterns)) {
          continue;
        }
+@@ -2613,6 +2620,11 @@ content::WebContents* TabsCaptureVisibleTabFunction::GetWebContentsForID(
+   }
+   content::WebContents* contents = tab->GetContents();
+ 
++  // Koan: not of a tab of a Space profile the extension is off in.
++  if (koan::containers::IsExtensionOffInContents(contents, extension_id())) {
++    *error = koan::containers::kExtensionOffError;
++    return nullptr;
++  }
+   if (!extension()->permissions_data()->CanCaptureVisiblePage(
+           contents->GetLastCommittedURL(),
+           sessions::SessionTabHelper::IdForTab(contents).id(), error,

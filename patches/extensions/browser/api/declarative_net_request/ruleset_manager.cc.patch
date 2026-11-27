@@ -1,0 +1,26 @@
+diff --git a/extensions/browser/api/declarative_net_request/ruleset_manager.cc b/extensions/browser/api/declarative_net_request/ruleset_manager.cc
+index e4f72b2..51d6111 100644
+--- a/extensions/browser/api/declarative_net_request/ruleset_manager.cc
++++ b/extensions/browser/api/declarative_net_request/ruleset_manager.cc
+@@ -39,6 +39,7 @@
+ #include "extensions/common/api/declarative_net_request.h"
+ #include "extensions/common/constants.h"
+ #include "extensions/common/switches.h"
++#include "koan/browser/containers/koan_container_extensions.h"
+ #include "services/metrics/public/cpp/ukm_builders.h"
+ #include "services/metrics/public/cpp/ukm_recorder.h"
+ #include "url/origin.h"
+@@ -646,6 +647,13 @@ bool RulesetManager::ShouldEvaluateRulesetForRequest(
+     const WebRequestInfo& request,
+     bool is_incognito_context,
+     PageAccess& host_permission_access) const {
++  // Koan: no request of a Space profile the extension is off in
++  // (.agent/notes/upstream/space-extensions.md).
++  if (koan::containers::IsExtensionOffInProcessId(request.global_id.child_id,
++                                                  ruleset.extension_id)) {
++    return false;
++  }
++
+   // Extensions should not generally have access to non-main-frame requests
+   // initiated by other extensions, though the --extensions-on-chrome-urls
+   // switch overrides that restriction.
