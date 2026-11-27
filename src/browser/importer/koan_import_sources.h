@@ -42,6 +42,16 @@ inline constexpr auto kChromiumImporterType =
 // (koan_chromium_profile_importer.h takes it out).
 inline constexpr uint16_t kSpacesImportItem = 1 << 7;
 
+// Not an item: a bit of an Arc source's services_supported saying that its
+// Spaces come with their own profiles (Arc has several), so the import
+// dialog's last step says that logins don't come along (#481).
+inline constexpr uint16_t kSpaceProfilesNote = 1 << 8;
+
+// The profile name of Arc's "every profile in one run" source (#481; Zen's
+// "All profiles"), whose source_path is Arc's "User Data" folder itself.
+// Short, as Zen's: the import dialog's list cuts a longer name off.
+inline constexpr char16_t kAllProfilesName[] = u"All profiles";
+
 enum class Engine {
   // A Firefox profile layout (profiles.ini, places.sqlite).
   kGecko,
@@ -97,13 +107,17 @@ bool ReadRegularFile(const base::FilePath& path,
                      size_t max_size,
                      std::string& contents);
 
-// The known browser whose data folder under `root` holds `profile_dir`, or
-// null.
+// The known browser whose data folder under `root` holds `profile_dir` (or,
+// for an "All profiles" source, is it), or null.
 const KnownBrowser* FindBrowser(const base::FilePath& root,
                                 const base::FilePath& profile_dir);
 
 // Whether `source` is a Chromium-format profile Koan imports itself.
 bool IsChromiumProfileSource(const user_data_importer::SourceProfile& source);
+
+// Whether `path`, a Chromium-format source's, is a "User Data" folder (an
+// "All profiles" source) rather than one profile's folder in it.
+bool IsAllProfilesPath(const base::FilePath& path);
 
 // The bundle id (Linux: Flatpak app id) of the app `source` is from (Koan's
 // browsers, Safari, Firefox), for its icon; empty for a bookmarks file.
@@ -127,12 +141,19 @@ std::vector<ProfileDir> ParseProfilesIni(const std::string& ini,
 std::vector<ProfileDir> ParseLocalState(std::string_view json,
                                         const base::FilePath& user_data_dir);
 
+// The profiles of a Chromium "User Data" folder that have data to import
+// (Bookmarks or History), in ParseLocalState()'s order.
+std::vector<ProfileDir> ChromiumProfilesWithData(
+    const base::FilePath& user_data_dir);
+
 // The sources found under `root`: one per profile with data (Gecko: a
 // places.sqlite; Chromium: Bookmarks or History), each browser's in its
 // profile order, the browsers most recently used first. A browser's only
 // profile has no name (as Chromium lists Firefox's). Zen's profiles with a
 // session file and Arc's with a StorableSidebar.json offer
-// kSpacesImportItem.
+// kSpacesImportItem. Arc with several profiles is listed first as "All
+// profiles" (kAllProfilesName, its "User Data" folder), as Zen's import
+// does, then each profile, all with kSpaceProfilesNote.
 std::vector<user_data_importer::SourceProfile> DetectSourceProfiles(
     const base::FilePath& root,
     const std::string& locale);

@@ -153,6 +153,25 @@ bool IsAgentProcess(content::RenderProcessHost* process) {
          IsAgentPartition(process->GetStoragePartition()->GetConfig());
 }
 
+std::optional<bool> PermissionBlockedInContainer(
+    content::RenderProcessHost* process,
+    bool notifications) {
+  if (!process) {
+    return std::nullopt;
+  }
+  const content::StoragePartitionConfig& config =
+      process->GetStoragePartition()->GetConfig();
+  if (IsAgentPartition(config)) {
+    return true;
+  }
+  const std::optional<ContainerId> container =
+      ContainerFromPartitionConfig(config);
+  if (notifications && container && container->kind == ContainerKind::kUser) {
+    return false;
+  }
+  return std::nullopt;
+}
+
 bool IsAgentFrame(content::RenderFrameHost* frame) {
   return frame && IsAgentPartition(frame->GetSiteInstance()
                                        ->GetSecurityPrincipal()

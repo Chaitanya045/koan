@@ -219,6 +219,7 @@ jobs:
             echo
             echo "- Job time so far: $(( ($(date +%s) - KOAN_CI_START) / 60 )) min"
             echo "- Build steps done: $PROGRESS"
+            echo "- Runner image: ${ImageOS:-?} ${ImageVersion:-?} (SDK details in the logs artifact, toolchain.txt)"
             if [[ -n $DMG ]]; then
               echo "- Disk image: \`$DMG\`, $(du -h "$ARTIFACTS/dmg/$DMG" | cut -f1)"
               echo "- SHA-256: \`$(cut -d' ' -f1 "$ARTIFACTS/dmg/$DMG.sha256")\`"

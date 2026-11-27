@@ -1,0 +1,29 @@
+diff --git a/content/browser/push_messaging/push_messaging_manager.cc b/content/browser/push_messaging/push_messaging_manager.cc
+--- a/content/browser/push_messaging/push_messaging_manager.cc
++++ b/content/browser/push_messaging/push_messaging_manager.cc
+@@ -31,7 +31,10 @@
+ #include "content/public/browser/permission_descriptor_util.h"
+ #include "content/public/browser/permission_request_description.h"
+ #include "content/public/browser/render_process_host.h"
++#include "content/public/browser/storage_partition.h"
++#include "content/public/browser/storage_partition_config.h"
+ #include "content/public/common/content_switches.h"
++#include "koan/browser/containers/koan_partition_domain.h"
+ #include "third_party/blink/public/common/permissions/permission_utils.h"
+ #include "third_party/blink/public/common/storage_key/storage_key.h"
+ #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
+@@ -847,6 +850,14 @@
+ }
+ 
+ PushMessagingService* PushMessagingManager::GetService() {
++  // Koan: no push in a Space's profile: push messages go to the origin's
++  // default partition.
++  if (koan::containers::IsUserPartitionDomain(render_process_host_
++                                                  ->GetStoragePartition()
++                                                  ->GetConfig()
++                                                  .partition_domain())) {
++    return nullptr;
++  }
+   return render_process_host_->GetBrowserContext()->GetPushMessagingService();
+ }
+ 

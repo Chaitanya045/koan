@@ -24,6 +24,7 @@ source_set("views") {
     "koan_glass_tint.h",
     "koan_look_hooks.h",
     "koan_omnibox_rows.h",
+    "koan_page_notifications.h",
     "koan_pinned.h",
     "koan_pinned_tabs_hooks.h",
     "koan_session_data.h",
@@ -453,6 +454,7 @@ source_set("impl") {
     "koan_omnibox_rows.cc",
     "koan_outside_window_tracker.cc",
     "koan_outside_window_tracker.h",
+    "koan_page_notifications.cc",
     "koan_pinned_glance.cc",
     "koan_pinned_tab_views.cc",
     "koan_pinned_tab_views.h",
@@ -591,8 +593,10 @@ source_set("impl") {
     "//chrome/browser:browser_process",
     "//chrome/browser:command_updater_impl",
     "//chrome/browser:shell_integration",
+    "//chrome/browser/app_mode",
     "//chrome/browser/bookmarks",
     "//chrome/browser/browsing_data:constants",
+    "//chrome/browser/content_settings:content_settings_factory",
     "//chrome/browser/favicon",
     "//chrome/browser/first_run",
     "//chrome/browser/lifetime",
@@ -664,6 +668,8 @@ source_set("impl") {
     "//components/blocked_content",
     "//components/bookmarks/browser",
     "//components/bookmarks/common",
+    "//components/content_settings/core/browser",
+    "//components/content_settings/core/common",
     "//components/constrained_window",
     "//components/download/content/public",
     "//components/download/public/common:public",
@@ -743,6 +749,7 @@ source_set("impl") {
     "//ui/gfx",
     "//ui/gfx/geometry:geometry_skia",
     "//ui/menus",
+    "//ui/message_center/public/cpp",
     "//ui/native_theme",
     "//ui/views",
     "//ui/views/controls/webview",
@@ -804,6 +811,12 @@ source_set("impl") {
     frameworks += [ "AppKit.framework" ]
   }
   if (is_linux) {
+    # Keeps profiles off the GTK and Qt themes, so the frame is Koan's colour.
+    sources += [
+      "koan_system_theme_lock_linux.cc",
+      "koan_system_theme_lock_linux.h",
+    ]
+
     # Dragging the window from the page asks the window manager to move it
     # (koan_window_drag.cc); macOS runs a move loop instead.
     deps += [

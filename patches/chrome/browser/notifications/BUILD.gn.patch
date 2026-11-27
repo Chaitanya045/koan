@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/notifications/BUILD.gn b/chrome/browser/notifications/BUILD.gn
+--- a/chrome/browser/notifications/BUILD.gn
++++ b/chrome/browser/notifications/BUILD.gn
+@@ -212,6 +212,7 @@
+     "//components/search_engines",
+     "//components/site_engagement/content",
+     "//components/visibility_timer",
++    "//koan/browser/ui/views",
+     "//ui/message_center",
+     "//ui/native_theme",
+     "//ui/strings:ui_strings_grit",

@@ -14,6 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
+#include "build/build_config.h"
 #include "ui/views/view.h"
 #include "ui/views/view_observer.h"
 #include "ui/views/widget/widget.h"
@@ -38,6 +39,9 @@ class KoanLoadingIndicator;
 class KoanMediaController;
 class KoanShortcutController;
 class KoanSplitHeaderController;
+#if BUILDFLAG(IS_LINUX)
+class KoanSystemThemeLock;
+#endif
 class KoanSidebarTabsController;
 class KoanTabActivationTracker;
 class KoanToast;
@@ -157,6 +161,9 @@ class KoanBrowserViewController : public views::ViewObserver,
   std::unique_ptr<KoanFolderController> folders_;
   std::unique_ptr<KoanThemeController> theme_;
   std::unique_ptr<KoanColorSchemeSync> color_scheme_sync_;
+#if BUILDFLAG(IS_LINUX)
+  std::unique_ptr<KoanSystemThemeLock> system_theme_lock_;
+#endif
   std::unique_ptr<KoanGlanceController> glance_;
   std::unique_ptr<KoanLibraryController> library_;
   std::unique_ptr<KoanTabActivationTracker> tab_activation_;

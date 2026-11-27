@@ -35,11 +35,6 @@ class View;
 // docs/REBASE.md.
 namespace koan {
 
-// Whether Koan can make windows translucent on this platform at all
-// (macOS). The setting (Chromium's local-state pref glass_frame.enabled) is
-// shown only then.
-bool IsWindowGlassSupported();
-
 // Whether windows may be translucent right now: not while macOS's Reduce
 // Transparency is on (Zen's prefers-reduced-transparency). Always true off
 // macOS, where nothing makes windows translucent.
