@@ -6,7 +6,7 @@
 
 namespace koan::fonts {
 
-// Koan ships on macOS only; elsewhere the system font stays.
+// Koan ships on macOS and Linux; elsewhere the system font stays.
 bool RegisterBundledFonts() {
   return false;
 }

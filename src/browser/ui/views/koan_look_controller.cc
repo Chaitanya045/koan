@@ -122,15 +122,28 @@ class LookController : public look::Observer {
 
 // Geist is shadcn's typeface: the native UI's default font in the shadcn
 // style, from the next start (fonts are loaded once, and the switch is
-// rare). macOS only: Koan ships nowhere else.
+// rare). The Zen style keeps the desktop's font. macOS and Linux, the
+// platforms Koan ships on.
 void ApplyDefaultFont() {
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
   if (!look::IsShadcnStyle() || !fonts::RegisterBundledFonts()) {
     return;
   }
-  gfx::FontList::SetDefaultFontDescription(std::string(fonts::kSansFamily) +
-                                           ", 13px");
+  // 13px, the size of the Mac's system font, which Koan's layout is made for.
+  const std::string description = std::string(fonts::kSansFamily) + ", 13px";
+#if BUILDFLAG(IS_LINUX)
+  // ReloadFonts() drops the font lists made from the old default, and resets
+  // the default description to the toolkit's font
+  // (ResourceBundle::InitDefaultFontList()), so it goes first. Guarded by
+  // KoanFontsLinuxTest.ReloadFontsResetsTheDefaultDescription.
   ui::ResourceBundle::GetSharedInstance().ReloadFonts();
+  gfx::FontList::SetDefaultFontDescription(description);
+#else
+  // The Mac's order is unchanged until it's checked on a Mac build: the same
+  // reset applies there, so this may leave the system font.
+  gfx::FontList::SetDefaultFontDescription(description);
+  ui::ResourceBundle::GetSharedInstance().ReloadFonts();
+#endif
 #endif
 }
 
