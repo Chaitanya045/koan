@@ -11,6 +11,8 @@
 #include <utility>
 
 #include "base/strings/cstring_view.h"
+#include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -129,14 +131,15 @@ TEST(KoanSshCommandTest, BuildsTheTunnelCommand) {
   const std::vector<std::string> argv = BuildSshTunnelArgv(
       base::FilePath("/usr/bin/ssh"), Destination("me", "box", 2222), 41234);
   EXPECT_THAT(
-      argv, ElementsAre(
-                "/usr/bin/ssh", "-N", "-n", "-T", "-D", "127.0.0.1:41234", "-o",
-                "ExitOnForwardFailure=no", "-o", "ServerAliveInterval=10", "-o",
-                "ServerAliveCountMax=3", "-o", "ConnectTimeout=15", "-o",
-                "ControlMaster=no", "-o", "ControlPath=none", "-o",
-                "ForkAfterAuthentication=no", "-o", "RemoteCommand=none", "-o",
-                "RequestTTY=no", "-o", "PermitLocalCommand=no", "-o",
-                "LogLevel=DEBUG1", "-p", "2222", "-l", "me", "--", "box"));
+      argv,
+      ElementsAre("/usr/bin/ssh", "-N", "-n", "-T", "-D", "127.0.0.1:41234",
+                  "-o", "ExitOnForwardFailure=no", "-o",
+                  "ClearAllForwardings=no", "-o", "ServerAliveInterval=10",
+                  "-o", "ServerAliveCountMax=3", "-o", "ConnectTimeout=15",
+                  "-o", "ControlMaster=no", "-o", "ControlPath=none", "-o",
+                  "ForkAfterAuthentication=no", "-o", "RemoteCommand=none",
+                  "-o", "RequestTTY=no", "-o", "PermitLocalCommand=no", "-o",
+                  "LogLevel=DEBUG1", "-p", "2222", "-l", "me", "--", "box"));
 }
 
 TEST(KoanSshCommandTest, TheHostIsAlwaysLastAfterDoubleDash) {
@@ -156,6 +159,10 @@ TEST(KoanSshCommandTest, SupervisesSsh) {
       BuildSupervisedArgv(base::FilePath("/bin/sh"), {"/usr/bin/ssh", "box"});
   EXPECT_THAT(argv, ElementsAre("/bin/sh", "-c", SshSupervisorScript(),
                                 "koan-ssh-tunnel", "/usr/bin/ssh", "box"));
+  // The watcher's grace before SIGKILL is the platform's.
+  EXPECT_NE(SshSupervisorScript().find(base::StrCat(
+                {"sleep ", base::NumberToString(kSshKillGraceSeconds), ";"})),
+            std::string_view::npos);
 }
 
 TEST(KoanSshCommandTest, ForcesTheAskpassHelper) {

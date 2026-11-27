@@ -37,6 +37,11 @@ enum class SshFailure {
   // ssh couldn't listen on the SOCKS port: it was taken between Koan picking
   // it and ssh binding it.
   kPortInUse,
+  // ssh can't listen on 127.0.0.1 at all: the user's config limits this host
+  // to IPv6 ("AddressFamily inet6"), which applies to forwards too. Koan
+  // can't override it without changing how the host itself is reached.
+  // Never retried.
+  kIpv6Only,
   // An established connection died (keepalive timeout, closed by the server).
   kConnectionLost,
   // The user cancelled a prompt (password, passphrase, code).
@@ -49,14 +54,27 @@ enum class SshFailure {
 bool IsRetryableSshFailure(SshFailure failure);
 
 // The reason for an exit of ssh (through the supervisor) with `exit_code`
-// (-1: killed by a signal), given its last stderr lines, and whether this run
-// had reached "connected".
+// (-1: the supervisor was killed by a signal; 128 + N: ssh was), given its
+// last stderr lines, and whether this run had reached "connected".
+//
+// The server's text shares ssh's stderr: its pre-authentication banner
+// (sshconnect2.c input_userauth_banner(), printed as sent, line breaks and
+// all) and, through logit(), keyboard-interactive instructions and disconnect
+// reasons. A ProxyJump's ssh prints its host's banner there too. So a line
+// anywhere in the output proves nothing. What the server can't forge is the
+// position of ssh's own last message: ssh prints its fatal()/exit reason last
+// and then exits, so a run is classified by its last line only (and, for a
+// host key or a disconnect, the line just before it, which ssh prints right
+// before). A run that reached "connected" had its host key and login
+// accepted, so it is always kConnectionLost; one that ssh didn't end itself
+// (killed by a signal) printed no reason, and its last line could be the
+// banner's, so it is kUnknown.
 SshFailure ClassifySshExit(const std::vector<std::string>& stderr_lines,
                            int exit_code,
                            bool was_connected);
 
-// The stderr line that explains the failure best, for the UI's details: the
-// last one that names an error, else the last one. Untrusted text (it can
+// ssh's line about the failure, for the UI's details: its last line (or for a
+// disconnect, the server's reason just before it). Untrusted text (it can
 // quote the server), already sanitized by AddSshStderrLine().
 std::string SshFailureDetail(const std::vector<std::string>& stderr_lines);
 
@@ -83,11 +101,14 @@ bool IsSshChatterLine(std::string_view line);
 //   ... (the user's own forwards) ...
 //   debug1: Entering interactive session.                  kSessionStarted
 // kBinding is printed just before bind(), so only kSessionStarted after it,
-// with no kFailed between, means the port is ssh's.
+// with no kFailed between, means the port is ssh's. With "AddressFamily
+// inet6" ssh can't even look up 127.0.0.1 (kUnsupported: no kBinding, and no
+// other port would help).
 enum class SshForwardLine {
   kOther,
   kBinding,
   kFailed,
+  kUnsupported,
   kSessionStarted,
 };
 SshForwardLine ReadSshForwardLine(std::string_view line, uint16_t port);

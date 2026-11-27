@@ -24,7 +24,8 @@ TEST(KoanSshTunnelSystemEventsTest, ForwardsSleepWakeAndNewNetworks) {
 
   tunnel.Start();
   platform.set_socks_ready(true);
-  task_environment.FastForwardBy(SshTunnel::kProbeInterval);
+  // Only ssh's own listening and session lines lead to the probe.
+  platform.EmitListening();
   ASSERT_EQ(tunnel.status().state, SshTunnelState::kConnected);
 
   // The old network going away isn't a reason to reconnect yet...

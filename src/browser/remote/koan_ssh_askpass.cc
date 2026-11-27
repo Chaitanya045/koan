@@ -56,13 +56,6 @@ bool IsYesNoQuestion(std::string_view prompt) {
          (trimmed.ends_with("(yes/no)?") || trimmed.ends_with("(yes/no):"));
 }
 
-bool IsValidSecret(std::string_view secret) {
-  return !secret.empty() && secret.size() <= kMaxSshAnswerBytes &&
-         std::ranges::none_of(secret, [](char c) {
-           return c == '\r' || c == '\n' || c == '\0';
-         });
-}
-
 constexpr char kHelperScript[] =
     "#!/bin/sh\n"
     "# Koan's SSH_ASKPASS helper (koan/browser/remote/koan_ssh_askpass.h).\n"
@@ -161,14 +154,20 @@ SshPrompt ParseAskpassRequest(std::string_view request) {
   return result;
 }
 
+bool IsValidSshSecret(std::string_view secret) {
+  return !secret.empty() && secret.size() <= kMaxSshAnswerBytes &&
+         std::ranges::none_of(secret, [](char c) {
+           return c == '\r' || c == '\n' || c == '\0';
+         });
+}
+
 SshSecret EncodeAskpassAnswer(SshPromptKind kind, const SshPromptReply& reply) {
   std::string answer;
   answer.reserve(kMaxSshAnswerBytes + 8);
   switch (kind) {
     case SshPromptKind::kSecret:
-      if (!reply.accepted || !IsValidSecret(reply.secret.value())) {
-        answer = "no\n";
-        break;
+      if (!reply.accepted || !IsValidSshSecret(reply.secret.value())) {
+        break;  // Nothing: see the header.
       }
       answer = "ok\n";
       answer.append(reply.secret.value());
@@ -179,8 +178,7 @@ SshSecret EncodeAskpassAnswer(SshPromptKind kind, const SshPromptReply& reply) {
       answer = reply.accepted ? "ok\nyes\n" : "ok\nno\n";
       break;
     case SshPromptKind::kNotice:
-      answer = "no\n";
-      break;
+      break;  // ssh ignores a notice's output and kills its helper.
   }
   return SshSecret(std::move(answer));
 }

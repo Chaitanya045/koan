@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <initializer_list>
 
-#include "base/containers/adapters.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -27,78 +26,84 @@ bool ContainsAny(std::string_view line,
       parts, [line](std::string_view part) { return Contains(line, part); });
 }
 
-bool AnyLine(const std::vector<std::string>& lines,
-             std::initializer_list<std::string_view> parts) {
-  return std::ranges::any_of(lines, [parts](const std::string& line) {
-    return ContainsAny(line, parts);
-  });
+// Whether ssh ended by itself, after printing its reason: the supervisor
+// passes ssh's own status on (255 for an error), and 128 + N if a signal
+// killed it; -1 is the supervisor itself killed.
+bool SshExitedByItself(int exit_code) {
+  return exit_code >= 0 && (exit_code <= 128 || exit_code == 255);
 }
 
-// The reasons in order of precedence: a changed host key outranks everything
-// printed after it, and so on down. The messages are OpenSSH's (ssh.c,
-// sshconnect.c, sshconnect2.c, readconf.c, channels.c, clientloop.c,
-// packet.c, kex.c; the design note lists them).
-SshFailure ClassifyLines(const std::vector<std::string>& lines,
-                         bool was_connected) {
-  if (AnyLine(lines, {"REMOTE HOST IDENTIFICATION HAS CHANGED",
-                      "POSSIBLE DNS SPOOFING DETECTED",
-                      "has changed and you "
-                      "have requested strict "
-                      "checking"})) {
-    return SshFailure::kHostKeyChanged;
+// The server's reason for a disconnect, from the line packet.c prints just
+// before its fatal "Disconnected from <host> port <port>" (or alone).
+std::string_view DisconnectReason(std::string_view last,
+                                  std::string_view before) {
+  if (last.starts_with("Received disconnect from ")) {
+    return last;
   }
-  if (AnyLine(lines, {"Host key verification failed.",
-                      "and you have requested strict checking."})) {
-    return SshFailure::kHostKeyNotVerified;
+  if (last.starts_with("Disconnected from ") &&
+      before.starts_with("Received disconnect from ")) {
+    return before;
+  }
+  return std::string_view();
+}
+
+// The reason ssh's last line gives (ClassifySshExit() says why only that
+// one). The messages are OpenSSH's (ssh.c, sshconnect.c, sshconnect2.c,
+// readconf.c, clientloop.c, packet.c, kex.c; the design note lists them).
+SshFailure ClassifyLastLine(const std::vector<std::string>& lines) {
+  if (lines.empty()) {
+    return SshFailure::kUnknown;
+  }
+  const std::string_view last = lines.back();
+  const std::string_view before =
+      lines.size() > 1 ? std::string_view(lines[lines.size() - 2])
+                       : std::string_view();
+  // verify_host_key_callback()'s fatal(). For a changed key, check_host_key()
+  // prints "Host key for <host> has changed and you have requested strict
+  // checking." just before it (sshconnect.c), after the warning box.
+  if (last == "Host key verification failed.") {
+    return Contains(before,
+                    "has changed and you have requested strict checking")
+               ? SshFailure::kHostKeyChanged
+               : SshFailure::kHostKeyNotVerified;
   }
   // Koan's own options come from the "command-line" pseudo-file: an ssh that
   // doesn't know one is too old.
-  for (const std::string& line : lines) {
-    if (Contains(line, "command-line") &&
-        ContainsAny(line, {"Bad configuration option", "nsupported option"})) {
-      return SshFailure::kSshTooOld;
-    }
+  if (Contains(last, "command-line") &&
+      ContainsAny(last, {"Bad configuration option", "nsupported option"})) {
+    return SshFailure::kSshTooOld;
   }
-  if (AnyLine(lines, {"Bad configuration option", "nsupported option",
-                      "bad configuration options",
-                      "hostname contains invalid characters",
-                      "remote username contains invalid characters",
-                      "Can't open user config file", "usage: ssh"})) {
+  if (ContainsAny(last, {"Bad configuration option", "nsupported option",
+                         "bad configuration options",
+                         "hostname contains invalid characters",
+                         "remote username contains invalid characters",
+                         "Can't open user config file"})) {
     return SshFailure::kBadConfig;
   }
-  if (AnyLine(lines, {"Permission denied (", "Too many authentication failures",
-                      "No more authentication methods"})) {
+  if (Contains(last, "Permission denied (") ||
+      Contains(DisconnectReason(last, before),
+               "Too many authentication failures")) {
     return SshFailure::kAuthFailed;
   }
-  if (AnyLine(lines,
-              {"Could not resolve hostname", "Could not resolve host"})) {
+  if (ContainsAny(last,
+                  {"Could not resolve hostname", "Could not resolve host"})) {
     return SshFailure::kHostNotFound;
   }
   // No kPortInUse: a failed forward doesn't end ssh (ExitOnForwardFailure=no),
   // and the tunnel ends the attempt itself when Koan's own one fails
   // (ReadSshForwardLine()). A bind error here is the user's own forward's.
-  if (AnyLine(lines, {"Timeout, server ", "closed by remote host",
-                      "client_loop: send disconnect", "Disconnected from "})) {
+  if (ContainsAny(last, {"Timeout, server ", "closed by remote host",
+                         "client_loop: send disconnect", "Disconnected from ",
+                         "Received disconnect from "})) {
     return SshFailure::kConnectionLost;
   }
-  if (AnyLine(lines, {"Connection closed by ", "Connection reset by ",
-                      "Broken pipe"})) {
-    return was_connected ? SshFailure::kConnectionLost
-                         : SshFailure::kHostUnreachable;
-  }
-  if (AnyLine(lines,
-              {"connect to host ", "banner exchange", "timed out",
-               "Network is unreachable", "No route to host", "Host is down"})) {
+  if (ContainsAny(last, {"Connection closed by ", "Connection reset by ",
+                         "Broken pipe", "connect to host ", "banner exchange",
+                         "timed out", "Network is unreachable",
+                         "No route to host", "Host is down"})) {
     return SshFailure::kHostUnreachable;
   }
-  return was_connected ? SshFailure::kConnectionLost : SshFailure::kUnknown;
-}
-
-bool NamesError(std::string_view line) {
-  return ContainsAny(
-      line, {"rror", "denied", "failed", "Could not", "refused", "timed out",
-             "Timeout", "closed", "reset", "unreachable", "No route", "invalid",
-             "Bad ", "nsupported", "CHANGED", "Address already in use"});
+  return SshFailure::kUnknown;
 }
 
 }  // namespace
@@ -118,6 +123,7 @@ bool IsRetryableSshFailure(SshFailure failure) {
     case SshFailure::kAuthFailed:
     case SshFailure::kHostKeyChanged:
     case SshFailure::kHostKeyNotVerified:
+    case SshFailure::kIpv6Only:
     case SshFailure::kCancelled:
       return false;
   }
@@ -130,16 +136,27 @@ SshFailure ClassifySshExit(const std::vector<std::string>& stderr_lines,
   if (exit_code == 127 || exit_code == 126) {
     return SshFailure::kSshNotFound;
   }
-  return ClassifyLines(stderr_lines, was_connected);
+  // The host key and the login were fine; whatever ssh (or the server's
+  // text) printed, the connection dropped.
+  if (was_connected) {
+    return SshFailure::kConnectionLost;
+  }
+  if (!SshExitedByItself(exit_code)) {
+    return SshFailure::kUnknown;
+  }
+  return ClassifyLastLine(stderr_lines);
 }
 
 std::string SshFailureDetail(const std::vector<std::string>& stderr_lines) {
-  for (const std::string& line : base::Reversed(stderr_lines)) {
-    if (NamesError(line)) {
-      return line;
-    }
+  if (stderr_lines.empty()) {
+    return std::string();
   }
-  return stderr_lines.empty() ? std::string() : stderr_lines.back();
+  const std::string_view last = stderr_lines.back();
+  const std::string_view reason = DisconnectReason(
+      last, stderr_lines.size() > 1
+                ? std::string_view(stderr_lines[stderr_lines.size() - 2])
+                : std::string_view());
+  return std::string(reason.empty() ? last : reason);
 }
 
 bool IsSshChatterLine(std::string_view line) {
@@ -151,7 +168,10 @@ bool IsSshChatterLine(std::string_view line) {
          line.starts_with("Authenticated to ") ||
          line.starts_with("Authenticated using ") ||
          line.starts_with("Transferred: sent ") ||
-         line.starts_with("Bytes per second: ");
+         line.starts_with("Bytes per second: ") ||
+         // A ProxyJump's ssh at the user's LogLevel VERBOSE, after Koan's
+         // ssh exited and hung it up; or Koan's own ssh killed in its session.
+         line.starts_with("Killed by signal ");
 }
 
 SshForwardLine ReadSshForwardLine(std::string_view line, uint16_t port) {
@@ -166,6 +186,13 @@ SshForwardLine ReadSshForwardLine(std::string_view line, uint16_t port) {
                     port_text, "."})) {
     return SshForwardLine::kBinding;
   }
+  // channel_setup_fwd_listener_tcpip()'s error_f() when the address family
+  // ("AddressFamily inet6") excludes 127.0.0.1. It names no port, but Koan's
+  // -D comes first, and with any other family the lookup can't fail.
+  if (line.starts_with(
+          "channel_setup_fwd_listener_tcpip: getaddrinfo(127.0.0.1): ")) {
+    return SshForwardLine::kUnsupported;
+  }
   // error() and verbose() lines of channel_setup_fwd_listener_tcpip(), and
   // ssh_init_forwarding()'s when no local forward at all could be set up.
   if (line.starts_with(base::StrCat({"bind [127.0.0.1]:", port_text, ": "})) ||
@@ -174,7 +201,6 @@ SshForwardLine ReadSshForwardLine(std::string_view line, uint16_t port) {
       line.starts_with(
           base::StrCat({"socket [127.0.0.1]:", port_text, ": "})) ||
       line.ends_with(base::StrCat({"cannot listen to port: ", port_text})) ||
-      Contains(line, "getaddrinfo(127.0.0.1): ") ||
       line == "Could not request local forwarding.") {
     return SshForwardLine::kFailed;
   }
@@ -220,6 +246,8 @@ std::string_view SshFailureName(SshFailure failure) {
       return "host-key-not-verified";
     case SshFailure::kPortInUse:
       return "port-in-use";
+    case SshFailure::kIpv6Only:
+      return "ipv6-only";
     case SshFailure::kConnectionLost:
       return "connection-lost";
     case SshFailure::kCancelled:

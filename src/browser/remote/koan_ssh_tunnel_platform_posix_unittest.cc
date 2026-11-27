@@ -11,14 +11,21 @@
 #include <unistd.h>
 
 #include <array>
+#include <memory>
+#include <optional>
+#include <string>
 
 #include "base/files/scoped_file.h"
+#include "base/functional/callback_helpers.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/process/launch.h"
 #include "base/process/process.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/test/repeating_test_future.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "base/test/test_timeouts.h"
+#include "base/threading/platform_thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "koan/browser/remote/koan_ssh_command.h"
@@ -117,6 +124,8 @@ class Supervised {
 
   void ClosePipe() { stdin_write_.reset(); }
 
+  pid_t pid() const { return process_.Pid(); }
+
   // The exit code, or nullopt if it's still running after the timeout.
   std::optional<int> Wait(base::TimeDelta timeout) {
     base::ScopedAllowBaseSyncPrimitivesForTesting allow_wait;
@@ -142,22 +151,36 @@ TEST(KoanSshTunnelPlatformPosixTest, TheSupervisorPassesSshsExitCode) {
   EXPECT_EQ(supervised.Wait(TestTimeouts::action_timeout()), 255);
 }
 
+// Whether process group `group` is empty, waiting up to `timeout` for its
+// members to go.
+bool GroupGoneWithin(pid_t group, base::TimeDelta timeout) {
+  const base::TimeTicks end = base::TimeTicks::Now() + timeout;
+  while (kill(-group, 0) == 0) {
+    if (base::TimeTicks::Now() >= end) {
+      return false;
+    }
+    base::PlatformThread::Sleep(base::Milliseconds(20));
+  }
+  return true;
+}
+
 TEST(KoanSshTunnelPlatformPosixTest, ClosingThePipeKillsTheGroup) {
-  // "ssh" and a helper it started, both of which would run for a long time.
-  Supervised supervised({"/bin/sh", "-c", "sleep 600 & sleep 600"});
+  // "ssh", a helper it started, and a ProxyCommand that ignores SIGTERM, all
+  // of which would run for a long time.
+  Supervised supervised({"/bin/sh", "-c",
+                         "(trap '' TERM; exec sleep 600) & sleep 600 & "
+                         "sleep 600"});
   EXPECT_FALSE(supervised.Wait(base::Milliseconds(200)));
-  // Koan stops the tunnel, quits or crashes.
+  // Koan crashes (or stops the tunnel, or quits).
   supervised.ClosePipe();
   const std::optional<int> exit_code =
       supervised.Wait(TestTimeouts::action_timeout());
   EXPECT_EQ(exit_code, -1);  // SIGTERM.
-  // Reaped, but its group's members may still be exiting: give them a moment.
-  for (int i = 0; i < 50 && supervised.GroupAlive(); ++i) {
-    base::PlatformThread::Sleep(base::Milliseconds(20));
-  }
-  EXPECT_FALSE(supervised.GroupAlive());
-  if (supervised.GroupAlive()) {
-    supervised.KillGroup();
+  // Nobody is left to send SIGKILL but the watcher, after its grace.
+  const pid_t group = supervised.pid();
+  EXPECT_TRUE(GroupGoneWithin(group, base::Seconds(kSshKillGraceSeconds + 2)));
+  if (kill(-group, 0) == 0) {
+    kill(-group, SIGKILL);
   }
 }
 
@@ -172,6 +195,58 @@ TEST(KoanSshTunnelPlatformPosixTest, SshExitingEndsWhatItLeftBehind) {
   if (supervised.GroupAlive()) {
     supervised.KillGroup();
   }
+}
+
+// The real platform, with a stand-in for ssh that prints its group (the
+// supervisor's pid) first.
+class KoanSshTunnelPlatformPosixProcessTest : public testing::Test {
+ protected:
+  ~KoanSshTunnelPlatformPosixProcessTest() override {
+    if (group_ > 0 && kill(-group_, 0) == 0) {
+      kill(-group_, SIGKILL);
+    }
+  }
+
+  // Launches `script` as ssh and waits for its first line, the group.
+  void Launch(const std::string& script) {
+    platform_.set_ssh_argv_for_testing(
+        {"/bin/sh", "-c", "echo $PPID >&2; " + script});
+    SshDestination destination;
+    destination.host = "box";
+    SshTunnelPlatform::ProcessCallbacks callbacks;
+    callbacks.on_stderr_line = lines_.GetCallback();
+    callbacks.on_prompt = base::DoNothing();
+    callbacks.on_exit = exit_.GetCallback();
+    process_ = platform_.Launch(destination, 41000, std::move(callbacks));
+    ASSERT_TRUE(base::StringToInt(lines_.Take(), &group_));
+    ASSERT_GT(group_, 1);
+  }
+
+  base::test::TaskEnvironment task_environment_;
+  SshTunnelPlatformPosix platform_;
+  base::test::RepeatingTestFuture<std::string> lines_;
+  base::test::TestFuture<int> exit_;
+  std::unique_ptr<SshTunnelPlatform::Process> process_;
+  int group_ = 0;
+};
+
+// ssh exits, but a member of its group that ignores SIGTERM (a ProxyCommand
+// that traps it) keeps stderr open: the exit is still reported, with ssh's
+// last line and status, and that member is killed.
+TEST_F(KoanSshTunnelPlatformPosixProcessTest, ReportsTheExitWhileStderrIsHeld) {
+  Launch("(trap '' TERM; exec sleep 60) & echo bye >&2; exit 3");
+  EXPECT_EQ(exit_.Get(), 3);
+  EXPECT_EQ(lines_.Take(), "bye");
+  EXPECT_TRUE(GroupGoneWithin(group_, base::Seconds(1)));
+}
+
+// Stopping the tunnel kills such a member too, as soon as the supervisor is
+// gone (before it's reaped).
+TEST_F(KoanSshTunnelPlatformPosixProcessTest, StoppingKillsWhatIgnoresTerm) {
+  Launch("(trap '' TERM; exec sleep 60) & exec sleep 60");
+  process_.reset();
+  EXPECT_TRUE(GroupGoneWithin(group_, base::Seconds(kSshKillGraceSeconds - 1)));
+  EXPECT_FALSE(exit_.IsReady());
 }
 
 TEST(KoanSshTunnelPlatformPosixTest, TrustsOnlyRootOwnedSystemBinaries) {

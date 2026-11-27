@@ -31,6 +31,11 @@ namespace koan::remote {
 // SetProcessGroup()) is answered: other processes of the same user could
 // write to ctl, and they get nothing. Other users can't reach the directory.
 //
+// A secret is never refused through the helper (EncodeAskpassAnswer()): a
+// cancelled one, and every request still open when the server goes away, get
+// no answer at all. The owner kills ssh's process group first, and the
+// helpers die with it.
+//
 // Lives on one sequence that may block and can watch file descriptors (a
 // MayBlock ThreadPool sequence or an IO thread).
 class SshAskpassServer {
@@ -39,9 +44,13 @@ class SshAskpassServer {
   using RequestCallback = base::RepeatingCallback<void(int id, SshPrompt)>;
 
   // Sets up `dir` (which must exist, be empty, be the user's and have mode
-  // 0700). Null on failure.
-  static std::unique_ptr<SshAskpassServer> Create(const base::FilePath& dir,
-                                                  RequestCallback on_request);
+  // 0700). `on_bad_request` runs when a helper of the group sent a request
+  // that can't be read: it gets no answer (it might be a password prompt),
+  // so the owner must stop ssh. Null on failure.
+  static std::unique_ptr<SshAskpassServer> Create(
+      const base::FilePath& dir,
+      RequestCallback on_request,
+      base::RepeatingClosure on_bad_request);
 
   SshAskpassServer(const SshAskpassServer&) = delete;
   SshAskpassServer& operator=(const SshAskpassServer&) = delete;
@@ -53,17 +62,17 @@ class SshAskpassServer {
   // The supervisor's pid, which is its process group's id.
   void SetProcessGroup(pid_t process_group);
 
-  // Answers request `id`; nothing if it's gone (the helper was killed). The
-  // reply's secret is wiped when the caller drops `reply`.
+  // Answers request `id`; nothing if it's gone (the helper was killed), or if
+  // EncodeAskpassAnswer() has nothing to write (a cancelled secret: the
+  // caller kills ssh). The reply's secret is wiped when the caller drops
+  // `reply`.
   void Reply(int id, const SshPromptReply& reply);
-
-  // Answers every open request with "no" (the helpers exit 1).
-  void RejectAll();
 
  private:
   SshAskpassServer(base::FilePath dir,
                    base::ScopedFD control,
-                   RequestCallback on_request);
+                   RequestCallback on_request,
+                   base::RepeatingClosure on_bad_request);
 
   void OnControlReadable();
   void HandleRequest(int id);
@@ -74,6 +83,7 @@ class SshAskpassServer {
   base::ScopedFD control_;
   std::unique_ptr<base::FileDescriptorWatcher::Controller> control_watch_;
   RequestCallback on_request_;
+  base::RepeatingClosure on_bad_request_;
   pid_t process_group_ = 0;
   // Bytes of an unfinished "<pid>\n".
   std::string partial_line_;

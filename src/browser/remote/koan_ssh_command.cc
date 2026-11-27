@@ -64,10 +64,16 @@ constexpr char kSupervisorScript[] =
     // Koan's pipe moves to fd 3; ssh gets /dev/null (it reads no stdin
     // with -N anyway, which is why ssh can't watch Koan itself).
     "exec 3<&0 </dev/null\n"
-    // The watcher: EOF on Koan's pipe kills the whole process group.
-    "(IFS= read -r _ <&3; kill -TERM 0) 2>/dev/null &\n"
+    // The watcher: EOF on Koan's pipe kills the whole process group, with
+    // SIGKILL after kSshKillGraceSeconds for whatever ignores SIGTERM (if Koan
+    // crashed, nobody else would). Only then does it ignore SIGTERM itself, so
+    // that ssh's own exit (below) still ends it.
+    "(IFS= read -r _ <&3; trap '' TERM; kill -TERM 0; sleep 3; kill -KILL 0)"
+    " 2>/dev/null 4>&- &\n"
     "exec 3<&-\n"
-    "\"$@\"\n"
+    // fd 4 is Koan's exit pipe: only this shell holds it, so it closes when
+    // the shell exits, whatever the rest of the group does.
+    "\"$@\" 4>&-\n"
     "r=$?\n"
     // ssh is gone: end the watcher and any helper left in the group.
     "trap '' TERM\n"
@@ -202,12 +208,16 @@ std::vector<std::string> BuildSshTunnelArgv(const base::FilePath& ssh,
       // hold whatever the user's config says.
       //
       // The user's own LocalForward, RemoteForward and DynamicForward for the
-      // host apply too (ClearAllForwardings would also clear -D), and one of
-      // them often fails: the same forward is up in a terminal. That must not
-      // end the tunnel. The tunnel watches for its own -D instead
-      // (ReadSshForwardLine()).
+      // host apply too, and one of them often fails: the same forward is up
+      // in a terminal. That must not end the tunnel. The tunnel watches for
+      // its own -D instead (ReadSshForwardLine()).
       "-o",
       "ExitOnForwardFailure=no",
+      // A config's "ClearAllForwardings yes" would clear -D too (readconf.c
+      // fill_default_options() clears the command line's forwards as well),
+      // and the tunnel would wait for a listener that never comes.
+      "-o",
+      "ClearAllForwardings=no",
       "-o",
       base::StringPrintf("ServerAliveInterval=%d",
                          kSshServerAliveIntervalSeconds),

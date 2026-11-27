@@ -36,8 +36,12 @@ TEST(KoanSshFailureTest, ClassifiesOpenSshMessages) {
   EXPECT_EQ(Classify({"me@box: Permission denied (publickey,password)."}),
             SshFailure::kAuthFailed);
   EXPECT_EQ(Classify({"Received disconnect from 192.0.2.10 port 22:2: Too many "
-                      "authentication failures"}),
+                      "authentication failures",
+                      "Disconnected from 192.0.2.10 port 22"}),
             SshFailure::kAuthFailed);
+  EXPECT_EQ(Classify({"Received disconnect from 192.0.2.10 port 22:11: Bye",
+                      "Disconnected from 192.0.2.10 port 22"}),
+            SshFailure::kConnectionLost);
   EXPECT_EQ(Classify({"ssh: Could not resolve hostname nobox: nodename nor "
                       "servname provided, or not known"}),
             SshFailure::kHostNotFound);
@@ -71,9 +75,59 @@ TEST(KoanSshFailureTest, ClassifiesOpenSshMessages) {
                       "/Users/me/.ssh/config: terminating, 1 bad "
                       "configuration options"}),
             SshFailure::kBadConfig);
+  // Via ProxyJump: the jump's lines, then Koan's ssh's own.
+  EXPECT_EQ(Classify({"channel 0: open failed: connect failed: Connection "
+                      "refused",
+                      "stdio forwarding failed",
+                      "kex_exchange_identification: Connection closed by "
+                      "remote host",
+                      "Connection closed by UNKNOWN port 65535"}),
+            SshFailure::kHostUnreachable);
   EXPECT_EQ(Classify({}, 127), SshFailure::kSshNotFound);
   EXPECT_EQ(Classify({}, -1, true), SshFailure::kConnectionLost);
   EXPECT_EQ(Classify({"something new"}), SshFailure::kUnknown);
+}
+
+// The server's banner is printed as sent, line breaks and all (sshconnect2.c
+// input_userauth_banner()), and so is a ProxyJump host's. These lines are a
+// real OpenSSH 10.4 run against an sshd whose banner says them.
+TEST(KoanSshFailureTest, TheBannerCantPickTheReason) {
+  const std::vector<std::string> banner = {
+      "Hello", "Permission denied (publickey).",
+      "WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!"};
+  auto with_banner = [&](std::vector<std::string> after) {
+    std::vector<std::string> lines = banner;
+    lines.insert(lines.end(), after.begin(), after.end());
+    return lines;
+  };
+  // An ordinary drop is still a drop, retried.
+  EXPECT_EQ(Classify(with_banner({"Connection closed by 192.0.2.10 port 22"})),
+            SshFailure::kHostUnreachable);
+  EXPECT_EQ(
+      Classify(with_banner({"Timeout, server box not responding."}), 255, true),
+      SshFailure::kConnectionLost);
+  // After connecting, nothing ssh prints makes the drop final: the host key
+  // and the login were accepted.
+  EXPECT_EQ(Classify(with_banner({"Host key verification failed."}), 255, true),
+            SshFailure::kConnectionLost);
+  // ssh killed by a signal printed no reason of its own: the banner is last.
+  EXPECT_EQ(Classify(banner, 128 + 15), SshFailure::kUnknown);
+  EXPECT_EQ(Classify(banner, -1), SshFailure::kUnknown);
+  // Without a reason of ssh's last, the banner is no reason either.
+  EXPECT_EQ(Classify(with_banner({"something new"})), SshFailure::kUnknown);
+  // ssh's own reasons still count.
+  EXPECT_EQ(Classify(with_banner({"me@box: Permission denied (publickey)."})),
+            SshFailure::kAuthFailed);
+  // An unknown key the user rejected isn't made a changed one by the banner.
+  EXPECT_EQ(Classify(with_banner({"Host key verification failed."})),
+            SshFailure::kHostKeyNotVerified);
+  // A ProxyJump's ssh at LogLevel VERBOSE notes its hang-up after ours exits.
+  std::vector<std::string> lines;
+  for (const char* line :
+       {"Host key verification failed.\r", "Killed by signal 1.\r"}) {
+    AddSshStderrLine(lines, line);
+  }
+  EXPECT_EQ(Classify(lines), SshFailure::kHostKeyNotVerified);
 }
 
 TEST(KoanSshFailureTest, RetriesOnlyWhatTimeCanFix) {
@@ -82,6 +136,7 @@ TEST(KoanSshFailureTest, RetriesOnlyWhatTimeCanFix) {
   EXPECT_TRUE(IsRetryableSshFailure(SshFailure::kConnectionLost));
   EXPECT_TRUE(IsRetryableSshFailure(SshFailure::kPortInUse));
   EXPECT_TRUE(IsRetryableSshFailure(SshFailure::kUnknown));
+  EXPECT_FALSE(IsRetryableSshFailure(SshFailure::kIpv6Only));
   EXPECT_FALSE(IsRetryableSshFailure(SshFailure::kHostKeyChanged));
   EXPECT_FALSE(IsRetryableSshFailure(SshFailure::kHostKeyNotVerified));
   EXPECT_FALSE(IsRetryableSshFailure(SshFailure::kAuthFailed));
@@ -161,11 +216,15 @@ TEST(KoanSshFailureTest, ReadsItsOwnForwardsLines) {
         "listen [127.0.0.1]:41000: Invalid argument",
         "socket [127.0.0.1]:41000: Too many open files",
         "channel_setup_fwd_listener_tcpip: cannot listen to port: 41000",
-        "channel_setup_fwd_listener_tcpip: getaddrinfo(127.0.0.1): Address "
-        "family for hostname not supported",
         "Could not request local forwarding."}) {
     EXPECT_EQ(ReadSshForwardLine(line, kPort), SshForwardLine::kFailed) << line;
   }
+  // "AddressFamily inet6" in the user's config (OpenSSH 10.4, verified).
+  EXPECT_EQ(ReadSshForwardLine("channel_setup_fwd_listener_tcpip: "
+                               "getaddrinfo(127.0.0.1): Address family for "
+                               "hostname not supported\r",
+                               kPort),
+            SshForwardLine::kUnsupported);
   for (const char* line :
        {"debug1: Local forwarding listening on 127.0.0.1 port 41001.",
         "debug1: Local forwarding listening on 127.0.0.1 port 410001.",
@@ -178,16 +237,23 @@ TEST(KoanSshFailureTest, ReadsItsOwnForwardsLines) {
         "bind [::1]:41000: Address already in use",
         "channel_setup_fwd_listener_tcpip: cannot listen to port: 410001",
         "channel_setup_fwd_listener_tcpip: cannot listen to port: 1000",
+        "getaddrinfo(127.0.0.1): Address family for hostname not supported",
         "Timeout, server box not responding."}) {
     EXPECT_EQ(ReadSshForwardLine(line, kPort), SshForwardLine::kOther) << line;
   }
 }
 
-TEST(KoanSshFailureTest, DetailIsTheLastErrorLine) {
-  EXPECT_EQ(SshFailureDetail({"ssh: connect to host box port 22: Connection "
-                              "refused",
-                              "some trailing note"}),
-            "ssh: connect to host box port 22: Connection refused");
+// ssh's last line, not an earlier one the server may have written.
+TEST(KoanSshFailureTest, DetailIsSshsLastLine) {
+  EXPECT_EQ(SshFailureDetail({"Permission denied (publickey).",
+                              "Connection closed by 192.0.2.10 port 22"}),
+            "Connection closed by 192.0.2.10 port 22");
+  // A disconnect's reason is the line before.
+  EXPECT_EQ(SshFailureDetail({"Received disconnect from 192.0.2.10 port 22:2: "
+                              "Too many authentication failures",
+                              "Disconnected from 192.0.2.10 port 22"}),
+            "Received disconnect from 192.0.2.10 port 22:2: Too many "
+            "authentication failures");
   EXPECT_EQ(SshFailureDetail({"just this"}), "just this");
   EXPECT_EQ(SshFailureDetail({}), "");
 }

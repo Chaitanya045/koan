@@ -74,7 +74,8 @@ class SshSecret {
 // The UI's answer to a prompt.
 struct SshPromptReply {
   // kSecret: OK with the secret; kConfirm / kHostKey: yes. False is "no" for
-  // a question and "cancel" for a secret (which ends the tunnel attempt).
+  // a question and "cancel" for a secret (which kills ssh: the tunnel attempt
+  // ends, and ssh gets no answer at all).
   bool accepted = false;
   SshSecret secret;  // kSecret only.
 
@@ -114,13 +115,22 @@ inline constexpr size_t kMaxSshAnswerBytes = 1023;
 // "none"), '\n', then the prompt to the end of the file.
 SshPrompt ParseAskpassRequest(std::string_view request);
 
+// Whether ssh can take `secret` as an answer: not empty, at most
+// kMaxSshAnswerBytes, and no line break or NUL (ssh would cut it short).
+bool IsValidSshSecret(std::string_view secret);
+
 // What the browser writes to the helper's answer FIFO for `reply` to a
-// `kind` prompt: "ok\n<answer>\n", where the helper prints <answer> for ssh,
-// or "no\n", where it exits 1 (ssh then sees no answer). A host key or
-// confirm question is answered with an explicit "yes" or "no": an empty
-// answer means yes to ask_permission(). A secret that's empty, too long or
-// has a line break or NUL in it is a cancel. Returned as a secret, since it
-// may hold one.
+// `kind` prompt: "ok\n<answer>\n", where the helper prints <answer> for ssh.
+// A host key or confirm question is answered with an explicit "yes" or "no":
+// an empty answer means yes to ask_permission(). Returned as a secret, since
+// it may hold one.
+//
+// Empty means "write nothing": a cancelled secret (or one that isn't
+// IsValidSshSecret()), and a notice. A secret prompt is never refused through
+// the helper: a failed askpass makes read_passphrase() return "", and ssh
+// sends that as the password or code (readpass.c), which the server counts as
+// a failed login. Whoever cancels a secret kills ssh instead, and the helper
+// dies with it.
 SshSecret EncodeAskpassAnswer(SshPromptKind kind, const SshPromptReply& reply);
 
 // The helper script (POSIX sh). ssh runs it as `<dir>/askpass <prompt>`;

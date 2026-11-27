@@ -4,6 +4,7 @@
 
 #include "koan/browser/remote/koan_ssh_askpass_server.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/stat.h>
@@ -60,6 +61,13 @@ class Helper {
 
   pid_t pid() const { return process_.Pid(); }
 
+  // Whether it's still waiting for its answer after a moment.
+  bool StillWaiting() {
+    base::ScopedAllowBaseSyncPrimitivesForTesting allow_wait;
+    return !process_.WaitForExitWithTimeout(TestTimeouts::tiny_timeout(),
+                                            nullptr);
+  }
+
   // Waits for the helper's exit; its stdout and exit code.
   std::pair<std::string, int> Finish() {
     base::ScopedAllowBaseSyncPrimitivesForTesting allow_wait;
@@ -91,8 +99,31 @@ class KoanSshAskpassServerTest : public testing::Test {
     server_ = SshAskpassServer::Create(
         dir_.GetPath(),
         base::BindRepeating(&KoanSshAskpassServerTest::OnRequest,
+                            base::Unretained(this)),
+        base::BindRepeating(&KoanSshAskpassServerTest::OnBadRequest,
                             base::Unretained(this)));
     ASSERT_TRUE(server_);
+  }
+
+  void OnBadRequest() {
+    ++bad_requests_;
+    if (quit_) {
+      std::move(quit_).Run();
+    }
+  }
+
+  // Writes "<id>\n" to ctl, as a helper would.
+  void WriteControl(int id) {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    base::ScopedFD control(
+        open(dir_.GetPath().Append("ctl").value().c_str(), O_WRONLY));
+    ASSERT_TRUE(control.is_valid());
+    ASSERT_TRUE(base::WriteFileDescriptor(control.get(),
+                                          base::NumberToString(id) + "\n"));
+  }
+
+  base::FilePath RequestFile(int id) {
+    return dir_.GetPath().Append("q." + base::NumberToString(id));
   }
 
   void OnRequest(int id, SshPrompt prompt) {
@@ -130,6 +161,7 @@ class KoanSshAskpassServerTest : public testing::Test {
   base::ScopedTempDir dir_;
   std::unique_ptr<SshAskpassServer> server_;
   std::vector<std::pair<int, SshPrompt>> requests_;
+  int bad_requests_ = 0;
   base::OnceClosure quit_;
 };
 
@@ -146,7 +178,8 @@ TEST_F(KoanSshAskpassServerTest, RefusesADirectoryOthersCanRead) {
   base::ScopedTempDir open_dir;
   ASSERT_TRUE(open_dir.CreateUniqueTempDir());
   ASSERT_TRUE(base::SetPosixFilePermissions(open_dir.GetPath(), 0755));
-  EXPECT_FALSE(SshAskpassServer::Create(open_dir.GetPath(), base::DoNothing()));
+  EXPECT_FALSE(SshAskpassServer::Create(open_dir.GetPath(), base::DoNothing(),
+                                        base::DoNothing()));
 }
 
 TEST_F(KoanSshAskpassServerTest, PassesASecretToSsh) {
@@ -168,14 +201,19 @@ TEST_F(KoanSshAskpassServerTest, PassesASecretToSsh) {
   EXPECT_THAT(DirEntries(), UnorderedElementsAre("askpass", "ctl"));
 }
 
-TEST_F(KoanSshAskpassServerTest, ACancelIsNoAnswer) {
+// The helper failing would make ssh send an empty code (readpass.c), so a
+// cancel writes nothing: the helper waits until ssh's group is killed.
+TEST_F(KoanSshAskpassServerTest, ACancelledSecretIsNeverAnswered) {
   Helper helper(server_->helper_path(), "Verification code: ", "");
   server_->SetProcessGroup(helper.pid());
   auto [id, prompt] = NextRequest();
   server_->Reply(id, SshPromptReply::Cancel());
+  server_->Reply(id, SshPromptReply::WithSecret(SshSecret("late")));
+  EXPECT_TRUE(helper.StillWaiting());
+  kill(helper.pid(), SIGTERM);
   auto [output, exit_code] = helper.Finish();
   EXPECT_EQ(output, "");
-  EXPECT_EQ(exit_code, 1);
+  EXPECT_EQ(exit_code, -1);  // Killed, not exited.
 }
 
 TEST_F(KoanSshAskpassServerTest, AnswersQuestionsWithWords) {
@@ -189,36 +227,78 @@ TEST_F(KoanSshAskpassServerTest, AnswersQuestionsWithWords) {
   EXPECT_EQ(exit_code, 0);
 }
 
-TEST_F(KoanSshAskpassServerTest, RejectAllEndsOpenHelpers) {
+// Going away answers nothing either: the owner kills ssh first.
+TEST_F(KoanSshAskpassServerTest, GoingAwayAnswersNothing) {
   Helper helper(server_->helper_path(), "password: ", "");
   server_->SetProcessGroup(helper.pid());
   NextRequest();
-  server_->RejectAll();
-  auto [output, exit_code] = helper.Finish();
-  EXPECT_EQ(output, "");
-  EXPECT_EQ(exit_code, 1);
-}
-
-TEST_F(KoanSshAskpassServerTest, IgnoresProcessesOutsideTheGroup) {
-  Helper helper(server_->helper_path(), "password: ", "");
-  // Not the helper's group.
-  server_->SetProcessGroup(getpgrp());
-  {
-    base::ScopedAllowBlockingForTesting allow_blocking;
-    // A request that names this test process.
-    base::ScopedFD control(
-        open(dir_.GetPath().Append("ctl").value().c_str(), O_WRONLY));
-    ASSERT_TRUE(control.is_valid());
-    ASSERT_TRUE(base::WriteFileDescriptor(
-        control.get(), base::NumberToString(getpid()) + "\n"));
-  }
-  task_environment_.RunUntilIdle();
-  EXPECT_TRUE(requests_.empty());
-  // The helper is left waiting; ssh would kill it with the group.
+  server_.reset();
+  EXPECT_TRUE(helper.StillWaiting());
   kill(helper.pid(), SIGTERM);
   auto [output, exit_code] = helper.Finish();
   EXPECT_EQ(output, "");
+  EXPECT_EQ(exit_code, -1);
+}
+
+// A same-user process outside ssh's group can write to ctl and leave a valid
+// request file: it gets no prompt. The request names this test process,
+// which isn't in the group; a helper of the group asks after it, so once its
+// prompt is in, the stranger's request has been handled.
+TEST_F(KoanSshAskpassServerTest, IgnoresProcessesOutsideTheGroup) {
+  const int stranger = getpid();
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(base::WriteFile(RequestFile(stranger), "\npassword: "));
+  }
+  WriteControl(stranger);
+  Helper helper(server_->helper_path(), "me@box's password: ", "");
+  ASSERT_NE(getpgid(stranger), helper.pid());
+  server_->SetProcessGroup(helper.pid());
+  auto [id, prompt] = NextRequest();
+  EXPECT_EQ(id, helper.pid());
   EXPECT_TRUE(requests_.empty());
+  // The stranger's request wasn't even read.
+  EXPECT_TRUE(base::PathExists(RequestFile(stranger)));
+  EXPECT_EQ(bad_requests_, 0);
+  kill(helper.pid(), SIGTERM);
+  helper.Finish();
+}
+
+// A request of the group that can't be read (here a link, which is never
+// followed) might be a password prompt: no answer, not even a refusal, and
+// ssh must be stopped.
+TEST_F(KoanSshAskpassServerTest, AnUnreadableRequestStopsSsh) {
+  // A stand-in for ssh's helper, leading its own group.
+  base::LaunchOptions options;
+  options.new_process_group = true;
+  base::Process member = base::LaunchProcess({"/bin/sleep", "30"}, options);
+  ASSERT_TRUE(member.IsValid());
+  server_->SetProcessGroup(member.Pid());
+  base::ScopedFD answer;
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(base::CreateSymbolicLink(server_->helper_path(),
+                                         RequestFile(member.Pid())));
+    // Its answer FIFO, held open as the helper would.
+    const base::FilePath answer_path =
+        dir_.GetPath().Append("a." + base::NumberToString(member.Pid()));
+    ASSERT_EQ(mkfifo(answer_path.value().c_str(), 0600), 0);
+    answer.reset(open(answer_path.value().c_str(), O_RDWR | O_NONBLOCK));
+    ASSERT_TRUE(answer.is_valid());
+  }
+  WriteControl(member.Pid());
+  {
+    base::RunLoop run_loop;
+    quit_ = run_loop.QuitClosure();
+    run_loop.Run();
+  }
+  EXPECT_EQ(bad_requests_, 1);
+  EXPECT_TRUE(requests_.empty());
+  std::array<char, 16> buffer;
+  EXPECT_EQ(read(answer.get(), buffer.data(), buffer.size()), -1);
+  EXPECT_EQ(errno, EAGAIN);
+  base::ScopedAllowBaseSyncPrimitivesForTesting allow_wait;
+  member.Terminate(0, /*wait=*/true);
 }
 
 }  // namespace

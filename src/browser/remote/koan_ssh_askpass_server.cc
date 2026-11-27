@@ -78,7 +78,8 @@ std::optional<std::string> ReadRequest(const base::FilePath& path) {
 // static
 std::unique_ptr<SshAskpassServer> SshAskpassServer::Create(
     const base::FilePath& dir,
-    RequestCallback on_request) {
+    RequestCallback on_request,
+    base::RepeatingClosure on_bad_request) {
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
                                                 base::BlockingType::MAY_BLOCK);
   struct stat info;
@@ -109,7 +110,8 @@ std::unique_ptr<SshAskpassServer> SshAskpassServer::Create(
     return nullptr;
   }
   auto server = base::WrapUnique(
-      new SshAskpassServer(dir, std::move(control), std::move(on_request)));
+      new SshAskpassServer(dir, std::move(control), std::move(on_request),
+                           std::move(on_bad_request)));
   // Unretained: the controller is a member, so the watch ends with `server`.
   server->control_watch_ = base::FileDescriptorWatcher::WatchReadable(
       server->control_.get(),
@@ -120,15 +122,18 @@ std::unique_ptr<SshAskpassServer> SshAskpassServer::Create(
 
 SshAskpassServer::SshAskpassServer(base::FilePath dir,
                                    base::ScopedFD control,
-                                   RequestCallback on_request)
+                                   RequestCallback on_request,
+                                   base::RepeatingClosure on_bad_request)
     : dir_(std::move(dir)),
       helper_path_(dir_.Append(kHelperName)),
       control_(std::move(control)),
-      on_request_(std::move(on_request)) {}
+      on_request_(std::move(on_request)),
+      on_bad_request_(std::move(on_bad_request)) {}
 
+// Open requests get no answer: the owner has killed (or is killing) ssh's
+// group, and a refusal could reach ssh as an empty password.
 SshAskpassServer::~SshAskpassServer() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  RejectAll();
 }
 
 void SshAskpassServer::SetProcessGroup(pid_t process_group) {
@@ -145,16 +150,6 @@ void SshAskpassServer::Reply(int id, const SshPromptReply& reply) {
   const SshPromptKind kind = it->second;
   open_.erase(it);
   Answer(id, kind, reply);
-}
-
-void SshAskpassServer::RejectAll() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  const base::flat_map<int, SshPromptKind> open = std::move(open_);
-  open_.clear();
-  for (const auto& [id, kind] : open) {
-    // A rejection is "no\n" whatever the kind (EncodeAskpassAnswer()).
-    Answer(id, SshPromptKind::kNotice, SshPromptReply::Cancel());
-  }
 }
 
 void SshAskpassServer::OnControlReadable() {
@@ -201,7 +196,8 @@ void SshAskpassServer::HandleRequest(int id) {
   std::optional<std::string> request = ReadRequest(path);
   base::DeleteFile(path);
   if (!request) {
-    Answer(id, SshPromptKind::kNotice, SshPromptReply::Cancel());
+    // Not answered, not even with a refusal: it may be a password prompt.
+    on_bad_request_.Run();
     return;
   }
   SshPrompt prompt = ParseAskpassRequest(*request);
@@ -218,6 +214,9 @@ void SshAskpassServer::Answer(int id,
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
                                                 base::BlockingType::MAY_BLOCK);
   const SshSecret answer = EncodeAskpassAnswer(kind, reply);
+  if (answer.empty()) {
+    return;
+  }
   // Non-blocking: if the helper is gone (no reader), this fails (ENXIO)
   // instead of waiting.
   base::ScopedFD fd(

@@ -100,7 +100,8 @@ struct SshTunnelStatus {
   ~SshTunnelStatus();
 
   SshTunnelState state = SshTunnelState::kStopped;
-  // kConnected: the SOCKS5 port on 127.0.0.1.
+  // kConnected: the SOCKS5 port on 127.0.0.1 (it can differ from one
+  // connection to the next).
   uint16_t port = 0;
   // kRetrying, kFailed: why ssh ended; `detail` is ssh's line about it
   // (untrusted text, sanitized).
@@ -165,6 +166,13 @@ class SshTunnel {
   // (its TCP connection is probably gone, and ssh would need up to
   // ServerAliveInterval * ServerAliveCountMax to notice) unless connecting
   // needed the user's input, which a restart would ask for again.
+  //
+  // Every attempt asks for the last connected port again, but the port can
+  // change, so observers must take status().port from each kConnected. After
+  // a restart in particular it usually does: the old ssh still holds the port
+  // when the new attempt picks one (it is killed asynchronously), and even
+  // once it's gone, the SOCKS connections it accepted leave the port in
+  // TIME_WAIT, which fails a plain bind() of it.
   void OnSuspend();
   void OnResume();
   void OnNetworkChanged();

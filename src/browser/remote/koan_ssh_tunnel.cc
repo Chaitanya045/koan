@@ -221,6 +221,11 @@ void SshTunnel::OnForwardLine(SshForwardLine line) {
       // that the user's own forwards can fail harmlessly).
       EndAttempt(SshFailure::kPortInUse, SshFailureDetail(stderr_lines_));
       return;
+    case SshForwardLine::kUnsupported:
+      // "AddressFamily inet6": no port would do, and the only fix is the
+      // user's config.
+      EndAttempt(SshFailure::kIpv6Only, SshFailureDetail(stderr_lines_));
+      return;
     case SshForwardLine::kSessionStarted:
       // Without kBinding first, this is another ssh's (a ProxyJump's at the
       // user's LogLevel), or Koan's -D wasn't set up: wait.
@@ -272,14 +277,18 @@ void SshTunnel::OnPromptReply(int attempt,
   if (attempt != attempt_ || !process_) {
     return;  // `answer` is wiped when dropped.
   }
-  if (kind == SshPromptKind::kSecret && !answer.accepted) {
-    // ssh would carry on with an empty password; the user meant stop.
+  if (kind == SshPromptKind::kSecret &&
+      (!answer.accepted || !IsValidSshSecret(answer.secret.value()))) {
+    // The user meant stop. `reply` is dropped unanswered: any answer that
+    // isn't the secret (even the helper failing) makes ssh send an empty one,
+    // a failed login for the server's lockout count. Ending the attempt kills
+    // ssh (and the helper) instead, before it can.
     cancelled_ = true;
-    std::move(reply).Run(SshPromptReply::Cancel());
     EndAttempt(SshFailure::kCancelled, std::string());
     return;
   }
   // A rejected host key makes ssh exit with "Host key verification failed."
+  // before it authenticates (sshconnect.c confirm(), check_host_key()).
   std::move(reply).Run(std::move(answer));
   if (status_.state == SshTunnelState::kNeedsInput) {
     SetState(SshTunnelState::kConnecting);

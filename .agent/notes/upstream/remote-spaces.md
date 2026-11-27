@@ -77,8 +77,18 @@ No upstream patch.
     masks everything.
   - `ask_permission()` treats an empty answer or "yes" as **allowed**, which is why Koan always
     answers questions with an explicit `yes` or `no`.
-  - A failed (cancelled) password askpass makes `read_passphrase()` return `""`, and ssh sends
-    that, so a cancel also stops the tunnel.
+  - A failed askpass (non-zero exit, or killed) makes `read_passphrase()` return `""` for a
+    password, passphrase or keyboard-interactive prompt, and ssh **sends that** to the server,
+    which logs and counts a failed login (faillock, 2FA lockouts). So a secret prompt is never
+    refused through the helper: on a cancel, Stop() or teardown Koan writes nothing and kills
+    the process group first (SIGTERM, which ends ssh at once: before `client_loop()` it has no
+    TERM handler), and the helper dies with ssh. Verified against a private sshd with
+    password-only auth: a helper that exits 1 produced two `Failed password` lines; killing the
+    group while the helper waited produced none, only `Connection closed by authenticating
+    user … [preauth]`.
+  - A rejected host key is still answered with an explicit `no`: `confirm()` returns 0 and
+    `check_host_key()` fails during the key exchange, before any authentication, with
+    `Host key verification failed.`
 - **The unknown host key prompt** (`sshconnect.c check_host_key`, `confirm()`):
   - It goes through `read_passphrase(msg, RP_ECHO)` with **no hint**. The text starts with
     `The authenticity of host '…' can't be established` and ends
@@ -103,10 +113,35 @@ No upstream patch.
   | `ssh: connect to host … port …: <errno>` | `sshconnect.c ssh_connect_direct` | `kHostUnreachable` |
   | `Connection timed out during banner exchange` | `kex.c` | `kHostUnreachable` |
   | `…: Permission denied (…)` | `sshconnect2.c` | `kAuthFailed` |
+  | `Received disconnect from …: Too many authentication failures`, then `Disconnected from …` | `packet.c` | `kAuthFailed` |
   | `Timeout, server … not responding.` | `clientloop.c` | `kConnectionLost` |
   | `Connection to … closed by remote host.` | `clientloop.c` | `kConnectionLost` |
   | `Connection closed by …`, `Connection reset by …` | `packet.c` | `kConnectionLost` (`kHostUnreachable` if never connected) |
   | `bind [127.0.0.1]:N: …`, `cannot listen to port: N` (Koan's N only, while ssh runs) | `channels.c` | `kPortInUse` (`ReadSshForwardLine()`) |
+  | `channel_setup_fwd_listener_tcpip: getaddrinfo(127.0.0.1): …` (while ssh runs) | `channels.c` | `kIpv6Only` (`ReadSshForwardLine()`) |
+
+- **Only ssh's last line decides** (`ClassifySshExit()`). The server's text shares ssh's stderr:
+  the banner is printed as sent, line breaks and all (`sshconnect2.c input_userauth_banner`,
+  `fmprintf`), keyboard-interactive names and instructions and disconnect reasons go through
+  `logit()` (`VIS_SAFE` keeps `\r` and `\n`), and a ProxyJump's ssh prints its own host's banner
+  there too. Verified: a banner reading `Permission denied (publickey).` and `WARNING: REMOTE
+  HOST IDENTIFICATION HAS CHANGED!` arrives as those exact lines, also through a jump. A
+  matching line anywhere therefore proves nothing. What the server can't forge is the position
+  of ssh's own reason: ssh prints its `fatal()` last and exits (verified for a changed key, a
+  failed login, a refused connection and the same three through a ProxyJump). So:
+  - a run that reached `kConnected` is always `kConnectionLost` (its host key and login were
+    accepted);
+  - a run that ssh didn't end itself (the supervisor reports 128 + N, or -1) printed no reason,
+    and is `kUnknown`;
+  - otherwise the last kept line decides. Two reasons read the line before it, which ssh prints
+    just before: `Host key for … has changed and you have requested strict checking.` makes
+    `Host key verification failed.` `kHostKeyChanged`, and a disconnect's reason precedes
+    `Disconnected from …`. `Killed by signal N.` (a ProxyJump's ssh at `LogLevel VERBOSE`, hung
+    up after ours exits) is dropped like the other verbose notes.
+  - The detail is that same line, never an earlier one the server may have written.
+  - Accepted: a server's disconnect reason (or a fake one sent before the key exchange by
+    someone on the path) can say `Too many authentication failures` and stop the retries. Such a
+    party can block the connection anyway.
 
 ## Is the listener ssh's?
 
@@ -146,9 +181,20 @@ debug1: Entering interactive session.                         kSessionStarted (c
   So a session line without the listening line first is ignored. A ProxyJump's ssh has no
   forwards at all (`-W` implies `ClearAllForwardings`, `readconf.c fill_default_options()`), so
   every forward line is the main ssh's.
-- `kFailed` (a bind, listen or socket error for `127.0.0.1:N`, `cannot listen to port: N`,
-  `getaddrinfo(127.0.0.1)`, or `Could not request local forwarding.`) before that ends the
-  attempt as `kPortInUse`: ssh is killed and Koan retries at once on a new port.
+- `kFailed` (a bind, listen or socket error for `127.0.0.1:N`, `cannot listen to port: N`, or
+  `Could not request local forwarding.`) before that ends the attempt as `kPortInUse`: ssh is
+  killed and Koan retries at once on a new port.
+- `kUnsupported`: `channel_setup_fwd_listener_tcpip: getaddrinfo(127.0.0.1): …` (no port in
+  it). The user's config has `AddressFamily inet6` for the host. It sets the hints for every
+  forward's lookup too (`hints.ai_family = ssh->chanctxt->IPv4or6`, `channels.c`), so ssh can't
+  listen on 127.0.0.1 with any port. Verified: ssh authenticates, prints that line and `Could
+  not request local forwarding.`, and runs on without `-D`. There is no clean way to pin the
+  forward alone: `-4` / `-o AddressFamily=inet` would also change how the host is reached (an
+  IPv6-only host would break), `-D [127.0.0.1]:N` takes the same lookup, and `-D localhost:N`
+  listens on `::1` (verified), which isn't the address Koan proxies to. With any other family the
+  lookup of a numeric 127.0.0.1 can't fail, and Koan's `-D` is the first forward, so the line is
+  Koan's. The attempt ends as `kIpv6Only`, which is never retried: retrying would log in again
+  each time, and only the user's config can fix it.
 - The lines need `-o LogLevel=DEBUG1`. It is set with `-o`, not `-v`: ssh passes only `-v` on to a
   ProxyJump's ssh (`ssh.c`, "Optional -v arguments if -v set"; verified, the jump's command has
   no `-v`).
@@ -189,7 +235,9 @@ print a fake listening line and session line for `<N>`. Only a host whose key th
 already accepted can do this, since the banner comes after the key exchange. The destination
 host gains nothing: it is the SOCKS exit and sees all of the Space's traffic anyway. A malicious
 *jump* host could, if a local process also wins the bind race on an unpredictable port. Both
-are accepted.
+are accepted. The same text could fake Koan's bind error (a retry on a new port) or the
+`getaddrinfo(127.0.0.1)` line (the attempt ends as `kIpv6Only`), which such a host could cause
+anyway by refusing the login.
 
 **Alternatives considered.**
 - On macOS, `libproc` (`proc_listpgrppids()` over the tunnel's process group, then
@@ -206,7 +254,8 @@ are accepted.
 ```
 /bin/sh -c <supervisor> koan-ssh-tunnel \
   /usr/bin/ssh -N -n -T -D 127.0.0.1:<port> \
-    -o ExitOnForwardFailure=no -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
+    -o ExitOnForwardFailure=no -o ClearAllForwardings=no \
+    -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
     -o ConnectTimeout=15 -o ControlMaster=no -o ControlPath=none \
     -o ForkAfterAuthentication=no -o RemoteCommand=none -o RequestTTY=no \
     -o PermitLocalCommand=no -o LogLevel=DEBUG1 [-p port] [-l user] -- <host>
@@ -252,7 +301,11 @@ env: inherited (SSH_AUTH_SOCK, HOME) + SSH_ASKPASS=<dir>/askpass
   (their children stay in the group), `User`, `Port`, `HostName`, known_hosts.
   - Accepting a new host key adds it to `~/.ssh/known_hosts`, as in a terminal.
   - A `LocalForward`/`RemoteForward`/`DynamicForward` in the config also applies to Koan's ssh.
-    `ClearAllForwardings=yes` would clear Koan's `-D` too, so they stay. With
+    A config's `ClearAllForwardings yes` would clear Koan's `-D` too (`readconf.c
+    fill_default_options()` clears the command line's forwards as well), and the tunnel would
+    wait forever for a listener; Koan passes `-o ClearAllForwardings=no`, which the command line
+    wins. Verified: with `ClearAllForwardings yes` in the config ssh entered its session with no
+    listening line; with the option, the listening line came. So the user's forwards stay. With
     `ExitOnForwardFailure=yes`, one that failed (very often the case: a terminal's ssh already
     holds `LocalForward 3000 localhost:3000`) would end the tunnel and make it retry forever.
     So Koan passes `ExitOnForwardFailure=no` and watches only its own `-D` (above). Verified: with
@@ -269,9 +322,9 @@ The supervisor runs `ssh` in the foreground and a watcher in the background:
 
 ```sh
 exec 3<&0 </dev/null
-(IFS= read -r _ <&3; kill -TERM 0) 2>/dev/null &
+(IFS= read -r _ <&3; trap '' TERM; kill -TERM 0; sleep 3; kill -KILL 0) 2>/dev/null 4>&- &
 exec 3<&-
-"$@"
+"$@" 4>&-
 r=$?
 trap '' TERM
 kill -TERM 0 2>/dev/null
@@ -285,16 +338,35 @@ exit "$r"
   spawns with `POSIX_SPAWN_CLOEXEC_DEFAULT`. When that end closes, the watcher reads EOF and kills
   the group. The end closes when the tunnel stops (the `Process` is destroyed on the tunnel's
   sequence), and also when Koan quits or **crashes**, because the kernel closes it. Verified: the
-  group was empty 0.05 s after the pipe closed.
+  group was empty 0.05 s after the pipe closed. A member that ignores SIGTERM (a `ProxyCommand`
+  that traps it) gets SIGKILL from the watcher 3 s later (`kSshKillGraceSeconds`): after a
+  crash nobody else would send it. The watcher ignores SIGTERM only from then on, so the
+  script's own `kill -TERM 0` at ssh's end still ends it. Verified: with such a member, the
+  group was empty 3.3 s after the pipe closed.
 - **When ssh exits by itself,** the script kills what is left of the group (a stray helper) and
   exits with ssh's status (verified: 255 is passed through).
-- **Koan's own checks.**
-  - On destruction the io side also sends SIGTERM to the group, then SIGKILL after 3 s, and only
-    then reaps the supervisor. The group id can't be reused while the supervisor is unreaped.
-  - In normal operation the end of ssh is EOF on its stderr pipe. Every member holds stderr; the
-    watcher's goes to /dev/null. The group then gets SIGKILL (anything that closed stderr but
-    kept running), and the supervisor is reaped by polling `WaitForExitWithTimeout(0)`, so no
-    thread blocks on `waitpid`.
+- **The exit pipe.** fd 4 is the write end of a second pipe, which only the script itself keeps
+  (`4>&-` for ssh and for the watcher; ssh's children never see it). It closes exactly when the
+  supervisor exits, whatever the rest of the group does. Stderr can't tell: a member that
+  ignores SIGTERM and keeps fd 2 holds it open after ssh and the supervisor are gone. Verified:
+  with `(trap '' TERM; exec sleep 60) &` as ssh's child, the exit pipe closed 0.01 s after ssh
+  exited while stderr stayed open (and without `4>&-`, it stayed open too). Alternatives:
+  Chromium has no asynchronous process-exit watcher on POSIX (the kqueue `EVFILT_PROC` uses in
+  `base/process/` are blocking waits), polling `WaitForExitWithTimeout(0)` reaps the
+  supervisor before its group could be killed, and `waitid(WNOWAIT)` would be untested Mac-only
+  behaviour.
+- **Koan's own checks.** The group always gets SIGKILL before the supervisor is reaped: the
+  group id can't be reused while the supervisor is unreaped.
+  - On destruction the io side sends SIGTERM to the group first of all, before it drops the
+    askpass server (which answers nothing), then SIGKILL as soon as the exit pipe closes (or
+    after 3 s), and only then reaps the supervisor.
+  - In normal operation the end of ssh is the exit pipe closing, or EOF on stderr (every member
+    holds stderr, the supervisor until it exits; the watcher's goes to /dev/null). The group then
+    gets SIGKILL, what ssh printed is read from the stderr pipe to the end, and the supervisor
+    is reaped by polling `WaitForExitWithTimeout(0)`, so no thread blocks on `waitpid`. Only then
+    is the exit reported.
+  - A helper of the group whose request can't be read gets no answer (it might be a password
+    prompt), and the group gets SIGTERM.
 - **Threads.** All of this runs on a `MayBlock` ThreadPool sequence per process, with
   `FileDescriptorWatcher`, so the UI thread does no blocking work.
 
@@ -314,7 +386,9 @@ The exchange:
 2. It writes `q.$$`, then writes `$$\n` to `ctl`. That write is under `PIPE_BUF`, so it's atomic.
 3. It reads one status line from fd 3. On `ok` it runs `head -n 1 <&3`, so the answer goes from
    the FIFO straight to ssh's pipe and **never enters a shell variable, argv or a file**. On
-   anything else it exits 1.
+   anything else it exits 1, which Koan never sends: a cancelled secret, an open request at
+   teardown and an unreadable request get no answer at all, and ssh is killed instead (see
+   "Askpass" above).
 4. On the browser side, the request's pid must be in the tunnel's process group
    (`getpgid(pid) == supervisor pid`). `q.<pid>` must be a regular file of the user's (opened
    O_NOFOLLOW, one link, at most 8 KiB). It is unlinked once read.
@@ -373,17 +447,23 @@ Retry and recovery:
 - **Backoff.** Retries back off at 1, 2, 4, … up to 60 s. A connection that lasts 30 s resets the
   backoff; one that flaps keeps growing it.
 - **Port clashes** (ssh's bind error for Koan's own port, read while it runs) are retried at
-  once, up to 3 times, on a new port. Otherwise the last port is
-  reused, so PR 1's proxy setting usually stays the same.
+  once, up to 3 times, on a new port.
+- **The port can change** between connections. Every attempt asks for the last connected port
+  again, which works after a failed attempt, but a restart of a connected tunnel usually gets a
+  new one: the old ssh is killed asynchronously and still holds the port when the new attempt
+  picks, and even once it's gone, the SOCKS connections it accepted leave the port in
+  `TIME_WAIT`, which fails a plain `bind()` of it (verified on Linux; ssh's own bind sets
+  `SO_REUSEADDR`, Koan's pick doesn't). Waiting for the old group wouldn't make the port
+  stable, so the tunnel doesn't: PR 1 and PR 3 take `status.port` from every `kConnected`.
 - **Never retried:** `kHostKeyChanged`, `kHostKeyNotVerified` (rejected, or strict checking),
-  `kAuthFailed`, `kCancelled`, `kBadConfig`, `kSshTooOld` and `kSshNotFound`. Only
+  `kAuthFailed`, `kCancelled`, `kBadConfig`, `kIpv6Only`, `kSshTooOld` and `kSshNotFound`. Only
   `Reconnect()` (the user) or `Start()` tries again.
 - **Sleep, wake and network changes** come through `SshTunnelSystemEvents`, from `PowerMonitor`
   and `NetworkChangeNotifier`.
   - While the Mac sleeps, no attempt starts.
   - On resume, or on a network change (once the new network is up, not on `CONNECTION_NONE`),
     a waiting retry starts at once with the backoff reset.
-  - A connected tunnel restarts at once, keeping its port, because its TCP connection is
+  - A connected tunnel restarts at once (usually on a new port, above), because its TCP connection is
     probably dead and ServerAlive would need up to 30 s to notice. The exception is a tunnel
     whose connection needed the user's input (password, code, host key, security-key touch):
     restarting it would ask again, so it waits for ServerAlive instead.
@@ -393,7 +473,8 @@ Retry and recovery:
 - **Wiring.** One `SshTunnel` per remote Space (or per container), plus one
   `SshTunnelSystemEvents`, all on the UI thread, with one `SshTunnelPlatformPosix` per profile or
   for the whole browser.
-  - `OnSshTunnelStatusChanged`: on `kConnected`, call `SetRuntimeProxy(container, status.port)`;
+  - `OnSshTunnelStatusChanged`: on every `kConnected`, call
+    `SetRuntimeProxy(container, status.port)` (the port can differ from the last connection's);
     in every other state, set "disconnected". The Space must **fail closed** and never fall back
     to a direct connection.
   - Destroy the tunnel on Space disconnect and on profile shutdown. Quit and crash are covered by

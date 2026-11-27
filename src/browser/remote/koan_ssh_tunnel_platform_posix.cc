@@ -45,11 +45,13 @@ namespace koan::remote {
 namespace {
 
 // After SIGTERM, how long the group has before SIGKILL.
-constexpr base::TimeDelta kKillGrace = base::Seconds(3);
+constexpr base::TimeDelta kKillGrace = base::Seconds(kSshKillGraceSeconds);
 // How often an exited supervisor is polled for until it can be reaped.
 constexpr base::TimeDelta kReapPoll = base::Milliseconds(20);
 // Longer stderr "lines" are passed on in pieces.
 constexpr size_t kMaxStderrLine = 4096;
+// The supervisor's end of its exit pipe (BuildSupervisedArgv()).
+constexpr int kExitPipeFd = 4;
 
 constexpr base::TaskTraits kBlockingTraits = {
     base::MayBlock(), base::TaskPriority::USER_VISIBLE,
@@ -89,26 +91,37 @@ bool CreateChildPipe(int child_end,
   return SetBlocking(child_end == 0 ? read_end->get() : write_end->get());
 }
 
+// Whether the supervisor has exited (or is exiting): its exit pipe, of which
+// it holds the only write end and never writes to, is closed. Non-blocking.
+bool IsExitPipeClosed(int fd) {
+  std::array<char, 1> byte;
+  const ssize_t n = HANDLE_EINTR(read(fd, byte.data(), byte.size()));
+  return n == 0 || (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK);
+}
+
 // Reaps `process` (the supervisor) once it has exited, polling, and runs
-// `done` with its exit code. Its group gets SIGKILL first: the supervisor
-// isn't reaped yet, so its pid, the group's id, can't have been reused.
+// `done` with its exit code. Its group gets SIGKILL first: at `kill_at`, or
+// as soon as the supervisor has exited (`exit_pipe` closed), so nothing of
+// the group outlives it. The supervisor isn't reaped before that, so its pid,
+// the group's id, can't have been reused.
 void ReapWhenExited(base::Process process,
+                    base::ScopedFD exit_pipe,
                     base::TimeTicks kill_at,
                     base::OnceCallback<void(int)> done) {
-  if (base::TimeTicks::Now() >= kill_at) {
+  if (base::TimeTicks::Now() >= kill_at || IsExitPipeClosed(exit_pipe.get())) {
     kill(-process.Pid(), SIGKILL);
-  }
-  int exit_code = -1;
-  if (process.WaitForExitWithTimeout(base::TimeDelta(), &exit_code)) {
-    if (done) {
-      std::move(done).Run(exit_code);
+    int exit_code = -1;
+    if (process.WaitForExitWithTimeout(base::TimeDelta(), &exit_code)) {
+      if (done) {
+        std::move(done).Run(exit_code);
+      }
+      return;
     }
-    return;
   }
   base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
-      base::BindOnce(&ReapWhenExited, std::move(process), kill_at,
-                     std::move(done)),
+      base::BindOnce(&ReapWhenExited, std::move(process), std::move(exit_pipe),
+                     kill_at, std::move(done)),
       kReapPoll);
 }
 
@@ -122,9 +135,14 @@ class SshProcessIo {
     base::OnceCallback<void(int)> on_exit;
   };
 
-  SshProcessIo(SshDestination destination, uint16_t port, Callbacks callbacks)
+  // `ssh_argv_for_testing`, if not empty, runs in place of ssh.
+  SshProcessIo(SshDestination destination,
+               uint16_t port,
+               std::vector<std::string> ssh_argv_for_testing,
+               Callbacks callbacks)
       : destination_(std::move(destination)),
         port_(port),
+        ssh_argv_for_testing_(std::move(ssh_argv_for_testing)),
         callbacks_(std::move(callbacks)) {}
 
   SshProcessIo(const SshProcessIo&) = delete;
@@ -132,13 +150,20 @@ class SshProcessIo {
 
   ~SshProcessIo() {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    if (process_.IsValid()) {
+      // First of all: ssh must be gone before one of its askpass helpers
+      // could finish, so an open prompt is never answered (not even with a
+      // refusal, which ssh would send as an empty password). Not reaped yet,
+      // so the group id is still ours. The tunnel's end of the stdin pipe is
+      // closed already, which makes the supervisor do the same.
+      kill(-process_.Pid(), SIGTERM);
+    }
     stderr_watch_.reset();
+    exit_watch_.reset();
     askpass_.reset();
     if (process_.IsValid()) {
-      // Not reaped yet, so the group id is still ours. The tunnel's end of
-      // the pipe is closed already, which makes the supervisor do the same.
-      kill(-process_.Pid(), SIGTERM);
-      ReapWhenExited(std::move(process_), base::TimeTicks::Now() + kKillGrace,
+      ReapWhenExited(std::move(process_), std::move(exit_pipe_),
+                     base::TimeTicks::Now() + kKillGrace,
                      base::OnceCallback<void(int)>());
     }
     // The askpass directory goes with dir_ (a blocking sequence).
@@ -168,21 +193,33 @@ class SshProcessIo {
 
  private:
   base::ScopedFD Launch() {
-    const base::FilePath ssh = ResolveSystemSsh();
     const base::FilePath sh = ResolveSystemShell();
-    if (ssh.empty() || sh.empty() || !dir_.CreateUniqueTempDir() ||
+    std::vector<std::string> ssh_argv = ssh_argv_for_testing_;
+    if (ssh_argv.empty()) {
+      const base::FilePath ssh = ResolveSystemSsh();
+      if (ssh.empty()) {
+        return base::ScopedFD();
+      }
+      ssh_argv = BuildSshTunnelArgv(ssh, destination_, port_);
+    }
+    if (sh.empty() || !dir_.CreateUniqueTempDir() ||
         !base::SetPosixFilePermissions(dir_.GetPath(), 0700)) {
       return base::ScopedFD();
     }
     askpass_ = SshAskpassServer::Create(
-        dir_.GetPath(), base::BindRepeating(&SshProcessIo::OnPrompt,
-                                            weak_factory_.GetWeakPtr()));
+        dir_.GetPath(),
+        base::BindRepeating(&SshProcessIo::OnPrompt,
+                            weak_factory_.GetWeakPtr()),
+        base::BindRepeating(&SshProcessIo::OnBadPromptRequest,
+                            weak_factory_.GetWeakPtr()));
     if (!askpass_) {
       return base::ScopedFD();
     }
-    base::ScopedFD stdin_read, stdin_write, stderr_read, stderr_write;
+    base::ScopedFD stdin_read, stdin_write, stderr_read, stderr_write,
+        exit_read, exit_write;
     if (!CreateChildPipe(0, &stdin_read, &stdin_write) ||
-        !CreateChildPipe(1, &stderr_read, &stderr_write)) {
+        !CreateChildPipe(1, &stderr_read, &stderr_write) ||
+        !CreateChildPipe(1, &exit_read, &exit_write)) {
       return base::ScopedFD();
     }
     base::ScopedFD dev_null(
@@ -193,13 +230,12 @@ class SshProcessIo {
     base::LaunchOptions options;
     options.fds_to_remap = {{stdin_read.get(), STDIN_FILENO},
                             {dev_null.get(), STDOUT_FILENO},
-                            {stderr_write.get(), STDERR_FILENO}};
+                            {stderr_write.get(), STDERR_FILENO},
+                            {exit_write.get(), kExitPipeFd}};
     options.new_process_group = true;
     options.environment = BuildSshEnvironment(askpass_->helper_path(),
                                               *base::Environment::Create());
-    process_ = base::LaunchProcess(
-        BuildSupervisedArgv(sh, BuildSshTunnelArgv(ssh, destination_, port_)),
-        options);
+    process_ = base::LaunchProcess(BuildSupervisedArgv(sh, ssh_argv), options);
     if (!process_.IsValid()) {
       return base::ScopedFD();
     }
@@ -209,6 +245,10 @@ class SshProcessIo {
     stderr_watch_ = base::FileDescriptorWatcher::WatchReadable(
         stderr_.get(), base::BindRepeating(&SshProcessIo::OnStderrReadable,
                                            base::Unretained(this)));
+    exit_pipe_ = std::move(exit_read);
+    exit_watch_ = base::FileDescriptorWatcher::WatchReadable(
+        exit_pipe_.get(), base::BindRepeating(&SshProcessIo::OnExitPipeReadable,
+                                              base::Unretained(this)));
     return stdin_write;
   }
 
@@ -216,17 +256,27 @@ class SshProcessIo {
     callbacks_.on_prompt.Run(id, std::move(prompt));
   }
 
-  void OnStderrReadable() {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // A helper's request couldn't be read, and it gets no answer: stop ssh
+  // instead (the end is reported as for any exit).
+  void OnBadPromptRequest() {
+    if (process_.IsValid()) {
+      kill(-process_.Pid(), SIGTERM);
+    }
+  }
+
+  enum class ReadResult { kData, kEmpty, kClosed };
+
+  // Reads what the stderr pipe holds (up to a buffer) and passes on its
+  // lines.
+  ReadResult ReadStderr() {
     std::array<char, 4096> buffer;
     const ssize_t n =
         HANDLE_EINTR(read(stderr_.get(), buffer.data(), buffer.size()));
     if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-      return;
+      return ReadResult::kEmpty;
     }
     if (n <= 0) {
-      OnStderrClosed();
-      return;
+      return ReadResult::kClosed;
     }
     partial_line_.append(
         base::as_string_view(base::span(buffer).first(static_cast<size_t>(n))));
@@ -239,31 +289,60 @@ class SshProcessIo {
       callbacks_.on_stderr_line.Run(std::move(partial_line_));
       partial_line_.clear();
     }
+    return ReadResult::kData;
   }
 
-  // Every process of the group has closed stderr, which the supervisor only
-  // does by exiting.
-  void OnStderrClosed() {
+  void OnStderrReadable() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    if (ReadStderr() == ReadResult::kClosed) {
+      OnSupervisorExited();
+    }
+  }
+
+  void OnExitPipeReadable() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    if (IsExitPipeClosed(exit_pipe_.get())) {
+      OnSupervisorExited();
+    }
+  }
+
+  // The supervisor has exited: its exit pipe closed, or stderr did (which
+  // every member of the group holds, the supervisor until it exits). Stderr
+  // can stay open after it, held by a member that ignores SIGTERM (a
+  // ProxyCommand that traps it), so the exit pipe is what counts.
+  void OnSupervisorExited() {
+    if (!process_.IsValid()) {
+      return;
+    }
+    // Whatever is left of the group goes now; until the supervisor is
+    // reaped, the group id is still ours.
+    kill(-process_.Pid(), SIGKILL);
+    exit_watch_.reset();
     stderr_watch_.reset();
+    // What ssh printed before it exited (its reason) is still in the pipe.
+    while (ReadStderr() == ReadResult::kData) {
+    }
     stderr_.reset();
     if (!partial_line_.empty()) {
       callbacks_.on_stderr_line.Run(std::move(partial_line_));
       partial_line_.clear();
     }
     askpass_.reset();
-    // Anything left in the group (it closed its stderr) goes now.
-    ReapWhenExited(std::move(process_), base::TimeTicks::Now(),
-                   std::move(callbacks_.on_exit));
+    ReapWhenExited(std::move(process_), std::move(exit_pipe_),
+                   base::TimeTicks::Now(), std::move(callbacks_.on_exit));
   }
 
   const SshDestination destination_;
   const uint16_t port_;
+  const std::vector<std::string> ssh_argv_for_testing_;
   Callbacks callbacks_;
   base::ScopedTempDir dir_;
   std::unique_ptr<SshAskpassServer> askpass_;
   base::Process process_;
   base::ScopedFD stderr_;
   std::unique_ptr<base::FileDescriptorWatcher::Controller> stderr_watch_;
+  base::ScopedFD exit_pipe_;
+  std::unique_ptr<base::FileDescriptorWatcher::Controller> exit_watch_;
   std::string partial_line_;
 
   SEQUENCE_CHECKER(sequence_checker_);
@@ -275,6 +354,7 @@ class SshProcessHandle : public SshTunnelPlatform::Process {
  public:
   SshProcessHandle(const SshDestination& destination,
                    uint16_t port,
+                   std::vector<std::string> ssh_argv_for_testing,
                    SshTunnelPlatform::ProcessCallbacks callbacks)
       : callbacks_(std::move(callbacks)) {
     scoped_refptr<base::SequencedTaskRunner> current =
@@ -291,7 +371,8 @@ class SshProcessHandle : public SshTunnelPlatform::Process {
         base::BindOnce(&SshProcessHandle::OnExit, weak_factory_.GetWeakPtr()));
     io_ = base::SequenceBound<SshProcessIo>(
         base::ThreadPool::CreateSequencedTaskRunner(kBlockingTraits),
-        destination, port, std::move(io_callbacks));
+        destination, port, std::move(ssh_argv_for_testing),
+        std::move(io_callbacks));
     // If this handle is gone by the reply, dropping the fd closes the pipe.
     io_.AsyncCall(&SshProcessIo::Start)
         .Then(base::BindOnce(&SshProcessHandle::OnStarted,
@@ -442,8 +523,8 @@ std::unique_ptr<SshTunnelPlatform::Process> SshTunnelPlatformPosix::Launch(
     const SshDestination& destination,
     uint16_t port,
     ProcessCallbacks callbacks) {
-  return std::make_unique<SshProcessHandle>(destination, port,
-                                            std::move(callbacks));
+  return std::make_unique<SshProcessHandle>(
+      destination, port, ssh_argv_for_testing_, std::move(callbacks));
 }
 
 void SshTunnelPlatformPosix::PickPort(

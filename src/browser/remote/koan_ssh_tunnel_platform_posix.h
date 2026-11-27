@@ -8,6 +8,9 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "base/files/file_path.h"
 #include "koan/browser/remote/koan_ssh_tunnel.h"
@@ -29,7 +32,10 @@ base::FilePath ResolveSystemShell();
 // the tunnel's sequence. Destroying the Process closes it, which makes the
 // supervisor kill its whole group; so does Koan's exit, even a crash, since
 // the kernel closes the pipe. The group then also gets SIGTERM, and SIGKILL
-// if anything is left after a few seconds, before the supervisor is reaped.
+// once the supervisor has exited or after a few seconds, before the
+// supervisor is reaped. The supervisor's exit is seen on its exit pipe (or
+// stderr), so a member that ignores SIGTERM and keeps stderr open can't keep
+// a dead ssh "running".
 class SshTunnelPlatformPosix : public SshTunnelPlatform {
  public:
   SshTunnelPlatformPosix();
@@ -46,6 +52,14 @@ class SshTunnelPlatformPosix : public SshTunnelPlatform {
       base::OnceCallback<void(std::optional<uint16_t>)> callback) override;
   void ProbeSocks(uint16_t port,
                   base::OnceCallback<void(bool)> callback) override;
+
+  // Runs `argv` under the supervisor in place of ssh, for tests.
+  void set_ssh_argv_for_testing(std::vector<std::string> argv) {
+    ssh_argv_for_testing_ = std::move(argv);
+  }
+
+ private:
+  std::vector<std::string> ssh_argv_for_testing_;
 };
 
 // The blocking halves, for tests.

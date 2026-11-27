@@ -177,12 +177,14 @@ TEST_F(KoanSshTunnelTest, PromptsGoToTheDelegateAndBack) {
   EXPECT_FALSE(status().prompt);
 }
 
-TEST_F(KoanSshTunnelTest, CancellingASecretStopsTheAttempt) {
+// Any answer but the secret would reach the server as an empty password (a
+// failed askpass makes read_passphrase() return ""): ssh is killed, and
+// never answered.
+TEST_F(KoanSshTunnelTest, CancellingASecretKillsSshWithoutAnAnswer) {
   tunnel_->Start();
   platform_.EmitPrompt(Prompt(SshPromptKind::kSecret, "Verification code: "));
   prompts_.Answer(SshPromptReply::Cancel());
-  ASSERT_EQ(platform_.replies().size(), 1u);
-  EXPECT_FALSE(platform_.replies()[0].accepted);
+  EXPECT_TRUE(platform_.replies().empty());
   EXPECT_FALSE(platform_.launched()[0].alive);
   EXPECT_EQ(status().state, SshTunnelState::kFailed);
   EXPECT_EQ(status().failure, SshFailure::kCancelled);
@@ -190,11 +192,28 @@ TEST_F(KoanSshTunnelTest, CancellingASecretStopsTheAttempt) {
   EXPECT_EQ(platform_.launched().size(), 1u);
 }
 
+// A secret ssh can't take (empty, or with a line break) is a cancel too.
+TEST_F(KoanSshTunnelTest, ASecretSshCantTakeIsACancel) {
+  for (const char* secret : {"", "two\nlines"}) {
+    tunnel_->Start();
+    platform_.EmitPrompt(Prompt(SshPromptKind::kSecret, "password: "));
+    prompts_.Answer(SshPromptReply::WithSecret(SshSecret(secret)));
+    EXPECT_TRUE(platform_.replies().empty());
+    EXPECT_FALSE(platform_.launched().back().alive);
+    EXPECT_EQ(status().failure, SshFailure::kCancelled);
+  }
+}
+
 TEST_F(KoanSshTunnelTest, AChangedHostKeyIsNeverRetried) {
   tunnel_->Start();
   platform_.EmitStderr(
-      "@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @");
-  platform_.EmitStderr("Host key verification failed.");
+      "@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @\r");
+  platform_.EmitStderr(
+      "Offending ED25519 key in /Users/me/.ssh/known_hosts:3\r");
+  platform_.EmitStderr(
+      "Host key for box has changed and you have requested strict "
+      "checking.\r");
+  platform_.EmitStderr("Host key verification failed.\r");
   platform_.Exit(255);
   EXPECT_EQ(status().state, SshTunnelState::kFailed);
   EXPECT_EQ(status().failure, SshFailure::kHostKeyChanged);
@@ -224,6 +243,55 @@ TEST_F(KoanSshTunnelTest, ARejectedHostKeyFails) {
   platform_.Exit(255);
   EXPECT_EQ(status().state, SshTunnelState::kFailed);
   EXPECT_EQ(status().failure, SshFailure::kHostKeyNotVerified);
+}
+
+// A ProxyJump host's banner (or the server's own) can say anything; a run
+// that drops afterwards is still retried. As printed by OpenSSH 10.4 through
+// a jump host whose banner has these lines and no route onwards.
+TEST_F(KoanSshTunnelTest, ABannerCantMakeADropFinal) {
+  tunnel_->Start();
+  for (const char* line :
+       {"Permission denied (publickey).",
+        "WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!",
+        "channel 0: open failed: connect failed: Connection refused\r",
+        "stdio forwarding failed\r",
+        "kex_exchange_identification: Connection closed by remote host\r",
+        "Connection closed by UNKNOWN port 65535\r"}) {
+    platform_.EmitStderr(line);
+  }
+  platform_.Exit(255);
+  EXPECT_EQ(status().state, SshTunnelState::kRetrying);
+  EXPECT_EQ(status().failure, SshFailure::kHostUnreachable);
+  EXPECT_EQ(status().detail, "Connection closed by UNKNOWN port 65535");
+
+  // Once connected, a drop is a drop whatever was printed before.
+  task_environment_.FastForwardBy(status().next_attempt -
+                                  base::TimeTicks::Now());
+  platform_.EmitStderr("Host key verification failed.");
+  platform_.set_socks_ready(true);
+  platform_.EmitListening();
+  ASSERT_EQ(status().state, SshTunnelState::kConnected);
+  platform_.Exit(255);
+  EXPECT_EQ(status().state, SshTunnelState::kRetrying);
+  EXPECT_EQ(status().failure, SshFailure::kConnectionLost);
+}
+
+// "AddressFamily inet6" in the user's config keeps ssh off 127.0.0.1, for
+// any port: ending at once, for the user to fix, instead of logging in again
+// and again (OpenSSH 10.4 prints these lines and carries on).
+TEST_F(KoanSshTunnelTest, AnIpv6OnlyConfigFailsWithoutRetrying) {
+  tunnel_->Start();
+  platform_.EmitStderr(
+      "channel_setup_fwd_listener_tcpip: getaddrinfo(127.0.0.1): Address "
+      "family for hostname not supported\r");
+  EXPECT_FALSE(platform_.launched()[0].alive);
+  EXPECT_EQ(status().state, SshTunnelState::kFailed);
+  EXPECT_EQ(status().failure, SshFailure::kIpv6Only);
+  EXPECT_EQ(status().detail,
+            "channel_setup_fwd_listener_tcpip: getaddrinfo(127.0.0.1): "
+            "Address family for hostname not supported");
+  task_environment_.FastForwardBy(base::Hours(1));
+  EXPECT_EQ(platform_.launched().size(), 1u);
 }
 
 TEST_F(KoanSshTunnelTest, RetriesWithBackoff) {
@@ -368,6 +436,8 @@ TEST_F(KoanSshTunnelTest, StopKillsSshAndClosesThePrompt) {
   const int id = prompts_.shown()[0].id;
   tunnel_->Stop();
   EXPECT_FALSE(platform_.launched()[0].alive);
+  // Killed, not answered (an answer could reach the server as a password).
+  EXPECT_TRUE(platform_.replies().empty());
   EXPECT_THAT(prompts_.cancelled(), ElementsAre(id));
   EXPECT_EQ(status().state, SshTunnelState::kStopped);
   // A late answer goes nowhere.
@@ -413,6 +483,7 @@ TEST_F(KoanSshTunnelTest, DestroyingTheTunnelStopsSsh) {
   observation_.Reset();
   tunnel_.reset();
   EXPECT_FALSE(platform_.launched()[0].alive);
+  EXPECT_TRUE(platform_.replies().empty());
   EXPECT_EQ(prompts_.cancelled().size(), 1u);
 }
 

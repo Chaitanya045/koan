@@ -77,18 +77,19 @@ TEST(KoanSshAskpassTest, EncodesAnswers) {
                           SshPromptReply::WithSecret(SshSecret("hunter2")))
           .value(),
       "ok\nhunter2\n");
-  EXPECT_EQ(
+  // A cancelled secret writes nothing: the helper failing would make ssh send
+  // an empty password.
+  EXPECT_TRUE(
       EncodeAskpassAnswer(SshPromptKind::kSecret, SshPromptReply::Cancel())
-          .value(),
-      "no\n");
-  // An answer ssh would cut short, or can't take, is no answer.
+          .empty());
+  // An answer ssh would cut short, or can't take, is no answer either.
   for (const std::string& bad :
        {std::string(), std::string("two\nlines"), std::string("cr\r"),
         std::string("nul\0", 4), std::string(kMaxSshAnswerBytes + 1, 'x')}) {
-    EXPECT_EQ(EncodeAskpassAnswer(SshPromptKind::kSecret,
-                                  SshPromptReply::WithSecret(SshSecret(bad)))
-                  .value(),
-              "no\n");
+    EXPECT_FALSE(IsValidSshSecret(bad));
+    EXPECT_TRUE(EncodeAskpassAnswer(SshPromptKind::kSecret,
+                                    SshPromptReply::WithSecret(SshSecret(bad)))
+                    .empty());
   }
   EXPECT_EQ(EncodeAskpassAnswer(SshPromptKind::kSecret,
                                 SshPromptReply::WithSecret(SshSecret(
@@ -111,9 +112,8 @@ TEST(KoanSshAskpassTest, EncodesAnswers) {
       EncodeAskpassAnswer(SshPromptKind::kConfirm, SshPromptReply::Cancel())
           .value(),
       "ok\nno\n");
-  EXPECT_EQ(EncodeAskpassAnswer(SshPromptKind::kNotice, SshPromptReply::Yes())
-                .value(),
-            "no\n");
+  EXPECT_TRUE(EncodeAskpassAnswer(SshPromptKind::kNotice, SshPromptReply::Yes())
+                  .empty());
 }
 
 TEST(KoanSshAskpassTest, SecretsMoveAndClear) {

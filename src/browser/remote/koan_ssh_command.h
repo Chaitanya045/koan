@@ -65,11 +65,15 @@ std::vector<std::string> BuildSshTunnelArgv(const base::FilePath& ssh,
 
 // The supervisor's argv: `sh` -c <script> koan-ssh-tunnel <ssh_argv...>. It
 // must be launched in a process group of its own, with stdin a pipe whose
-// only writer is Koan. The script runs ssh in the foreground and a watcher in
-// the background; when that pipe closes (Koan stopped the tunnel, quit or
-// crashed), the watcher kills the whole group: ssh and any askpass helper.
-// When ssh exits by itself, the script kills the group too and exits with
-// ssh's status.
+// only writer is Koan, and fd 4 the write end of a pipe that Koan reads (its
+// "exit pipe"). The script runs ssh in the foreground and a watcher in the
+// background; when the stdin pipe closes (Koan stopped the tunnel, quit or
+// crashed), the watcher kills the whole group: ssh and any askpass helper,
+// with SIGKILL after kSshKillGraceSeconds. When ssh exits by itself, the
+// script kills the group too and exits with ssh's status. Only the script
+// itself keeps fd 4, so the exit pipe closes exactly when it exits, even if
+// a member of the group that ignores SIGTERM still holds stderr.
+inline constexpr int kSshKillGraceSeconds = 3;
 std::vector<std::string> BuildSupervisedArgv(
     const base::FilePath& sh,
     const std::vector<std::string>& ssh_argv);
