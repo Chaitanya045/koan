@@ -2,7 +2,8 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
-// Import from Zen, Arc and Chrome (#348), end to end through Chromium's
+// Import from Zen, Arc and Chrome (#348; on Linux #493, without Arc), end
+// to end through Chromium's
 // importer: Koan's sources in its ImporterList, then an import through
 // ExternalProcessImporterHost and ProfileWriter, as the import dialog runs
 // it. Zen goes through Chromium's Firefox importer (the utility process),
@@ -29,6 +30,7 @@
 #include "base/test/run_until.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/importer/external_process_importer_host.h"
 #include "chrome/browser/importer/importer_list.h"
@@ -75,18 +77,35 @@ constexpr char kZenBookmark[] = "https://zen-bookmark.example/";
 constexpr char kChromeHistory[] = "https://chrome-history.example/";
 constexpr char kChromeBookmark[] = "https://chrome-bookmark.example/";
 constexpr char kChromeLogin[] = "https://chrome-login.example/";
+#if BUILDFLAG(IS_MAC)
 constexpr char kArcPinned[] = "https://arc-pinned.example/";
 constexpr char kArcFavorite[] = "https://arc-favorite.example/";
 constexpr char kArcFolderTab[] = "https://arc-folder.example/";
 constexpr char kArcWork[] = "https://arc-work.example/";
+#endif
 constexpr char kZenEssential[] = "https://zen-essential.example/";
 constexpr char kZenPinned[] = "https://zen-pinned.example/";
 constexpr char kZenFolderTab[] = "https://zen-folder.example/";
 constexpr char kZenPlay[] = "https://zen-play.example/";
 constexpr char kZenUnpinned[] = "https://zen-unpinned.example/";
 // "hunter2" under the key of the Safe Storage secret "peanuts" (as in
-// koan_chromium_profile_reader_unittest.cc).
+// koan_chromium_profile_reader_unittest.cc): macOS's "v10", Linux's "v11"
+// (the keyring's).
+#if BUILDFLAG(IS_MAC)
+constexpr char kPasswordPrefix[] = "v10";
 constexpr char kHunter2[] = "7218b8ec8774bcaad0e8305f7a6cf965";
+#else
+constexpr char kPasswordPrefix[] = "v11";
+constexpr char kHunter2[] = "58186cf88abd515a1cd36afe2d4d93ca";
+#endif
+// The browsers' folders under the search root.
+#if BUILDFLAG(IS_MAC)
+constexpr char kZenDir[] = "zen";
+constexpr char kChromeDir[] = "Google/Chrome";
+#else
+constexpr char kZenDir[] = ".zen";
+constexpr char kChromeDir[] = ".config/google-chrome";
+#endif
 
 class ImportWaiter : public ::importer::ImporterProgressObserver {
  public:
@@ -157,13 +176,15 @@ class KoanImportBrowserTest : public InProcessBrowserTest {
     base::ScopedAllowBlockingForTesting allow_blocking;
     WriteZen();
     WriteChrome();
+#if BUILDFLAG(IS_MAC)
     WriteArc();
+#endif
   }
 
   // A Zen profile as Zen 1.24 writes one (its places.sqlite schema, the
   // tables Chromium's Firefox importer reads).
   void WriteZen() {
-    const base::FilePath zen = root_.GetPath().AppendASCII("zen");
+    const base::FilePath zen = root_.GetPath().AppendASCII(kZenDir);
     Write(zen.AppendASCII("profiles.ini"),
           "[Profile0]\nName=Default (release)\nIsRelative=1\n"
           "Path=Profiles/k0an.Default (release)\nDefault=1\n\n"
@@ -267,7 +288,7 @@ class KoanImportBrowserTest : public InProcessBrowserTest {
   // A Chrome profile: Local State, Bookmarks, History and Login Data, its
   // Safe Storage secret in the test root's Keychain folder.
   void WriteChrome() {
-    const base::FilePath chrome = root_.GetPath().AppendASCII("Google/Chrome");
+    const base::FilePath chrome = root_.GetPath().AppendASCII(kChromeDir);
     Write(chrome.AppendASCII("Local State"),
           R"({"profile": {"last_used": "Default",
               "info_cache": {"Default": {"name": "Person 1"}}}})");
@@ -302,7 +323,8 @@ class KoanImportBrowserTest : public InProcessBrowserTest {
            "password_element VARCHAR, password_value BLOB, signon_realm "
            "VARCHAR NOT NULL, blacklisted_by_user INTEGER NOT NULL, scheme "
            "INTEGER NOT NULL)");
-      std::vector<uint8_t> password = {'v', '1', '0'};
+      const std::string_view prefix = kPasswordPrefix;
+      std::vector<uint8_t> password(prefix.begin(), prefix.end());
       std::vector<uint8_t> body;
       ASSERT_TRUE(base::HexStringToBytes(kHunter2, &body));
       password.insert(password.end(), body.begin(), body.end());
@@ -319,6 +341,7 @@ class KoanImportBrowserTest : public InProcessBrowserTest {
           "peanuts\n");
   }
 
+#if BUILDFLAG(IS_MAC)
   // Arc: a profile with a History; its Spaces, pinned tabs (one in a
   // folder) and Favorites in StorableSidebar.json.
   void WriteArc() {
@@ -355,6 +378,7 @@ class KoanImportBrowserTest : public InProcessBrowserTest {
                     "savedURL": ")",
                         kArcWork, R"("}}}]}]}})"}));
   }
+#endif  // BUILDFLAG(IS_MAC)
 
   std::vector<SourceProfile> Detect() {
     ImporterList list;
@@ -471,18 +495,22 @@ class KoanImportBrowserTest : public InProcessBrowserTest {
 // Koan's browsers come first in Chromium's list (the import dialog's and the
 // welcome's), before upstream's; the bookmarks file stays last.
 IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, ListsZenArcAndChrome) {
+#if BUILDFLAG(IS_MAC)
+  const std::vector<std::u16string> koan = {u"Arc", u"Google Chrome", u"Zen"};
+#else
+  const std::vector<std::u16string> koan = {u"Google Chrome", u"Zen"};
+#endif
   const std::vector<SourceProfile> sources = Detect();
-  ASSERT_GE(sources.size(), 4u);
+  ASSERT_GE(sources.size(), koan.size() + 1);
   std::vector<std::u16string> first;
-  for (size_t i = 0; i < 3; ++i) {
+  for (size_t i = 0; i < koan.size(); ++i) {
     first.push_back(sources[i].importer_name);
   }
   std::ranges::sort(first);
-  EXPECT_EQ((std::vector<std::u16string>{u"Arc", u"Google Chrome", u"Zen"}),
-            first);
+  EXPECT_EQ(koan, first);
   EXPECT_EQ(user_data_importer::TYPE_BOOKMARKS_FILE,
             sources.back().importer_type);
-  for (size_t i = 0; i < 3; ++i) {
+  for (size_t i = 0; i < koan.size(); ++i) {
     // Each profile is the only one of its browser: no profile name.
     EXPECT_TRUE(sources[i].profile.empty()) << sources[i].importer_name;
     EXPECT_TRUE(root_.GetPath().IsParent(sources[i].source_path));
@@ -491,8 +519,8 @@ IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, ListsZenArcAndChrome) {
 
 // The welcome's pick is listed first, so the import dialog opens on it.
 IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, WelcomePickFirst) {
-  importer::SetPreferredSource(Find(u"Arc"));
-  EXPECT_EQ(u"Arc", Detect()[0].importer_name);
+  importer::SetPreferredSource(Find(u"Google Chrome"));
+  EXPECT_EQ(u"Google Chrome", Detect()[0].importer_name);
   importer::SetPreferredSource(Find(u"Zen"));
   EXPECT_EQ(u"Zen", Detect()[0].importer_name);
 }
@@ -501,7 +529,10 @@ IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, WelcomePickFirst) {
 IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, ImportsZen) {
   const SourceProfile zen = Find(u"Zen");
   EXPECT_EQ(user_data_importer::TYPE_FIREFOX, zen.importer_type);
-  EXPECT_FALSE(zen.services_supported & user_data_importer::PASSWORDS);
+  // Passwords through NSS on Linux, as upstream offers Firefox's; never on
+  // macOS.
+  EXPECT_EQ(!BUILDFLAG(IS_MAC),
+            !!(zen.services_supported & user_data_importer::PASSWORDS));
   const std::vector<user_data_importer::ImportItem> ended =
       Import(zen, user_data_importer::HISTORY | user_data_importer::FAVORITES);
   EXPECT_TRUE(std::ranges::contains(ended, user_data_importer::HISTORY));
@@ -542,6 +573,7 @@ IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, ImportsChrome) {
   EXPECT_EQ(u"ana", logins[0].username_value);
 }
 
+#if BUILDFLAG(IS_MAC)
 // Arc without "Spaces and pinned tabs": its pinned tabs arrive as
 // bookmarks, in a folder named after the Space, and no Space changes.
 IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, ImportsArcPinnedTabs) {
@@ -560,7 +592,9 @@ IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, OffersSpaces) {
   EXPECT_FALSE(Find(u"Google Chrome").services_supported &
                importer::kSpacesImportItem);
 }
+#endif  // BUILDFLAG(IS_MAC)
 
+#if BUILDFLAG(IS_MAC)
 // Arc's Spaces as Koan's: the first takes the window's untouched Space, the
 // others come after it; their pinned tabs and folders, unloaded at their
 // pinned URL; the Favorites as Essentials. The window stays on its tab.
@@ -621,6 +655,7 @@ IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, ImportsArcSpaces) {
            StoredUrls(prefs::kFolderList, "tabs").contains(kArcFolderTab);
   }));
 }
+#endif  // BUILDFLAG(IS_MAC)
 
 // Zen's Spaces alone (no utility process): its Spaces, Essentials, pinned
 // tabs with their labels and folders; never its unpinned tabs.

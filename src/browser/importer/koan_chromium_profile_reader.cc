@@ -4,6 +4,7 @@
 
 #include "koan/browser/importer/koan_chromium_profile_reader.h"
 
+#include <algorithm>
 #include <array>
 #include <utility>
 
@@ -37,10 +38,17 @@ using user_data_importer::ImporterURLRow;
 // histograms.xml has no other importer tag; Koan reports no metrics).
 inline constexpr sql::Database::Tag kDatabaseTag{"FirefoxImporter"};
 
-// os_crypt's macOS parameters (keychain_key_provider.mm, os_crypt_mac.mm).
-constexpr std::string_view kEncryptionPrefix = "v10";
+// os_crypt's parameters: on macOS (keychain_key_provider.mm,
+// os_crypt_mac.mm) and on Linux (posix_key_provider.cc,
+// freedesktop_secret_key_provider.cc).
 constexpr std::string_view kSalt = "saltysalt";
-constexpr uint32_t kIterations = 1003;
+constexpr uint32_t kMacIterations = 1003;
+constexpr uint32_t kLinuxIterations = 1;
+constexpr std::string_view kMacPrefix = "v10";
+constexpr std::string_view kLinuxBasicPrefix = "v10";
+constexpr std::string_view kLinuxKeyringPrefix = "v11";
+// Linux's fixed secret for passwords saved without a keyring.
+constexpr std::string_view kLinuxBasicSecret = "peanuts";
 
 // Bookmark folders deeper than this are cut (a hostile file).
 constexpr int kMaxDepth = 32;
@@ -140,28 +148,54 @@ void AddArcItems(const std::vector<ImportedItem>& items,
   }
 }
 
+SafeStorageKey DeriveKey(std::string_view secret, uint32_t iterations) {
+  SafeStorageKey key;
+  const base::span<const uint8_t> salt = base::as_byte_span(kSalt);
+  CHECK(PKCS5_PBKDF2_HMAC_SHA1(secret.data(), secret.size(), salt.data(),
+                               salt.size(), iterations, key.size(),
+                               key.data()));
+  return key;
+}
+
 }  // namespace
 
 SafeStorageKey DeriveSafeStorageKey(std::string_view keychain_secret) {
-  SafeStorageKey key;
-  const base::span<const uint8_t> salt = base::as_byte_span(kSalt);
-  CHECK(PKCS5_PBKDF2_HMAC_SHA1(keychain_secret.data(), keychain_secret.size(),
-                               salt.data(), salt.size(), kIterations,
-                               key.size(), key.data()));
-  return key;
+  return DeriveKey(keychain_secret, kMacIterations);
+}
+
+SafeStorageKey DeriveLinuxSafeStorageKey(std::string_view secret) {
+  return DeriveKey(secret, kLinuxIterations);
+}
+
+std::vector<PasswordKey> MacPasswordKeys(std::string_view keychain_secret) {
+  return {{kMacPrefix, DeriveSafeStorageKey(keychain_secret)}};
+}
+
+std::vector<PasswordKey> LinuxPasswordKeys(
+    const std::optional<std::string>& keyring_secret) {
+  std::vector<PasswordKey> keys = {
+      {kLinuxBasicPrefix, DeriveLinuxSafeStorageKey(kLinuxBasicSecret)}};
+  if (keyring_secret) {
+    keys.push_back(
+        {kLinuxKeyringPrefix, DeriveLinuxSafeStorageKey(*keyring_secret)});
+  }
+  return keys;
 }
 
 std::optional<std::u16string> DecryptPassword(
     base::span<const uint8_t> encrypted,
-    const SafeStorageKey& key) {
-  if (!base::as_string_view(encrypted).starts_with(kEncryptionPrefix)) {
+    base::span<const PasswordKey> keys) {
+  const auto it = std::ranges::find_if(keys, [&](const PasswordKey& key) {
+    return base::as_string_view(encrypted).starts_with(key.prefix);
+  });
+  if (it == keys.end()) {
     return std::nullopt;
   }
   static constexpr std::array<uint8_t, crypto::aes_cbc::kBlockSize> kIv = {
       ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
       ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '};
   std::optional<std::vector<uint8_t>> plain = crypto::aes_cbc::Decrypt(
-      key, kIv, encrypted.subspan(kEncryptionPrefix.size()));
+      it->key, kIv, encrypted.subspan(it->prefix.size()));
   if (!plain || !base::IsStringUTF8(base::as_string_view(*plain))) {
     return std::nullopt;
   }
@@ -253,7 +287,7 @@ std::vector<ImporterURLRow> ReadHistory(const base::FilePath& history_file) {
 
 std::vector<ImportedPasswordForm> ReadLogins(
     const base::FilePath& login_data_file,
-    const SafeStorageKey& key) {
+    base::span<const PasswordKey> keys) {
   std::vector<ImportedPasswordForm> forms;
   base::ScopedTempDir temp_dir;
   sql::Database db(kDatabaseTag);
@@ -292,7 +326,7 @@ std::vector<ImportedPasswordForm> ReadLogins(
     if (!form.blocked_by_user) {
       // A federated sign-in has no password: nothing to import.
       std::optional<std::u16string> password =
-          DecryptPassword(s.ColumnBlob(5), key);
+          DecryptPassword(s.ColumnBlob(5), keys);
       if (!password || password->empty()) {
         continue;
       }

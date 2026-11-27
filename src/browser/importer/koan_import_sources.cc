@@ -43,6 +43,7 @@ static_assert(user_data_importer::TYPE_FIREFOX != kChromiumImporterType &&
 // Koan's Spaces item is none of upstream's.
 static_assert(user_data_importer::ALL < kSpacesImportItem);
 
+#if BUILDFLAG(IS_MAC)
 // Zen first: Koan is for people leaving Zen and Arc (#348). Data folders and
 // keychain items as the browsers' own (Zen's ChromeMigrationUtils patch for
 // Arc and Dia).
@@ -109,26 +110,213 @@ constexpr KnownBrowser kBrowsers[] = {
      .bundle_id = "net.waterfox.waterfox"},
 };
 
-// What Chromium's Firefox importer brings on macOS (importer_list.cc: no
-// passwords there, NSS can't be loaded).
+#else
+// Linux (#493): the same browsers but Arc and Dia (none on Linux), and
+// Firefox, which Chromium finds too but not in Koan's Flatpak (its XDG
+// folder is the sandbox's there). Under the home folder: each one's native
+// folder, then its Flatpak's (~/.var/app/<app id>, with the app's
+// XDG_CONFIG_HOME at config/); a Firefox-based one's folder also where
+// Firefox 147 and later make new profiles ($XDG_CONFIG_HOME). Every folder
+// here is in Koan's Flatpak finish-args, read-only
+// (flatpak/dev.koan.Koan.yml): scripts/tests/test_flatpak_import_paths.py
+// keeps the two the same.
+constexpr KnownBrowser Gecko(std::u16string_view name,
+                             std::string_view data_dir,
+                             std::string_view app_id,
+                             std::string_view icon_names,
+                             bool zen_sessions = false) {
+  return {.name = name,
+          .engine = Engine::kGecko,
+          .data_dir = data_dir,
+          .bundle_id = app_id,
+          .icon_names = icon_names,
+          .zen_sessions = zen_sessions};
+}
+
+// A Chromium-based browser and its keyring names (its own
+// freedesktop_secret_key_provider.h: Brave's patch renames them; Edge's and
+// Vivaldi's closed builds keep Chromium's and Chrome's, as the tools that
+// read their keys on Linux use).
+constexpr KnownBrowser ChromiumBased(std::u16string_view name,
+                                     std::string_view data_dir,
+                                     std::string_view app_id,
+                                     std::string_view icon_names,
+                                     std::string_view key_name,
+                                     std::string_view secret_application,
+                                     std::string_view kwallet_folder) {
+  return {.name = name,
+          .engine = Engine::kChromium,
+          .data_dir = data_dir,
+          .bundle_id = app_id,
+          .icon_names = icon_names,
+          .keychain_service = key_name,
+          .secret_application = secret_application,
+          .kwallet_folder = kwallet_folder};
+}
+
+constexpr KnownBrowser kBrowsers[] = {
+    Gecko(u"Zen", ".zen", "app.zen_browser.zen", "zen-browser zen", true),
+    Gecko(u"Zen",
+          ".config/zen",
+          "app.zen_browser.zen",
+          "zen-browser zen",
+          true),
+    Gecko(u"Zen",
+          ".var/app/app.zen_browser.zen/.zen",
+          "app.zen_browser.zen",
+          "zen-browser zen",
+          true),
+    Gecko(u"Zen",
+          ".var/app/app.zen_browser.zen/config/zen",
+          "app.zen_browser.zen",
+          "zen-browser zen",
+          true),
+    ChromiumBased(u"Google Chrome",
+                  ".config/google-chrome",
+                  "com.google.Chrome",
+                  "google-chrome",
+                  "Chrome Safe Storage",
+                  "chrome",
+                  "Chrome Keys"),
+    ChromiumBased(u"Google Chrome",
+                  ".var/app/com.google.Chrome/config/google-chrome",
+                  "com.google.Chrome",
+                  "google-chrome",
+                  "Chrome Safe Storage",
+                  "chrome",
+                  "Chrome Keys"),
+    ChromiumBased(u"Brave",
+                  ".config/BraveSoftware/Brave-Browser",
+                  "com.brave.Browser",
+                  "brave-browser",
+                  "Brave Safe Storage",
+                  "brave",
+                  "Brave Keys"),
+    ChromiumBased(
+        u"Brave",
+        ".var/app/com.brave.Browser/config/BraveSoftware/Brave-Browser",
+        "com.brave.Browser",
+        "brave-browser",
+        "Brave Safe Storage",
+        "brave",
+        "Brave Keys"),
+    ChromiumBased(u"Microsoft Edge",
+                  ".config/microsoft-edge",
+                  "com.microsoft.Edge",
+                  "microsoft-edge",
+                  "Chromium Safe Storage",
+                  "chromium",
+                  "Chromium Keys"),
+    ChromiumBased(u"Microsoft Edge",
+                  ".var/app/com.microsoft.Edge/config/microsoft-edge",
+                  "com.microsoft.Edge",
+                  "microsoft-edge",
+                  "Chromium Safe Storage",
+                  "chromium",
+                  "Chromium Keys"),
+    ChromiumBased(u"Vivaldi",
+                  ".config/vivaldi",
+                  "com.vivaldi.Vivaldi",
+                  "vivaldi",
+                  "Chrome Safe Storage",
+                  "chrome",
+                  "Chrome Keys"),
+    ChromiumBased(u"Vivaldi",
+                  ".var/app/com.vivaldi.Vivaldi/config/vivaldi",
+                  "com.vivaldi.Vivaldi",
+                  "vivaldi",
+                  "Chrome Safe Storage",
+                  "chrome",
+                  "Chrome Keys"),
+    ChromiumBased(u"Chromium",
+                  ".config/chromium",
+                  "org.chromium.Chromium",
+                  "chromium",
+                  "Chromium Safe Storage",
+                  "chromium",
+                  "Chromium Keys"),
+    ChromiumBased(u"Chromium",
+                  ".var/app/org.chromium.Chromium/config/chromium",
+                  "org.chromium.Chromium",
+                  "chromium",
+                  "Chromium Safe Storage",
+                  "chromium",
+                  "Chromium Keys"),
+    Gecko(u"Floorp", ".floorp", "one.ablaze.floorp", "floorp"),
+    Gecko(u"Floorp", ".config/floorp", "one.ablaze.floorp", "floorp"),
+    Gecko(u"Floorp",
+          ".var/app/one.ablaze.floorp/.floorp",
+          "one.ablaze.floorp",
+          "floorp"),
+    Gecko(u"Floorp",
+          ".var/app/one.ablaze.floorp/config/floorp",
+          "one.ablaze.floorp",
+          "floorp"),
+    Gecko(u"LibreWolf",
+          ".librewolf",
+          "io.gitlab.librewolf-community",
+          "librewolf"),
+    Gecko(u"LibreWolf",
+          ".config/librewolf",
+          "io.gitlab.librewolf-community",
+          "librewolf"),
+    Gecko(u"LibreWolf",
+          ".var/app/io.gitlab.librewolf-community/.librewolf",
+          "io.gitlab.librewolf-community",
+          "librewolf"),
+    Gecko(u"LibreWolf",
+          ".var/app/io.gitlab.librewolf-community/config/librewolf",
+          "io.gitlab.librewolf-community",
+          "librewolf"),
+    Gecko(u"Waterfox", ".waterfox", "net.waterfox.waterfox", "waterfox"),
+    Gecko(u"Waterfox", ".config/waterfox", "net.waterfox.waterfox", "waterfox"),
+    Gecko(u"Waterfox",
+          ".var/app/net.waterfox.waterfox/.waterfox",
+          "net.waterfox.waterfox",
+          "waterfox"),
+    Gecko(u"Waterfox",
+          ".var/app/net.waterfox.waterfox/config/waterfox",
+          "net.waterfox.waterfox",
+          "waterfox"),
+    // Where Chromium's firefox_importer_utils_linux.cc looks, the Snap's too.
+    Gecko(u"Firefox",
+          ".config/mozilla/firefox",
+          "org.mozilla.firefox",
+          "firefox"),
+    Gecko(u"Firefox", ".mozilla/firefox", "org.mozilla.firefox", "firefox"),
+    Gecko(u"Firefox",
+          "snap/firefox/common/.mozilla/firefox",
+          "org.mozilla.firefox",
+          "firefox"),
+    Gecko(u"Firefox",
+          ".var/app/org.mozilla.firefox/.mozilla/firefox",
+          "org.mozilla.firefox",
+          "firefox"),
+    Gecko(u"Firefox",
+          ".var/app/org.mozilla.firefox/config/mozilla/firefox",
+          "org.mozilla.firefox",
+          "firefox"),
+};
+#endif
+
+// What Chromium's Firefox importer brings: on macOS no passwords
+// (importer_list.cc: NSS can't be loaded there); on Linux passwords too,
+// decrypted with NSS from the profile's key4.db, as upstream offers for
+// Firefox.
 constexpr uint16_t kGeckoServices = user_data_importer::HISTORY |
                                     user_data_importer::FAVORITES |
-                                    user_data_importer::AUTOFILL_FORM_DATA;
-
-uint16_t ChromiumServices() {
-  uint16_t services =
-      user_data_importer::HISTORY | user_data_importer::FAVORITES;
-  // Saved passwords need the browser's Safe Storage key from the keychain
-  // (macOS), or a test's key file.
-#if BUILDFLAG(IS_MAC)
-  services |= user_data_importer::PASSWORDS;
-#else
-  if (HasTestRoot()) {
-    services |= user_data_importer::PASSWORDS;
-  }
+                                    user_data_importer::AUTOFILL_FORM_DATA
+#if !BUILDFLAG(IS_MAC)
+                                    | user_data_importer::PASSWORDS
 #endif
-  return services;
-}
+    ;
+
+// A Chromium-based browser's saved passwords need its Safe Storage key: from
+// the keychain (macOS) or the keyring (Linux; without it, only those saved
+// without a keyring), or a test's key file.
+constexpr uint16_t kChromiumServices = user_data_importer::HISTORY |
+                                       user_data_importer::FAVORITES |
+                                       user_data_importer::PASSWORDS;
 
 base::Time LastModified(const base::FilePath& path) {
   base::File::Info info;
@@ -184,6 +372,12 @@ base::FilePath SearchRoot() {
   base::FilePath app_data;
   if (base::PathService::Get(base::DIR_APP_DATA, &app_data)) {
     return app_data;
+  }
+#else
+  // The home folder, as firefox_importer_utils_linux.cc (Flatpak keeps it).
+  base::FilePath home;
+  if (base::PathService::Get(base::DIR_HOME, &home)) {
+    return home;
   }
 #endif
   return base::FilePath();
@@ -351,6 +545,7 @@ std::vector<SourceProfile> DetectSourceProfiles(const base::FilePath& root,
     return {};
   }
   struct Found {
+    std::u16string_view name;
     base::Time last_used;
     std::vector<SourceProfile> sources;
   };
@@ -392,7 +587,7 @@ std::vector<SourceProfile> DetectSourceProfiles(const base::FilePath& root,
         }
       } else {
         source.importer_type = kChromiumImporterType;
-        source.services_supported = ChromiumServices();
+        source.services_supported = kChromiumServices;
         if (browser.arc_sidebar &&
             base::PathExists(data_dir.DirName().AppendASCII(kArcSidebarFile))) {
           source.services_supported |= kSpacesImportItem;
@@ -403,17 +598,28 @@ std::vector<SourceProfile> DetectSourceProfiles(const base::FilePath& root,
     if (entry.sources.empty()) {
       continue;
     }
-    if (entry.sources.size() == 1) {
-      // One profile: no name to tell it from others.
-      entry.sources[0].profile.clear();
-    }
     if (browser.arc_sidebar) {
       // Arc keeps its Spaces and pinned tabs beside "User Data".
       entry.last_used = std::max(
           entry.last_used,
           LastModified(data_dir.DirName().AppendASCII(kArcSidebarFile)));
     }
-    found.push_back(std::move(entry));
+    // A browser found in several folders (Linux: native and Flatpak) is
+    // listed once, its profiles together.
+    const auto it = std::ranges::find(found, browser.name, &Found::name);
+    if (it == found.end()) {
+      entry.name = browser.name;
+      found.push_back(std::move(entry));
+      continue;
+    }
+    it->last_used = std::max(it->last_used, entry.last_used);
+    std::ranges::move(entry.sources, std::back_inserter(it->sources));
+  }
+  for (Found& entry : found) {
+    if (entry.sources.size() == 1) {
+      // One profile: no name to tell it from others.
+      entry.sources[0].profile.clear();
+    }
   }
   std::ranges::stable_sort(found, std::ranges::greater(), &Found::last_used);
 
@@ -427,9 +633,19 @@ std::vector<SourceProfile> DetectSourceProfiles(const base::FilePath& root,
 void AddSourceProfiles(const std::string& locale,
                        std::vector<SourceProfile>& profiles) {
   std::vector<SourceProfile> koan = DetectSourceProfiles(SearchRoot(), locale);
+  // Upstream's copy of a profile Koan lists too (Linux: Firefox's).
+  std::erase_if(profiles, [&](const SourceProfile& profile) {
+    return std::ranges::any_of(koan, [&](const SourceProfile& source) {
+      return source.importer_type == profile.importer_type &&
+             source.source_path == profile.source_path;
+    });
+  });
   profiles.insert(profiles.begin(), std::make_move_iterator(koan.begin()),
                   std::make_move_iterator(koan.end()));
   MovePreferredSourceFirst(profiles);
+#if BUILDFLAG(IS_LINUX)
+  LoadAppIcons(profiles);
+#endif
 }
 
 void SetPreferredSource(const SourceProfile& source) {

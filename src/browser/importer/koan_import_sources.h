@@ -11,6 +11,7 @@
 
 #include "base/containers/span.h"
 #include "base/files/file_path.h"
+#include "build/build_config.h"
 #include "components/user_data_importer/common/importer_data_types.h"
 #include "components/user_data_importer/common/importer_type.h"
 
@@ -19,7 +20,9 @@
 // through Chromium's Firefox importer, and the Chromium-based ones (Arc,
 // Chrome...), which Chromium 158 has no importer for on macOS, through
 // koan_chromium_profile_importer.h. Found under ~/Library/Application
-// Support, or the --koan-import-test-root folder in tests. Listed first in
+// Support on macOS, under the home folder on Linux (#493: native and Flatpak
+// installs, and Firefox too), or the --koan-import-test-root folder in
+// tests. Listed first in
 // Chromium's ImporterList (the import dialog, the welcome's import step),
 // the most recently used browser first, as Zen's welcome lists them.
 namespace koan::importer {
@@ -48,18 +51,27 @@ enum class Engine {
 };
 
 struct KnownBrowser {
-  // The name listed.
+  // The name listed. A browser in several folders (on Linux, its native and
+  // its Flatpak install) has a row for each, listed as one.
   std::u16string_view name;
   Engine engine;
-  // Where its data is, under ~/Library/Application Support: profiles.ini's
+  // Where its data is, under the search root (SearchRoot()): profiles.ini's
   // folder (Gecko) or the "User Data" folder (Chromium).
   std::string_view data_dir;
-  // Its app, for the icon listed.
+  // Its app, for the icon listed: its bundle id on macOS, its Flatpak app id
+  // on Linux (also the icon name its Flatpak installs).
   std::string_view bundle_id;
-  // Chromium: the keychain item ("<Browser> Safe Storage") whose secret
-  // encrypts its saved passwords.
+  // Linux: the other names its icon has in the icon theme (its native
+  // packages'), space-separated.
+  std::string_view icon_names;
+  // Chromium: the "<Browser> Safe Storage" item whose secret encrypts its
+  // saved passwords: the keychain item (macOS), its KWallet entry (Linux).
   std::string_view keychain_service;
   std::string_view keychain_account;
+  // Linux, Chromium: its Secret Service item's "application" attribute and
+  // its KWallet folder (freedesktop_secret_key_provider.h in the browser).
+  std::string_view secret_application;
+  std::string_view kwallet_folder;
   // Arc: its Spaces and pinned tabs are in StorableSidebar.json, beside
   // "User Data".
   bool arc_sidebar = false;
@@ -72,8 +84,8 @@ struct KnownBrowser {
 base::span<const KnownBrowser> KnownBrowsers();
 
 // The folder the browsers' data folders are in: --koan-import-test-root, or
-// ~/Library/Application Support on macOS. Empty elsewhere without the switch
-// (Koan's import is macOS's).
+// ~/Library/Application Support on macOS, the home folder on Linux (in
+// Koan's Flatpak too: its finish-args let it read exactly those folders).
 base::FilePath SearchRoot();
 // Whether --koan-import-test-root is set.
 bool HasTestRoot();
@@ -86,8 +98,8 @@ const KnownBrowser* FindBrowser(const base::FilePath& root,
 // Whether `source` is a Chromium-format profile Koan imports itself.
 bool IsChromiumProfileSource(const user_data_importer::SourceProfile& source);
 
-// The bundle id of the app `source` is from (Koan's browsers, Safari,
-// Firefox), for its icon; empty for a bookmarks file.
+// The bundle id (Linux: Flatpak app id) of the app `source` is from (Koan's
+// browsers, Safari, Firefox), for its icon; empty for a bookmarks file.
 std::string_view BundleIdOf(const user_data_importer::SourceProfile& source);
 
 // A profile folder and its name.
@@ -119,9 +131,10 @@ std::vector<user_data_importer::SourceProfile> DetectSourceProfiles(
     const std::string& locale);
 
 // The hook in Chromium's ImporterList (importer_list.cc), on its detection
-// thread: puts Koan's sources before upstream's, then the source the
+// thread: puts Koan's sources before upstream's (without upstream's copy of
+// a profile Koan lists too: Firefox's on Linux), then the source the
 // welcome's import step picked (SetPreferredSource) first of all, so the
-// import dialog opens on it.
+// import dialog opens on it. On Linux, loads the sources' icons.
 void AddSourceProfiles(
     const std::string& locale,
     std::vector<user_data_importer::SourceProfile>& profiles);
@@ -131,6 +144,31 @@ void SetPreferredSource(const user_data_importer::SourceProfile& source);
 // Moves the preferred source, if `profiles` has it, to the front.
 void MovePreferredSourceFirst(
     std::vector<user_data_importer::SourceProfile>& profiles);
+
+#if BUILDFLAG(IS_LINUX)
+// Linux (koan_import_icons_linux.cc): the folders apps' icons are under
+// (the XDG data folders, the Flatpak exports, Flatpak's view of the host's
+// under /run/host), the user's first; with --koan-import-test-root, its
+// .local/share only.
+std::vector<base::FilePath> AppIconDataDirs();
+
+// The icon file of an app with icon theme names `names` (the first
+// preferred) under the data folders `data_dirs`: hicolor's PNG nearest
+// 64 px, else its SVG, else a pixmap; empty if none.
+base::FilePath FindAppIcon(base::span<const base::FilePath> data_dirs,
+                           base::span<const std::string> names);
+
+// The icon names of the app with `bundle_id`: the id, then a known
+// browser's other names.
+std::vector<std::string> AppIconNames(std::string_view bundle_id);
+
+// Finds the icons of `sources`' apps (blocking file IO, on the detection
+// thread), for LoadedAppIconDataUrl().
+void LoadAppIcons(base::span<const user_data_importer::SourceProfile> sources);
+// The icon LoadAppIcons() found for `bundle_id`, as a data: URL; empty if
+// none.
+std::string LoadedAppIconDataUrl(std::string_view bundle_id);
+#endif
 
 }  // namespace koan::importer
 

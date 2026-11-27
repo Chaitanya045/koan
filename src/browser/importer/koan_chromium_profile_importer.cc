@@ -19,6 +19,7 @@
 #include "base/strings/string_util.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "build/build_config.h"
 #include "chrome/browser/importer/external_process_importer_host.h"
 #include "chrome/browser/importer/in_process_importer_bridge.h"
 #include "chrome/browser/importer/profile_writer.h"
@@ -45,7 +46,8 @@ struct ProfileData {
 };
 
 // The browser's Safe Storage secret: from the keychain (macOS asks the
-// user), or with --koan-import-test-root from its Keychain/<item> file.
+// user) or the keyring (Linux: the Secret Service, else KWallet, which may
+// ask), or with --koan-import-test-root from its Keychain/<item> file.
 std::optional<std::string> SafeStorageSecret(const KnownBrowser& browser) {
   if (HasTestRoot()) {
     std::string secret;
@@ -57,7 +59,34 @@ std::optional<std::string> SafeStorageSecret(const KnownBrowser& browser) {
     }
     return std::string(base::TrimWhitespaceASCII(secret, base::TRIM_ALL));
   }
+#if BUILDFLAG(IS_MAC)
   return ReadKeychainSecret(browser.keychain_service, browser.keychain_account);
+#else
+  return ReadKeyringSecret(browser.secret_application, browser.kwallet_folder,
+                           browser.keychain_service);
+#endif
+}
+
+// The keys of `browser`'s saved passwords; none on macOS without its
+// keychain secret, only those saved without a keyring on Linux without its
+// keyring secret.
+std::vector<PasswordKey> PasswordKeysOf(const KnownBrowser& browser) {
+  std::optional<std::string> secret = SafeStorageSecret(browser);
+#if BUILDFLAG(IS_MAC)
+  if (!secret) {
+    LOG(WARNING) << "Koan import: no " << browser.keychain_service
+                 << " key (denied or missing); passwords not imported";
+    return {};
+  }
+  return MacPasswordKeys(*secret);
+#else
+  if (!secret) {
+    LOG(WARNING) << "Koan import: no " << browser.keychain_service
+                 << " in the keyring (denied or missing); only passwords "
+                    "saved without a keyring imported";
+  }
+  return LinuxPasswordKeys(secret);
+#endif
 }
 
 // On the thread pool: what `items` asks for from `profile_dir`.
@@ -95,21 +124,19 @@ ProfileData ReadProfile(const base::FilePath& profile_dir, uint16_t items) {
   const base::FilePath login_files[] = {
       profile_dir.AppendASCII("Login Data"),
       profile_dir.AppendASCII("Login Data For Account")};
-  // The keychain is asked only when there are passwords to decrypt.
+  // The keychain or keyring is asked only when there are passwords to
+  // decrypt.
   if ((items & user_data_importer::PASSWORDS) && browser &&
       !browser->keychain_service.empty() &&
       std::ranges::any_of(login_files, [](const base::FilePath& file) {
         return base::PathExists(file);
       })) {
-    if (std::optional<std::string> secret = SafeStorageSecret(*browser)) {
-      const SafeStorageKey key = DeriveSafeStorageKey(*secret);
+    const std::vector<PasswordKey> keys = PasswordKeysOf(*browser);
+    if (!keys.empty()) {
       for (const base::FilePath& file : login_files) {
-        std::ranges::move(ReadLogins(file, key),
+        std::ranges::move(ReadLogins(file, keys),
                           std::back_inserter(data.passwords));
       }
-    } else {
-      LOG(WARNING) << "Koan import: no " << browser->keychain_service
-                   << " key (denied or missing); passwords not imported";
     }
   }
   return data;
