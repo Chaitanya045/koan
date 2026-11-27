@@ -50,8 +50,9 @@ if [[ ${KOAN_CI_DUMMY:-0} == 1 ]]; then
   printf '#!/bin/sh\necho "Koan packaging check: $*"\n' > "$OUT/chrome"
   cp "$OUT/chrome" "$OUT/chrome_crashpad_handler"
   chmod +x "$OUT/chrome" "$OUT/chrome_crashpad_handler"
+  mkdir -p "$OUT/koan_fonts"
   for f in icudtl.dat resources.pak chrome_100_percent.pak chrome_200_percent.pak \
-      locales/en-US.pak; do
+      locales/en-US.pak koan_fonts/OFL.txt; do
     : > "$OUT/$f"
   done
   echo "is_component_build = false" > "$OUT/args.gn"
@@ -66,8 +67,9 @@ if grep -q 'is_component_build = true' "$OUT/args.gn" 2>/dev/null; then
 fi
 
 echo "==> Staging $OUT"
+# koan_fonts: Geist for the native UI (//koan/browser/ui/fonts:font_files).
 required=(chrome chrome_crashpad_handler icudtl.dat resources.pak
-          chrome_100_percent.pak chrome_200_percent.pak locales)
+          chrome_100_percent.pak chrome_200_percent.pak locales koan_fonts)
 optional=(v8_context_snapshot.bin snapshot_blob.bin libEGL.so libGLESv2.so
           libvk_swiftshader.so vk_swiftshader_icd.json libvulkan.so.1
           libqt5_shim.so libqt6_shim.so libqt6_shim.so.6 libffmpeg.so

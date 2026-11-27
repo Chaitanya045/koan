@@ -97,6 +97,9 @@ jobs:
       - name: Fetch Chromium, apply patches and branding, gn gen
         id: fetch
         env:
+          # Test-only update hooks for a run whose build is never published
+          # (scripts/ci/linux_env.sh; scripts/tests/test_update_test_hooks.py).
+          KOAN_CI_UPDATE_TEST_HOOKS: ${{ (!inputs.keep_base && !inputs.release) && '1' || '0' }}
           KOAN_BASE_RUN: ${{ steps.base.outputs.base_run }}
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -451,22 +454,34 @@ jobs:
   # more (a failed one keeps them, for "Re-run failed jobs", until they
   # expire: source 3 days, out 2). Its source goes too, unless it is a
   # keep_base run: its source and finished out/Koan stay for later runs to
-  # build on, and the copies of older keep_base runs go. A run that is not
-  # one only ever deletes its own archives. The .dmg and the logs stay.
+  # build on, and older develop runs' copies go, but not right away: a run
+  # that picked the previous base when its fetch started only downloads its
+  # out/Koan when build 1 starts, hours later, and deleting it in between
+  # made that build a full one (#569). So scripts/ci/prune_bases.sh keeps a
+  # base until a newer one has existed for 12 h (its header has the
+  # details). A run that is not a keep_base one only ever deletes its own
+  # archives. The .dmg and the logs stay.
   cleanup:
     name: Delete build archives
-    needs: [check]
+    needs: [fetch, check]
     if: ${{ !cancelled() && needs.check.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
+      contents: read
       actions: write
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       RUN: ${{ github.run_id }}
       KEEP_BASE: ${{ inputs.keep_base }}
+      BRANCH: develop
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.fetch.outputs.sha }}
+          persist-credentials: false
+
       - name: Delete
         run: |
           delete() {
@@ -482,13 +497,4 @@ jobs:
             exit 0
           fi
           delete "$RUN" '^koan-mac-out-[0-9]+[.]'
-          # Older runs' bases go, but only runs that are over: a running
-          # chain still needs its source. The list's status filter has
-          # missed runs, so each run's own status decides.
-          gh api "repos/$GH_REPO/actions/workflows/macos.yml/runs?per_page=50" --jq '.workflow_runs[].id' |
-            while read -r id; do
-              ((id < RUN)) || continue
-              status="$(gh api "repos/$GH_REPO/actions/runs/$id" --jq .status 2>/dev/null || true)"
-              [[ $status == completed ]] || continue
-              delete "$id" '^koan-mac-(source|out-final)[.]'
-            done
+          scripts/ci/prune_bases.sh macos.yml koan-mac

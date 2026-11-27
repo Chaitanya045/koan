@@ -2,6 +2,7 @@
 # Use of this source code is governed by the MIT license that can be
 # found in the LICENSE file.
 
+import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
 
@@ -22,6 +23,7 @@ test("koan_unittests") {
     "//koan/browser/ui/webui/koan_settings_rows_unittest.cc",
     "//koan/browser/ui/webui/koan_settings_url_unittest.cc",
     "//koan/browser/updates/koan_update_logic_unittest.cc",
+    "//koan/browser/updates/koan_update_source_unittest.cc",
     "//koan/browser/window_sync/koan_window_sync_model_unittest.cc",
     "//koan/common/koan_glance_trigger_unittest.cc",
     "//koan/version/koan_version_unittest.cc",
@@ -49,6 +51,7 @@ test("koan_unittests") {
     "//koan/browser/ui/webui:settings_rows",
     "//koan/browser/ui/webui:settings_url",
     "//koan/browser/updates:update_logic",
+    "//koan/browser/updates:update_source",
     "//koan/browser/window_sync:model",
     "//koan/common:glance_trigger",
     "//koan/version",
@@ -58,7 +61,25 @@ test("koan_unittests") {
     "//ui/color:color_provider_key",
     "//url",
   ]
+  data = [ "//koan/browser/updates/koan_update_public_key.txt" ]
   data_deps = [ "//third_party/icu:icudata" ]
+
+  if (is_linux) {
+    sources += [ "//koan/browser/ui/fonts/koan_fonts_linux_unittest.cc" ]
+    deps += [
+      "//koan/browser/ui/fonts",
+      "//ui/base",
+      "//ui/gfx",
+    ]
+  }
+
+  if (is_linux && use_dbus) {
+    sources += [ "//koan/common/koan_linux_safe_storage_unittest.cc" ]
+    deps += [
+      "//components/os_crypt/async/browser:freedesktop_secret_key_provider",
+      "//koan/common:branding",
+    ]
+  }
 }
 
 # Koan's browser tests (InProcessBrowserTest): Spaces, pinned tabs and what
@@ -73,8 +94,10 @@ source_set("browsertests_impl") {
     "browser/koan_agent_capture_browsertest.cc",
     "browser/koan_agent_pause_watch_browsertest.cc",
     "browser/koan_agent_secret_lock_browsertest.cc",
+    "browser/koan_bookmark_bar_overflow_browsertest.cc",
     "browser/koan_browser_test_utils.cc",
     "browser/koan_browser_test_utils.h",
+    "browser/koan_caption_buttons_browsertest.cc",
     "browser/koan_command_palette_browsertest.cc",
     "browser/koan_essentials_drop_browsertest.cc",
     "browser/koan_essentials_profiles_browsertest.cc",
@@ -87,6 +110,7 @@ source_set("browsertests_impl") {
     "browser/koan_sidebar_top_row_browsertest.cc",
     "browser/koan_sidebar_transitions_browsertest.cc",
     "browser/koan_space_containers_browsertest.cc",
+    "browser/koan_space_history_browsertest.cc",
     "browser/koan_space_notifications_browsertest.cc",
     "browser/koan_spaces_browsertest.cc",
     "browser/koan_split_view_browsertest.cc",
@@ -98,8 +122,11 @@ source_set("browsertests_impl") {
     "//base",
     "//base/test:test_support",
     "//chrome/browser",
+    "//chrome/browser/autocomplete",
     "//chrome/browser/bookmarks",
+    "//chrome/browser/bookmarks:test_support",
     "//chrome/browser/content_settings:content_settings_factory",
+    "//chrome/browser/history",
     "//chrome/browser/importer",
     "//chrome/browser/metrics",
     "//chrome/browser/notifications",
@@ -108,15 +135,20 @@ source_set("browsertests_impl") {
     "//chrome/browser/prefs",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/sessions:test_support",
+    "//chrome/browser/themes",
     "//chrome/browser/ui:browser_tabstrip",
+    "//chrome/browser/ui:view_ids",
     "//chrome/browser/ui/browser_window",
     "//chrome/browser/ui/exclusive_access",
     "//chrome/browser/ui/fullscreen",
+    "//chrome/browser/ui/location_bar",
     "//chrome/browser/ui/navigator",
+    "//chrome/browser/ui/omnibox",
     "//chrome/browser/ui/startup",
     "//chrome/browser/ui/tabs",
     "//chrome/browser/ui/tabs:tab_enums",
     "//chrome/browser/ui/tabs:tab_strip",
+    "//chrome/browser/ui/views/bookmarks",
     "//chrome/browser/ui/views/frame",
     "//chrome/browser/ui/views/frame:browser_widget",
     "//chrome/browser/ui/views/frame:multi_contents_view",
@@ -134,7 +166,9 @@ source_set("browsertests_impl") {
     "//components/bookmarks/test",
     "//components/content_settings/core/browser",
     "//components/content_settings/core/common",
+    "//components/history/core/browser",
     "//components/keyed_service/core",
+    "//components/omnibox/browser",
     "//components/password_manager/core/browser:password_form",
     "//components/password_manager/core/browser/password_store:password_store_interface",
     "//components/password_manager/core/browser/password_store:test_support",
@@ -161,6 +195,7 @@ source_set("browsertests_impl") {
     "//koan/browser/containers:partition",
     "//koan/browser/containers:user_containers",
     "//koan/browser/importer",
+    "//koan/browser/ui/color",
     "//koan/browser/ui/views:impl",
     "//koan/browser/ui/views:split_rearrange",
     "//koan/common:renderer_settings_mojom",
@@ -174,9 +209,11 @@ source_set("browsertests_impl") {
     "//testing/gtest",
     "//third_party/blink/public/common",
     "//third_party/blink/public/mojom:mojom_core",
+    "//third_party/metrics_proto",
     "//ui/actions",
     "//ui/base",
     "//ui/base:types",
+    "//ui/color",
     "//ui/compositor",
     "//ui/events",
     "//ui/events:test_support",

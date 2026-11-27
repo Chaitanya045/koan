@@ -104,6 +104,11 @@ modules:
       # zypak starts the sandboxed processes itself; Chromium only checks
       # that a sandbox binary exists (com.google.Chrome does the same).
       - install -Dm 755 stub_sandbox.sh /app/koan/chrome-sandbox
+      # Geist, which Koan registers from /app/koan/koan_fonts itself, also
+      # in the runtime's font folder, so fc-match and the other processes
+      # in the sandbox find it.
+      - mkdir -p /app/share/fonts
+      - ln -s ../../koan/koan_fonts /app/share/fonts/koan
       - install -Dm 755 koan.sh /app/bin/koan
       - install -Dm 644 -t /app/etc cobalt.ini
       - install -Dm 644 -t /app/share/applications dev.koan.Koan.desktop

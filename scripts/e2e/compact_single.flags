@@ -1,0 +1,5 @@
+# The window at (-20, -20): headless Ozone's pointer is always at (0, 0), so
+# it is over the window, clear of its 8 px edges, as a person's pointer is
+# after clicking a menu item. A closed menu's sidebar hold lets go at once
+# then (SidebarHold::ReleaseWhenPointerMoves()), as with real input.
+--window-position=-20,-20

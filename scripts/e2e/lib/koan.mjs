@@ -446,6 +446,10 @@ export async function boundsOf(cls) {
 // views() saw is another view's, often one of the same class: on macOS the
 // sidebar's hot zone's id named the top edge's. The view is found again in
 // this session, by its class and its bounds.
+//
+// The point is rounded: UI DevTools drops an event at a fractional point
+// (the middle of a 29 px menu item, since Geist became the native font in
+// #519), and the menu stayed open without a word.
 export async function mouseOn(view, type, x = 10, y = 10, button = 'left') {
   if (!view) throw new Error(`mouseOn(): no view to send ${type} to (not found)`);
   const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
@@ -472,7 +476,7 @@ export async function mouseOn(view, type, x = 10, y = 10, button = 'left') {
     }
   }
   await ui.send('DOM.dispatchMouseEvent', { nodeId: nodeId ?? view.nodeId,
-      event: { type, x, y, button, wheelDirection: 'none' } });
+      event: { type, x: Math.round(x), y: Math.round(y), button, wheelDirection: 'none' } });
   ui.close();
 }
 
@@ -675,6 +679,70 @@ export async function viewTree() {
   return out;
 }
 
+// The UI DevTools properties (Width, Visible, ...) of the `n`th view of
+// class `cls` in the document now (viewTree() order), or null if there is no
+// such view. Reads that one view only, so it is quick enough to sample
+// something that lasts under a second, which a whole viewTree() (seconds on
+// a busy machine) is not. (By class, not node id: a new connection numbers
+// the nodes again, so an id from an older tree can name another view once
+// views come or go.)
+export async function propsOf(cls, n = 0) {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  try {
+    await ui.send('DOM.enable');
+    await ui.send('CSS.enable');
+    const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result?.root;
+    const nodes = [];
+    const walk = node => {
+      const a = node.attributes ?? [];
+      if (node.nodeName === 'View' && a[a.indexOf('class') + 1] === cls) nodes.push(node);
+      for (const c of node.children ?? []) walk(c);
+    };
+    if (doc) walk(doc);
+    if (!nodes[n]) return null;
+    const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId: nodes[n].nodeId });
+    const p = {};
+    for (const rule of r.result?.matchedCSSRules ?? []) {
+      for (const prop of rule.rule.style.cssProperties) p[prop.name] = prop.value;
+    }
+    return p;
+  } finally {
+    ui.close();
+  }
+}
+
+// The texts of the toast's labels (KoanToastView), [] while none shows.
+// Quicker than viewTree(), which reads every view's properties: that can
+// take longer than the toast stays (2.4 s, koan_toast.h) on a busy machine.
+export async function toastTexts() {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  try {
+    await ui.send('DOM.enable');
+    await ui.send('CSS.enable');
+    const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result?.root;
+    const labels = [];
+    const walk = (n, inToast) => {
+      const a = n.attributes ?? [];
+      const cls = n.nodeName === 'View' ? a[a.indexOf('class') + 1] : undefined;
+      if (inToast && cls === 'Label') labels.push(n.nodeId);
+      for (const c of n.children ?? []) walk(c, inToast || cls === 'KoanToastView');
+    };
+    if (doc) walk(doc, false);
+    const texts = [];
+    for (const nodeId of labels) {
+      const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId });
+      for (const rule of r.result?.matchedCSSRules ?? []) {
+        for (const p of rule.rule.style.cssProperties) {
+          if (p.name === 'Text' && p.value) texts.push(p.value);
+        }
+      }
+    }
+    return texts;
+  } finally {
+    ui.close();
+  }
+}
+
 // Sends a native event to a view from viewTree() (UI DevTools); `method` is
 // DOM.dispatchMouseEvent or DOM.dispatchKeyEvent. Fire-and-forget when
 // `wait` is false.
@@ -753,11 +821,17 @@ export function openMenus(vs) {
 // Hovers (`types` = ['mouseMoved']) or picks a menu item, at its position
 // in the menu's root view. (Needs a sized headless screen, see
 // koan_test_env.sh: menus are clamped to the screen.)
+// The events go, in one session, to the menu's root view as that session
+// numbers it (lib/mac.mjs rootMouse()): UI DevTools numbers the nodes again
+// on each DOM.getDocument, and on Linux a window that came or went since the
+// menu was read (a toast, the loading indicator: child windows of the
+// browser's, ahead of the menu's) moves the menu root's number, so the
+// events went to another view and the menu stayed open.
 export async function menuMouse(menu, item,
                                 types = ['mouseMoved', 'mousePressed', 'mouseReleased']) {
-  for (const type of types) {
-    await viewMouse(menu.root, type, item.ax + 8, item.ay + item.h / 2);
-  }
+  // (lib/mac.mjs imports this file: imported when called, not at load.)
+  const { rootMouse } = await import('./mac.mjs');
+  await rootMouse(menu.root, types, item.ax + 8, item.ay + item.h / 2);
   await sleep(1200);
 }
 

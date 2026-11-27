@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/i18n/case_conversion.h"
 #include "base/i18n/time_formatting.h"
 #include "base/memory/raw_ptr.h"
@@ -58,13 +59,18 @@
 #include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/page_navigator.h"
+#include "content/public/browser/storage_partition_config.h"
 #include "content/public/common/referrer.h"
+#include "koan/browser/containers/koan_container_partition.h"
+#include "koan/browser/containers/koan_history_profiles.h"
+#include "koan/browser/containers/koan_user_containers.h"
 #include "koan/browser/koan_library_logic.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_library_sections.h"
 #include "koan/browser/ui/views/koan_library_view.h"
+#include "koan/browser/ui/views/koan_space_history_index.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "ui/base/l10n/time_format.h"
@@ -106,6 +112,15 @@ constexpr ClearRange kClearRanges[] = {
 
 using library::FormatUrl;
 using library::SiteOf;
+
+// The profile filter's options besides the user's profiles (#474), whose ids
+// are their Serialize()d containers.
+constexpr char kAllProfiles[] = "all";
+constexpr char kDefaultProfile[] = "default";
+
+// A profile (empty: the default one) or every profile (nullopt), as the
+// profile filter picks them.
+using ProfileChoice = std::optional<std::string>;
 
 // "Oct 12, 2026, 3:45 PM" (Intl dateStyle medium + timeStyle short).
 std::u16string FormatVisit(base::Time time) {
@@ -173,6 +188,12 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
   void OnShown() override {
     KoanLibrarySearchSection::OnShown();
     shown_ = true;
+    // Each opening shows the active Space's profile first (#474), and lists
+    // the profiles as they are now.
+    if (ShowWindowsProfile()) {
+      dirty_ = true;
+    }
+    UpdateFilterPanel();
     if (dirty_) {
       ResetAndFetch();
     }
@@ -200,7 +221,7 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
 
   // KoanLibrarySearchSection:
   std::vector<FilterGroup> GetFilterGroups() const override {
-    return {
+    std::vector<FilterGroup> groups = {
         WhenFilterGroup(u"When was it visited?"),
         FilterGroup("sort", u"Sort by", /*exclusive=*/true,
                     {{"date", u"By Date"},
@@ -211,6 +232,19 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
         FilterGroup("source", u"What to look through", /*exclusive=*/true,
                     {{"history", u"History"}, {"closed", u"Closed tabs"}}),
     };
+    // Koan's own (#474): history per Space profile.
+    const std::vector<containers::UserContainer> profiles = Profiles();
+    if (!profiles.empty()) {
+      std::vector<FilterOption> options = {{kAllProfiles, u"All profiles"},
+                                           {kDefaultProfile, u"Default"}};
+      for (const containers::UserContainer& profile : profiles) {
+        options.emplace_back(containers::Serialize(profile.id),
+                             base::UTF8ToUTF16(profile.name));
+      }
+      groups.emplace_back("profile", u"Which profile?", /*exclusive=*/true,
+                          std::move(options));
+    }
+    return groups;
   }
 
   void OnSearchChanged() override { ResetAndFetch(); }
@@ -225,6 +259,10 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
     }
     if (ActiveSort().empty()) {
       SetFilterActive("sort", "date", true);
+    }
+    if (!Profiles().empty() && !ShownProfile() &&
+        !IsFilterActive("profile", kAllProfiles)) {
+      SetFilterActive("profile", kAllProfiles, true);
     }
     profile_->GetPrefs()->SetBoolean(prefs::kLibraryHistoryClosedTabs,
                                      ShowingClosed());
@@ -276,6 +314,81 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
   };
 
   bool ShowingClosed() const { return IsFilterActive("source", "closed"); }
+
+  // The user's profiles, while Keep history apart for each profile is on;
+  // none (no profile filter, every profile's history) otherwise.
+  std::vector<containers::UserContainer> Profiles() const {
+    if (!profile_->GetPrefs()->GetBoolean(prefs::kSpacesSeparateHistory)) {
+      return {};
+    }
+    return containers::ParseUserContainers(
+        profile_->GetPrefs()->GetList(prefs::kUserContainers));
+  }
+
+  // The profile the list shows, or every profile.
+  ProfileChoice ShownProfile() const {
+    // (A choice left from before the setting was turned off doesn't count.)
+    const std::vector<containers::UserContainer> profiles = Profiles();
+    if (profiles.empty()) {
+      return std::nullopt;
+    }
+    if (IsFilterActive("profile", kDefaultProfile)) {
+      return std::string();
+    }
+    for (const containers::UserContainer& profile : profiles) {
+      const std::string id = containers::Serialize(profile.id);
+      if (IsFilterActive("profile", id)) {
+        return id;
+      }
+    }
+    return std::nullopt;
+  }
+
+  // Picks the window's active Space's profile in the filter. Returns whether
+  // that changed it.
+  bool ShowWindowsProfile() {
+    const std::vector<containers::UserContainer> profiles = Profiles();
+    if (profiles.empty()) {
+      return false;
+    }
+    const std::string window =
+        HistoryProfileOfWindow(library()->browser_view()->browser());
+    std::string option = window.empty() ? kDefaultProfile : kAllProfiles;
+    for (const containers::UserContainer& profile : profiles) {
+      if (containers::Serialize(profile.id) == window) {
+        option = window;
+      }
+    }
+    if (IsFilterActive("profile", option)) {
+      return false;
+    }
+    SetFilterActive("profile", kAllProfiles, false);
+    SetFilterActive("profile", kDefaultProfile, false);
+    for (const containers::UserContainer& profile : profiles) {
+      SetFilterActive("profile", containers::Serialize(profile.id), false);
+    }
+    SetFilterActive("profile", option, true);
+    return true;
+  }
+
+  // " in the Work profile", " in every profile", or nothing without
+  // profiles: what the confirmations say a removal acts on.
+  std::u16string ProfileClause(const ProfileChoice& choice) const {
+    const std::vector<containers::UserContainer> profiles = Profiles();
+    if (profiles.empty()) {
+      return std::u16string();
+    }
+    if (!choice) {
+      return u" in every profile";
+    }
+    std::u16string name = u"Default";
+    for (const containers::UserContainer& profile : profiles) {
+      if (containers::Serialize(profile.id) == *choice) {
+        name = base::UTF8ToUTF16(profile.name);
+      }
+    }
+    return base::StrCat({u" in the ", name, u" profile"});
+  }
 
   std::string ActiveSort() const {
     for (const char* sort : {"date", "site", "mostvisited", "lastvisited"}) {
@@ -364,6 +477,10 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
     options.duplicate_policy =
         PerDay() ? history::QueryOptions::REMOVE_DUPLICATES_PER_DAY
                  : history::QueryOptions::REMOVE_ALL_DUPLICATES;
+    // One profile's visits, by their tag ('' for the default profile's).
+    if (const ProfileChoice shown = ShownProfile()) {
+      options.app_id = containers::HistoryAppIdForProfile(*shown);
+    }
     fetching_ = true;
     history_->QueryHistory(
         query(), options,
@@ -425,11 +542,25 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
     }
     const base::Time cutoff = Cutoff();
     const std::u16string needle = base::i18n::ToLower(query());
+    const ProfileChoice shown = ShownProfile();
     std::vector<Entry> entries;
     for (const auto& entry : tab_restore_->entries()) {
       if (entry->type != sessions::tab_restore::Type::TAB ||
           entry->timestamp < cutoff) {
         continue;
+      }
+      // A closed tab's profile is the container its session data names.
+      if (shown) {
+        const auto container =
+            entry->extra_data.find(containers::kContainerSessionKey);
+        const std::string tab_profile =
+            container == entry->extra_data.end()
+                ? std::string()
+                : containers::HistoryProfileFromAppId(
+                      containers::HistoryAppIdForProfile(container->second));
+        if (tab_profile != *shown) {
+          continue;
+        }
       }
       const auto& tab = static_cast<const sessions::tab_restore::Tab&>(*entry);
       if (tab.navigations.empty()) {
@@ -656,7 +787,15 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
         tab_restore_->RemoveEntryById(*entry.closed_id);
       }
     } else if (history_) {
-      history_->DeleteURLs({entry.url});
+      // The profile shown's visits to the page, or all of them.
+      if (const ProfileChoice shown = ShownProfile()) {
+        history_->ExpireHistoryBetween(
+            {entry.url}, containers::HistoryAppIdForProfile(*shown),
+            base::Time(), base::Time(), /*user_initiated=*/true,
+            base::DoNothing(), &forget_tracker_);
+      } else {
+        history_->DeleteURLs({entry.url});
+      }
     }
     // Drop the row now, like Zen; the services' notifications follow. Not
     // from inside the row's own button, which the rebuild destroys.
@@ -691,48 +830,87 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
     if (site.empty()) {
       return;
     }
+    // The profile shown (#474), or every profile.
+    const ProfileChoice shown = ShownProfile();
     ShowLibraryConfirmation(
         library(), u"Forget About This Site",
         base::StrCat({u"This will remove all data related to ",
-                      base::UTF8ToUTF16(site),
+                      base::UTF8ToUTF16(site), ProfileClause(shown),
                       u", including history, cookies, cache and site data. "
                       u"Bookmarks and passwords are kept."}),
         u"Forget",
         base::BindOnce(&KoanLibraryHistorySection::DoForgetSite,
-                       weak_factory_.GetWeakPtr(), site));
+                       weak_factory_.GetWeakPtr(), site, shown));
   }
 
-  void DoForgetSite(const std::string& site) {
+  void DoForgetSite(const std::string& site, const ProfileChoice& shown) {
     if (history_ && IsDeletingHistoryAllowed(profile_)) {
       history::QueryOptions options;
       options.hostname_suffix = site;
+      std::optional<std::string> app_id;
+      if (shown) {
+        app_id = containers::HistoryAppIdForProfile(*shown);
+        options.app_id = app_id;
+      }
       history_->QueryHistory(
           std::u16string(), options,
           base::BindOnce(
               [](base::WeakPtr<KoanLibraryHistorySection> section,
+                 std::optional<std::string> app_id,
                  history::QueryResults results) {
                 if (!section || !section->history_) {
                   return;
                 }
-                std::vector<GURL> urls;
+                std::set<GURL> urls;
                 for (const history::URLResult& result : results) {
-                  urls.push_back(result.url());
+                  urls.insert(result.url());
                 }
-                section->history_->DeleteURLs(urls);
+                if (urls.empty()) {
+                  return;
+                }
+                if (!app_id) {
+                  section->history_->DeleteURLs(
+                      std::vector<GURL>(urls.begin(), urls.end()));
+                  return;
+                }
+                // Only that profile's visits; the pages stay for the others.
+                section->history_->ExpireHistoryBetween(
+                    urls, app_id, base::Time(), base::Time(),
+                    /*user_initiated=*/true, base::DoNothing(),
+                    &section->forget_tracker_);
               },
-              weak_factory_.GetWeakPtr()),
+              weak_factory_.GetWeakPtr(), std::move(app_id)),
           &forget_tracker_);
     }
-    auto filter = content::BrowsingDataFilterBuilder::Create(
-        content::BrowsingDataFilterBuilder::Mode::kDelete);
-    filter->AddRegisterableDomain(site);
-    profile_->GetBrowsingDataRemover()->RemoveWithFilter(
-        base::Time(), base::Time::Max(),
-        chrome_browsing_data_remover::DATA_TYPE_SITE_DATA |
-            content::BrowsingDataRemover::DATA_TYPE_CACHE,
-        content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB |
-            content::BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB,
-        std::move(filter));
+    // The site's data in each profile's own partition: the default one (and
+    // with it the site's permissions and engagement, which every profile
+    // shares) for the default profile, a user container's for its profile.
+    const auto remove =
+        [&](std::optional<content::StoragePartitionConfig> partition) {
+          auto filter = content::BrowsingDataFilterBuilder::Create(
+              content::BrowsingDataFilterBuilder::Mode::kDelete);
+          filter->AddRegisterableDomain(site);
+          uint64_t types = chrome_browsing_data_remover::DATA_TYPE_SITE_DATA |
+                           content::BrowsingDataRemover::DATA_TYPE_CACHE;
+          if (partition) {
+            filter->SetStoragePartitionConfig(*partition);
+            types &=
+                content::BrowsingDataRemover::DATA_TYPE_ON_STORAGE_PARTITION;
+          }
+          profile_->GetBrowsingDataRemover()->RemoveWithFilter(
+              base::Time(), base::Time::Max(), types,
+              content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB |
+                  content::BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB,
+              std::move(filter));
+        };
+    if (!shown || shown->empty()) {
+      remove(std::nullopt);
+    }
+    for (const containers::UserContainer& container : Profiles()) {
+      if (!shown || *shown == containers::Serialize(container.id)) {
+        remove(containers::PartitionConfigFor(profile_, container.id));
+      }
+    }
   }
 
   void ShowRowMenu(const Entry& entry,
@@ -777,16 +955,19 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
   // Zen's confirmation, naming the range ("Clear history from the last
   // hour?").
   void ConfirmClearHistory(const ClearRange& range) {
+    // The profile shown (#474), or every profile.
+    const ProfileChoice shown = ShownProfile();
     ShowLibraryConfirmation(
         library(), range.title,
-        u"The pages you visited in this time frame will be forgotten. This "
-        u"cannot be undone.",
+        base::StrCat({u"The pages you visited in this time frame",
+                      ProfileClause(shown),
+                      u" will be forgotten. This cannot be undone."}),
         u"Clear history",
         base::BindOnce(&KoanLibraryHistorySection::ClearHistory,
-                       weak_factory_.GetWeakPtr(), range.hours));
+                       weak_factory_.GetWeakPtr(), range.hours, shown));
   }
 
-  void ClearHistory(int hours) {
+  void ClearHistory(int hours, const ProfileChoice& shown) {
     if (!IsDeletingHistoryAllowed(profile_)) {
       return;
     }
@@ -796,6 +977,13 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
       begin = now.LocalMidnight();
     } else if (hours > 0) {
       begin = now - base::Hours(hours);
+    }
+    if (shown && history_) {
+      // That profile's visits only.
+      history_->ExpireHistoryBetween(
+          {}, containers::HistoryAppIdForProfile(*shown), begin, base::Time(),
+          /*user_initiated=*/true, base::DoNothing(), &forget_tracker_);
+      return;
     }
     profile_->GetBrowsingDataRemover()->Remove(
         begin, base::Time::Max(),

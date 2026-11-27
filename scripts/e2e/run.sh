@@ -15,8 +15,9 @@
 # argument per line), to restart Koan with the same profile.
 # scripts/e2e/<test>.flags, if it exists, adds browser flags too, one per
 # line; {dump} in them is a directory for frame dumps
-# (--ozone-dump-file={dump}), passed to the test as KOAN_DUMP_DIR, and
-# {profile} the profile's directory, passed as KOAN_PROFILE.
+# (--ozone-dump-file={dump}), passed to the test as KOAN_DUMP_DIR,
+# {profile} the profile's directory, passed as KOAN_PROFILE, and {root} the
+# checkout (as scripts/mac/suite.sh expands them).
 #
 # Starts Koan (out/Koan, or KOAN_OUT=out/Release) on the headless Ozone
 # platform with a fresh profile, UI DevTools and the DevTools protocol, runs
@@ -100,6 +101,7 @@ if [[ -f $KOAN_ROOT/scripts/e2e/$test_name.flags ]]; then
   while IFS= read -r flag; do
     [[ -z $flag || $flag == \#* ]] && continue
     flag="${flag//\{dump\}/"$KOAN_DUMP_DIR"}"
+    flag="${flag//\{root\}/"$KOAN_ROOT"}"
     file_flags+=("${flag//\{profile\}/"$prof"}")
   done <"$KOAN_ROOT/scripts/e2e/$test_name.flags"
 fi

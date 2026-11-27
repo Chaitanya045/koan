@@ -110,15 +110,46 @@ out-final of any other run is the second lock.
   runner image with a new Xcode or SDK gets a clean build. It also falls
   back when a patch won't reverse or apply, or when the archive is gone.
 - Build 1 downloads the base's `out/Koan` (`koan-mac-out-final`) before
-  building. If that download fails, the build is full but still correct.
+  building. If that download fails, the build is full but still correct,
+  and build 1 says so: a `Lost base` warning and "base run N lost its
+  out/Koan (...); building from scratch" in its summary.
 - The job that finishes packs `out/Koan` as `koan-mac-out-final` **before**
   `mac_package.sh`, which signs `Koan.app` in place and adds the VMP
   signature. The next build then starts from the build's own output.
 - With `keep_base`, source and out-final are kept 14 days. A successful
-  run deletes its own out-N slices, and the source and out-final of older
-  `macos.yml` runs whose own status (`gh api .../runs/<id> --jq .status`,
-  not the list's `status=completed` filter, which has missed runs) is
-  `completed`. A running chain keeps its archives.
+  run deletes its own out-N slices, and older bases as below.
+
+**When bases are deleted** (both chains, `scripts/ci/prune_bases.sh` in the
+`cleanup` job of a successful keep_base run; tests in
+`scripts/tests/test_prune_bases.py`, a fake `gh`). A run picks its base when
+its fetch starts, but build 1 downloads the base's out-final only when the
+fetch is done, up to hours later. The cleanup used to delete every older
+develop run's archives at once, so a develop build finishing in that window
+turned the other build into a full one (#569: pull request #514's run
+46028618466 picked 46019353569, develop run 46026497864's cleanup deleted
+it at ~16:00 UTC, and build 1 built from scratch). Now:
+- an older develop run of the same workflow whose run is still in progress
+  keeps its archives (a running chain needs its source);
+- one that is no base (not successful, or missing its source or out-final)
+  loses both at once;
+- a base stays until a newer base has existed for 12 h (`GRACE_HOURS`):
+  the newer one counts from its run's `updated_at`, this run's from now.
+  12 h covers the fetch's 5 h timeout plus waiting for a runner; after
+  that every run's `find_base.sh` has picked the newer base. With one
+  develop build a day, the previous base goes with the next day's cleanup;
+  a busy day keeps two or three (~7 GB each).
+- It looks the archives up by name (`actions/artifacts?name=`) and checks
+  each run's own status and workflow (`gh api .../runs/<id>`), not a page
+  of the workflow's runs (macos-chain.yml used the newest 50, which #537
+  showed can miss develop's). Pull requests', other refs' and
+  release.yml's archives are never touched.
+
+If a base is lost anyway (a build 1 re-run days later), build 1 reports it
+as above. Retrying with the next base belongs in the fetch, but
+`linux_fetch.sh` and `mac_fetch.sh` are in `KOAN_FULL_BUILD_INPUTS`: any
+change to them makes the next build of every branch a full one, so #569's
+fix left them alone.
+
 - Why `git status` and `git apply` rather than rsync and GNU patch (the
   first Linux version): macOS ships openrsync and BSD patch, which lack the
   needed options.

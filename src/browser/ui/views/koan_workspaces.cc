@@ -1366,9 +1366,7 @@ void KoanWorkspaceController::ShowCreateForm() {
   auto* state =
       tabs::VerticalTabStripStateController::From(browser_view_->browser());
   if (state && state->IsCollapsed()) {
-    create_form_lock_ =
-        static_cast<BaseTabStripRegionView*>(browser_view_->tab_strip_view())
-            ->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
+    create_form_lock_ = TakeSidebarExpandedLock(browser_view_);
   }
   creation_form_ = tab_strip->AddChildViewAt(
       std::make_unique<KoanSpaceCreationView>(this), 2);

@@ -14,7 +14,8 @@
 // bar there.
 import {
   ACCEL, ALT, CTRL, IS_MAC, SHIFT, UI_PORT, browserCall, check, connect, evalIn, finish, front,
-  key, onPage, pages, showPane, sleep, typeInto, viewMouse, viewTree, waitFor,
+  key, onPage, pages, propsOf, showPane, sleep, toastTexts, typeInto, viewMouse, viewTree,
+  waitFor,
 } from './lib/koan.mjs';
 import { goFullscreen } from './lib/fullscreen.mjs';
 import {
@@ -298,11 +299,19 @@ await setMenu('koan.compact_mode.hide', 'sidebar');
 
 // The flash popup: a selected tab pops the hidden sidebar up for a moment.
 const flash = 'koan.compact_mode.toolbar_flash_popup';
+// (The strip region's own width, sampled: the pop-up lasts 0.8 s
+// (kFlashDuration), less than one sidebarWidth(), a whole viewTree(), takes
+// on a busy machine.)
 const flashes = async () => {
+  // (The first window's region: its place among the regions of all windows.)
+  const w = await win();
+  const nth = w.vs.filter(v => v.cls === 'VerticalTabStripRegionView')
+      .indexOf(w.find('VerticalTabStripRegionView'));
   const tab = await openTab(`data:text/html,${encodeURIComponent('<title>Flash</title>')}`);
   const widths = [];
   for (let i = 0; i < 8; i++) {
-    widths.push(await sidebarWidth());
+    const p = nth >= 0 ? await propsOf('VerticalTabStripRegionView', nth) : null;
+    widths.push(Number(p?.Width ?? -1));
     await sleep(100);
   }
   await sleep(1500);
@@ -338,9 +347,9 @@ const toast = 'koan.compact_mode.show_background_tab_toast';
 const toastShown = async () => {
   const before = new Set((await pages()).map(p => p.id));
   await clickLink(testPage, 'background', ACCEL);
-  const v = await win();
-  const text = v.vs.filter(x => x.path.includes('KoanToastView') && x.cls === 'Label' && x.shown)
-      .map(x => x.props.Text).join(' ');
+  // (toastTexts(): the toast stays 2.4 s, which a whole viewTree() can take
+  // longer than on a busy machine.)
+  const text = await waitFor(async () => (await toastTexts()).join(' '), 2000) || '';
   for (const p of (await pages()).filter(p => !before.has(p.id))) await closeTab(p);
   await sleep(2500);   // the toast goes
   await front(testPage);
