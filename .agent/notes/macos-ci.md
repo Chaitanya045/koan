@@ -77,6 +77,20 @@ only accepts a successful run on `$BRANCH` (develop) whose event is
 out-final of any other run is the second lock.
 
 - The fetch job finds that run (`scripts/ci/find_base.sh`).
+  **How the base is found:** it asks the API only for runs that can be a
+  base, `actions/workflows/<file>/runs?branch=develop&event=schedule` and
+  the same with `event=workflow_dispatch` (up to 3 pages of 100 each),
+  merges them newest first, keeps the successful ones on develop with a
+  base event (filtered by the script too: `?status=success` has left out a
+  finished run for hours), and takes the first, other than this run, with
+  both archives unexpired. It used to take the workflow's newest 50 runs of
+  any kind and filter them; every label put on any pull request makes a
+  run of `linux.yml` and `macos.yml` (`pull_request: labeled`), so a dozen
+  labelled pull requests hid the base and every build was a full one
+  (#537). Shared by both chains; tests in `scripts/tests/test_find_base.py`
+  (a fake `gh` over recorded runs). A pull-request build runs its own
+  head's scripts, so a pull request branched before a find_base.sh fix
+  needs develop merged in to get it.
   `scripts/ci/incremental.sh` then:
   - deletes the checkout's tracked files and unpacks that run's source
     archive in their place, mtimes and all;
