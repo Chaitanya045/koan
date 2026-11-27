@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include "base/run_loop.h"
 #include "base/test/run_until.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
@@ -295,6 +296,42 @@ IN_PROC_BROWSER_TEST_F(KoanEssentialsProfilesBrowserTest,
       [&] { return spaces->GetActiveSpace() == work_space; }));
   EXPECT_EQ(mail, tab_strip()->GetActiveTab());
   EXPECT_TRUE(IsEssentialShown(mail));
+}
+
+// Closing a tab selects the most recently used tab that is shown (Zen's
+// default, prefs::kSelectRecentlyUsedOnClose): never another profile's
+// hidden Essential, which would take the window to its Space.
+IN_PROC_BROWSER_TEST_F(KoanEssentialsProfilesBrowserTest,
+                       ClosingATabStaysInTheSpace) {
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  KoanPinnedTabController* pinned = GetPinnedTabs(browser());
+  ASSERT_TRUE(spaces && pinned);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  const tab_groups::TabGroupId first = spaces->GetSpaces()[0].id;
+  // An older tab of the first Space.
+  tabs::TabInterface* older = OpenTab();
+  ASSERT_TRUE(older);
+  const std::string work = AddProfile(u"Work");
+  spaces->CreateSpace(u"Work", u"", {}, work);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  // Work's Essential, used after it.
+  tabs::TabInterface* mail = OpenTab();
+  ASSERT_TRUE(mail);
+  pinned->AddToEssentials(mail);
+  tab_strip()->ActivateTabAt(tab_strip()->GetIndexOfTab(mail));
+  spaces->SwitchTo(first);
+  ASSERT_TRUE(WaitForGrid(std::nullopt));
+  ASSERT_FALSE(IsEssentialShown(mail));
+  tabs::TabInterface* newest = OpenTab();
+  ASSERT_TRUE(newest);
+
+  tab_strip()->CloseWebContentsAt(tab_strip()->GetIndexOfTab(newest),
+                                  TabCloseTypes::CLOSE_USER_GESTURE);
+  EXPECT_NE(mail, tab_strip()->GetActiveTab());
+  EXPECT_EQ(first, tab_strip()->GetActiveTab()->GetGroup());
+  // (ShowActiveEssential() runs with the next update.)
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(first, spaces->GetActiveSpace());
 }
 
 // After a restart each Essential is back in its profile, and so in its grid.
