@@ -15,3 +15,13 @@ use_sysroot = true
 proprietary_codecs = true
 ffmpeg_branding = "Chrome"
 disable_fieldtrial_testing_config = true
+
+# Widevine DRM on Linux (issue #494), as build/koan-mac.gn does on macOS.
+# Upstream turns it on only for Chrome-branded builds. Chromium can't bundle
+# Google's CDM unbranded (bundle_widevine_cdm stays false), so the component
+# updater downloads it into the profile's WidevineCdm/ and, on Linux, the
+# browser loads it at the next start, before the zygote is sandboxed, from the
+# hint file there. In the Flatpak, cobalt.ini's ExposeWidevine lets zypak's
+# sandbox read that folder. No host verification: upstream has it on macOS
+# and Windows only.
+enable_widevine = true

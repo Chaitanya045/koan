@@ -45,6 +45,9 @@ source_set("prefs") {
     "//koan/browser/agent:auto_resume",
     "//koan/browser/agent:limits",
     "//koan/browser/containers:access_prefs",
+
+    # ui::SystemTheme (system_theme.h).
+    "//ui/color:color_provider_key",
   ]
 }
 

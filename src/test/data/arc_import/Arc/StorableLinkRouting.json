@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "defaultDestination": {"space": {"_0": "space-home"}},
+  "rules": [
+    {"id": "rule-contains",
+     "sourceComponents": [{"id": "c1", "componentType": {
+       "urlMatch": {"_0": {"contains": {}}, "_1": "git.example"}}}],
+     "destination": {"space": {"_0": "space-projects"}}},
+    {"id": "rule-is",
+     "sourceComponents": [{"id": "c2", "componentType": {
+       "urlMatch": {"_0": {"matches": {}}, "_1": "mail.example/inbox"}}}],
+     "destination": {"space": {"_0": {"space": {"_0": "space-home"}}}}},
+    {"id": "rule-little-arc",
+     "sourceComponents": [{"id": "c3", "componentType": {
+       "urlMatch": {"_0": {"contains": {}}, "_1": "meet.example"}}}],
+     "destination": {"littleArc": {"_0": {"mostRecent": {}}}}},
+    {"id": "rule-most-recent",
+     "sourceComponents": [{"id": "c4", "componentType": {
+       "urlMatch": {"_0": {"contains": {}}, "_1": "docs.example"}}}],
+     "destination": {"space": {"_0": {"mostRecent": {}}}}},
+    {"id": "rule-two-conditions",
+     "sourceComponents": [
+       {"id": "c5", "componentType": {
+         "urlMatch": {"_0": {"contains": {}}, "_1": "chat.example"}}},
+       {"id": "c6", "componentType": {
+         "urlMatch": {"_0": {"contains": {}}, "_1": "team"}}}],
+     "destination": {"space": {"_0": "space-clients"}}},
+    {"id": "rule-starts-with",
+     "sourceComponents": [{"id": "c7", "componentType": {
+       "urlMatch": {"_0": {"startsWith": {}}, "_1": "https://crm.example"}}}],
+     "destination": {"space": {"_0": "space-clients"}}}
+  ]
+}

@@ -203,10 +203,26 @@ you change it in fullscreen: "Hide Tab bar" keeps the toolbar and reveals the
 sidebar at the screen's side edge, "Hide Top bar" and "Hide Both" reveal the
 toolbar at the top edge. A page's own fullscreen (a video's) hides it all.
 
+**Fullscreen on Linux** (F11) keeps the same layout too, as Zen's does on
+Linux: the sidebar stays beside the page, which keeps its gap and rounded
+corners; with single toolbar the sidebar's top row has the sidebar toggle
+and back / forward / reload, and Ctrl+L, Ctrl+T or the URL pill open the URL
+bar over the page; with "Sidebar and Top Toolbar" the toolbar stays above
+the page. With compact mode on (and
+no split view) the page fills the screen with no gap or corners, and the
+pointer at the screen's left edge (the right one with tabs on the right)
+slides the sidebar in; where compact mode hides the toolbar, the top edge
+slides it in. The window's buttons aren't shown in fullscreen (Zen shows a
+thin strip with them at the top edge). A page's own fullscreen (a video's),
+from a window or inside F11, hides it all and shows only the page; leaving it
+brings the layout back as it was, compact mode included. Chromium's "To exit
+full screen, press and hold Esc" notice still shows as fullscreen starts;
+F11 or holding Esc leaves it.
+
 **Bookmarks bar**: off, as in Zen: none anywhere, also on the new tab page
 and after importing bookmarks. Turn it on in Koan's settings (Look and Feel
 > Appearance > Bookmarks bar) or with ⇧⌘B (View > Always Show Bookmarks Bar,
-whose check mark follows the setting); Chromium's own "Show bookmarks bar"
+whose check mark follows the setting; Ctrl+Shift+B on Linux); Chromium's own "Show bookmarks bar"
 setting doesn't change it. It then shows above every page, the new tab page
 too: below the toolbar with Sidebar and Top Toolbar, and with Only Sidebar in
 Zen's top bar above the page (34 px, beside the sidebar), also in compact mode
@@ -563,7 +579,8 @@ belongs to a Space, and new tabs open in the active one.
   the first matching route wins. Match by Contains, Is Exactly (ignoring
   http(s)://, www. and a final /) or RegEx. "Default route for external
   links" picks the Space links from other apps open in when no route
-  matches. Right-click a tab > Add Route for Domain adds a route for its
+  matches. On Linux that includes a link given on Koan's command line,
+  which is how other apps (and `xdg-open`) open a link in Koan. Right-click a tab > Add Route for Domain adds a route for its
   site (one per selected tab's site) and opens the settings. Essentials and
   pinned tabs are never routed.
 - **Profiles: separate logins per Space** (Zen's containers per Space).
@@ -584,8 +601,19 @@ belongs to a Space, and new tabs open in the active one.
   Deleting a Space keeps its profile and its data, so another Space can
   use it. Each profile has its own Essentials (see Pinned tabs and
   Essentials); an Essential whose profile no Space has any more shows in
-  the Spaces without a profile. Clear browsing data doesn't clear profiles yet, and notifications
-  don't work in a profile. Incognito windows have no profiles.
+  the Spaces without a profile. Clear browsing data doesn't clear profiles
+  yet. Incognito windows have no profiles.
+- **Notifications in a profile.** A site in a Space with a profile can ask
+  to notify you and show notifications while its tab is open, as in any
+  tab. Allow or Block is the site's answer in every Space. Its
+  notifications name the Space after the site ("mail.example.com · Work").
+  Clicking a site's notification, in any Space, shows its Space and tab. Push notifications, which a
+  site sends while it is closed, and notifications from a site's service
+  worker don't work in a profile yet: the site panel (the URL bar's site
+  icon) says so. Some sites only offer push; they can't turn notifications
+  on in a profile. In practice, sites that notify through a service worker,
+  as many mail and calendar apps do, still can't notify in a profile
+  ([#530](https://github.com/koan-browser/koan/issues/530)).
 - **Unload Space** (right-click the header or a Space button) frees the
   Space's tabs; they reload when you select them. Unload All Other Spaces
   frees all the others. Tabs on screen and tabs in use (playing sound, in
@@ -807,7 +835,8 @@ yet).
 **Settings** (Koan's settings, Look and Feel → Glance; Zen's
 `zen.glance.enabled` and `zen.glance.activation-method`): **Enable Glance**,
 and **Trigger method**: Ctrl + Click, Alt + Click (the default), Shift +
-Click or Meta (Command) + Click. Both apply at once, in the pages already
+Click or Meta (Command) + Click (on Linux "Super + Click", which GNOME and
+KDE often keep for moving windows). Both apply at once, in the pages already
 open too, as in Zen. With another trigger
 method, a click Glance can't open (not a web link, an app window) does
 what that modifier does without Glance (⌘: a background tab; Shift: a
@@ -1101,6 +1130,16 @@ wait a minute or open `chrome://components` and click **Check for update**
 under **Widevine Content Decryption Module**. It updates itself from then
 on.
 
+**On Linux, restart Koan once after the download.** Chromium on Linux loads
+the CDM only when the browser starts (before its sandbox locks down), so the
+first download plays only after a restart; later updates, too, take effect
+at the next start. In the Flatpak the CDM lives in
+`~/.var/app/dev.koan.Koan/config/koan/WidevineCdm/`, and the launcher lets
+the sandbox read that folder. Netflix's VMP signature (below) is a macOS
+and Windows matter; on Linux, Netflix and other services that need a
+higher security level may play at a lower resolution or not at all, as in
+other Chromium-based browsers.
+
 **Settings > Privacy and security > Site settings > Additional content
 settings > Protected content** ("Sites can play protected content") turns
 it on or off; it is on by default, and works in Incognito windows too.
@@ -1126,6 +1165,24 @@ similar). See "VMP signing" below for where that stands.
    --skip-visual <Koan.app>` (`scripts/e2e/widevine.mjs`: the component
    installs and `requestMediaKeySystemAccess('com.widevine.alpha')`
    resolves). It needs the network, so it isn't part of the regular suite.
+
+### Checking it (Linux Flatpak)
+
+1. Install the bundle and start Koan with an empty profile
+   (`flatpak run dev.koan.Koan`; to start over, quit and delete
+   `~/.var/app/dev.koan.Koan/config/koan`).
+2. Wait a minute, open `chrome://components`: **Widevine Content Decryption
+   Module** has a version (not `0.0.0.0`). If it doesn't, click **Check for
+   update**.
+3. `~/.var/app/dev.koan.Koan/config/koan/WidevineCdm/` has a version folder
+   and `latest-component-updated-widevine-cdm`.
+4. Quit Koan completely and start it again.
+5. <https://bitmovin.com/demos/drm>: the Widevine stream plays. The error
+   `DRM_NO_KEY_SYSTEM` means the CDM didn't load (not restarted, or the
+   sandbox can't read the folder: check that `G_MESSAGES_DEBUG=cobalt
+   flatpak run dev.koan.Koan` shows `ZYPAK_EXPOSE_WIDEVINE_PATH` set to the
+   folder above).
+6. Spotify Web (<https://open.spotify.com>, signed in) plays a song.
 
 ### VMP signing
 
@@ -1275,6 +1332,26 @@ from …" folder on it.
   drawn Space icons (Koan's are emoji) too. Without this option, Arc's
   pinned tabs and Favorites arrive as bookmarks instead: a folder per Space
   (Arc's folders inside it) and a "Favorites" folder.
+- **Arc's profiles.** In Arc each Space belongs to a profile with its own
+  logins; so it does in Koan. Each Arc profile becomes a Koan profile of the
+  same name (one you already have of that name is reused), and each Space
+  and Favorite comes in the profile it had in Arc. Arc's main profile is
+  Koan's Default. With several Arc profiles, Arc is listed first as **All
+  profiles**: one import brings every profile's Spaces, each in its profile,
+  and all their bookmarks (a folder per profile), history and passwords,
+  which every Koan profile shares anyway. Each Arc profile is also listed on
+  its own. Cookies don't come along, so sign in again once in each profile;
+  the dialog says so when it's done.
+- **Arc's link rules** (Air Traffic Control) become Koan's Space routes
+  (Settings > Spaces > Space routing) when you import the Spaces: a rule
+  "URL contains" or "URL is" a text, sending links to a Space you import,
+  routes them to that Koan Space, after your own routes. Its default for
+  links from other apps comes along if it names an imported Space and you
+  have none set. Rules for Little Arc or the most recent Space, rules on
+  the app a link came from, and rules with several conditions are left out.
+- Arc's import reads only its files (Arc doesn't need to run, or even
+  start again). Arc runs only on macOS and Windows: on Linux, and on the
+  Mac without Arc, there is nothing to list.
 - Not imported yet: cookies and open (unpinned) tabs.
 
 ## Updates
@@ -1327,7 +1404,7 @@ Zen's `zen.theme.acrylic-urlbar` is "Glass URL bar" (Settings,
 URL Bar): the floating URL bar (⌘T / ⌘L) turns translucent with the page
 blurred behind it. Off by default, as in Zen; it also stays opaque while
 macOS's Reduce Transparency is on and in a window that isn't active (Zen's
-rules). The card is translucent over a blur of the page; only the card of
+rules; on Linux only the second, and its note says so). The card is translucent over a blur of the page; only the card of
 the window it opens in changes. The suggestion list under it stays opaque. Off
 macOS only the page is blurred.
 
@@ -1479,6 +1556,12 @@ dev.koan.Koan` (add `--delete-data` to remove the profile too).
 - Koan sees your Downloads, Documents, Pictures, Music and Videos folders,
   not the rest of your home folder. `flatpak override --user
   --filesystem=home dev.koan.Koan` gives it more.
+- Koan's window is in Koan's colours, as on the Mac, whatever GTK or Qt
+  theme the desktop uses: light or dark follows the desktop's colour-scheme
+  setting (in the shadcn look, Settings > Look and Feel > Mode decides), and
+  changes with it while Koan runs. Chromium's "Use GTK" / "Use Qt" theme
+  choice is not offered, and a profile that used it moves back to the
+  classic theme when Koan starts.
 
 ### Saved passwords, cookies and the keyring
 

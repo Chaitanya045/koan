@@ -271,6 +271,12 @@ void ExtendSettingsUI(content::WebUI& web_ui,
   // The import dialog's Koan checkbox (Zen's migration-zen-spaces-option-
   // label).
   source.AddString("koanImportSpaces", "Spaces and pinned tabs");
+  // Its last step after an import whose Spaces have their own profiles
+  // (Arc's, #481): cookies don't come along.
+  source.AddString("koanImportSpaceProfiles",
+                   "If you brought your Spaces, they keep their separate "
+                   "profiles. Sign in again in each: logins don't come "
+                   "along.");
   web_ui.AddMessageHandler(std::make_unique<KoanSettingsHandler>(
       *profile->GetPrefs(), *g_browser_process->local_state()));
 #if BUILDFLAG(IS_POSIX)
@@ -282,8 +288,11 @@ void ExtendSettingsUI(content::WebUI& web_ui,
 
 void AddImportDialogItems(uint16_t services_supported,
                           base::DictValue& browser_profile) {
-  browser_profile.Set("koanSpaces",
-                      (services_supported & importer::kSpacesImportItem) != 0);
+  const bool spaces = (services_supported & importer::kSpacesImportItem) != 0;
+  browser_profile.Set("koanSpaces", spaces);
+  browser_profile.Set(
+      "koanSpaceProfiles",
+      spaces && (services_supported & importer::kSpaceProfilesNote) != 0);
 }
 
 uint16_t GetImportDialogItems(const base::DictValue& types) {

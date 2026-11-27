@@ -19,13 +19,8 @@
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_glass_tint.h"
 #include "koan/browser/ui/views/koan_url_bar.h"
-#include "ui/base/ui_base_features.h"
 
 namespace koan {
-
-bool IsWindowGlassSupported() {
-  return ::features::IsGlassFrameEnabled();
-}
 
 void OnGlassLayout(const views::View* browser_view,
                    bool in_glass_mode,

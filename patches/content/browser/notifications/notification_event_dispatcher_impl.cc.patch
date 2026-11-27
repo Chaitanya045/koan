@@ -1,0 +1,19 @@
+diff --git a/content/browser/notifications/notification_event_dispatcher_impl.cc b/content/browser/notifications/notification_event_dispatcher_impl.cc
+--- a/content/browser/notifications/notification_event_dispatcher_impl.cc
++++ b/content/browser/notifications/notification_event_dispatcher_impl.cc
+@@ -514,6 +514,15 @@
+                      std::move(dispatch_complete_callback)));
+ }
+ 
++RenderFrameHost*
++NotificationEventDispatcherImpl::GetNonPersistentNotificationFrame(
++    const std::string& notification_id) {
++  auto listener = non_persistent_notification_listeners_.find(notification_id);
++  return listener == non_persistent_notification_listeners_.end()
++             ? nullptr
++             : listener->second.document.AsRenderFrameHostIfValid();
++}
++
+ void NotificationEventDispatcherImpl::RegisterNonPersistentNotificationListener(
+     const std::string& notification_id,
+     mojo::PendingRemote<blink::mojom::NonPersistentNotificationListener>

@@ -24,6 +24,13 @@ constexpr bool IsAgentPartitionDomain(std::string_view domain) {
   return domain.starts_with(kAgentPartitionDomainPrefix);
 }
 
+// Whether `domain` is a user container's (a Space's profile). Fails closed for
+// the refusals that use it: any domain with the prefix, valid or not. The
+// push and service-worker notification hooks in //content/browser (#478).
+constexpr bool IsUserPartitionDomain(std::string_view domain) {
+  return domain.starts_with(kUserPartitionDomainPrefix);
+}
+
 }  // namespace koan::containers
 
 #endif  // KOAN_BROWSER_CONTAINERS_KOAN_PARTITION_DOMAIN_H_
