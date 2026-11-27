@@ -557,6 +557,14 @@ source_set("impl") {
       "koan_workspaces_mac.mm",
     ]
   }
+  if (is_linux) {
+    # Zen's app menu button in the sidebar's top row, where macOS has the
+    # menu bar (koan_sidebar_nav_view.cc).
+    sources += [
+      "koan_app_menu_button.cc",
+      "koan_app_menu_button.h",
+    ]
+  }
   sources += get_target_outputs(":grain_png")
   public_deps = [
     ":space_theme",
@@ -823,5 +831,8 @@ source_set("impl") {
       "//ui/platform_window",
       "//ui/platform_window/wm",
     ]
+
+    # KoanAppMenuButton.
+    deps += [ "//chrome/browser/ui/views/frame:app_menu_button" ]
   }
 }

@@ -134,13 +134,23 @@ Ctrl where the Mac uses ⌘, and a few keys of their own:
 | **Koan only:** switch single / multiple toolbars | Ctrl+Alt+B | |
 | **Koan only:** create a Space | Ctrl+Alt+N | |
 | Koan settings (Zen's "Open Preferences") | Ctrl+, | |
+| Quit Koan (Zen's "Quit Application", Firefox's key; every window closes and the session comes back on the next start) | Ctrl+Q | Nothing (Chrome has no quit key on Linux) |
+
+On Linux there is no menu bar, so the sidebar's top row starts with Zen's
+app menu button (the menu icon, before back / forward / reload): Chromium's
+app menu, opening below it over the page (with tabs on the right, towards
+the page too), with New Tab, History, Downloads, Settings and **Exit** (Ctrl+Q)
+at the bottom. Its items show Koan's keys (New Incognito window: Ctrl+Shift+P;
+Save page as: Ctrl+Alt+Shift+S), and none where Koan gave Chrome's key to
+something else (Bookmark all tabs). Quit is in Settings > Keyboard Shortcuts (Window & Tab
+Management, "Quit Application"), where you can change or clear its key.
 
 ## Layout
 
 Koan starts in Zen's default layout, **single toolbar**: there is no toolbar
 across the top, and the page reaches the top of the window. The top row of
-the sidebar has the sidebar toggle, back / forward / reload and the tab
-groups / tab search buttons; below it is a rounded grey pill with the
+the sidebar has the sidebar toggle, back / forward / reload (on Linux after
+the app menu button) and the tab groups / tab search buttons; below it is a rounded grey pill with the
 current site's icon and name (just the host, like Zen). While the pointer is
 over the sidebar, the pill also shows your pinned extensions (click one for
 its popup), **Copy URL** (copies the address, with a "Copied" toast) and

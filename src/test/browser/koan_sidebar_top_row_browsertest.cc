@@ -14,6 +14,7 @@
 
 #include "base/strings/strcat.h"
 #include "base/test/run_until.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -32,6 +33,23 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(IS_LINUX)
+#include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/ui/toolbar/app_menu_model.h"
+#include "chrome/browser/ui/views/toolbar/app_menu.h"
+#include "koan/browser/ui/views/koan_app_menu_button.h"
+#include "koan/browser/ui/views/koan_compact_mode.h"
+#include "koan/browser/ui/views/koan_sidebar_header.h"
+#include "ui/base/accelerators/accelerator.h"
+#include "ui/events/event_constants.h"
+#include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/views/controls/menu/menu_item_view.h"
+#include "ui/views/controls/menu/menu_runner.h"
+#include "ui/views/controls/menu/menu_scroll_view_container.h"
+#include "ui/views/controls/menu/submenu_view.h"
+#endif
 
 namespace koan {
 
@@ -111,7 +129,8 @@ IN_PROC_BROWSER_TEST_F(KoanSidebarTopRowBrowserTest, NavButtonsAreClientArea) {
       ui_test_utils::NavigateToURL(browser(), GURL("chrome://version/")));
   KoanSidebarNavButtons* row = WaitForView<KoanSidebarNavButtons>();
   ASSERT_TRUE(row);
-  ASSERT_EQ(row->children().size(), 3u);
+  // Back, forward and reload; on Linux after Zen's app menu button.
+  ASSERT_EQ(row->children().size(), BUILDFLAG(IS_LINUX) ? 4u : 3u);
   for (views::View* button : row->children()) {
     ASSERT_TRUE(IsOnScreen(button));
     gfx::Point centre = button->GetLocalBounds().CenterPoint();
@@ -146,5 +165,64 @@ IN_PROC_BROWSER_TEST_F(KoanSidebarTopRowBrowserTest, ExtensionsButtonToggles) {
   views::test::ButtonTestApi(button).NotifyDefaultMouseClick();
   EXPECT_TRUE(base::test::RunUntil([&] { return !BubbleAt(button); }));
 }
+
+#if BUILDFLAG(IS_LINUX)
+// Linux has no menu bar: Zen's app menu button in the top row opens
+// Chromium's app menu, whose Exit shows Koan's Quit key, Ctrl+Q, and whose
+// other items show the keys in effect in Koan (#488).
+IN_PROC_BROWSER_TEST_F(KoanSidebarTopRowBrowserTest, AppMenuButtonOffersExit) {
+  KoanAppMenuButton* button = WaitForView<KoanAppMenuButton>();
+  ASSERT_TRUE(button);
+  ui::Accelerator key;
+  ASSERT_TRUE(button->GetAcceleratorForCommandId(IDC_EXIT, &key));
+  EXPECT_EQ(key, ui::Accelerator(ui::VKEY_Q, ui::EF_CONTROL_DOWN));
+  // The menu shows the keys Koan runs them on, not Chromium's, which Zen
+  // gave to other shortcuts (Ctrl+Shift+N: New Blank Window; Ctrl+S: compact
+  // mode; Ctrl+Shift+D: pin the tab).
+  ASSERT_TRUE(
+      button->GetAcceleratorForCommandId(IDC_NEW_INCOGNITO_WINDOW, &key));
+  EXPECT_EQ(key, ui::Accelerator(ui::VKEY_P,
+                                 ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN));
+  ASSERT_TRUE(button->GetAcceleratorForCommandId(IDC_SAVE_PAGE, &key));
+  EXPECT_EQ(key,
+            ui::Accelerator(ui::VKEY_S, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
+                                            ui::EF_SHIFT_DOWN));
+  EXPECT_FALSE(button->GetAcceleratorForCommandId(IDC_BOOKMARK_ALL_TABS, &key));
+  // A key Koan leaves alone stays Chromium's.
+  ASSERT_TRUE(button->GetAcceleratorForCommandId(IDC_FIND, &key));
+  EXPECT_EQ(key, ui::Accelerator(ui::VKEY_F, ui::EF_CONTROL_DOWN));
+
+  // With the sidebar on the left (the default) the menu lines up with the
+  // button's left edge and opens to the right, over the page, not to the
+  // left of the window as from the toolbar's ⋮.
+  ASSERT_FALSE(IsSidebarOnRight(button));
+  EXPECT_TRUE(AlignsAppMenuWithLeadingEdge(button));
+  button->ShowMenuWithFlags(views::MenuRunner::NO_FLAGS);
+  ASSERT_TRUE(base::test::RunUntil([&] { return button->IsMenuShowing(); }));
+  // (The block-style menu behind kAppMenuGlowUp has no AppMenuModel.)
+  if (AppMenuModel* model = button->app_menu_model()) {
+    EXPECT_TRUE(model->GetIndexOfCommandId(IDC_EXIT).has_value());
+    views::SubmenuView* submenu =
+        button->app_menu()->root_menu_item()->GetSubmenu();
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return submenu->GetWidget() && submenu->GetWidget()->IsVisible();
+    }));
+    // The menu as drawn: its container less the shadow around it.
+    views::MenuScrollViewContainer* container =
+        submenu->GetScrollViewContainer();
+    gfx::Rect menu_bounds = container->GetBoundsInScreen();
+    menu_bounds.Inset(container->outside_border_insets());
+    const gfx::Rect button_bounds = button->GetBoundsInScreen();
+    EXPECT_GE(menu_bounds.x(), button_bounds.x())
+        << "menu " << menu_bounds.ToString() << ", button "
+        << button_bounds.ToString();
+    EXPECT_GT(menu_bounds.right(), button_bounds.right())
+        << "menu " << menu_bounds.ToString() << ", button "
+        << button_bounds.ToString();
+  }
+  button->CloseMenu();
+  EXPECT_TRUE(base::test::RunUntil([&] { return !button->IsMenuShowing(); }));
+}
+#endif  // BUILDFLAG(IS_LINUX)
 
 }  // namespace koan

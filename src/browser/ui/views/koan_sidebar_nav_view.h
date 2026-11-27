@@ -33,8 +33,9 @@ class KoanSidebarExtensionsView;
 class KoanSiteButton;
 
 // Zen's single-toolbar sidebar header is two pieces:
-// - KoanSidebarNavButtons (back / forward / reload) at the trailing end of
-//   the vertical tab strip's top row, next to the sidebar toggle;
+// - KoanSidebarNavButtons (back / forward / reload; on Linux first Zen's
+//   app menu button, KoanAppMenuButton) at the trailing end of the vertical
+//   tab strip's top row, next to the sidebar toggle;
 // - KoanSidebarNavView below it: a URL pill with the site identity button
 //   (the favicon, which opens the site panel), the site's name, then, while
 //   the sidebar is hovered, the pinned extensions, Zen's copy-URL button
