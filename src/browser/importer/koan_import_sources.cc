@@ -42,6 +42,7 @@ static_assert(user_data_importer::TYPE_FIREFOX != kChromiumImporterType &&
               user_data_importer::TYPE_BOOKMARKS_FILE != kChromiumImporterType);
 // Koan's Spaces item is none of upstream's.
 static_assert(user_data_importer::ALL < kSpacesImportItem);
+static_assert(kSpacesImportItem < kSpaceProfilesNote);
 
 // Zen first: Koan is for people leaving Zen and Arc (#348). Data folders and
 // keychain items as the browsers' own (Zen's ChromeMigrationUtils patch for
@@ -196,8 +197,9 @@ const KnownBrowser* FindBrowser(const base::FilePath& root,
   }
   for (const KnownBrowser& browser : kBrowsers) {
     const base::FilePath data_dir = root.AppendASCII(browser.data_dir);
-    if (browser.engine == Engine::kGecko ? data_dir.IsParent(profile_dir)
-                                         : profile_dir.DirName() == data_dir) {
+    if (browser.engine == Engine::kGecko
+            ? data_dir.IsParent(profile_dir)
+            : profile_dir.DirName() == data_dir || profile_dir == data_dir) {
       return &browser;
     }
   }
@@ -206,6 +208,13 @@ const KnownBrowser* FindBrowser(const base::FilePath& root,
 
 bool IsChromiumProfileSource(const SourceProfile& source) {
   return source.importer_type == kChromiumImporterType;
+}
+
+bool IsAllProfilesPath(const base::FilePath& path) {
+  const base::FilePath root = SearchRoot();
+  const KnownBrowser* browser = FindBrowser(root, path);
+  return browser && browser->engine == Engine::kChromium &&
+         path == root.AppendASCII(browser->data_dir);
 }
 
 std::string_view BundleIdOf(const SourceProfile& source) {
@@ -345,6 +354,20 @@ std::vector<ProfileDir> ParseLocalState(std::string_view json,
   return profiles;
 }
 
+std::vector<ProfileDir> ChromiumProfilesWithData(
+    const base::FilePath& user_data_dir) {
+  std::string local_state;
+  // Without a Local State (or unreadable), "Default".
+  base::ReadFileToString(user_data_dir.AppendASCII("Local State"),
+                         &local_state);
+  std::vector<ProfileDir> profiles =
+      ParseLocalState(local_state, user_data_dir);
+  std::erase_if(profiles, [](const ProfileDir& profile) {
+    return DataFileOf(Engine::kChromium, profile.path).empty();
+  });
+  return profiles;
+}
+
 std::vector<SourceProfile> DetectSourceProfiles(const base::FilePath& root,
                                                 const std::string& locale) {
   if (root.empty()) {
@@ -412,6 +435,18 @@ std::vector<SourceProfile> DetectSourceProfiles(const base::FilePath& root,
       entry.last_used = std::max(
           entry.last_used,
           LastModified(data_dir.DirName().AppendASCII(kArcSidebarFile)));
+      if (entry.sources.size() > 1) {
+        // Every profile in one run, first (Zen's "All profiles"): their
+        // Spaces each in its profile, and all their bookmarks, history and
+        // passwords, which Koan's profiles share anyway.
+        SourceProfile all = entry.sources[0];
+        all.profile = kAllProfilesName;
+        all.source_path = data_dir;
+        entry.sources.insert(entry.sources.begin(), std::move(all));
+        for (SourceProfile& source : entry.sources) {
+          source.services_supported |= kSpaceProfilesNote;
+        }
+      }
     }
     found.push_back(std::move(entry));
   }

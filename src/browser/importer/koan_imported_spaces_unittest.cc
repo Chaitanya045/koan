@@ -266,6 +266,108 @@ TEST(KoanImportedSpacesTest, ArcSpaces) {
           .empty());
 }
 
+// Every profile's Spaces in one plan, in the sidebar's order, each with its
+// profile (#481): none for the main one, else Local State's name, else its
+// folder; the Favorites too. A profile not asked for is left out.
+TEST(KoanImportedSpacesTest, ArcSpacesOfProfiles) {
+  const ArcProfile both[] = {{.dir = "Default", .name = u"Personal"},
+                             {.dir = "Profile 1", .name = u" Work "}};
+  const ImportedSpaces plan = ParseArcSpaces(kArcSidebar, both);
+  ASSERT_EQ(4u, plan.spaces.size());
+  EXPECT_EQ(u"Work", plan.spaces[0].name);
+  EXPECT_EQ(u"", plan.spaces[0].profile);
+  EXPECT_EQ("s1", plan.spaces[0].source_id);
+  EXPECT_EQ(u"Personal", plan.spaces[1].name);
+  EXPECT_EQ(u"", plan.spaces[1].profile);
+  EXPECT_EQ(u"Other", plan.spaces[2].name);
+  EXPECT_EQ(u"Work", plan.spaces[2].profile);
+  EXPECT_EQ("s3", plan.spaces[2].source_id);
+  EXPECT_EQ(u"", plan.spaces[3].profile);
+  // The Favorites of both, each with its profile.
+  ASSERT_EQ(3u, plan.essentials.size());
+  EXPECT_EQ(u"", plan.essentials[0].profile);
+  EXPECT_EQ(GURL("https://work.example/"), plan.essentials[2].url);
+  EXPECT_EQ(u"Work", plan.essentials[2].profile);
+
+  // One profile; a profile without a name is named after its folder.
+  const ArcProfile other[] = {{.dir = "Profile 1"}};
+  const ImportedSpaces only = ParseArcSpaces(kArcSidebar, other);
+  ASSERT_EQ(1u, only.spaces.size());
+  EXPECT_EQ(u"Profile 1", only.spaces[0].profile);
+  ASSERT_EQ(1u, only.essentials.size());
+  EXPECT_EQ(u"Profile 1", only.essentials[0].profile);
+
+  EXPECT_TRUE(
+      ParseArcSpaces(kArcSidebar, base::span<const ArcProfile>()).empty());
+}
+
+// Arc's link rules (StorableLinkRouting.json, as its public readers
+// describe it) as routes to the imported Spaces: "contains" and "is" (both
+// id forms), never Little Arc, the most recent Space, several conditions,
+// another condition, a Space not imported or a rule twice.
+TEST(KoanImportedSpacesTest, ArcLinkRules) {
+  const ArcProfile main_profile[] = {{.dir = "Default"}};
+  ImportedSpaces plan = ParseArcSpaces(kArcSidebar, main_profile);
+  AddArcLinkRules(R"({"version": 1,
+    "defaultDestination": {"space": {"_0": "s1"}},
+    "rules": [
+      {"id": "a", "sourceComponents": [{"id": "c", "componentType": {
+         "urlMatch": {"_0": {"contains": {}}, "_1": " git.example "}}}],
+       "destination": {"space": {"_0": "s1"}}},
+      {"id": "b", "sourceComponents": [{"id": "c", "componentType": {
+         "urlMatch": {"_0": {"matches": {}}, "_1": "mail.example/inbox"}}}],
+       "destination": {"space": {"_0": {"space": {"_0":
+         "thebrowser.company.defaultPersonalSpaceID"}}}}},
+      {"id": "dup", "sourceComponents": [{"id": "c", "componentType": {
+         "urlMatch": {"_0": {"contains": {}}, "_1": "git.example"}}}],
+       "destination": {"space": {"_0": "s1"}}},
+      {"id": "little", "sourceComponents": [{"id": "c", "componentType": {
+         "urlMatch": {"_0": {"contains": {}}, "_1": "meet.example"}}}],
+       "destination": {"littleArc": {"_0": {"mostRecent": {}}}}},
+      {"id": "recent", "sourceComponents": [{"id": "c", "componentType": {
+         "urlMatch": {"_0": {"contains": {}}, "_1": "docs.example"}}}],
+       "destination": {"space": {"_0": {"mostRecent": {}}}}},
+      {"id": "two", "sourceComponents": [
+         {"id": "c", "componentType": {
+           "urlMatch": {"_0": {"contains": {}}, "_1": "chat.example"}}},
+         {"id": "d", "componentType": {
+           "urlMatch": {"_0": {"contains": {}}, "_1": "team"}}}],
+       "destination": {"space": {"_0": "s1"}}},
+      {"id": "starts", "sourceComponents": [{"id": "c", "componentType": {
+         "urlMatch": {"_0": {"startsWith": {}}, "_1": "https://crm"}}}],
+       "destination": {"space": {"_0": "s1"}}},
+      {"id": "app", "sourceComponents": [{"id": "c", "componentType": {
+         "sourceApp": {"_0": "com.example.mail"}}}],
+       "destination": {"space": {"_0": "s1"}}},
+      {"id": "empty", "sourceComponents": [{"id": "c", "componentType": {
+         "urlMatch": {"_0": {"contains": {}}, "_1": "  "}}}],
+       "destination": {"space": {"_0": "s1"}}},
+      {"id": "other", "sourceComponents": [{"id": "c", "componentType": {
+         "urlMatch": {"_0": {"contains": {}}, "_1": "other.example"}}}],
+       "destination": {"space": {"_0": "s3"}}}
+    ]})",
+                  plan);
+  EXPECT_EQ((std::vector<ImportedRoute>{
+                {.reference = "git.example",
+                 .match = ImportedRoute::Match::kContains,
+                 .space_id = "s1"},
+                {.reference = "mail.example/inbox",
+                 .match = ImportedRoute::Match::kEqualTo,
+                 .space_id = "thebrowser.company.defaultPersonalSpaceID"}}),
+            plan.routes);
+  EXPECT_EQ("s1", plan.external_default);
+
+  // Little Arc for links from other apps: no default; nothing from a file
+  // that isn't JSON.
+  ImportedSpaces again = ParseArcSpaces(kArcSidebar, main_profile);
+  AddArcLinkRules(
+      R"({"defaultDestination": {"littleArc": {"_0": {"mostRecent": {}}}}})",
+      again);
+  AddArcLinkRules("not json", again);
+  EXPECT_FALSE(again.external_default);
+  EXPECT_TRUE(again.routes.empty());
+}
+
 TEST(KoanImportedSpacesTest, ZenSessions) {
   const ImportedSpaces plan = ParseZenSessions(kZenSessions);
   ASSERT_EQ(1u, plan.essentials.size());

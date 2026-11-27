@@ -9,6 +9,9 @@
 // - importing from Chrome brings its bookmarks, history and saved password
 //   (its Safe Storage key from the test root, never the keychain), and from
 //   Zen (Chromium's Firefox importer) its bookmarks and history;
+// - Arc with two profiles (#481) is listed first as "All profiles", whose
+//   import makes the Work profile, puts each Space in its own, brings Arc's
+//   link rules as Space routes and says on the last step to sign in again;
 // - "Spaces and pinned tabs" (#363) is offered for Zen and Arc only, in the
 //   welcome and in the dialog, and brings their Spaces, pinned tabs and
 //   folders (kept for the next start in koan.workspaces.list and
@@ -84,6 +87,7 @@ const choices = await js(`[...document.querySelectorAll('input[name=import]')].m
   const label = input.closest('label');
   const img = label.querySelector('.tile img');
   return { value: input.value, title: label.querySelector('.choice-title')?.textContent,
+           detail: label.querySelector('.choice-detail')?.textContent ?? null,
            icon: img ? img.src.slice(0, 22) : label.querySelector('.tile')?.textContent ?? null };
 })`) ?? [];
 console.log(`import step: ${JSON.stringify(choices)}`);
@@ -105,6 +109,11 @@ if (IS_MAC && indexOf('Safari') >= 0) {
   check('...Safari with its app icon', choices[indexOf('Safari')].icon === 'data:image/png;base64,',
         choices[indexOf('Safari')].icon);
 }
+
+check('Arc with two profiles is listed first as "All profiles", then each profile',
+      choices[indexOf('Arc')]?.detail?.startsWith('All profiles') &&
+      ['Work', 'Personal'].every(name => choices.some(c => c.title === 'Arc' && c.detail === name)),
+      JSON.stringify(choices.filter(c => c.title === 'Arc')));
 
 // "Spaces and pinned tabs" shows for the browsers that have them.
 const pick = async name => {
@@ -174,7 +183,9 @@ async function importFrom(name, { history, bookmarks, passwords, spaces = false 
 }
 const pickInDialog = name => evalIn(dialog, `(() => {
   const select = window.__deepQuery('#browserSelect');
-  const option = [...select.options].find(o => o.textContent.trim() === ${JSON.stringify(name)});
+  // A browser's first entry (Arc's: "Arc - All profiles (...)").
+  const option = [...select.options].find(o => o.textContent.trim() === ${JSON.stringify(name)} ||
+                                             o.textContent.trim().startsWith(${JSON.stringify(name + ' ')}));
   if (!option) return false;
   select.selectedIndex = option.index;
   select.dispatchEvent(new Event('change'));
@@ -206,22 +217,37 @@ if (zenOk) {
   skipped('the Zen import', 'no node:sqlite or python3 to write its places.sqlite');
 }
 
-check('Importing Arc\'s Spaces and pinned tabs alone succeeds',
+check('Arc\'s first entry in the dialog is "All profiles"',
+      profiles.find(p => p.name === 'Arc')?.profileName?.startsWith('All profiles'),
+      JSON.stringify(profiles.filter(p => p.name === 'Arc')));
+check('Importing every Arc profile\'s Spaces and pinned tabs alone succeeds',
       await importFrom('Arc', { history: false, bookmarks: false, passwords: false, spaces: true }) === 'succeeded');
+// The last step says logins don't come along (hook in
+// import_data_dialog.html.ts), Arc being the dialog's pick.
+const note = await evalIn(dialog, `(() => {
+  const note = window.__deepQuery('#koanSpaceProfilesNote');
+  return note ? { hidden: note.hidden, text: note.textContent.trim() } : null;
+})()`);
+check('...and its last step says to sign in again in each profile',
+      note?.hidden === false && note.text.includes('Sign in again in each'), JSON.stringify(note));
 
 // --- What landed.
 // The Spaces, kept for a start that restores no session (their tabs never
 // loaded). (Zen's first took the window's untouched Space; Arc's came after.)
 const storedSpaces = async () => (await readPref('koan.workspaces.list')) ?? [];
+// A stored title is "<emoji> <name>" for a Space with an icon.
+const spaceIs = (title, name) => title === name || title?.endsWith(` ${name}`);
 const spacesLanded = await waitFor(async () => {
   const list = await storedSpaces();
   const titles = list.map(space => space.title);
-  return titles.includes('Reading') && (!zenOk || titles.includes('Zen Work')) && list;
+  return ['Home', 'Projects', 'Clients'].every(t => titles.some(title => spaceIs(title, t))) &&
+         (!zenOk || titles.includes('Zen Work')) && list;
 }, 15000);
 const spaceTitles = (spacesLanded || []).map(space => space.title);
 check('Arc\'s and Zen\'s Spaces are Koan Spaces', !!spacesLanded, JSON.stringify(spaceTitles));
-const pinnedOf = title => (spacesLanded || []).find(space => space.title === title)?.pinned?.map(tab => tab.url) ?? [];
-check('...with their pinned tabs (unloaded)', pinnedOf('Reading').includes(ARC_PINNED) &&
+const spaceNamed = name => (spacesLanded || []).find(space => spaceIs(space.title, name));
+const pinnedOf = name => spaceNamed(name)?.pinned?.map(tab => tab.url) ?? [];
+check('...with their pinned tabs (unloaded)', pinnedOf('Projects').includes(ARC_PINNED) &&
       (!zenOk || pinnedOf('Zen Work').includes(ZEN_PINNED)), JSON.stringify(spacesLanded));
 if (zenOk) {
   const folders = (await readPref('koan.folders.list')) ?? [];
@@ -229,6 +255,25 @@ if (zenOk) {
         folders.some(folder => folder.name === 'Zen folder' && folder.tabs?.some(tab => tab.url === ZEN_FOLDER_TAB)),
         JSON.stringify(folders));
 }
+// Arc's profiles (#481): Work made (Personal is the Default), each Space in
+// its own; Arc's link rules as routes to the imported Spaces.
+const userContainers = (await readPref('koan.containers.user')) ?? [];
+const work = userContainers.find(c => c.name === 'Work');
+check('Arc\'s Work profile is a Koan profile (Personal is the Default)',
+      !!work && !userContainers.some(c => c.name === 'Personal'), JSON.stringify(userContainers));
+const containerOf = name => spaceNamed(name)?.container ?? '';
+check('...and its Spaces are in it, the Personal one in the Default',
+      !!work && containerOf('Projects').includes(work.id) && containerOf('Clients').includes(work.id) &&
+      !containerOf('Home'), JSON.stringify((spacesLanded || []).map(s => [s.title, s.container])));
+const routes = (await readPref('koan.space_routing.routes')) ?? [];
+check('Arc\'s link rules are Space routes (those Koan can take)',
+      routes.some(r => r.reference === 'git.example' && r.space === 'Projects') &&
+      routes.some(r => r.reference === 'mail.example/inbox' && r.space === 'Home') &&
+      !routes.some(r => ['meet.example', 'docs.example', 'chat.example'].includes(r.reference)),
+      JSON.stringify(routes));
+check('...and its default for links from other apps',
+      await readPref('koan.space_routing.external_default') === 'Home');
+
 const bookmarksPage = await open('chrome://bookmarks/');
 const bookmarked = url => evalIn(bookmarksPage,
     `new Promise(r => chrome.bookmarks.search({url: ${JSON.stringify(url)}}, r)).then(found => found.length > 0)`);

@@ -1275,6 +1275,26 @@ from …" folder on it.
   drawn Space icons (Koan's are emoji) too. Without this option, Arc's
   pinned tabs and Favorites arrive as bookmarks instead: a folder per Space
   (Arc's folders inside it) and a "Favorites" folder.
+- **Arc's profiles.** In Arc each Space belongs to a profile with its own
+  logins; so it does in Koan. Each Arc profile becomes a Koan profile of the
+  same name (one you already have of that name is reused), and each Space
+  and Favorite comes in the profile it had in Arc. Arc's main profile is
+  Koan's Default. With several Arc profiles, Arc is listed first as **All
+  profiles**: one import brings every profile's Spaces, each in its profile,
+  and all their bookmarks (a folder per profile), history and passwords,
+  which every Koan profile shares anyway. Each Arc profile is also listed on
+  its own. Cookies don't come along, so sign in again once in each profile;
+  the dialog says so when it's done.
+- **Arc's link rules** (Air Traffic Control) become Koan's Space routes
+  (Settings > Spaces > Space routing) when you import the Spaces: a rule
+  "URL contains" or "URL is" a text, sending links to a Space you import,
+  routes them to that Koan Space, after your own routes. Its default for
+  links from other apps comes along if it names an imported Space and you
+  have none set. Rules for Little Arc or the most recent Space, rules on
+  the app a link came from, and rules with several conditions are left out.
+- Arc's import reads only its files (Arc doesn't need to run, or even
+  start again). Arc runs only on macOS and Windows: on Linux, and on the
+  Mac without Arc, there is nothing to list.
 - Not imported yet: cookies and open (unpinned) tabs.
 
 ## Updates

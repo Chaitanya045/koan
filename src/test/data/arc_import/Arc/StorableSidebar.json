@@ -1,0 +1,65 @@
+{
+  "sidebar": {
+    "containers": [
+      {"global": {}},
+      {
+        "topAppsContainerIDs": [
+          {"default": {}}, "top-personal",
+          {"custom": {"_0": {"directoryBasename": "Profile 1"}}}, "top-work"
+        ],
+        "spaces": [
+          "space-home", {
+            "id": "space-home", "title": "Home",
+            "profile": {"default": {}},
+            "containerIDs": ["pinned", "pinned-home", "unpinned", "unpinned-home"],
+            "customInfo": {"iconType": {"emoji_v2": "🏠"}}
+          },
+          "space-projects", {
+            "id": "space-projects", "title": "Projects",
+            "profile": {"custom": {"_0": {"directoryBasename": "Profile 1"}}},
+            "containerIDs": ["pinned", "pinned-projects"],
+            "customInfo": {"iconType": {"emoji_v2": "🛠️"}}
+          },
+          "space-clients", {
+            "id": "space-clients", "title": "Clients",
+            "profile": {"custom": {"_0": {"directoryBasename": "Profile 1"}}},
+            "containerIDs": ["pinned", "pinned-clients"]
+          }
+        ],
+        "items": [
+          "top-personal", {"id": "top-personal", "childrenIds": ["fav-personal"]},
+          "fav-personal", {"id": "fav-personal", "parentID": "top-personal",
+            "title": "Personal favorite",
+            "data": {"tab": {"savedURL": "https://personal-favorite.example/",
+                             "savedTitle": "Personal favorite"}}},
+          "top-work", {"id": "top-work", "childrenIds": ["fav-work"]},
+          "fav-work", {"id": "fav-work", "parentID": "top-work",
+            "title": "Work favorite",
+            "data": {"tab": {"savedURL": "https://work-favorite.example/",
+                             "savedTitle": "Work favorite"}}},
+          "pinned-home", {"id": "pinned-home", "childrenIds": ["home-tab"]},
+          "home-tab", {"id": "home-tab", "parentID": "pinned-home",
+            "data": {"tab": {"savedURL": "https://home-pinned.example/",
+                             "savedTitle": "Home pinned"}}},
+          "unpinned-home", {"id": "unpinned-home", "childrenIds": ["loose"]},
+          "loose", {"id": "loose", "parentID": "unpinned-home",
+            "data": {"tab": {"savedURL": "https://unpinned.example/"}}},
+          "pinned-projects", {"id": "pinned-projects",
+            "childrenIds": ["projects-tab", "projects-folder"]},
+          "projects-tab", {"id": "projects-tab", "parentID": "pinned-projects",
+            "data": {"tab": {"savedURL": "https://projects-pinned.example/",
+                             "savedTitle": "Projects pinned"}}},
+          "projects-folder", {"id": "projects-folder", "parentID": "pinned-projects",
+            "title": "Specs", "data": {"list": {}}, "childrenIds": ["spec-tab"]},
+          "spec-tab", {"id": "spec-tab", "parentID": "projects-folder",
+            "data": {"tab": {"savedURL": "https://spec.example/",
+                             "savedTitle": "Spec"}}},
+          "pinned-clients", {"id": "pinned-clients", "childrenIds": ["clients-tab"]},
+          "clients-tab", {"id": "clients-tab", "parentID": "pinned-clients",
+            "data": {"tab": {"savedURL": "https://clients-pinned.example/",
+                             "savedTitle": "Clients pinned"}}}
+        ]
+      }
+    ]
+  }
+}
