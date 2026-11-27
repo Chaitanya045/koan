@@ -66,4 +66,16 @@ float LinuxSwipePixelSize(LinuxScrollBackend backend) {
   return kGtkUnitsPerAmount * kWaylandOffsetPerUnit;
 }
 
+void TouchpadWheels::OnScroll(base::TimeTicks time, bool taken) {
+  last_scroll_ = time;
+  taken_ = taken;
+}
+
+TouchpadWheels::Kind TouchpadWheels::Classify(base::TimeTicks time) const {
+  if (last_scroll_.is_null() || time != last_scroll_) {
+    return Kind::kMouseWheel;
+  }
+  return taken_ ? Kind::kTakenScroll : Kind::kLeftScroll;
+}
+
 }  // namespace koan

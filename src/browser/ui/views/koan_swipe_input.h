@@ -11,6 +11,7 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_SWIPE_INPUT_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_SWIPE_INPUT_H_
 
+#include "base/time/time.h"
 #include "koan/browser/ui/views/koan_swipe_tracker.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/types/event_type.h"
@@ -73,6 +74,41 @@ enum class LinuxScrollBackend { kWayland, kX11 };
 //   X11      53: one increment of the scroll valuator (GTK's unit), times
 //            Chromium's kWheelScrollAmount (events_x_utils.cc), so 1457.5.
 float LinuxSwipePixelSize(LinuxScrollBackend backend);
+
+// Linux: tells a mouse wheel's wheel events from the ones Views makes out of
+// the touchpad's scroll events. Each touchpad kScroll that reaches a browser
+// window becomes a ui::MouseWheelEvent right after it, with its time stamp:
+// DesktopNativeWidgetAura::OnScrollEvent() makes one whenever the scroll event
+// it passed on isn't handled, and it never is, even when a view's handler took
+// it, because views::Widget::OnScrollEvent() dispatches a copy (and makes a
+// wheel event of its own from an unhandled copy). Left alone, the wheel events
+// of a swipe Koan follows would also switch Space through upstream's wheel
+// switch. A mouse wheel comes as a wheel event of its own on Wayland and X11,
+// and nothing sets EF_PRECISION_SCROLLING_DELTA there, so the time stamp is
+// what tells the two apart.
+class TouchpadWheels {
+ public:
+  enum class Kind {
+    // A mouse wheel's (or a touchpad's that never was a scroll event).
+    kMouseWheel,
+    // Made from a scroll event Koan took (the swipe's, or the Space
+    // switcher's): nothing else may act on it.
+    kTakenScroll,
+    // Made from a scroll event Koan left (scrolling the tabs, a gesture's
+    // first pixels): the tab list's, never a Space switch.
+    kLeftScroll,
+  };
+
+  // A touchpad kScroll at `time`, `taken` by Koan or not.
+  void OnScroll(base::TimeTicks time, bool taken);
+
+  // What a wheel event at `time` is.
+  Kind Classify(base::TimeTicks time) const;
+
+ private:
+  base::TimeTicks last_scroll_;
+  bool taken_ = false;
+};
 
 }  // namespace koan
 

@@ -169,6 +169,11 @@ source_set("browsertests_impl") {
     "//ui/views:test_support",
     "//url",
   ]
+  if (is_linux) {
+    # The sidebar's touchpad swipe through Aura, as Wayland's events come.
+    sources += [ "browser/koan_space_swipe_browsertest.cc" ]
+    deps += [ "//ui/aura" ]
+  }
 }
 
 test("koan_browsertests") {
