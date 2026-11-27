@@ -178,7 +178,10 @@ source_set("quick_window_rules") {
     "koan_quick_window_rules.cc",
     "koan_quick_window_rules.h",
   ]
-  public_deps = [ "//ui/gfx/geometry" ]
+  public_deps = [
+    "//base",
+    "//ui/gfx/geometry",
+  ]
 }
 
 # Zen's page-load progress bar over time (koan_loading_bar.h): pure, for the
