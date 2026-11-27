@@ -145,5 +145,5 @@ Upstream behaviour Koan depends on, each guarded by a test named in its REBASE r
   - a change reloads the profile's tabs in new processes, and turning the extension back on brings
     its content script back
   - a Space without a profile can't have a list (its tabs are the default partition's)
-- **Mac / Linux by hand**: the PR's steps (a real extension, uBlock Origin Lite or a small unpacked
-  one, off in a banking profile).
+- **By hand, Mac and Linux**: `scripts/mac/steps/space_extensions.md` (SE1-SE18), with a small unpacked
+  test extension (a content script, a webRequest listener, a DNR rule, an action and a side panel).
