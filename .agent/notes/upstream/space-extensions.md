@@ -116,16 +116,66 @@ is unchanged.
 | Incognito | No Spaces, no profiles, no lists. Upstream's "Allow in Incognito" applies. |
 | A profile used by several Spaces | One list. The dialog's text names the profile, not the Space. |
 | tabs.query, windows' tab lists and tab events (review finding 2) | **Left out.** The listings skip the profile's tabs (`BuildTabList()`, `CreateTabList()`), and the two events that carry a tab object, `onUpdated` and `onCreated`, are dropped per extension in their will-dispatch callbacks. `GetScrubTabBehavior()` scrubs every other tab object of the profile (no `url`, `title`, `favIconUrl`) as a second line. Chosen over scrubbing alone because a scrubbed `onUpdated` still says when the user loads a page and its `status`, and a scrubbed listing still counts and orders the tabs. B3's agent tabs still have the gap (there the user lets the agent browse). |
-| Tab events with ids only | **Still sent**: `onActivated`, `onHighlighted`, `onMoved`, `onAttached`/`onDetached`, `onRemoved`, `onReplaced`, `onZoomChange` (and the deprecated `onSelectionChanged`/`onActiveChanged`) for the profile's tabs carry a tab id, a window id, positions or zoom factors, no address or title. They go through `TabsEventRouter::DispatchEvent()`, which has no tab, from about ten places; dropping them would take a hook at each. What they tell: that a tab the extension can't list exists, and when it is activated, moved, zoomed or closed. With its id the extension can do nothing (`GetTabById()` refuses it). Follow-up if wanted. |
+| Tab events with ids only | **Not sent** since #544 (they were the accepted gap of #515): `onActivated`, `onHighlighted`, `onMoved`, `onAttached`/`onDetached`, `onRemoved`, `onReplaced`, `onZoomChange` (and the deprecated `onSelectionChanged`/`onActiveChanged`, `onHighlightChanged`) for the profile's tabs. They are all built in `TabsEventRouter::DispatchEvent()`, which has no tab; each of its eight callers sets a `ScopedEventSkip` with the tab (onHighlighted: every highlighted tab, so an extension off in any of them gets none) and `DispatchEvent()` applies it ("The stores every profile shares" below). |
 | webNavigation events (review finding 2) | **Dropped** for the profile's frames, per extension: every event is built in `web_navigation_api_helpers.cc`, and each gets `SkipExtensionsOffIn()` before it is broadcast (eight one-line calls; upstream's per-extension point is `Event::will_dispatch_callback`, which runs synchronously in the broadcast, so the tab is alive; the list is taken when the event is built). The getters were already blocked. |
 | Context menus (review finding 3) | **No item** of the extension in a page of the profile (checked: before this, `PopulateExtensionItems()` added every extension's items, with no frame or profile check, and a click sent `onClicked(info, tab)` with `pageUrl`, `linkUrl`, `selectionText` and granted activeTab). The filter is upstream's `MenuItemMatchesParams()` plus the profile's list, taken when the menu opens. The extension's own pages (another partition) keep their items. |
 | Keyboard shortcuts of an extension (`commands`, review finding 3) | **Do nothing** while a tab of the profile is active (checked: `CommandExecuted()` granted activeTab and sent the tab; `_execute_action` ran the action, which also granted activeTab and could open the popup or side panel). Named commands stop in `CommandExecuted()`, the action in `ExtensionActionRunner::RunAction()` (which also covers the extensions menu's click). The shortcut is still consumed, as Chromium does for an extension with a listener; global commands (outside the browser, no tab) are unchanged. |
 | `activeTab` (review finding 3) | **Never granted** for a tab of the profile (`ActiveTabPermissionGranter::GrantIfRequested()`, the one place). With the three paths above closed this is a second line. |
 | The omnibox keyword API | Harmless: `omnibox.onInputChanged`/`onInputEntered` give the text the user types after the extension's keyword, no tab. What the extension then does to "the current tab" with no tab id (`tabs.update({url})`) is refused while a tab of the profile is active (`TabUnlessExtensionOff()`), so it opens nothing in the profile. Typing its keyword is the user asking it. |
 | `tabs.sendMessage`/`tabs.connect` to a tab of the profile | Harmless, not hooked: they don't go through an `ExtensionFunction` (the messaging service looks the tab up itself), but the extension isn't loaded in the profile's renderers, so no frame there listens: the call fails with "Receiving end does not exist". The extension learns no tab id to ask with (the listings and events above). Expected from the code; not on the build. |
-| Profile-wide stores that aren't per partition | **Still visible**, listed plainly: `chrome.history` (every visit made in the profile's tabs, with URL, title and time: history is the browser profile's, shared by every Space, `space-containers.md`), `chrome.sessions` (recently closed tabs and windows of the profile, with URL and title for an extension with "tabs"), `chrome.downloads` (downloads from the profile's tabs, with URL and referrer), `chrome.topSites`, `chrome.readingList`, `chrome.bookmarks`, `chrome.tabGroups` (the Spaces themselves, their names and colours), the windows (not their tabs). None of these stores knows which partition an entry came from, so hiding the profile's entries needs Koan to record that first. Follow-up. The dialog says so: "Your history, downloads and bookmarks are shared by every profile, so it can still read those." (It said "can't see or change this profile's pages" before, which history made untrue.) |
+| Profile-wide stores that aren't per partition | **Left out** since #544: history, recently closed tabs, top sites and downloads give an extension nothing of a profile it is off in ("The stores every profile shares" below; before, all of it was readable and the dialog said so). **Still visible**, on purpose: `chrome.bookmarks`, `chrome.readingList`, passwords and autofill (shared by every profile in Koan), `chrome.tabGroups` (the Spaces' names and colours), the windows (not their tabs). The dialog says: "... or read its history, closed tabs, top sites and downloads. Your bookmarks and reading list are shared by every profile, so it can still read those." |
 | Extensions menu (the puzzle menu, Koan's site panel) | Still lists every extension: it is the management menu, like chrome://extensions. Clicking one that is off in the active tab's profile does nothing (`RunAction()`, above); its context menu (options, pin, remove) still works. |
 | Default partition, windows without Spaces | Unchanged. |
+
+## The stores every profile shares (#544)
+
+History, the recently closed list, top sites and downloads are the browser profile's, shared by every Space
+profile. Each entry knows its profile, so each API's results and events can leave a profile out:
+
+- a **visit** by its tag, `visits.app_id` (#474, `space-history.md`: `HistoryProfileFromAppId()`);
+- a **closed tab** by its session data, `tab_restore::Tab::extra_data[kContainerSessionKey]` (`PopulateTab()` copies
+  every tab's, also in a closed window or group);
+- a **download** by its partition, `DownloadItem::GetSerializedEmbedderDownloadData()` (a serialized
+  `StoragePartitionConfig`, set for every download from a frame, kept for its life and in the downloads database,
+  `DownloadRow::embedder_download_data`, so it holds after a restart), and its tab while it is open
+  (`DownloadItemUtils::GetOriginalWebContents()`). Nothing new has to be stored;
+- a **tab** by its partition, as in #515.
+
+What an extension is off in is read from the profile's list each time (`ProfilesExtensionIsOffIn()`,
+`ExtensionsOffForVisit()`, `ExtensionsOffInPartition()`, `IsExtensionOffInSessionData()` in
+`koan_container_extensions.h`, unit tested). An extension that is off nowhere takes upstream's path unchanged.
+
+Events are built in one function per API that doesn't know their subject (`TabsEventRouter::DispatchEvent()`,
+`HistoryEventRouter::DispatchEvent()`, `ExtensionDownloadsEventRouter::DispatchEvent()`), called synchronously
+from the places that do. Those places set a `ScopedEventSkip` (`koan_extension_events.h`: a thread-local scope, the
+same pattern as `ScopedExtensionCall`), and the builder calls `SkipExtensionsInScope(event)`, which gives the event a
+will-dispatch callback that skips the extensions off in the subject's profile (or, for onVisitRemoved, gives each
+extension its own list). The sets are taken when the event is built, so an event queued for a lazy background page
+holds no pointer.
+
+| API | Where upstream builds it for the calling extension | Koan's hook (one call each; size in changed upstream lines) | Still visible |
+|---|---|---|---|
+| `history.search` | `HistorySearchFunction::Run()`: one `HistoryService::QueryHistory()` | `koan::QueryHistoryForExtension()` in place of the call (`history_api.cc`): a `HistoryDBTask` runs upstream's `HistoryBackend::QueryHistory()` once per tag the extension isn't off in (`QueryOptions::app_id`: `''` for the default profile, then every tag of `GetAllAppIds()`), keeps each page's latest visit among them, newest first, as many as asked. A page that also has hidden visits gets the count, typed count and last visit of the others (recounted from `GetVisitsForURL()` with `AddPageVisit()`'s rules: no reloads; typed by `incremented_omnibox_typed_score`) | A page visited there and elsewhere shows the URL row's **title**, which is the one last seen, maybe in the hidden profile. Visits from before the `app_id` column existed (NULL, not `''`) match no tag: such a page isn't found for an extension that is off somewhere (none in a Koan profile; imported history is `''`) |
+| `history.getVisits` | `HistoryGetVisitsFunction::QueryComplete()` | `koan::EraseVisitsOffFor()` on the result's visits | Nothing |
+| `history.onVisited` | `HistoryEventRouter::OnURLVisited()` → `DispatchEvent()` | a `ScopedEventSkip` of the visit's profile (`ExtensionsOffForVisit(visit_row.app_id)`), applied in `DispatchEvent()` | The visit of another profile carries the URL row's counts, which include the hidden visits |
+| `history.onVisitRemoved` | `HistoryEventRouter::OnHistoryDeletions()` → `DispatchEvent()` | a `ScopedEventSkip` with `koan::RemovedPagesFilter()`: each extension gets the removed URLs without those that only had visits in profiles it is off in, by `SpaceHistoryIndex::PageProfilesOf()` (what the index knew before it reads the deletion again, 1 s later); none left: no event. With the index not read yet, no URL for an extension that is off anywhere | That something was removed, with `allHistory: true` for a clear of everything |
+| `history.deleteUrl`/`deleteRange`/`deleteAll`/`addUrl` | | not hooked | An off extension can still **delete** the profile's visits (every profile's, as upstream), and add untagged visits |
+| `sessions.getRecentlyClosed` | `SessionsGetRecentlyClosedFunction::Run()`'s loop over `TabRestoreService::entries()` (group entries are split into tabs there) and `CreateWindowModel()`'s tab loop | `koan::containers::HidesClosedEntry()` skips a tab of such a profile, and a window, group or split whose every tab is; a window with some keeps the others (`sessions_api.cc`) | `sessions.onChanged` (no arguments) still fires when the profile closes a tab. A window's `sessionId` and its other tabs |
+| `sessions.restore` | `RestoreMostRecentlyClosed()`, `RestoreLocalSession()` | refused for an entry or tab it can't list (`HidesClosedEntry()`, `HidesClosedId()`): no restore without an id while the most recent entry is the profile's ("There are no recently closed sessions."), "Invalid session id" for its id | Restoring a mixed window still reopens its hidden tabs (the extension sees none of them afterwards) |
+| `topSites.get` | `TopSitesGetFunction::Run()` → `OnMostVisitedURLsAvailable()` | the callback is wrapped by `koan::TopSitesForExtension()`: a `HistoryDBTask` drops the sites whose every visit is in a profile the extension is off in (`top_sites_api.cc`) | The ranking and the list's length still count the hidden visits, so a site visited a lot there ranks higher elsewhere |
+| `downloads.search`, `erase` and every function with an id (`pause`, `resume`, `cancel`, `open`, `show`, `removeFile`, `acceptDanger`, `getFileIcon`) | `ShouldExport()`, which `RunDownloadQuery()` and `GetDownload()` ask for every item, synchronously in `RunInternal()` | `koan::containers::IsCallingExtensionOffInDownload()` (the calling extension of `ScopedExtensionCall`; `ExecuteFromQueue()`, which runs a function queued before the download manager loaded, sets the scope too) (`downloads_api.cc`) | The ids are sequential, so a gap says that a hidden download exists. If an extension's function makes the downloads system notify synchronously (e.g. `browsingData` deleting downloads), `ShouldExport()` also says no for that extension's hidden items in the events of that moment, for every extension (hides more) |
+| `downloads.onCreated`, `onChanged`, `onErased`, `onDeterminingFilename` | `OnDownloadCreated()`, `OnDownloadUpdated()`, `OnDownloadRemoved()`, `OnDeterminingFilename()` → `DispatchEvent()` | a `ScopedEventSkip` of `ExtensionsOffInDownload(item)` in each, applied in `DispatchEvent()`; an off extension doesn't take part in naming the profile's downloads | `downloads.download()` started by the extension itself is in the default partition, so it sees it |
+| Tab events with ids only | `TabsEventRouter::DispatchEvent()` (11 calls from 8 places) | a `ScopedEventSkip` of the tab at each place, applied in `DispatchEvent()` (`tabs_event_router.cc`) | `windows.onFocusChanged` and the other window events (the windows aren't per profile) |
+
+Patch sizes (`scripts/ci/patch_report.py` against develop): new `history_api.cc` (24), `history/BUILD.gn` (3),
+`sessions_api.cc` (28), `top_sites_api.cc` (8), `downloads_api.cc` (23); grown `tabs_event_router.cc` (11 -> 32),
+`chrome/browser/extensions/BUILD.gn` (3 -> 4, `:extension_events`). +108 lines in all. The history and top sites
+parts are in `koan_extension_history.{h,cc}` (`//koan/browser/ui/views`, header-only hook, defined in `:impl`)
+because they need the history service and the Space history index; the rest is in `:extension_events`, whose deps
+grow by `//components/download/public/common`, `//components/sessions` and `//content/public/browser`.
+
+Not checked or not hooked, and why: `tabs.sendMessage` to the profile's tab (no frame there listens, above);
+`chrome.processes` (dev channel only); `chrome.cookies` (the default partition only, above).
 
 ## Flag
 
@@ -213,6 +263,11 @@ Upstream behaviour Koan depends on, each guarded by a test named in its REBASE r
   - a change reloads the profile's tabs in new processes, and turning the extension back on brings
     its content script back
   - a Space without a profile can't have a list (its tabs are the default partition's)
+  - `SharedStoresLeaveOutTheProfile` (#544): off in Bank, on in Work: history.search, getVisits and onVisited
+    have none of Bank's visits (a page both visited: Work's visit only, visit count 1), downloads.search,
+    search by id and onCreated none of Bank's downloads, topSites.get not Bank's page, getRecentlyClosed not
+    Bank's closed tab and restore of its id fails, no onActivated and no onRemoved for Bank's tab; every one of
+    them has Work's
 - **By hand, Mac and Linux**: `scripts/mac/steps/space_extensions.md` (SE1-SE26), with a small unpacked
   test extension (a content script, webRequest listeners with `extraHeaders`, a DNR rule, tabs and
   webNavigation listeners, a context menu item, a keyboard command, an action and a side panel).

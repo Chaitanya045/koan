@@ -179,6 +179,12 @@ bool SpaceHistoryIndex::ShowsPage(const GURL& url, std::string_view profile) {
       it == keys.end() ? nullptr : &it->second, profile);
 }
 
+const containers::PageProfiles* SpaceHistoryIndex::PageProfilesOf(
+    const GURL& url) const {
+  const auto it = pages_.find(url);
+  return it == pages_.end() ? nullptr : &it->second;
+}
+
 void SpaceHistoryIndex::OnURLVisited(
     history::HistoryService* history_service,
     const history::VisitedURLInfo& visited_url_info) {

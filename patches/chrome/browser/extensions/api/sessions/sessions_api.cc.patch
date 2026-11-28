@@ -1,0 +1,72 @@
+diff --git a/chrome/browser/extensions/api/sessions/sessions_api.cc b/chrome/browser/extensions/api/sessions/sessions_api.cc
+index 0d736fe..290f117 100644
+--- a/chrome/browser/extensions/api/sessions/sessions_api.cc
++++ b/chrome/browser/extensions/api/sessions/sessions_api.cc
+@@ -53,6 +53,7 @@
+ #include "extensions/buildflags/buildflags.h"
+ #include "extensions/common/error_utils.h"
+ #include "extensions/common/mojom/context_type.mojom.h"
++#include "koan/browser/containers/koan_extension_events.h"
+ #include "ui/base/mojom/window_show_state.mojom.h"
+ #include "ui/base/window_open_disposition.h"
+ 
+@@ -298,6 +299,11 @@ api::windows::Window SessionsGetRecentlyClosedFunction::CreateWindowModel(
+ 
+   std::vector<api::tabs::Tab> tabs;
+   for (const auto& tab : window.tabs) {
++    // Koan: not a tab of a Space profile the extension is off in.
++    if (koan::containers::HidesClosedEntry(browser_context(), extension_id(),
++                                           *tab)) {
++      continue;
++    }
+     tabs.push_back(
+         CreateTabModel(*tab, tab->tabstrip_index == window.selected_tab_index));
+   }
+@@ -368,11 +374,21 @@ ExtensionFunction::ResponseAction SessionsGetRecentlyClosedFunction::Run() {
+   // We prune the list to contain max 25 entries at any time and removes
+   // uninteresting entries.
+   for (const auto& entry : tab_restore_service->entries()) {
++    // Koan: not the tabs and windows of Space profiles the extension is off
++    // in (a window with some of them: without those).
++    if (koan::containers::HidesClosedEntry(browser_context(), extension_id(),
++                                           *entry)) {
++      continue;
++    }
+     // TODO(crbug.com/40757179): Support group entries in the Sessions API,
+     // rather than sharding the group out into individual tabs.
+     if (entry->type == sessions::tab_restore::Type::GROUP) {
+       auto& group = static_cast<const sessions::tab_restore::Group&>(*entry);
+       for (const auto& tab : group.tabs) {
++        if (koan::containers::HidesClosedEntry(browser_context(),
++                                               extension_id(), *tab)) {
++          continue;  // Koan
++        }
+         if (result_.size() < max_results_) {
+           result_.push_back(CreateSessionModel(*tab));
+         } else {
+@@ -744,6 +760,12 @@ SessionsRestoreFunction::RestoreMostRecentlyClosed(
+ #endif
+   }
+ 
++  // Koan: not an entry sessions.getRecentlyClosed doesn't list.
++  if (koan::containers::HidesClosedEntry(browser_context(), extension_id(),
++                                         *entries.front())) {
++    return RespondNow(Error(kNoRecentlyClosedSessionsError));
++  }
++
+   bool is_window = is_window_entry(*entries.front());
+   sessions::LiveTabContext* context = GetLiveTabContextForBrowser(browser);
+   if (!context) {
+@@ -915,6 +937,12 @@ ExtensionFunction::ResponseAction SessionsRestoreFunction::RestoreLocalSession(
+ #endif
+   }
+ 
++  // Koan: not an entry or tab sessions.getRecentlyClosed doesn't list.
++  if (koan::containers::HidesClosedId(browser_context(), extension_id(),
++                                      entries, session_id.id())) {
++    return RespondNow(Error(kInvalidSessionIdError, session_id.ToString()));
++  }
++
+   // Check if the recently closed list contains an entry with the provided id.
+   bool is_window = false;
+   for (const auto& entry : entries) {

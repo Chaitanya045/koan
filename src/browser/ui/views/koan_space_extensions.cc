@@ -89,9 +89,10 @@ DEFINE_ELEMENT_IDENTIFIER_VALUE(kKoanSpaceExtensionsDone);
 constexpr char16_t kNoProfileTitle[] = u"Extensions in This Space";
 constexpr char16_t kProfileText[] =
     u"An extension that is off can't see or change this profile's tabs, in "
-    u"every Space that uses it. Your history, downloads and bookmarks are "
-    u"shared by every profile, so it can still read those. The profile's "
-    u"open tabs reload when you press Done.";
+    u"every Space that uses it, or read its history, closed tabs, top sites "
+    u"and downloads. Your bookmarks and reading list are shared by every "
+    u"profile, so it can still read those. The profile's open tabs reload "
+    u"when you press Done.";
 constexpr char16_t kNoProfileText[] =
     u"This Space uses the Default profile, which every Space without a "
     u"profile of its own shares. Turning an extension off gives this Space a "

@@ -1,0 +1,26 @@
+diff --git a/chrome/browser/extensions/api/top_sites/top_sites_api.cc b/chrome/browser/extensions/api/top_sites/top_sites_api.cc
+index a67a4a8..2528aec 100644
+--- a/chrome/browser/extensions/api/top_sites/top_sites_api.cc
++++ b/chrome/browser/extensions/api/top_sites/top_sites_api.cc
+@@ -15,6 +15,7 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "components/history/core/browser/top_sites.h"
+ #include "extensions/buildflags/buildflags.h"
++#include "koan/browser/ui/views/koan_extension_history.h"
+ 
+ static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
+ 
+@@ -30,8 +31,11 @@ ExtensionFunction::ResponseAction TopSitesGetFunction::Run() {
+     return RespondNow(Error(kUnknownErrorDoNotUse));
+   }
+ 
+-  ts->GetMostVisitedURLs(
+-      base::BindOnce(&TopSitesGetFunction::OnMostVisitedURLsAvailable, this));
++  // Koan: without the sites only visited in Space profiles the extension is
++  // off in.
++  ts->GetMostVisitedURLs(koan::TopSitesForExtension(
++      browser_context(), extension_id(),
++      base::BindOnce(&TopSitesGetFunction::OnMostVisitedURLsAvailable, this)));
+ 
+   // GetMostVisitedURLs() will invoke the callback synchronously if the URLs are
+   // already populated.
