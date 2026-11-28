@@ -6,13 +6,18 @@
 
 #include <algorithm>
 #include <optional>
+#include <set>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/i18n/case_conversion.h"
 #include "base/location.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -26,13 +31,19 @@
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/browser/extension_registry.h"
+#include "extensions/browser/ui_util.h"
+#include "extensions/common/extension.h"
 #include "koan/browser/containers/koan_agent_containers.h"
+#include "koan/browser/containers/koan_container_extensions.h"
 #include "koan/browser/containers/koan_container_partition.h"
+#include "koan/browser/containers/koan_container_proxies.h"
 #include "koan/browser/containers/koan_containers.h"
 #include "koan/browser/containers/koan_user_containers.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_page_notifications.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
+#include "koan/browser/ui/views/koan_space_extensions.h"
 #include "koan/browser/ui/views/koan_space_profile_menu.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_tab_auto_closer.h"
@@ -97,6 +108,31 @@ void ForEachSpacesWindow(Profile* profile, Visit visit) {
       });
 }
 
+// The extensions of `off` that the Extensions... dialog lists
+// (koan_space_extensions.cc: installed, enabled or not, no themes), by name.
+std::vector<SpaceProfileInfo::OffExtension> OffExtensions(
+    Profile* profile,
+    const std::set<std::string>& off) {
+  std::vector<SpaceProfileInfo::OffExtension> listed;
+  extensions::ExtensionRegistry* registry =
+      extensions::ExtensionRegistry::Get(profile);
+  for (const std::string& id : off) {
+    const extensions::Extension* extension = registry->GetExtensionById(
+        id, extensions::ExtensionRegistry::ENABLED |
+                extensions::ExtensionRegistry::DISABLED);
+    if (extension && !extension->is_theme() &&
+        extensions::ui_util::ShouldDisplayInExtensionSettings(*extension)) {
+      listed.push_back(
+          {.id = id, .name = base::UTF8ToUTF16(extension->name())});
+    }
+  }
+  std::ranges::sort(listed, [](const SpaceProfileInfo::OffExtension& a,
+                               const SpaceProfileInfo::OffExtension& b) {
+    return base::i18n::ToLower(a.name) < base::i18n::ToLower(b.name);
+  });
+  return listed;
+}
+
 base::flat_map<std::string, int64_t> ComputeSizes(
     std::vector<std::pair<std::string, base::FilePath>> paths) {
   std::vector<std::pair<std::string, int64_t>> sizes;
@@ -119,12 +155,25 @@ std::vector<SpaceProfileInfo> GetSpaceProfiles(Profile* profile) {
   if (!HasSpaceProfiles(profile)) {
     return profiles;
   }
+  const base::ListValue& list =
+      profile->GetPrefs()->GetList(prefs::kUserContainers);
+  // (None yet: no runtime state either, and the switch isn't applied yet.)
+  const containers::ContainerProxies* proxies =
+      containers::ContainerProxies::Find(profile);
   for (const containers::UserContainer& container :
        GetUserContainers(profile)) {
     SpaceProfileInfo info;
     info.id = containers::Serialize(container.id);
     info.name = container.name;
     info.color = static_cast<int>(container.color);
+    if (container.proxy) {
+      info.proxy = container.proxy->server;
+    }
+    const std::optional<containers::RuntimeProxy> now =
+        proxies ? proxies->ProxyFor(container.id) : std::nullopt;
+    info.proxy_disconnected = now && !now->connected();
+    info.extensions_off =
+        OffExtensions(profile, containers::ExtensionsOffIn(list, container.id));
     profiles.push_back(std::move(info));
   }
   const auto find = [&profiles](const std::string& id) -> SpaceProfileInfo* {
@@ -199,6 +248,47 @@ void GetSpaceProfileSizes(
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&ComputeSizes, std::move(paths)), std::move(done));
+}
+
+bool ShowSpaceProfileExtensions(Profile* profile,
+                                content::WebContents* from,
+                                const std::string& id) {
+  if (!ListedProfile(profile, id)) {
+    return false;
+  }
+  // A Space of `spaces` that uses it.
+  const auto space_of = [&id](KoanWorkspaceController& spaces)
+      -> std::optional<tab_groups::TabGroupId> {
+    for (const KoanWorkspaceController::SpaceInfo& space : spaces.GetSpaces()) {
+      if (space.container == id) {
+        return space.id;
+      }
+    }
+    return std::nullopt;
+  };
+  tabs::TabInterface* tab =
+      from ? tabs::TabInterface::MaybeGetFromContents(from) : nullptr;
+  BrowserWindowInterface* own =
+      tab ? tab->GetBrowserWindowInterface() : nullptr;
+  if (KoanWorkspaceController* spaces =
+          own ? KoanWorkspaceController::FromTabStrip(own->GetTabStripModel())
+              : nullptr) {
+    if (const std::optional<tab_groups::TabGroupId> space = space_of(*spaces)) {
+      ShowSpaceExtensions(spaces, *space);
+      return true;
+    }
+  }
+  bool shown = false;
+  ForEachSpacesWindow(profile, [&](KoanWorkspaceController& spaces) {
+    if (shown) {
+      return;
+    }
+    if (const std::optional<tab_groups::TabGroupId> space = space_of(spaces)) {
+      ShowSpaceExtensions(&spaces, *space);
+      shown = true;
+    }
+  });
+  return shown;
 }
 
 bool RenameSpaceProfile(Profile* profile,

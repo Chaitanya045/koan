@@ -1,0 +1,4 @@
+# An extension to turn off in a profile (its id is fixed by its key).
+--load-extension={root}/scripts/e2e/extensions/test_helper
+# Work's proxy, the way Koan sets one today (there is no setting for it yet).
+--koan-container-proxy=Work=socks5://127.0.0.1:1080

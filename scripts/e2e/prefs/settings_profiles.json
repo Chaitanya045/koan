@@ -1,0 +1,12 @@
+{"koan": {
+  "urlbar": {"replace_newtab": false},
+  "containers": {"user": [
+    {"id": "sworkprofile", "name": "Work", "color": 1},
+    {"id": "shomeprofile", "name": "Home", "color": 3}
+  ]},
+  "workspaces": {"list": [
+    {"title": "Start", "color": 0, "theme": "", "active": true, "pinned": []},
+    {"title": "Work", "color": 0, "theme": "", "container": "user:sworkprofile", "pinned": []},
+    {"title": "Home", "color": 0, "theme": "", "container": "user:shomeprofile", "pinned": []}
+  ]}
+}}

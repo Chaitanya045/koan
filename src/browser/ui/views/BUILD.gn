@@ -757,6 +757,7 @@ source_set("impl") {
     "//koan/browser/containers",
     "//koan/browser/containers:impl",
     "//koan/browser/containers:partition",
+    "//koan/browser/containers:proxies",
     "//koan/browser/containers:user_containers",
     "//koan/browser/importer:spaces",
     "//koan/browser/omnibox:hooks",

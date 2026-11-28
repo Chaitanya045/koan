@@ -99,6 +99,8 @@ settings timeout=420
 # Chromium's switches and radio buttons in both looks and modes, on
 # chrome://settings/performance (#419).
 settings_controls timeout=300
+# Each profile's proxy and extensions off in Settings > Profiles (#477).
+settings_profiles timeout=300
 # Each behaviour row's effect, Chromium's rows Koan overrides, two restarts
 # (docs/SETTINGS_AUDIT.md).
 settings_effects_behaviour timeout=900
