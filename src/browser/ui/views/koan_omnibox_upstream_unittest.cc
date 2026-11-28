@@ -23,14 +23,17 @@
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 
-// The patched AutocompleteController constructor calls this (the command
-// palette lives in the views target, which this test does not link): no
-// provider.
+// The patched AutocompleteController constructor and UpdateResult() call
+// these (the command palette and the Space history filter live in the views
+// target, which this test does not link): no provider, no filter.
 namespace koan {
 void AddAutocompleteProviders(
     AutocompleteController* controller,
     int provider_types,
     std::vector<scoped_refptr<AutocompleteProvider>>& providers) {}
+void FilterSpaceHistoryMatches(AutocompleteProviderClient& client,
+                               const AutocompleteInput& input,
+                               AutocompleteResult& result) {}
 }  // namespace koan
 
 namespace koan {

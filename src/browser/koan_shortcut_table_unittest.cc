@@ -182,7 +182,7 @@ TEST(KoanShortcutTable, NoKeyIsBoundToTwoActions) {
 }
 
 // Every action has a key, except the ones Zen leaves without (Reset Pinned
-// Tab) and the Space keys outside macOS.
+// Tab), the Space keys outside macOS and Quit outside Linux.
 TEST(KoanShortcutTable, EveryActionHasAKeyExceptZens) {
   for (const Info& info : Actions()) {
     if (info.action == Action::kResetPinnedTab) {
@@ -190,6 +190,11 @@ TEST(KoanShortcutTable, EveryActionHasAKeyExceptZens) {
     }
 #if !BUILDFLAG(IS_MAC)
     if (SwitchWorkspaceNumber(info.action)) {
+      continue;
+    }
+#endif
+#if !BUILDFLAG(IS_LINUX)
+    if (info.action == Action::kQuit) {
       continue;
     }
 #endif
@@ -204,6 +209,48 @@ TEST(KoanShortcutTable, DefaultsAreValidCustomKeys) {
     EXPECT_TRUE(IsValidCustomAccelerator(binding.accelerator))
         << DisplayText(binding.accelerator, /*macos=*/true);
   }
+}
+
+// Ctrl+Q quits on Linux, as Firefox's key_quitApplication does in Zen:
+// Chrome binds no quit key there (#488). It is a normal shortcut, shown in
+// Settings > Keyboard Shortcuts and rebindable. On macOS Koan has no Quit
+// key (⌘Q is the menu bar's and the system's) and the settings page doesn't
+// list it.
+TEST(KoanShortcutTable, QuitKeyOnLinuxOnly) {
+  const Info* info = FindAction("quit-app");
+  ASSERT_TRUE(info);
+  EXPECT_EQ(info->action, Action::kQuit);
+  EXPECT_STREQ(info->group, "windowAndTabManagement");
+  EXPECT_STREQ(info->label, "Quit Application");
+  ASSERT_TRUE(info->is_available);
+#if BUILDFLAG(IS_LINUX)
+  EXPECT_TRUE(info->is_available());
+  EXPECT_EQ(KeysOf(Action::kQuit), Keys({Key(ui::VKEY_Q, kCtrl)}));
+  EXPECT_TRUE(IsValidCustomAccelerator(Key(ui::VKEY_Q, kCtrl)));
+  EXPECT_EQ(DisplayText(Key(ui::VKEY_Q, kCtrl)), u"Ctrl+Q");
+  // In effect with no custom keys; a custom key replaces it, and clearing
+  // it leaves no quit key.
+  const auto quit_keys = [](const base::DictValue& overrides) {
+    Keys keys;
+    for (const Binding& binding : Bindings(overrides)) {
+      if (binding.action == Action::kQuit) {
+        keys.push_back(binding.accelerator);
+      }
+    }
+    return keys;
+  };
+  EXPECT_EQ(quit_keys(base::DictValue()), Keys({Key(ui::VKEY_Q, kCtrl)}));
+  const ui::Accelerator custom = Key(ui::VKEY_Q, kCtrl | kShift);
+  base::DictValue rebound;
+  rebound.Set("quit-app", ToPrefValue(custom));
+  EXPECT_EQ(quit_keys(rebound), Keys({custom}));
+  base::DictValue cleared;
+  cleared.Set("quit-app", ToPrefValue(ui::Accelerator()));
+  EXPECT_TRUE(quit_keys(cleared).empty());
+#else
+  EXPECT_FALSE(info->is_available());
+  EXPECT_TRUE(KeysOf(Action::kQuit).empty());
+#endif
 }
 
 TEST(KoanShortcutTable, ReservedAndSystemKeysOnMac) {

@@ -19,6 +19,7 @@
 #include "base/strings/string_util.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "build/build_config.h"
 #include "chrome/browser/importer/external_process_importer_host.h"
 #include "chrome/browser/importer/in_process_importer_bridge.h"
 #include "chrome/browser/importer/profile_writer.h"
@@ -45,7 +46,8 @@ struct ProfileData {
 };
 
 // The browser's Safe Storage secret: from the keychain (macOS asks the
-// user), or with --koan-import-test-root from its Keychain/<item> file.
+// user) or the keyring (Linux: the Secret Service, else KWallet, which may
+// ask), or with --koan-import-test-root from its Keychain/<item> file.
 std::optional<std::string> SafeStorageSecret(const KnownBrowser& browser) {
   if (HasTestRoot()) {
     std::string secret;
@@ -57,59 +59,148 @@ std::optional<std::string> SafeStorageSecret(const KnownBrowser& browser) {
     }
     return std::string(base::TrimWhitespaceASCII(secret, base::TRIM_ALL));
   }
+#if BUILDFLAG(IS_MAC)
   return ReadKeychainSecret(browser.keychain_service, browser.keychain_account);
+#else
+  return ReadKeyringSecret(browser.secret_application, browser.kwallet_folder,
+                           browser.keychain_service);
+#endif
 }
 
-// On the thread pool: what `items` asks for from `profile_dir`.
-ProfileData ReadProfile(const base::FilePath& profile_dir, uint16_t items) {
+// The keys of `browser`'s saved passwords; none on macOS without its
+// keychain secret, only those saved without a keyring on Linux without its
+// keyring secret.
+std::vector<PasswordKey> PasswordKeysOf(const KnownBrowser& browser) {
+  std::optional<std::string> secret = SafeStorageSecret(browser);
+#if BUILDFLAG(IS_MAC)
+  if (!secret) {
+    LOG(WARNING) << "Koan import: no " << browser.keychain_service
+                 << " key (denied or missing); passwords not imported";
+    return {};
+  }
+  return MacPasswordKeys(*secret);
+#else
+  if (!secret) {
+    LOG(WARNING) << "Koan import: no " << browser.keychain_service
+                 << " in the keyring (denied or missing); only passwords "
+                    "saved without a keyring imported";
+  }
+  return LinuxPasswordKeys(secret);
+#endif
+}
+
+// The bookmarks of one profile of several, in a folder named after it (the
+// bookmarks bar's directly, the other roots' in their own folder inside it):
+// the writer puts the folders on the bar when it is empty, else in its
+// "Imported from" folder.
+void AddProfileBookmarks(
+    std::vector<user_data_importer::ImportedBookmarkEntry> bookmarks,
+    const std::u16string& folder,
+    std::vector<user_data_importer::ImportedBookmarkEntry>& out) {
+  for (user_data_importer::ImportedBookmarkEntry& entry : bookmarks) {
+    if (!folder.empty()) {
+      // The bar's own folder name (the path's first) gives way to the
+      // profile's; the other roots' stay inside it.
+      if (entry.in_toolbar && !entry.path.empty()) {
+        entry.path[0] = folder;
+      } else {
+        entry.path.insert(entry.path.begin(), folder);
+      }
+      entry.in_toolbar = false;
+    }
+    out.push_back(std::move(entry));
+  }
+}
+
+// On the thread pool: what `items` asks for from `source_path`, one
+// profile's folder or, for Arc's "All profiles", the "User Data" folder
+// (every profile with data, in one run; #481).
+ProfileData ReadProfile(const base::FilePath& source_path, uint16_t items) {
   ProfileData data;
-  const KnownBrowser* browser = FindBrowser(SearchRoot(), profile_dir);
+  const KnownBrowser* browser = FindBrowser(SearchRoot(), source_path);
+  const bool all_profiles = IsAllProfilesPath(source_path);
+  const base::FilePath user_data_dir =
+      all_profiles ? source_path : source_path.DirName();
+  // The profiles to read, with their names (Local State's).
+  std::vector<ProfileDir> profiles;
+  for (ProfileDir& profile : ChromiumProfilesWithData(user_data_dir)) {
+    if (all_profiles || profile.path == source_path) {
+      profiles.push_back(std::move(profile));
+    }
+  }
+  if (!all_profiles && profiles.empty()) {
+    profiles.push_back({.path = source_path});
+  }
+  // Several profiles' bookmarks go in a folder each.
+  const auto folder_of = [&](const ProfileDir& profile) {
+    return profiles.size() < 2    ? std::u16string()
+           : profile.name.empty() ? profile.path.BaseName().LossyDisplayName()
+                                  : profile.name;
+  };
   if (items & user_data_importer::FAVORITES) {
-    for (const char* file : {"Bookmarks", "AccountBookmarks"}) {
-      std::string json;
-      if (base::ReadFileToString(profile_dir.AppendASCII(file), &json)) {
-        std::ranges::move(ParseBookmarksJson(json),
-                          std::back_inserter(data.bookmarks));
+    for (const ProfileDir& profile : profiles) {
+      for (const char* file : {"Bookmarks", "AccountBookmarks"}) {
+        std::string json;
+        if (base::ReadFileToString(profile.path.AppendASCII(file), &json)) {
+          AddProfileBookmarks(ParseBookmarksJson(json), folder_of(profile),
+                              data.bookmarks);
+        }
       }
     }
   }
-  // Arc's sidebar: its Spaces as Koan's, else (without the Spaces item) as
-  // bookmarks.
+  // Arc's sidebar: its Spaces as Koan's, each in its Arc profile's Koan
+  // profile, with Arc's link rules as routes; else (without the Spaces
+  // item) as bookmarks.
   std::string sidebar;
+  const base::FilePath arc_dir = user_data_dir.DirName();
   if (browser && browser->arc_sidebar &&
       (items & (user_data_importer::FAVORITES | kSpacesImportItem)) &&
-      base::ReadFileToString(
-          profile_dir.DirName().DirName().AppendASCII(kArcSidebarFile),
-          &sidebar)) {
-    const std::string profile_name = profile_dir.BaseName().AsUTF8Unsafe();
+      base::ReadFileToString(arc_dir.AppendASCII(kArcSidebarFile), &sidebar)) {
     if (items & kSpacesImportItem) {
-      data.spaces = ParseArcSpaces(sidebar, profile_name);
+      std::vector<ArcProfile> arc_profiles;
+      for (const ProfileDir& profile : profiles) {
+        arc_profiles.push_back({.dir = profile.path.BaseName().AsUTF8Unsafe(),
+                                .name = profile.name});
+      }
+      data.spaces = ParseArcSpaces(sidebar, arc_profiles);
+      std::string link_rules;
+      if (base::ReadFileToString(arc_dir.AppendASCII(kArcLinkRoutingFile),
+                                 &link_rules)) {
+        AddArcLinkRules(link_rules, *data.spaces);
+      }
     } else {
-      std::ranges::move(ParseArcSidebar(sidebar, profile_name),
-                        std::back_inserter(data.bookmarks));
+      for (const ProfileDir& profile : profiles) {
+        AddProfileBookmarks(
+            ParseArcSidebar(sidebar, profile.path.BaseName().AsUTF8Unsafe()),
+            folder_of(profile), data.bookmarks);
+      }
     }
   }
   if (items & user_data_importer::HISTORY) {
-    data.history = ReadHistory(profile_dir.AppendASCII("History"));
+    for (const ProfileDir& profile : profiles) {
+      std::ranges::move(ReadHistory(profile.path.AppendASCII("History")),
+                        std::back_inserter(data.history));
+    }
   }
-  const base::FilePath login_files[] = {
-      profile_dir.AppendASCII("Login Data"),
-      profile_dir.AppendASCII("Login Data For Account")};
-  // The keychain is asked only when there are passwords to decrypt.
+  std::vector<base::FilePath> login_files;
+  for (const ProfileDir& profile : profiles) {
+    for (const char* file : {"Login Data", "Login Data For Account"}) {
+      login_files.push_back(profile.path.AppendASCII(file));
+    }
+  }
+  // The keychain or keyring is asked only when there are passwords to
+  // decrypt, once for every profile (one key per browser).
   if ((items & user_data_importer::PASSWORDS) && browser &&
       !browser->keychain_service.empty() &&
       std::ranges::any_of(login_files, [](const base::FilePath& file) {
         return base::PathExists(file);
       })) {
-    if (std::optional<std::string> secret = SafeStorageSecret(*browser)) {
-      const SafeStorageKey key = DeriveSafeStorageKey(*secret);
+    const std::vector<PasswordKey> keys = PasswordKeysOf(*browser);
+    if (!keys.empty()) {
       for (const base::FilePath& file : login_files) {
-        std::ranges::move(ReadLogins(file, key),
+        std::ranges::move(ReadLogins(file, keys),
                           std::back_inserter(data.passwords));
       }
-    } else {
-      LOG(WARNING) << "Koan import: no " << browser->keychain_service
-                   << " key (denied or missing); passwords not imported";
     }
   }
   return data;

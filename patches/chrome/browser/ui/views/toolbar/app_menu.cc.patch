@@ -1,0 +1,27 @@
+diff --git a/chrome/browser/ui/views/toolbar/app_menu.cc b/chrome/browser/ui/views/toolbar/app_menu.cc
+index 3f5a2e9c3411e95b446e283ae67163b1b917560e..8e8ffef733479d2bf8896612228bdf96201b2d77 100644
+--- a/chrome/browser/ui/views/toolbar/app_menu.cc
++++ b/chrome/browser/ui/views/toolbar/app_menu.cc
+@@ -74,6 +74,7 @@
+ #include "content/public/browser/host_zoom_map.h"
+ #include "content/public/browser/web_contents.h"
+ #include "extensions/common/feature_switch.h"
++#include "koan/browser/ui/views/koan_sidebar_header.h"
+ #include "third_party/skia/include/core/SkCanvas.h"
+ #include "third_party/skia/include/core/SkPaint.h"
+ #include "ui/accessibility/ax_node_data.h"
+@@ -1120,9 +1121,13 @@ void AppMenu::RunMenu(views::MenuButtonController* host,
+   UMA_HISTOGRAM_ENUMERATION("WrenchMenu.MenuAction", MENU_ACTION_MENU_OPENED,
+                             LIMIT_MENU_ACTION);
+ 
++  // Koan: from its button in the sidebar, the menu opens towards the page.
+   menu_runner_->RunMenuAt(host->button()->GetWidget(), host,
+                           host->button()->GetAnchorBoundsInScreen(),
+-                          views::MenuAnchorPosition::kTopRight, source_type,
++                          koan::AlignsAppMenuWithLeadingEdge(host->button())
++                              ? views::MenuAnchorPosition::kTopLeft
++                              : views::MenuAnchorPosition::kTopRight,
++                          source_type,
+                           /*native_view_for_gestures=*/gfx::NativeView(),
+                           /*corners=*/std::nullopt,
+                           "Chrome.AppMenu.MenuHostInitToNextFramePresented");

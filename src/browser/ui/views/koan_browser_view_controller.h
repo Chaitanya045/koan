@@ -14,6 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
+#include "build/build_config.h"
 #include "ui/views/view.h"
 #include "ui/views/view_observer.h"
 #include "ui/views/widget/widget.h"
@@ -38,8 +39,13 @@ class KoanLoadingIndicator;
 class KoanMediaController;
 class KoanShortcutController;
 class KoanSplitHeaderController;
+#if BUILDFLAG(IS_LINUX)
+class KoanSystemThemeLock;
+#endif
 class KoanSidebarTabsController;
+class KoanSpaceExtensionsGuard;
 class KoanTabActivationTracker;
+class KoanTabAutoCloser;
 class KoanToast;
 class KoanThemeController;
 class KoanUrlBarController;
@@ -106,6 +112,7 @@ class KoanBrowserViewController : public views::ViewObserver,
   KoanLibraryController* library() const { return library_.get(); }
   KoanShortcutController* shortcuts() const { return shortcuts_.get(); }
   KoanMediaController* media() const { return media_.get(); }
+  KoanTabAutoCloser* tab_auto_closer() const { return tab_auto_closer_.get(); }
   KoanDownloadAnimation* download_animation() const {
     return download_animation_.get();
   }
@@ -157,9 +164,15 @@ class KoanBrowserViewController : public views::ViewObserver,
   std::unique_ptr<KoanFolderController> folders_;
   std::unique_ptr<KoanThemeController> theme_;
   std::unique_ptr<KoanColorSchemeSync> color_scheme_sync_;
+#if BUILDFLAG(IS_LINUX)
+  std::unique_ptr<KoanSystemThemeLock> system_theme_lock_;
+#endif
   std::unique_ptr<KoanGlanceController> glance_;
   std::unique_ptr<KoanLibraryController> library_;
   std::unique_ptr<KoanTabActivationTracker> tab_activation_;
+  std::unique_ptr<KoanTabAutoCloser> tab_auto_closer_;
+  // Extensions off in a Space's profile: the side panel and toolbar (#473).
+  std::unique_ptr<KoanSpaceExtensionsGuard> space_extensions_;
   std::unique_ptr<KoanMediaController> media_;
   std::unique_ptr<KoanDownloadAnimation> download_animation_;
   std::unique_ptr<KoanLoadingIndicator> loading_indicator_;

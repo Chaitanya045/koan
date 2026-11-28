@@ -47,10 +47,24 @@ check('The URL pill shows the page\'s icon', iconBefore === 'true', iconBefore);
 await press(VK.S, ACCEL, 's');
 await checkSingleToolbarCompact('Ctrl+S', false);
 
-// Tabs on the right from the menu of the peeked sidebar, then back: the
-// menu opens twice in the window. On macOS the menu is a native NSMenu that
-// UI DevTools can't reach (NATIVE_MENUS), so the pref is set as the menu
-// item sets it, without peeking the sidebar for its menu.
+// Tabs on the right from the menu of the pinned sidebar, then back: the
+// menu opens twice in the window. Ctrl+Alt+S pins the sidebar out until it is
+// pressed again (Zen's `zen-user-show`, since #98; it used to hide itself
+// after a few seconds), so it is pressed again once the menu is done. On
+// macOS the menu is a native NSMenu that UI DevTools can't reach
+// (NATIVE_MENUS), so the pref is set as the menu item sets it, without
+// pinning the sidebar for its menu.
+//
+// The closed menu holds the sidebar out until the pointer moves, unless the
+// pointer is over the window (SidebarHold::ReleaseWhenPointerMoves()), as it
+// is after a person clicks the item. Headless Ozone's pointer is always at
+// (0, 0) and UI DevTools' events never move it, so compact_single.flags puts
+// the window up and to the left: the pointer is over the page near its top,
+// clear of the window's edges and of the sidebar on either side.
+//
+// The side is only a pref in Zen (zen.tabs.vertical.right-side): the pin
+// (`zen-user-show`) stays across the change (#567), on the new side, and the
+// next press of the key lets the sidebar slide away.
 async function tabsOnRight(onRight, name) {
   if (NATIVE_MENUS) {
     await setKoanPref('koan.tabs.on_right', onRight);
@@ -58,6 +72,15 @@ async function tabsOnRight(onRight, name) {
     await press(VK.S, ACCEL | ALT, 's');
     const missing = await sidebarMenu(TABS_ON_RIGHT);
     check(name, !missing, missing ?? '');
+    await sleep(1500);
+    const vs = await views();
+    const bv = findShown(vs, 'BrowserView');
+    const strip = find(vs, 'VerticalTabStripRegionView');
+    check(`...the sidebar stays pinned, now on the ${onRight ? 'right' : 'left'}`,
+          strip?.w > 0 && bv &&
+              (onRight ? strip.x + strip.w === bv.x + bv.w : strip.x === bv.x),
+          strip && bv && `${strip.x}+${strip.w} in ${bv.x}+${bv.w}`);
+    await press(VK.S, ACCEL | ALT, 's');
   }
   await sleep(3500);
 }

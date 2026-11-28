@@ -34,7 +34,12 @@ flatpak-check ┘                (.flatpak)          (nightly-linux)
 - `linux-build.yml`: unpack source and the previous `out/Release`,
   `linux_build_slice.sh` (SIGINT to siso 65 min before the 6 h limit), then
   pack and upload out, or (last slice) a headless smoke test and the
-  Flatpak.
+  Flatpak. Like the Mac's, a slice that has far more to do than the
+  previous one left fails after 10 min (`build_progress.py`), and its logs
+  get `siso_explain`. The Mac chain's stall on runner image dates (#534,
+  macos-ci.md "Resuming") doesn't apply here: the compile steps' inputs are
+  all in the source archive (Chromium's clang and sysroot), not on the
+  runner.
 
 Build config: `build/koan-release.gn` (`KOAN_CONFIG=release`, set by
 `scripts/ci/linux_env.sh`): no component build, no DCHECKs, no symbols,
@@ -44,24 +49,36 @@ Chromium's Debian sysroot. Same reasons as the Mac's for no
 ## Incremental builds
 
 A full build is ~73k steps (~8 h of build jobs on these runners). A run
-builds on the newest successful `develop` run that kept its tree and
-finished `out/Release`, so a nightly rebuilds only what its commits changed.
+builds on the newest successful trusted run (a `develop` nightly or a
+release, `scripts/ci/trusted_base.sh`) that kept its tree and finished
+`out/Release`, so a nightly rebuilds only what its commits changed.
 
 **Who is a base.** Only a *trusted* run (`keep_base` in `linux-chain.yml` and
 `linux-build.yml`, set by `linux.yml`'s plan job): one that built `develop`
 itself, on a schedule or by hand with no other `ref`, the same condition
 that lets the release job publish `nightly-linux`. Only such a run uploads
 `koan-linux-out-final.tar.zst` and keeps its source for 14 days, and its
-cleanup deletes the source and out-final of older `develop` runs (finished
-ones only: a running chain still needs its source). A labelled pull
+cleanup deletes the source and out-final of older `develop` runs (see
+"When bases are deleted" in macos-ci.md: not while another run may still
+be building on one). A labelled pull
 request's run, or a manual run of another ref, may still *build on* the
 base (`scripts/ci/find_base.sh linux.yml koan-linux`, which only picks
-successful `schedule` and `workflow_dispatch` runs of `develop` that still
-have both archives; "How the base is found" in macos-ci.md), but keeps
+successful `schedule` and `workflow_dispatch` runs of `develop`, and
+successful release.yml runs of a `v*` tag, that still have both
+`koan-linux-*` archives; "How the base is found" in macos-ci.md), but keeps
 its source 3 days, uploads no finished build, and its cleanup deletes only its own source and out slices. So
 objects built from unmerged code never end up in the published Flatpak, and
 a pull request that moves `CHROMIUM_VERSION` can't delete `develop`'s base.
 Forks' pull requests are never built.
+
+**When GitHub's API fails** during the lookup (#589), `find_base.sh` retries
+each call (`scripts/ci/gh_api.sh`, 4 tries) and then **fails the "Find a
+build to build on" step**, naming the call and GitHub's error: re-run the
+job. It used to read the failure as "no base" and build all of Chromium
+(5 h+ here, holding the runners every other PR waits for); a failed step
+costs minutes. The cleanup's `prune_bases.sh` instead deletes nothing more
+and succeeds with a warning, so the run stays a base. Details and the
+reasons under "How the base is found" in macos-ci.md.
 
 siso goes by mtime, so reusing out/ alone is useless: a fresh checkout
 re-dates every file. `scripts/ci/incremental.sh` instead turns the base
@@ -79,8 +96,11 @@ holds the `.gclient`) differs from the base's, when the runner image
 (`KOAN_TOOLCHAIN`, `ID VERSION_ID` from `/etc/os-release`: Chromium's clang
 and sysroot are pinned by `CHROMIUM_VERSION`) differs from
 `.cache/ci-toolchain` in the base's tree, or when the archive has expired.
-If the base's out/Release is gone by the time slice 1 looks for it, the
-build is still correct, just full.
+If the base's out/Release is gone by the time slice 1 looks for it
+(a newer run's cleanup keeps a base 12 h after it is superseded; "When
+bases are deleted" in macos-ci.md), the build is still correct, just full,
+and slice 1 says so loudly: a `Lost base` warning and "base run N lost its
+out/Release (...); building from scratch" in its summary.
 
 Checked locally on a fake tree (2026-11-22, with the earlier Linux-only
 scripts, since replaced by the shared ones): new, changed and removed
@@ -147,6 +167,25 @@ sandbox patches, on Flathub's big builders):
 - The profile is `~/.var/app/dev.koan.Koan/config/koan`: the branding
   renames Chromium's folder (seen on a desktop install, 2026-11-24).
   cobalt.ini's ConfigDir says the same.
+- **Widevine (#494):** `build/koan-release.gn` sets `enable_widevine`
+  (upstream: Chrome-branded only), so `enable_widevine_cdm_component`
+  follows; `bundle_widevine_cdm` stays false (Google's binary) and host
+  verification is macOS/Windows only. The component updater downloads the
+  CDM into `<profile>/WidevineCdm/<version>/` and writes the hint file
+  `latest-component-updated-widevine-cdm` there; on Linux the CDM is
+  preloaded at startup, before the zygote is sandboxed, so it plays only
+  after a restart. cobalt.ini's `ExposeWidevine` makes cobalt set
+  `ZYPAK_EXPOSE_WIDEVINE_PATH` to `$XDG_CONFIG_HOME/<ConfigDir>/WidevineCdm`
+  (`~/.var/app/dev.koan.Koan/config/koan/WidevineCdm`), which zypak exposes
+  to `flatpak-spawn --sandbox`; ConfigDir must stay the profile folder's
+  name (`scripts/tests/test_widevine.py`). `linux_package.sh` stages an
+  `out/Release/WidevineCdm` only if a build ever bundles one; it doesn't.
+  The args change rebuilds (estimate) the files that include
+  `third_party/widevine/cdm/buildflags.h` (~480 translation units, most
+  through `chrome/common/chrome_paths.h`) and the new component, CDM
+  registration and renderer key-system sources, plus the link: a few
+  percent of the ~73k steps, not a full build. Not yet tried in the
+  Flatpak (USAGE, "Checking it (Linux Flatpak)").
 - App id `dev.koan.Koan`, the Mac bundle id. Flathub would need a domain
   the project controls; a bundle installed from a file doesn't.
 
@@ -194,5 +233,8 @@ runtime repo, so `flatpak install ./Koan-….flatpak` fetches the runtime.
   makes it, but agents outside the sandbox reach Koan's socket under
   `~/.var/app/dev.koan.Koan/config/koan/AgentControl/` only if they
   know that path. Not looked at yet.
-- Tagged releases (`release.yml`) build only the Mac; a Linux leg would
-  call `linux-chain.yml` with `release: true` (and no `keep_base`).
+- Tagged releases (`release.yml`) build only the Mac; a Linux leg (#468)
+  must call `linux-chain.yml` with `release: true` and `keep_base: true`, so
+  the release builds on the newest trusted Linux build and is one itself
+  (`find_base.sh` already looks at release.yml's runs; the chain's cleanup
+  prunes with `BRANCH: develop` also in a release run).

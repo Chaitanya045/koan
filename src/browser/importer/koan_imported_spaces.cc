@@ -57,6 +57,9 @@ namespace {
 // (kMaxTreeDepth).
 constexpr int kMaxDepth = 32;
 
+// Arc's main profile's folder (ZenMigrationUtils' kArcDefaultProfile).
+constexpr char kArcDefaultProfile[] = "Default";
+
 // Arc's default Space (ZenMigrationUtils' kArcDefaultSpaceId).
 constexpr char kArcDefaultSpaceId[] =
     "thebrowser.company.defaultPersonalSpaceID";
@@ -113,7 +116,7 @@ std::string ArcProfileOf(const base::Value* marker) {
       return *dir;
     }
   }
-  return "Default";
+  return kArcDefaultProfile;
 }
 
 // The items of Arc's "global" container, by id.
@@ -209,6 +212,59 @@ class ArcItems {
   base::flat_map<std::string, const base::DictValue*> items_;
   std::vector<const base::DictValue*> order_;
 };
+
+// The Space id of an Arc link rule's destination ({"space": {"_0": ...}}):
+// the readers of Arc's file write the id two ways, a string `_0` and
+// {"_0": {"space": {"_0": id}}}; nullopt for Little Arc, the most recent
+// Space and anything else.
+std::optional<std::string> ArcDestinationSpace(
+    const base::DictValue* destination) {
+  const base::Value* target =
+      destination ? destination->FindByDottedPath("space._0") : nullptr;
+  if (!target) {
+    return std::nullopt;
+  }
+  if (const std::string* id = target->GetIfString()) {
+    return *id;
+  }
+  if (const base::DictValue* dict = target->GetIfDict()) {
+    for (const char* path : {"space._0", "space", "id"}) {
+      if (const std::string* id = dict->FindStringByDottedPath(path)) {
+        return *id;
+      }
+    }
+  }
+  return std::nullopt;
+}
+
+// An Arc link rule's condition as a route without its Space: a URL match
+// ({"componentType": {"urlMatch": {"_0": {"contains": {}}, "_1": text}}}),
+// "contains" as Koan's contains and "matches" (Arc's "is", also read as
+// "isEqualTo") as Koan's equal-to; nullopt for any other.
+std::optional<ImportedRoute> ArcUrlMatch(const base::Value& component) {
+  const base::DictValue* dict = component.GetIfDict();
+  const base::DictValue* match =
+      dict ? dict->FindDictByDottedPath("componentType.urlMatch") : nullptr;
+  const base::DictValue* kind = match ? match->FindDict("_0") : nullptr;
+  const std::string* text = match ? match->FindString("_1") : nullptr;
+  if (!kind || !text) {
+    return std::nullopt;
+  }
+  ImportedRoute route;
+  route.reference =
+      std::string(base::TrimWhitespaceASCII(*text, base::TRIM_ALL));
+  if (route.reference.empty()) {
+    return std::nullopt;
+  }
+  if (kind->Find("contains")) {
+    route.match = ImportedRoute::Match::kContains;
+  } else if (kind->Find("matches") || kind->Find("isEqualTo")) {
+    route.match = ImportedRoute::Match::kEqualTo;
+  } else {
+    return std::nullopt;
+  }
+  return route;
+}
 
 // An Arc Space's emoji (customInfo.iconType: emoji_v2, else a code point).
 std::u16string ArcSpaceIcon(const base::DictValue& space) {
@@ -644,7 +700,28 @@ class ZenSessionReader {
 
 ImportedSpaces ParseArcSpaces(std::string_view json,
                               std::string_view profile_dir_name) {
+  const ArcProfile profile{.dir = std::string(profile_dir_name)};
+  return ParseArcSpaces(json, base::span_from_ref(profile));
+}
+
+ImportedSpaces ParseArcSpaces(std::string_view json,
+                              base::span<const ArcProfile> profiles) {
   ImportedSpaces plan;
+  // The profile a marker names, if it is one of `profiles`: none for the
+  // main one, else its name.
+  const auto profile_of =
+      [&](const base::Value* marker) -> std::optional<std::u16string> {
+    const std::string dir = ArcProfileOf(marker);
+    const auto it = std::ranges::find(profiles, dir, &ArcProfile::dir);
+    if (it == profiles.end()) {
+      return std::nullopt;
+    }
+    if (dir == kArcDefaultProfile) {
+      return std::u16string();
+    }
+    std::u16string name(base::TrimWhitespace(it->name, base::TRIM_ALL));
+    return name.empty() ? base::UTF8ToUTF16(dir) : name;
+  };
   // Kept for the whole function: everything read points into it.
   const std::optional<base::DictValue> file =
       base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
@@ -660,14 +737,18 @@ ImportedSpaces ParseArcSpaces(std::string_view json,
     }
     const ArcItems items(*container);
     // The Favorites (top apps): Koan's Essentials.
-    ForEachPair(
-        container->FindList("topAppsContainerIDs"),
-        [&](const base::Value& marker, const base::Value& id) {
-          if (id.is_string() && ArcProfileOf(&marker) == profile_dir_name) {
-            std::ranges::move(items.Convert(id.GetString(), 0),
-                              std::back_inserter(plan.essentials));
-          }
-        });
+    ForEachPair(container->FindList("topAppsContainerIDs"),
+                [&](const base::Value& marker, const base::Value& id) {
+                  const std::optional<std::u16string> profile =
+                      profile_of(&marker);
+                  if (!id.is_string() || !profile) {
+                    return;
+                  }
+                  for (ImportedItem& item : items.Convert(id.GetString(), 0)) {
+                    item.profile = profile;
+                    plan.essentials.push_back(std::move(item));
+                  }
+                });
     int index = 0;
     ForEachPair(container->FindList("spaces"), [&](const base::Value&,
                                                    const base::Value& value) {
@@ -676,11 +757,17 @@ ImportedSpaces ParseArcSpaces(std::string_view json,
         return;
       }
       ++index;
-      if (ArcProfileOf(space->Find("profile")) != profile_dir_name) {
+      std::optional<std::u16string> profile =
+          profile_of(space->Find("profile"));
+      if (!profile) {
         return;
       }
       ImportedSpace imported;
+      imported.profile = std::move(profile);
       const std::string* id = space->FindString("id");
+      if (id) {
+        imported.source_id = *id;
+      }
       imported.name = Trimmed(space->FindString("title"));
       if (imported.name.empty()) {
         imported.name = id && *id == kArcDefaultSpaceId
@@ -705,6 +792,47 @@ ImportedSpaces ParseArcSpaces(std::string_view json,
     });
   });
   return plan;
+}
+
+void AddArcLinkRules(std::string_view json, ImportedSpaces& plan) {
+  // Kept for the whole function: everything read points into it.
+  const std::optional<base::DictValue> file =
+      base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
+  if (!file) {
+    return;
+  }
+  const auto is_imported = [&](const std::string& id) {
+    return !id.empty() &&
+           std::ranges::contains(plan.spaces, id, &ImportedSpace::source_id);
+  };
+  if (std::optional<std::string> space =
+          ArcDestinationSpace(file->FindDict("defaultDestination"));
+      space && is_imported(*space)) {
+    plan.external_default = std::move(*space);
+  }
+  const base::ListValue* rules = file->FindList("rules");
+  if (!rules) {
+    return;
+  }
+  for (const base::Value& rule_value : *rules) {
+    const base::DictValue* rule = rule_value.GetIfDict();
+    const base::ListValue* components =
+        rule ? rule->FindList("sourceComponents") : nullptr;
+    // One condition only: what several mean together isn't known.
+    if (!components || components->size() != 1) {
+      continue;
+    }
+    std::optional<ImportedRoute> route = ArcUrlMatch((*components)[0]);
+    std::optional<std::string> space =
+        ArcDestinationSpace(rule->FindDict("destination"));
+    if (!route || !space || !is_imported(*space)) {
+      continue;
+    }
+    route->space_id = std::move(*space);
+    if (!std::ranges::contains(plan.routes, *route)) {
+      plan.routes.push_back(std::move(*route));
+    }
+  }
 }
 
 ImportedSpaces ParseZenSessions(std::string_view json) {

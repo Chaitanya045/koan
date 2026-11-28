@@ -247,6 +247,10 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void UpdateActive();
   void Activate(Mode mode);
   void Deactivate();
+  // Deactivate() and Activate(mode) for a change that isn't compact mode
+  // turning off (the tabs' side, the variant): the pin and the empty tab's
+  // hold stay.
+  void Reactivate(Mode mode);
   void OnTabsOnRightChanged();
 
   // Compact mode with the toolbar hidden in the overlay, revealed at the top
@@ -297,16 +301,18 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void EndOutsideTracking();
   // The page's own fullscreen (video) starts or ends, or the window's:
   // Koan's hover state is cleared (Zen's sizemodechange ->
-  // _clearAllHoverStates) and the card is laid out again.
+  // _clearAllHoverStates) and the card is laid out again. On Linux Chromium's
+  // own top UI (bookmarks bar, toolbar commands) is updated too, for a page's
+  // fullscreen inside the window's (see KeepsLayoutInFullscreen()).
   void OnFullscreenStateChanged();
   void ClearHoverStates();
   // The window is closing or gone (its widget is closed, the browser is going
   // to be deleted, or OnBrowserViewDestroying() ran): no UI work, and no
   // letting go of a lock, which starts an animation.
   bool IsClosing() const;
-  // Native fullscreen (macOS): the page covers the window, so the pointer at
-  // the screen's edge reveals the hidden sidebar and toolbar, watched here
-  // instead of by the hot zones.
+  // The window's fullscreen (macOS, Linux): the page covers the window, so the
+  // pointer at the screen's edge reveals the hidden sidebar and toolbar,
+  // watched here instead of by the hot zones.
   bool WantsFullscreenEdges() const;
   void CheckFullscreenEdges();
   // macOS: the traffic lights are shown in the revealed sidebar's top row
@@ -373,8 +379,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void OnCaptionHotZoneHovered(bool hovered);
   void SetCaptionStripRevealed(bool revealed);
   void CheckCaptionStripHide();
-  // Fades the frame's caption buttons in or out with the strip.
-  void UpdateCaptionButtons();
+  // Fades the frame's caption buttons in or out with the strip (or, without
+  // `animate`, shows or hides them at once).
+  void UpdateCaptionButtons(bool animate = true);
   // Whether `button` (a frame child) sits above the sidebar's top row, which
   // keeps room for it.
   bool IsCaptionButtonBesideSidebar(const views::View* button) const;
@@ -417,6 +424,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
   raw_ptr<KoanHotZone> caption_hot_zone_ = nullptr;
   // Lets the pointer through the revealed toolbar to the caption buttons.
   std::unique_ptr<KoanCaptionButtonsTargeter> caption_buttons_targeter_;
+  // Follows the frame's caption buttons, which a rebuilt frame replaces.
+  class CaptionButtonsObserver;
+  std::unique_ptr<CaptionButtonsObserver> caption_buttons_observer_;
   // macOS: the traffic lights, which the window buttons below stand for.
   std::unique_ptr<KoanTrafficLightsController> traffic_lights_;
   bool caption_strip_collapsible_ = false;
@@ -465,7 +475,8 @@ class KoanCompactModeController : public views::FocusChangeListener,
   // A point at the window's top that is always on screen while Koan hides the
   // toolbar: where bubbles point when neither the pill nor the header is.
   raw_ptr<views::View> bubble_fallback_anchor_ = nullptr;
-  // macOS: told when fullscreen of the window or of the page starts or ends.
+  // macOS and Linux: told when fullscreen of the window or of the page starts
+  // or ends.
   base::CallbackListSubscription fullscreen_subscription_;
   std::unique_ptr<views::EventMonitor> pointer_monitor_;
   // The monitor sees all the application's windows (fullscreen), not just the

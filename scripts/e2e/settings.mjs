@@ -343,7 +343,8 @@ const found = await waitFor(async () => {
   return t?.includes('Toggle Compact Mode') && t;
 }) || await paneText();
 check('Search finds Koan\'s settings and shortcuts',
-      found?.includes('Enable Koan\'s compact mode') && found?.includes('Toggle Compact Mode'));
+      found?.includes('Enable Koan\'s compact mode') && found?.includes('Toggle Compact Mode'),
+      typeof found === 'string' ? found.replace(/\s+/g, ' ').slice(0, 200) : String(found));
 // A section of the page in search results: shown, not hidden by the search.
 const sectionFound = id => evalIn(settings, `(() => {
     const main = document.querySelector('settings-ui').shadowRoot
@@ -397,6 +398,11 @@ if (NATIVE_MENUS) {
           NATIVE_MENU_WHY);
 } else {
   const tint = `koanSettingsRoot.querySelector('[data-pref="koan.workspaces.tint"] input')`;
+  // Space themes are the Zen look's (KoanThemeController::IsEnabled(), #62),
+  // and the default look has been shadcn's since #296, where Theme... is
+  // greyed out: the Zen look for these checks, as theme.mjs has
+  // (local_state/theme.json), and the default back after them.
+  await settingsCall(settings, 'koanSetPref', 'koan.look.style', 'zen');
   await evalIn(settings, `${showPane('tabs')}`);
   const userColor = await readPref('browser.theme.user_color2');
   await front(other);
@@ -409,10 +415,15 @@ if (NATIVE_MENUS) {
   }
   await sleep(1000);
   const [menu] = openMenus(await viewTree());
-  await menuMouse(menu, menu.items[2]);  // Theme...
+  if (menu) await menuMouse(menu, menu.items[2]);  // Theme...
   const swatch = await waitFor(async () => (await viewTree()).find(
       v => v.cls === 'KoanThemeSwatch' && v.shown));
-  check('Theme... opens the theme picker', !!swatch);
+  check('Theme... opens the theme picker', !!swatch,
+        swatch ? '' : `header ${header ? 'found' : 'not found'}, ` +
+                      (menu ? `the menu had ${menu.items.length} item(s); the third: ` +
+                              JSON.stringify(Object.fromEntries(Object.entries(menu.items[2].props)
+                                  .filter(([k]) => /Title|Enabled|Visible|Text|Name/.test(k))))
+                            : 'no menu opened'));
   if (swatch) {
     for (const type of ['mousePressed', 'mouseReleased']) {
       await viewMouse(swatch, type, 13, 13);
@@ -436,6 +447,7 @@ if (NATIVE_MENUS) {
   check('...and switching them on tints it again',
         await waitFor(async () => await readPref('koan.workspaces.tint') === true &&
                                   (await windowTints()).includes(seed)));
+  await settingsCall(settings, 'koanSetPref', 'koan.look.style', 'shadcn');
 }
 
 // One Settings page: a link to one of Chromium's sections opens it in the
@@ -538,7 +550,8 @@ for (const text of ['Gemini', 'ad privacy', 'Show home button']) {
         .filter(el => el.checkVisibility()).map(el => el.textContent.trim());
   })()`);
   check(`A search for "${text}" finds none of Chromium's rows`, hits?.length === 0,
-        JSON.stringify(hits));
+        hits ? JSON.stringify(hits) : `no answer from the page (it is ` +
+            `${await evalIn(settings, 'document.visibilityState') ?? 'not answering'})`);
 }
 
 // ---- Chromium's sections in the shadcn look (#301; koan_chromium.css).

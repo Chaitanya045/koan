@@ -9,12 +9,14 @@
 #include "base/path_service.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/performance_manager/public/user_tuning/prefs.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_registry.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/universal_optout/prefs.h"
@@ -22,6 +24,7 @@
 #include "koan/browser/agent/koan_agent_limits.h"
 #include "koan/browser/containers/koan_agent_access_prefs.h"
 #include "koan/browser/koan_features.h"
+#include "ui/color/system_theme.h"
 
 namespace koan::prefs {
 
@@ -46,6 +49,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterStringPref(kWorkspacesScrollModifierKey, "ctrl");
   registry->RegisterBooleanPref(kWorkspacesSwipeEdgeActions, true);
   registry->RegisterBooleanPref(kWorkspacesSeparateEssentials, true);
+  registry->RegisterBooleanPref(kSpacesSeparateHistory, true);
   registry->RegisterIntegerPref(kWorkspaceTintApplied, 0);
   registry->RegisterIntegerPref(kWorkspaceTintSavedColor, 0);
   registry->RegisterIntegerPref(kWorkspaceTintSavedVariant, 0);
@@ -65,6 +69,9 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kOpenPinnedInNewTab, true);
   registry->RegisterBooleanPref(kCtrlTabWithinKind, false);
   registry->RegisterBooleanPref(kCtrlTabSkipPending, false);
+  registry->RegisterIntegerPref(kAutoCloseTabsAfterHours, 0);
+  registry->RegisterTimePref(kAutoCloseNoticeTime, base::Time());
+  registry->RegisterListPref(kAutoClosedTabs);
   registry->RegisterBooleanPref(kCommandPaletteSuggestions, true);
   registry->RegisterDictionaryPref(kCommandPaletteUsage);
   registry->RegisterStringPref(kPinnedTabCloseShortcutBehavior,
@@ -132,6 +139,20 @@ void OverrideUpstreamProfilePrefDefaults(
     registry->SetDefaultPrefValue(::prefs::kVerticalTabsUncollapsedWidth,
                                   base::Value(kSidebarDefaultWidth));
   }
+  OverrideSystemThemeDefault(registry);
+}
+
+void OverrideSystemThemeDefault(PrefRegistry* registry) {
+#if BUILDFLAG(IS_LINUX)
+  // Upstream's default is the desktop's toolkit theme (GTK on GNOME, Qt on
+  // KDE: ui::GetDefaultSystemTheme()), which paints the frame, the toolbar
+  // and their text with the toolkit's colours whatever Koan's look and colour
+  // mode are (#486). Zen's Linux window is its own colour too
+  // (ZenGradientGenerator.mjs getBrowserBg()).
+  registry->SetDefaultPrefValue(
+      ::prefs::kSystemTheme,
+      base::Value(static_cast<int>(ui::SystemTheme::kDefault)));
+#endif
 }
 
 void OverrideServiceProfilePrefDefaults(
@@ -164,11 +185,13 @@ void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(kHapticFeedback, true);
   registry->RegisterBooleanPref(kUpdatesCheckEnabled, true);
   registry->RegisterTimePref(kUpdatesLastCheck, base::Time());
-  registry->RegisterStringPref(kUpdatesLatestCommit, "");
-  registry->RegisterTimePref(kUpdatesLatestCommitTime, base::Time());
-  registry->RegisterStringPref(kUpdatesNotifiedCommit, "");
+  registry->RegisterStringPref(kUpdatesLatestManifest, "");
+  registry->RegisterStringPref(kUpdatesNotifiedVersion, "");
   registry->RegisterBooleanPref(kUpdatesShowUpdateNotification, true);
   registry->RegisterStringPref(kUpdatesLastBuild, "");
+  registry->RegisterStringPref(kUpdatesLatestCommitObsolete, "");
+  registry->RegisterTimePref(kUpdatesLatestCommitTimeObsolete, base::Time());
+  registry->RegisterStringPref(kUpdatesNotifiedCommitObsolete, "");
   registry->RegisterBooleanPref(kAgentControlEnabled, AgentReadyByDefault());
   registry->RegisterIntegerPref(kAgentControlMaxLeasedTabs,
                                 agent::kLeasedTabsLimit.default_value);

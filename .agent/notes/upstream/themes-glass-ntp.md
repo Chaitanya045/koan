@@ -575,3 +575,39 @@ From Zen 1.24b source (patches, `prefs/*.yaml`, CSS, JS overrides), with effecti
   - `chrome/browser/ui/views/session_restore_infobar/session_restore_infobar_model.cc` (`ShouldShowOnStartup`, `IsDefaultSessionRestorePref`);
   - `components/os_crypt/async/browser/keychain_key_provider.mm:40-72`;
   - `chrome/browser/ui/webui/whats_new/whats_new_util.cc:35-43`.
+
+## Linux system theme (GTK / Qt), 2026-11-27 (#486)
+
+Linux is a product platform now (#490). Upstream map, from pristine 158:
+
+- `prefs::kSystemTheme` (`extensions.theme.system_theme`, profile, not
+  synced) is registered by `ThemeService::RegisterProfilePrefs()` with
+  `ui::GetDefaultSystemTheme()`: GTK on GNOME/Cinnamon/XFCE/…, Qt on KDE.
+- `ThemeServiceAuraLinux::GetSystemThemeForProfile()` reads it (kDefault for a
+  child profile). `InitFromPrefs()` applies it (`UseTheme()`), and
+  `LinuxUiGetterImpl` picks the window's `LinuxUiTheme` from it, so a browser
+  window's native theme is `NativeThemeGtk` / Qt's, whose colour scheme is the
+  toolkit theme's darkness, not the desktop's colour-scheme setting.
+- With the toolkit theme on, `key.system_theme` is kGtk/kQt and
+  `AddNativeChromeColorMixer` (linux) and the GTK/Qt mixers set the toolbar,
+  its text, tabs, the frame (`kColorFrameActive`), menus and more from the
+  toolkit; `BrowserFrameViewLinux` draws a GTK frame
+  (`GetWindowFrameProvider`); `GetBrowserColorScheme()` is forced to kSystem.
+- Settings > Appearance: "Use Classic" / "Use GTK" / "Use Qt" (`useGtkTheme`,
+  `useQtTheme`, `useDefaultTheme` handlers), inside the Theme row.
+- Incognito and enterprise-isolated windows already use the classic native
+  theme (`BrowserWidget::SelectNativeTheme()`).
+
+Zen on Linux: no GTK colours for its chrome; without
+`zen.widget.linux.transparency` (off) the window is opaque
+`getBrowserBg()` (#131313 / #e9e9e9) under its theme.
+
+Decisions:
+
+| Upstream state | Decision |
+|---|---|
+| `kSystemTheme` default (GTK/Qt) | **override**: kDefault (`koan::prefs::OverrideSystemThemeDefault()`) |
+| A stored GTK/Qt value (old profile), `useGtkTheme` / `useQtTheme` sent by hand | **lock**: `KoanSystemThemeLock` (one per window, Linux) posts `ThemeService::UseDefaultTheme()` while `UsingSystemTheme()` |
+| Use Classic / Use GTK / Use Qt buttons | **lock**: already hidden with the Theme row (`page_visibility.ts` patch, `setTheme: false`) |
+| Colour mode | **reuse**: the classic native theme follows the desktop's colour-scheme (portal, live); in the shadcn look Koan's Mode decides, as on the Mac |
+| GTK dialogs, file chooser, IME, cursor theme, accent colour | **reuse**: `LinuxUi` stays GTK; only the theme supplier changes |

@@ -27,7 +27,7 @@
 import http from 'node:http';
 
 import { ACCEL, ALT, NATIVE_MENUS, NATIVE_MENU_WHY, SHIFT, keyEventParams, sendKey,
-         typeInto, viewTree, windowFrame }
+         half, typeInto, viewTree, whole, windowFrame }
     from './lib/koan.mjs';
 import { IS_MAC, log, makeKey, skipped } from './lib/mac.mjs';
 
@@ -199,8 +199,8 @@ async function clickView(view, button = 'left', after = 1200) {
   const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
   await ui.send('DOM.enable');
   await ui.send('DOM.getDocument', { depth: -1 });
-  const x = Math.round(view.ax + Math.min(view.w / 2, 20));
-  const y = Math.round(view.ay + view.h / 2);
+  const x = whole(view.ax + Math.min(half(view.w), 20));
+  const y = whole(view.ay + half(view.h));
   for (const type of ['mousePressed', 'mouseReleased']) {
     await ui.send('DOM.dispatchMouseEvent', {
       nodeId: view.root.nodeId,
@@ -226,7 +226,7 @@ async function clickLink(target, id, modifiers, button = 'left') {
     });
     const box = JSON.parse(r.result.result.value);
     const base = {
-      x: box.x + 10, y: box.y + 10, modifiers, button, clickCount: 1,
+      x: whole(box.x + 10), y: whole(box.y + 10), modifiers, button, clickCount: 1,
       buttons: button === 'right' ? 2 : 1,
     };
     await c.send('Input.dispatchMouseEvent', { ...base, type: 'mousePressed' });

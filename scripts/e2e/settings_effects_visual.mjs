@@ -13,8 +13,9 @@
 // (fullscreen_multiple, fullscreen_single); this one checks the bookmarks
 // bar there.
 import {
-  ACCEL, ALT, CTRL, IS_MAC, SHIFT, UI_PORT, browserCall, check, connect, evalIn, finish, front,
-  key, onPage, pages, showPane, sleep, typeInto, viewMouse, viewTree, waitFor,
+  half, ACCEL, ALT, CTRL, IS_MAC, SHIFT, UI_PORT, browserCall, check, connect, evalIn, finish, front,
+  key, onPage, pages, propsOf, showPane, sleep, toastTexts, typeInto, viewMouse, viewTree,
+  waitFor,
 } from './lib/koan.mjs';
 import { goFullscreen } from './lib/fullscreen.mjs';
 import {
@@ -77,7 +78,7 @@ async function freshTestPage() {
 async function clickLink(page, id, modifiers = 0) {
   const box = await evalIn(page, `(() => {
     const r = document.getElementById('${id}').getBoundingClientRect();
-    return { x: r.x + 20, y: r.y + r.height / 2 };
+    return { x: Math.floor(r.x + 20), y: Math.floor(r.y + r.height / 2) };
   })()`);
   await onPage(page, async c => {
     for (const type of ['mousePressed', 'mouseReleased']) {
@@ -298,11 +299,19 @@ await setMenu('koan.compact_mode.hide', 'sidebar');
 
 // The flash popup: a selected tab pops the hidden sidebar up for a moment.
 const flash = 'koan.compact_mode.toolbar_flash_popup';
+// (The strip region's own width, sampled: the pop-up lasts 0.8 s
+// (kFlashDuration), less than one sidebarWidth(), a whole viewTree(), takes
+// on a busy machine.)
 const flashes = async () => {
+  // (The first window's region: its place among the regions of all windows.)
+  const w = await win();
+  const nth = w.vs.filter(v => v.cls === 'VerticalTabStripRegionView')
+      .indexOf(w.find('VerticalTabStripRegionView'));
   const tab = await openTab(`data:text/html,${encodeURIComponent('<title>Flash</title>')}`);
   const widths = [];
   for (let i = 0; i < 8; i++) {
-    widths.push(await sidebarWidth());
+    const p = nth >= 0 ? await propsOf('VerticalTabStripRegionView', nth) : null;
+    widths.push(Number(p?.Width ?? -1));
     await sleep(100);
   }
   await sleep(1500);
@@ -338,9 +347,9 @@ const toast = 'koan.compact_mode.show_background_tab_toast';
 const toastShown = async () => {
   const before = new Set((await pages()).map(p => p.id));
   await clickLink(testPage, 'background', ACCEL);
-  const v = await win();
-  const text = v.vs.filter(x => x.path.includes('KoanToastView') && x.cls === 'Label' && x.shown)
-      .map(x => x.props.Text).join(' ');
+  // (toastTexts(): the toast stays 2.4 s, which a whole viewTree() can take
+  // longer than on a busy machine.)
+  const text = await waitFor(async () => (await toastTexts()).join(' '), 2000) || '';
   for (const p of (await pages()).filter(p => !before.has(p.id))) await closeTab(p);
   await sleep(2500);   // the toast goes
   await front(testPage);
@@ -625,8 +634,8 @@ const floating = v => !!v.vs.find(x => x.cls === 'KoanUrlBarBackdrop' && x.shown
 async function openBar() {
   const pill = (await win()).shown('KoanUrlPill');
   if (pill) {
-    await viewMouse(pill, 'mousePressed', 30, pill.h / 2);
-    await viewMouse(pill, 'mouseReleased', 30, pill.h / 2);
+    await viewMouse(pill, 'mousePressed', 30, half(pill.h));
+    await viewMouse(pill, 'mouseReleased', 30, half(pill.h));
     await sleep(1000);
   }
   return win();
@@ -692,8 +701,8 @@ const replace = 'koan.urlbar.replace_newtab';
 const pageCount = async () => (await pages()).length;
 async function newTabRowClick() {
   const r = newTabRow(await win());
-  await viewMouse(r, 'mousePressed', 20, r.h / 2);
-  await viewMouse(r, 'mouseReleased', 20, r.h / 2);
+  await viewMouse(r, 'mousePressed', 20, half(r.h));
+  await viewMouse(r, 'mouseReleased', 20, half(r.h));
   await sleep(1200);
 }
 let count = await pageCount();

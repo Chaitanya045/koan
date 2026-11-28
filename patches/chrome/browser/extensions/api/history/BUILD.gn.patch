@@ -1,0 +1,14 @@
+diff --git a/chrome/browser/extensions/api/history/BUILD.gn b/chrome/browser/extensions/api/history/BUILD.gn
+index 7845177..5afa456 100644
+--- a/chrome/browser/extensions/api/history/BUILD.gn
++++ b/chrome/browser/extensions/api/history/BUILD.gn
+@@ -26,6 +26,9 @@ source_set("history") {
+     "//components/prefs",
+     "//extensions/browser",
+     "//extensions/buildflags",
++    "//koan/browser/containers:extension_events",
++    "//koan/browser/containers:partition",
++    "//koan/browser/ui/views",
+   ]
+ 
+   if (!is_android) {

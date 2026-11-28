@@ -20,7 +20,7 @@
 #include "koan/browser/containers/koan_agent_access_prefs.h"
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
-#include "koan/browser/ui/views/koan_window_glass.h"
+#include "ui/base/ui_base_features.h"
 
 namespace koan::settings {
 
@@ -29,6 +29,14 @@ namespace {
 // Haptic feedback is macOS's (koan::PlayHapticFeedback()).
 bool IsMacOS() {
   return BUILDFLAG(IS_MAC);
+}
+
+// Whether Koan can make windows translucent on this platform at all: macOS
+// 26 or later (Chromium's glass frame, which koan_window_glass.h builds on).
+// The setting (Chromium's local-state pref glass_frame.enabled) is shown only
+// then.
+bool IsWindowGlassSupported() {
+  return ::features::IsGlassFrameEnabled();
 }
 
 constexpr Pane kPanes[] = {
@@ -50,11 +58,17 @@ constexpr Group kGroups[] = {
      "For the shadcn style: light or dark, a base colour, an accent colour, "
      "or a theme of your own from ui.shadcn.com/themes or tweakcn.com."},
     // Koan's own: Zen's bookmarks toolbar is off (never shown) unless turned
-    // on from its View menu.
+    // on from its View menu. Linux has no View menu, only the key
+    // (IDC_SHOW_BOOKMARK_BAR in accelerator_table.cc).
     {"bookmarks-bar", "looks", "Appearance", "Bookmarks bar",
      "Like Zen, none unless you turn it on, also on the new tab page and "
+#if BUILDFLAG(IS_MAC)
      "after importing bookmarks. Turned on, it shows above every page; View > "
      "Always Show Bookmarks Bar (\u21e7\u2318B on a Mac) switches it too."},
+#else
+     "after importing bookmarks. Turned on, it shows above every page; "
+     "Ctrl+Shift+B switches it too."},
+#endif
     {"layout", "looks", "Sidebar and tabs layout", "Browser Layout",
      "Choose the layout that suits you best"},
     {"vertical-tabs", "looks", "Sidebar and tabs layout", "Vertical Tabs",
@@ -81,11 +95,11 @@ constexpr Group kGroups[] = {
     // about:preferences#home has one).
     {"newtab", "looks", "New Tab Page", "New tabs",
      "Choose what a new tab page shows"},
-    // Koan's own: Koan is built from source, so an update is `git pull &&
-    // scripts/build.sh`. Zen's update notification is zen.updates.*.
+    // Koan's own: the check of Koan's GitHub releases (koan_updates.h).
+    // Zen's update notification is zen.updates.*.
     {"updates", "looks", "Updates", "Koan Updates",
-     "Koan asks GitHub once a day for the newest commit of its develop "
-     "branch: the request carries no cookies and nothing about you"},
+     "Koan checks its GitHub releases for a newer version twice a day at "
+     "most: the request carries no cookies and nothing about you"},
     {"workspaces", "tabs", "Workspaces", "General settings for workspaces",
      "With workspaces, you can have multiple browsing sessions at once!"},
     {"pinned-tabs", "tabs", "Pinned Tabs", "General settings for pinned tabs",
@@ -162,14 +176,19 @@ constexpr Option kDarkThemeStyles[] = {
 };
 
 // Zen's Glance trigger methods (zen-glance-trigger-*), in Zen's order. On
-// macOS Ctrl+click is a right-click, so it can't trigger anything.
+// macOS Ctrl+click is a right-click, so it can't trigger anything. Off macOS
+// "meta" is the Super key, which GNOME and KDE often keep for moving windows.
 constexpr Option kGlanceTriggers[] = {
 #if !BUILDFLAG(IS_MAC)
     {"ctrl", "Ctrl + Click"},
 #endif
     {"alt", "Alt + Click"},
     {"shift", "Shift + Click"},
+#if BUILDFLAG(IS_MAC)
     {"meta", "Meta (Command) + Click"},
+#else
+    {"meta", "Super + Click (the desktop may use it to move windows)"},
+#endif
 };
 
 // Zen's zen.urlbar.behavior choices.
@@ -197,6 +216,13 @@ constexpr Option kPinnedTabCloseBehaviors[] = {
     {"switch", "Switch to next tab"},
     {"reset", "Reset URL"},
     {"close", "Close tab"},
+};
+
+// "Close tabs I haven't used for" (koan::auto_close::kAllowedHours), Arc's
+// auto-archive times.
+constexpr Option kAutoCloseTimes[] = {
+    {"0", "Never"},    {"12", "12 hours"}, {"24", "24 hours"},
+    {"168", "7 days"}, {"720", "30 days"},
 };
 
 // Agent control's limits (koan/browser/agent/koan_agent_limits.h). Only these
@@ -251,7 +277,7 @@ constexpr Option kSpaceScrollModifiers[] = {
     {"ctrl", "Ctrl"},
     {"alt", "Alt"},
     {"shift", "Shift"},
-    {"meta", "Meta"},
+    {"meta", "Super"},
 #endif
 };
 
@@ -354,7 +380,8 @@ constexpr Row kRows[] = {
     {.group = "bookmarks-bar",
      .control = Control::kCheckbox,
      .pref = prefs::kBookmarksBarShow,
-     // Also ⇧⌘B, View > Always Show Bookmarks Bar (koan_command_policy.cc).
+     // Also ⇧⌘B, View > Always Show Bookmarks Bar on macOS, Ctrl+Shift+B
+     // elsewhere (koan_command_policy.cc).
      .label = "Show the bookmarks bar"},
     {.group = "vertical-tabs",
      .control = Control::kCheckbox,
@@ -374,14 +401,18 @@ constexpr Row kRows[] = {
      .label = "Tabs on the right",
      .is_available = features::IsSidebarEnabled},
     // Zen's zen.widget.macos.window-vibrancy (default on), here Chromium's
-    // pref; macOS's Reduce Transparency turns it off as well.
+    // pref; macOS's Reduce Transparency turns it off as well. Shown on macOS
+    // only (IsWindowGlassSupported()), so it has no text for elsewhere.
     {.group = "window-material",
      .control = Control::kCheckbox,
      .pref = ::prefs::kGlassFrameEnabled,
      .label = "Translucent window",
      .is_available = IsWindowGlassSupported,
      .local_state = true,
-     .note = "Off while macOS's Reduce Transparency is on"},
+#if BUILDFLAG(IS_MAC)
+     .note = "Off while macOS's Reduce Transparency is on"
+#endif
+    },
     {.group = "window-drag",
      .control = Control::kCheckbox,
      .pref = prefs::kDragWindowFromContent,
@@ -464,9 +495,15 @@ constexpr Row kRows[] = {
      .label = "Glass URL bar (translucent, with the page blurred behind it)",
      .is_available = features::IsUrlBarEnabled,
      .local_state = true,
+#if BUILDFLAG(IS_MAC)
      .note = "For the URL bar floating over the page (not in the top "
              "toolbar); off while macOS's Reduce Transparency is on, and in "
-             "a window that isn't active"},
+             "a window that isn't active"
+#else
+     .note = "For the URL bar floating over the page (not in the top "
+             "toolbar); off in a window that isn't active"
+#endif
+    },
     {.group = "newtab",
      .control = Control::kMenu,
      .pref = prefs::kNewTabPage,
@@ -536,6 +573,15 @@ constexpr Row kRows[] = {
               "sidebar (a sideways wheel needs none)",
      .options = kSpaceScrollModifiers,
      .is_available = features::IsWorkspacesEnabled},
+    // Koan's own (#474): Zen keeps one history for every container.
+    {.group = "workspaces",
+     .control = Control::kCheckbox,
+     .pref = prefs::kSpacesSeparateHistory,
+     .label = "Keep history apart for each profile",
+     .is_available = features::IsWorkspacesEnabled,
+     .note = "The URL bar suggests only the active Space's profile's pages "
+             "and tabs, and the Library's History shows that profile first. "
+             "Bookmarks, passwords and autofill stay shared."},
     {.group = "pinned-tabs",
      .control = Control::kCheckbox,
      .pref = prefs::kPinnedTabRestoreToPinnedUrl,
@@ -569,6 +615,18 @@ constexpr Row kRows[] = {
               "running)",
      .is_available = IsTabFreezingAvailable,
      .local_state = true},
+    // Koan's own (Arc's auto-archive, #482).
+    {.group = "background-tabs",
+     .control = Control::kMenu,
+     .pref = prefs::kAutoCloseTabsAfterHours,
+     .label = "Close tabs I haven't used for",
+     .options = kAutoCloseTimes,
+     .note = "Never closes Essentials, pinned tabs, tabs in a folder, the tab "
+             "each Space shows, agent tabs, or tabs in use (playing sound, in "
+             "a call, sharing the screen, open in DevTools, with a form you "
+             "started, downloading, in picture-in-picture, or on a page that "
+             "asks before you leave). Closed tabs are in the Library: "
+             "History, Closed tabs."},
     // Agents.
     {.group = "agent-control",
      .control = Control::kCheckbox,

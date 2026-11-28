@@ -1,0 +1,24 @@
+diff --git a/chrome/browser/ui/webui/cr_components/most_visited/most_visited_handler.cc b/chrome/browser/ui/webui/cr_components/most_visited/most_visited_handler.cc
+index e33ecf8f0df7a3a27b60fde6b3f80448160cbffd..951e9e876d651f0e4c043d29fd97de7d88a0e772 100644
+--- a/chrome/browser/ui/webui/cr_components/most_visited/most_visited_handler.cc
++++ b/chrome/browser/ui/webui/cr_components/most_visited/most_visited_handler.cc
+@@ -44,6 +44,7 @@
+ #include "components/search_engines/template_url_service.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/web_contents.h"
++#include "koan/browser/containers/koan_container_partition.h"
+ #include "services/network/public/cpp/constants.h"
+ #include "ui/base/window_open_disposition_utils.h"
+ 
+@@ -370,6 +371,11 @@ void MostVisitedHandler::PreconnectMostVisitedTile(
+         ntp_prefs::kNtpMostVisitedTileHoverCount,
+         prefs->GetInt64(ntp_prefs::kNtpMostVisitedTileHoverCount) + 1);
+   }
++  // Koan: not from a new tab page in a container: the predictor preconnects
++  // in the default partition, outside its proxy.
++  if (koan::containers::IsContainerContents(web_contents_)) {
++    return;
++  }
+ 
+   auto* loading_predictor =
+       predictors::LoadingPredictorFactory::GetForProfile(profile_);

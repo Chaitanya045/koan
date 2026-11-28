@@ -1,4 +1,5 @@
 diff --git a/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.cc b/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.cc
+index dce94a0..580bb57 100644
 --- a/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.cc
 +++ b/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.cc
 @@ -55,6 +55,8 @@
@@ -10,7 +11,29 @@ diff --git a/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.cc b/
  #include "ui/base/dragdrop/drag_drop_types.h"
  #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
  #include "ui/base/l10n/l10n_util.h"
-@@ -1251,6 +1253,8 @@
+@@ -349,6 +351,8 @@ void ExtensionsToolbarDesktop::UpdateAllIcons() {
+ 
+   for (const auto& icon : icons_) {
+     icon.second->UpdateState();
++    // Koan: the active tab's Space profile may hide it (below).
++    UpdateIconVisibility(icon.first);
+   }
+ 
+   if (close_side_panel_button_) {
+@@ -556,6 +560,12 @@ void ExtensionsToolbarDesktop::UpdateIconVisibility(
+     action_view->ClearProperty(views::kFlexBehaviorKey);
+   }
+ 
++  // Koan: no button while the active tab's Space profile has the extension
++  // off (koan_extensions_hooks.h).
++  if (!must_show && koan::HidesExtensionAction(browser_, extension_id)) {
++    GetAnimatingLayoutManager()->FadeOut(action_view);
++    return;
++  }
+   if (must_show || (ToolbarActionsModel::CanShowActionsInToolbar(*browser_) &&
+                     model_->IsActionPinned(extension_id))) {
+     GetAnimatingLayoutManager()->FadeIn(action_view);
+@@ -1251,6 +1261,8 @@ void ExtensionsToolbarDesktop::OnPopupShown(
  void ExtensionsToolbarDesktop::OnPopupClosed(
      const extensions::ExtensionId& action_id) {
    GetViewForId(action_id)->OnPopupClosed();
@@ -19,7 +42,7 @@ diff --git a/chrome/browser/ui/views/extensions/extensions_toolbar_desktop.cc b/
  }
  
  views::FocusManager* ExtensionsToolbarDesktop::GetFocusManagerForAccelerator() {
-@@ -1259,16 +1263,30 @@
+@@ -1259,16 +1271,30 @@ views::FocusManager* ExtensionsToolbarDesktop::GetFocusManagerForAccelerator() {
  
  views::BubbleAnchor ExtensionsToolbarDesktop::GetReferenceButtonForPopup(
      const extensions::ExtensionId& action_id) {

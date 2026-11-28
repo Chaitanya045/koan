@@ -105,7 +105,15 @@ isn't in its Space's container: a new blank page is made in the right partition,
 and with the same selection, and the old one is closed. This one rule covers every way a Space
 gets an empty tab: Create Space (made before the Space has its data), a Space recreated from
 `koan.workspaces.list`, a closed Space coming back, the adopted last tab, and a container changed
-on an existing Space (Set Profile, or another window's sync).
+on an existing Space (Set Profile, or another window's sync). Create Space and Set Profile also
+run it at once, before they return (#543): until then the empty tab is in the partition of the
+Space that was active, and a bookmark or a link dropped on it in that task would load there.
+
+The profile menu (Default, the profiles, New Profile…) is a submenu of the Space menu, so its
+command ids are apart from the Space menu's: views runs a menu command by looking its id up in the
+whole menu, parent first (`MenuModelAdapter::ExecuteCommand()`). With the same ids, Set Profile ▸
+Default ran Change Name and ▸ New Profile… ran Change Icon (#543; macOS's native menus were not
+affected).
 
 **The indicator** (`PaintSidebarTab`, no new patch). A 2 px line in the container's colour sits
 at the start edge of a tab row, inset by half the corner radius; Essentials get 3 px, clipped to
@@ -120,8 +128,8 @@ changes.
 | Case | Decision |
 |---|---|
 | What isolates | Cookies, localStorage, sessionStorage, IndexedDB, Cache Storage, the HTTP cache, service workers, HTTP auth, the network context (sockets, HSTS state), shared workers, renderer processes. Each is per StoragePartition. |
-| What's shared | History, bookmarks, passwords, autofill, site permissions (content settings are per profile; Firefox shares them too), extensions, downloads, zoom, the omnibox's suggestions. As in Firefox's containers. |
-| Notifications / push | Upstream refuses them outside a site's home partition (`IsPermissionBlockedInPartition`, kUndelegated). Koan keeps that: a container's push would wake the site's default-partition service worker. Documented limit. |
+| What's shared | Bookmarks, passwords, autofill, site permissions (content settings are per profile; Firefox shares them too), extensions, downloads, zoom. As in Firefox's containers. History is kept apart per profile since #474 (`space-history.md`): one history, each visit tagged with its profile. |
+| Notifications / push | Since #478: a page's own notifications (`new Notification()`) are allowed in a Space's profile; service-worker notifications and push stay refused there. See "Notifications (#478)" below. Agent containers: all refused, as before. |
 | WebUSB / HID / Serial / Bluetooth | Upstream refuses them in non-default partitions. Kept (Brave keeps it too). |
 | Tab moved to another Space (menu, drag, Move To) | Keeps its partition, as in Zen. A WebContents can't change partition, and reopening would lose the page's state and form input. The colour line then shows it is in another container. |
 | Tab dragged to another window | Same WebContents, same partition. |
@@ -137,10 +145,10 @@ changes.
 | Incognito | No Spaces, so no containers. No Profile row and no Set Profile. Containers are never made off the record. |
 | Deleting a Space | Its container and data stay, listed for reuse, as Zen leaves containers alone. Deleting a container (and its data) belongs to container management in Settings, a follow-up. |
 | Clear browsing data | Upstream clears the default partition only. Container data stays until the container is deleted. Documented. |
-| URL bar suggestions | Shared history and bookmarks, as in Firefox. Typed URLs open as rule 6. |
-| Switch to Tab | Switches to the tab wherever it is, across containers. Upstream and Firefox both do (`switchTabs.searchAllContainers`). Agent tabs stay hidden (existing hook). |
+| URL bar suggestions | Since #474, the history suggestions are the active Space's profile's (`space-history.md`); bookmarks are shared, as in Firefox. Typed URLs open as rule 6. |
+| Switch to Tab | Since #474, only tabs of the active Space's profile (`space-history.md`); off with Keep history apart for each profile, across containers as upstream and Firefox (`switchTabs.searchAllContainers`). Agent tabs stay hidden (existing hook). |
 | Space routing | Rules 3 and 5. The routed tab is created in the routed Space's container before routing moves it. |
-| Prerender / NoStatePrefetch / preconnect | Off in container tabs (C4, B10). The prerendered page would be built in the default partition. Accepted cost. |
+| Prerender / NoStatePrefetch / preconnect / search prefetch | Off in container tabs (C4, B10, and the search prefetch and browser-side preconnect hooks in `space-proxy.md`). Each would load or connect in the default partition, with its cookies and outside a Space's proxy. Accepted cost. |
 | Discard | The replacement is created in the old tab's partition (C3). |
 | chrome:// pages in a container Space | Open in the default partition (rule 2), except the new tab page. A URL typed into such a page then loads in the default partition. Accepted: settings pages are rare starting points. |
 | Agent containers | Untouched: agent tabs never take a Space's container, and agent Spaces have none. |
@@ -153,6 +161,101 @@ depends on) instead of `koan::containers::SiteInstanceForNewTab()`. It is the sa
 upstream's guard (`CreateTargetContents` is still the only place the new tab's SiteInstance is
 picked) is the existing REBASE row. Everything else uses Koan's own extension points: the
 controller's `Update()`, the sidebar paint hook, the session data, and the stored Space list.
+
+## Notifications (#478)
+
+Date: 2026-11-27. Chromium 158 (pristine). Decided before coding; the reviewer can object here.
+
+### What upstream does
+
+Chromium's model is one **home partition per origin** (`BrowserContext::GetStoragePartitionForUrl()`, which
+`ChromeContentBrowserClient::GetStoragePartitionConfigForSite()` answers: the default partition for web sites, an
+extension's or an isolated web app's own). Every background path finds the site's data through it:
+
+- `NotificationEventDispatcherImpl::DispatchNotificationEvent()` (`notification_event_dispatcher_impl.cc`): a
+  **service-worker notification's** click or close reads the notification from
+  `GetStoragePartitionForUrl(origin)->GetPlatformNotificationContext()` and wakes that partition's service worker.
+- `PushMessagingRouter::DeliverMessage()`: a **push message** goes to `GetStoragePartitionForUrl(origin)`'s
+  service worker with the registration id the subscription was made with. A subscription is keyed by origin and
+  service-worker registration id only (`PushMessagingAppIdentifier`, `PushMessagingServiceImpl`, one per profile),
+  and registration ids are per partition, so the same id can name another registration in the default partition.
+- DevTools' background-service logging for both does the same.
+
+So `PermissionUtil::IsPermissionBlockedInPartition()` refuses `NOTIFICATIONS`, the only `kUndelegated` permission,
+in any partition but the site's home one: it covers push as well, which asks for the notifications permission.
+`PermissionManager` asks it before every request and status, so the answer is `denied` with no prompt. Content
+settings are per profile, keyed by origin: a grant is the site's in every partition. `PlatformNotificationServiceImpl`
+is per profile and shows what content gives it; the notification ids are profile-wide
+(`ReadNextPersistentNotificationId()` is the profile's), with a tag in place of the number when the page gives one.
+
+A **page's own notification** (non-persistent: `new Notification()` in a document or a dedicated worker) has none of
+this: content keeps its listener, the page's frame, by notification id (`NotificationEventDispatcherImpl`'s
+non-persistent listeners), and show, click and close go straight back to that page. Nothing looks up a partition.
+
+Others:
+- **Brave**'s containers return false from `IsPermissionBlockedInPartition()` for every container partition, so
+  service-worker notifications and push are allowed there too. Brave has no change in `content/browser/push_messaging`
+  or `content/browser/notifications` (GitHub code search, 2026-11-27), so those clicks and messages go to the default partition.
+- **Isolated web apps** don't meet the problem: the app's origin's home partition *is* its own partition.
+- **`<webview>` and Controlled Frame** guests are outside the site's home partition, so notifications are refused
+  there; `PermissionContextBase` refuses most permissions for guests anyway (`IsPermissionRequestable()`).
+- **Firefox (Zen)** keeps a push subscription's origin attributes, container included (UNVERIFIED: Firefox's
+  PushService, not in Zen's tree), so its containers don't meet this.
+
+### Decision
+
+| Case | Decision | Why |
+|---|---|---|
+| A page's notifications in a Space's profile (user container) | **Allowed.** The page asks, and the answer is the site's, shared with the default partition and every profile, like any site permission (Firefox's containers share them too). | Nothing in that path depends on the partition. |
+| Service-worker notifications (`registration.showNotification()`, also from an open page) in a Space's profile | **Refused** (`PERMISSION_DENIED`, the promise rejects). | A click or close would read the default partition's notification database and wake the default partition's service worker (`DispatchNotificationEvent()`): at best nothing happens, at worst another account's worker gets it. |
+| Push in a Space's profile | **Refused**: content sees no push service there (`SERVICE_NOT_AVAILABLE`, "push service not available"), as with Chromium's push kill switch. | Messages are routed by origin to the default partition (`DeliverMessage()`), and the subscription key would collide with the default partition's registration ids. Making it work needs the partition in the subscription (stored in prefs per profile), in delivery, and in the notification click path: four content patches plus a stored-format change. A follow-up, not this issue. Whether Koan's builds can push at all (they configure no Google API keys, and GCM needs them) is a separate, unverified question. |
+| Agent containers | **Unchanged**: every permission refused, never asked (B1). | Agents must not notify the user as a site. |
+| Other partitions (extensions, isolated apps, guests) | Upstream's. | Koan's hook answers only for its own containers. |
+| Another `kUndelegated` permission in a later Chromium | Stays refused in a Space's profile: the hook allows `NOTIFICATIONS` by name. | The same routing problem would likely apply. |
+
+**What the user sees.**
+- A page in a Space's profile asks for and shows notifications as in any tab.
+- The line under the notification's title names the Space after the site ("mail.example.com · Work"; for a tab in no
+  Space, an Essential, its profile's name), so two accounts of one site can be told apart. Past 28 characters
+  (what a macOS banner's subtitle fits, which shows a set line untrimmed) the site is cut to its domain, so the
+  Space's name stays. On macOS that line is the
+  notification's subtitle; on Linux it is the start of the body. A default tab's notification is upstream's (the
+  site only).
+- A click shows the notification's tab: its window, its Space and the tab, as Firefox does; Chromium leaves it to the
+  page's own click handler, and that still runs. If the tab has closed, the click shows the Space it was in, and
+  upstream then opens the site in a new tab there, so in that Space's profile.
+- The site panel of a web page in a Space's profile says "Push notifications aren't available in this Space's
+  profile. The site can notify you while its tab is open.", unless the site is blocked from notifying. It is a
+  fact about the profile, so it shows whether or not the site tried: a site that subscribes to push without asking
+  first never gets a prompt, and the note is the only sign.
+
+**Known limits.**
+- Two tabs of one site (two accounts) that give their notifications the same tag replace each other's
+  notification, as two tabs of one site do upstream: the ids are the origin and the tag.
+- A shared worker's notification has no page: no Space in its line and no tab to show.
+- After a restart a notification left in macOS's Notification Center has no tab: upstream's new tab opens in the
+  active Space.
+
+### Hooks
+
+- **B1, grown** (`components/permissions/permission_util.cc`, `IsPermissionBlockedInPartition()`): one call,
+  `koan::containers::PermissionBlockedInContainer(process, permission == NOTIFICATIONS)`; true for an agent container,
+  false for notifications in a valid user container, else upstream decides. 4 lines more than the agent block it replaces.
+- **N1** `content/browser/notifications/blink_notification_service_impl.cc` (`DisplayPersistentNotification()`):
+  refuses in a partition whose domain is a user container's (`IsUserPartitionDomain()`, `:domain`, which content
+  already depends on). No extension point: content decides and stores the notification before the embedder hears
+  of it.
+- **N2** `content/browser/push_messaging/push_messaging_manager.cc` (`GetService()`): no push service for a process in
+  a user container. Every subscribe, unsubscribe and lookup already handles a missing service.
+- **N3** `content/public/browser/notification_event_dispatcher.h` + `notification_event_dispatcher_impl.{h,cc}`:
+  `GetNonPersistentNotificationFrame(id)`, the frame content already keeps for a page's notification. Upstream
+  exposes no way from a notification to its page; the alternative, guessing the tab from the origin, is wrong exactly
+  when one site is open in two profiles.
+- **N4** `chrome/browser/notifications/platform_notification_service_impl.cc` (`DisplayNotification()`, after
+  `CreateNotificationFromData()`) and `non_persistent_notification_handler.cc` (`OnClick()`, before dispatching), +
+  `notifications/BUILD.gn` (`//koan/browser/ui/views`): `koan::OnShowingPageNotification()` and
+  `koan::OnPageNotificationClicked()` (`koan_page_notifications.h`). `NotificationDisplayService::Observer` sees a
+  notification only as const and has no click event.
 
 ## Tests
 
@@ -167,6 +270,11 @@ controller's `Update()`, the sidebar paint hook, the session data, and the store
   - a moved tab keeps its partition
   - the empty tab follows Set Profile
   - the list and the session restore the Space's container
+- **Notifications** (#478): `ContainerPermissionsTest` (`koan_containers_unittests`: the hook, and upstream's
+  check around it); browser tests `KoanSpaceNotificationsBrowserTest.*` (a page in a Space's profile gets the
+  prompt and shows a notification naming its Space; a default tab still does, and the answer is shared; a click
+  shows the tab in its Space; service-worker notifications and push are refused; the site panel's note); Mac steps
+  in `scripts/mac/steps/space_notifications.md`.
 - **e2e** `scripts/e2e/space_containers.mjs` (seeded `koan.workspaces.list` and containers): the
   reviewer's check with a local page.
   - Space A logs in (a cookie plus a localStorage theme). Space B (its own container) sees

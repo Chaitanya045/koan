@@ -1,0 +1,3 @@
+# macOS (scripts/mac/suite.sh reads <name>.mac.flags): no flags. The window
+# position in compact_single.flags is for headless Ozone's fixed pointer;
+# the Mac has a real one, and its menus are native (no sidebar hold).

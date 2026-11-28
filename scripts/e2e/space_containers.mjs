@@ -19,8 +19,8 @@
 // active Space, with no page behind them.
 import { spawn } from 'node:child_process';
 import { openSync } from 'node:fs';
-import { CDP_PORT, CTRL, ALT, browserCall, check, connect, evalIn, finish, pages, sleep,
-         typeInto, viewMouse, viewTree, waitFor } from './lib/koan.mjs';
+import { CDP_PORT, CTRL, ALT, browserCall, check, connect, evalIn, finish, front, onPage, pages,
+         sleep, typeInto, viewMouse, viewTree, waitFor } from './lib/koan.mjs';
 import { fatalInLog, key, spaceButtons, startServer } from './lib/mac.mjs';
 
 const server = await startServer({
@@ -85,8 +85,29 @@ async function openIn(name) {
   return page;
 }
 
-const state = async page => JSON.parse(await evalIn(page, 'state()') ?? '{}');
-const signedOut = s => !s.cookie && !s.theme && !s.server;
+// A page's state, read with the page shown (Page.bringToFront, which shows
+// its Space): Koan freezes background tabs beyond the 5 most recently used
+// and lets them run 5 s a minute (#47, kInfiniteTabsFreezing in
+// koan_feature_overrides.cc), so the /whoami fetch of a page in a Space in
+// the background can wait most of a minute (its cookie and localStorage
+// read at once, and say the same). Asked again for up to 10 s; a read that
+// never gets an answer says why, in `error`, which is not the same as
+// signed out.
+const readState = async page => {
+  const r = await onPage(page, c => c.send('Runtime.evaluate',
+      { expression: 'state()', returnByValue: true, awaitPromise: true }));
+  const value = r.result?.result?.value;
+  if (typeof value === 'string') return JSON.parse(value);
+  return { error: r.timedOut ? 'no answer in 5 s' :
+      r.result?.exceptionDetails?.exception?.description ?? JSON.stringify(r).slice(0, 200) };
+};
+const state = async page => {
+  await front(page);
+  let s;
+  await waitFor(async () => !(s = await readState(page)).error, 10000);
+  return s;
+};
+const signedOut = s => !s.error && !s.cookie && !s.theme && !s.server;
 
 // ---- The Spaces and their profiles came from the stored list.
 const names = (await buttons()).map(b => b.name).join();
@@ -123,7 +144,8 @@ s = await state(b);
 check('Logging out in A leaves B signed in',
       s.cookie === 'login=bob' && s.theme === 'light' && s.server === 'login=bob', JSON.stringify(s));
 s = await state(a2);
-check("...and A two, A's profile, is signed out too", !s.cookie && !s.server, JSON.stringify(s));
+check("...and A two, A's profile, is signed out too", !s.error && !s.cookie && !s.server,
+      JSON.stringify(s));
 await evalIn(a, "login('alice'); true");
 
 // ---- Zen's Profile row in the Create-a-Space form (Ctrl+Alt+N), on Default.

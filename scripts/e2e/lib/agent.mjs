@@ -4,7 +4,7 @@
 // needs the Mac's peer resolver. KOAN_CLI, KOAN_PROFILE and KOAN_AGENT_HOME
 // are set by scripts/mac/suite.sh.
 import { spawn } from 'node:child_process';
-import { sleep, viewTree, waitFor } from './koan.mjs';
+import { centerOf, sleep, viewTree, waitFor } from './koan.mjs';
 import { rootMouse, rootOf } from './mac.mjs';
 
 export const CLI = process.env.KOAN_CLI;
@@ -64,7 +64,7 @@ export async function allow(title, printed) {
   const vs = await viewTree();
   const button = vs.find(v => v.nodeId === found.button.nodeId) ?? found.button;
   const root = rootOf({ views: vs.filter(v => v.widget === button.widget) });
-  await rootMouse(root, ['mousePressed', 'mouseReleased'], button.ax + button.w / 2,
-                  button.ay + button.h / 2);
+  const c = centerOf(button);
+  await rootMouse(root, ['mousePressed', 'mouseReleased'], c.x, c.y);
   return true;
 }

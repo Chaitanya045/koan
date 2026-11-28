@@ -24,6 +24,7 @@ BASE_FEATURE(kKoanWindowDrag, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanWelcome, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanFolders, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kKoanNewTab, base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kKoanSpaceExtensions, base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsSidebarEnabled() {
   return base::FeatureList::IsEnabled(kKoanSidebar);

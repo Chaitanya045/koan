@@ -88,6 +88,17 @@ std::optional<ContainerId> ContainerFromPartitionConfig(
 // Whether `config` is an agent container's partition. No allocation.
 bool IsAgentPartition(const content::StoragePartitionConfig& config);
 
+// PermissionUtil::IsPermissionBlockedInPartition() (B1), for a permission
+// asked for in `process`: true in an agent container (every permission is
+// denied, without a prompt); false for notifications in a user container (a
+// Space's profile asks, and remembers the answer per site, like a default
+// tab: #478, .agent/notes/upstream/space-containers.md "Notifications");
+// nullopt for anything else (upstream decides: a permission only the site's
+// home partition may have stays refused there).
+std::optional<bool> PermissionBlockedInContainer(
+    content::RenderProcessHost* process,
+    bool notifications);
+
 // Whether the process, frame or tab is in an agent container. Null is not.
 // IsAgentContents() asks the primary main frame, which a tab always has.
 // The agent blocks call these from upstream (agent-control.md section 7.2):
@@ -129,9 +140,12 @@ void SetAgentTab(content::WebContents* contents, const ContainerId& task);
 void SetAgentLeased(content::WebContents* contents, bool leased);
 
 // Whether the frame, tab or SiteInstance is in a container of either kind.
-// Paths that would load its pages in the default partition, with the user's
-// cookies, check this: NoStatePrefetch, the loading predictor's prewarming,
-// web-app navigation capturing. Null is not.
+// Paths that would load its pages or connect for it in the default
+// partition, with the user's cookies and outside a Space's proxy, check this:
+// NoStatePrefetch, the loading predictor's prewarming, search prefetch (start
+// and serving), the omnibox's, bookmark bar's, new tab page's, navigation
+// predictor's and pointer-down preconnects, web-app navigation capturing.
+// Null is not.
 bool IsContainerFrame(content::RenderFrameHost* frame);
 bool IsContainerContents(const content::WebContents* contents);
 bool IsContainerSiteInstance(content::SiteInstance* site_instance);

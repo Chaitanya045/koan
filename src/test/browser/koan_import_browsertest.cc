@@ -2,7 +2,8 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
-// Import from Zen, Arc and Chrome (#348), end to end through Chromium's
+// Import from Zen, Arc and Chrome (#348; on Linux #493, without Arc), end
+// to end through Chromium's
 // importer: Koan's sources in its ImporterList, then an import through
 // ExternalProcessImporterHost and ProfileWriter, as the import dialog runs
 // it. Zen goes through Chromium's Firefox importer (the utility process),
@@ -17,11 +18,13 @@
 #include <string_view>
 #include <vector>
 
+#include "base/base_paths.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/callback.h"
+#include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/cstring_view.h"
 #include "base/strings/strcat.h"
@@ -29,6 +32,7 @@
 #include "base/test/run_until.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/importer/external_process_importer_host.h"
 #include "chrome/browser/importer/importer_list.h"
@@ -47,16 +51,21 @@
 #include "components/password_manager/core/browser/password_store/password_store_interface.h"
 #include "components/password_manager/core/browser/password_store/password_store_results_observer.h"
 #include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "components/tabs/public/tab_interface.h"
 #include "components/user_data_importer/common/importer_data_types.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
+#include "koan/browser/containers/koan_container_partition.h"
+#include "koan/browser/containers/koan_user_containers.h"
 #include "koan/browser/importer/koan_import_sources.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/koan_switches.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
+#include "koan/browser/ui/views/koan_session_data.h"
+#include "koan/browser/ui/views/koan_space_routes.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
 #include "sql/database.h"
@@ -75,18 +84,35 @@ constexpr char kZenBookmark[] = "https://zen-bookmark.example/";
 constexpr char kChromeHistory[] = "https://chrome-history.example/";
 constexpr char kChromeBookmark[] = "https://chrome-bookmark.example/";
 constexpr char kChromeLogin[] = "https://chrome-login.example/";
+#if BUILDFLAG(IS_MAC)
 constexpr char kArcPinned[] = "https://arc-pinned.example/";
 constexpr char kArcFavorite[] = "https://arc-favorite.example/";
 constexpr char kArcFolderTab[] = "https://arc-folder.example/";
 constexpr char kArcWork[] = "https://arc-work.example/";
+#endif
 constexpr char kZenEssential[] = "https://zen-essential.example/";
 constexpr char kZenPinned[] = "https://zen-pinned.example/";
 constexpr char kZenFolderTab[] = "https://zen-folder.example/";
 constexpr char kZenPlay[] = "https://zen-play.example/";
 constexpr char kZenUnpinned[] = "https://zen-unpinned.example/";
 // "hunter2" under the key of the Safe Storage secret "peanuts" (as in
-// koan_chromium_profile_reader_unittest.cc).
+// koan_chromium_profile_reader_unittest.cc): macOS's "v10", Linux's "v11"
+// (the keyring's).
+#if BUILDFLAG(IS_MAC)
+constexpr char kPasswordPrefix[] = "v10";
 constexpr char kHunter2[] = "7218b8ec8774bcaad0e8305f7a6cf965";
+#else
+constexpr char kPasswordPrefix[] = "v11";
+constexpr char kHunter2[] = "58186cf88abd515a1cd36afe2d4d93ca";
+#endif
+// The browsers' folders under the search root.
+#if BUILDFLAG(IS_MAC)
+constexpr char kZenDir[] = "zen";
+constexpr char kChromeDir[] = "Google/Chrome";
+#else
+constexpr char kZenDir[] = ".zen";
+constexpr char kChromeDir[] = ".config/google-chrome";
+#endif
 
 class ImportWaiter : public ::importer::ImporterProgressObserver {
  public:
@@ -157,13 +183,15 @@ class KoanImportBrowserTest : public InProcessBrowserTest {
     base::ScopedAllowBlockingForTesting allow_blocking;
     WriteZen();
     WriteChrome();
+#if BUILDFLAG(IS_MAC)
     WriteArc();
+#endif
   }
 
   // A Zen profile as Zen 1.24 writes one (its places.sqlite schema, the
   // tables Chromium's Firefox importer reads).
   void WriteZen() {
-    const base::FilePath zen = root_.GetPath().AppendASCII("zen");
+    const base::FilePath zen = root_.GetPath().AppendASCII(kZenDir);
     Write(zen.AppendASCII("profiles.ini"),
           "[Profile0]\nName=Default (release)\nIsRelative=1\n"
           "Path=Profiles/k0an.Default (release)\nDefault=1\n\n"
@@ -267,7 +295,7 @@ class KoanImportBrowserTest : public InProcessBrowserTest {
   // A Chrome profile: Local State, Bookmarks, History and Login Data, its
   // Safe Storage secret in the test root's Keychain folder.
   void WriteChrome() {
-    const base::FilePath chrome = root_.GetPath().AppendASCII("Google/Chrome");
+    const base::FilePath chrome = root_.GetPath().AppendASCII(kChromeDir);
     Write(chrome.AppendASCII("Local State"),
           R"({"profile": {"last_used": "Default",
               "info_cache": {"Default": {"name": "Person 1"}}}})");
@@ -302,7 +330,8 @@ class KoanImportBrowserTest : public InProcessBrowserTest {
            "password_element VARCHAR, password_value BLOB, signon_realm "
            "VARCHAR NOT NULL, blacklisted_by_user INTEGER NOT NULL, scheme "
            "INTEGER NOT NULL)");
-      std::vector<uint8_t> password = {'v', '1', '0'};
+      const std::string_view prefix = kPasswordPrefix;
+      std::vector<uint8_t> password(prefix.begin(), prefix.end());
       std::vector<uint8_t> body;
       ASSERT_TRUE(base::HexStringToBytes(kHunter2, &body));
       password.insert(password.end(), body.begin(), body.end());
@@ -319,6 +348,7 @@ class KoanImportBrowserTest : public InProcessBrowserTest {
           "peanuts\n");
   }
 
+#if BUILDFLAG(IS_MAC)
   // Arc: a profile with a History; its Spaces, pinned tabs (one in a
   // folder) and Favorites in StorableSidebar.json.
   void WriteArc() {
@@ -355,6 +385,7 @@ class KoanImportBrowserTest : public InProcessBrowserTest {
                     "savedURL": ")",
                         kArcWork, R"("}}}]}]}})"}));
   }
+#endif  // BUILDFLAG(IS_MAC)
 
   std::vector<SourceProfile> Detect() {
     ImporterList list;
@@ -471,18 +502,22 @@ class KoanImportBrowserTest : public InProcessBrowserTest {
 // Koan's browsers come first in Chromium's list (the import dialog's and the
 // welcome's), before upstream's; the bookmarks file stays last.
 IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, ListsZenArcAndChrome) {
+#if BUILDFLAG(IS_MAC)
+  const std::vector<std::u16string> koan = {u"Arc", u"Google Chrome", u"Zen"};
+#else
+  const std::vector<std::u16string> koan = {u"Google Chrome", u"Zen"};
+#endif
   const std::vector<SourceProfile> sources = Detect();
-  ASSERT_GE(sources.size(), 4u);
+  ASSERT_GE(sources.size(), koan.size() + 1);
   std::vector<std::u16string> first;
-  for (size_t i = 0; i < 3; ++i) {
+  for (size_t i = 0; i < koan.size(); ++i) {
     first.push_back(sources[i].importer_name);
   }
   std::ranges::sort(first);
-  EXPECT_EQ((std::vector<std::u16string>{u"Arc", u"Google Chrome", u"Zen"}),
-            first);
+  EXPECT_EQ(koan, first);
   EXPECT_EQ(user_data_importer::TYPE_BOOKMARKS_FILE,
             sources.back().importer_type);
-  for (size_t i = 0; i < 3; ++i) {
+  for (size_t i = 0; i < koan.size(); ++i) {
     // Each profile is the only one of its browser: no profile name.
     EXPECT_TRUE(sources[i].profile.empty()) << sources[i].importer_name;
     EXPECT_TRUE(root_.GetPath().IsParent(sources[i].source_path));
@@ -491,8 +526,8 @@ IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, ListsZenArcAndChrome) {
 
 // The welcome's pick is listed first, so the import dialog opens on it.
 IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, WelcomePickFirst) {
-  importer::SetPreferredSource(Find(u"Arc"));
-  EXPECT_EQ(u"Arc", Detect()[0].importer_name);
+  importer::SetPreferredSource(Find(u"Google Chrome"));
+  EXPECT_EQ(u"Google Chrome", Detect()[0].importer_name);
   importer::SetPreferredSource(Find(u"Zen"));
   EXPECT_EQ(u"Zen", Detect()[0].importer_name);
 }
@@ -501,7 +536,10 @@ IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, WelcomePickFirst) {
 IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, ImportsZen) {
   const SourceProfile zen = Find(u"Zen");
   EXPECT_EQ(user_data_importer::TYPE_FIREFOX, zen.importer_type);
-  EXPECT_FALSE(zen.services_supported & user_data_importer::PASSWORDS);
+  // Passwords through NSS on Linux, as upstream offers Firefox's; never on
+  // macOS.
+  EXPECT_EQ(!BUILDFLAG(IS_MAC),
+            !!(zen.services_supported & user_data_importer::PASSWORDS));
   const std::vector<user_data_importer::ImportItem> ended =
       Import(zen, user_data_importer::HISTORY | user_data_importer::FAVORITES);
   EXPECT_TRUE(std::ranges::contains(ended, user_data_importer::HISTORY));
@@ -542,6 +580,7 @@ IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, ImportsChrome) {
   EXPECT_EQ(u"ana", logins[0].username_value);
 }
 
+#if BUILDFLAG(IS_MAC)
 // Arc without "Spaces and pinned tabs": its pinned tabs arrive as
 // bookmarks, in a folder named after the Space, and no Space changes.
 IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, ImportsArcPinnedTabs) {
@@ -560,7 +599,9 @@ IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, OffersSpaces) {
   EXPECT_FALSE(Find(u"Google Chrome").services_supported &
                importer::kSpacesImportItem);
 }
+#endif  // BUILDFLAG(IS_MAC)
 
+#if BUILDFLAG(IS_MAC)
 // Arc's Spaces as Koan's: the first takes the window's untouched Space, the
 // others come after it; their pinned tabs and folders, unloaded at their
 // pinned URL; the Favorites as Essentials. The window stays on its tab.
@@ -621,6 +662,7 @@ IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, ImportsArcSpaces) {
            StoredUrls(prefs::kFolderList, "tabs").contains(kArcFolderTab);
   }));
 }
+#endif  // BUILDFLAG(IS_MAC)
 
 // Zen's Spaces alone (no utility process): its Spaces, Essentials, pinned
 // tabs with their labels and folders; never its unpinned tabs.
@@ -685,5 +727,198 @@ IN_PROC_BROWSER_TEST_F(KoanImportBrowserTest, ImportsOnlyTheItemsAsked) {
   EXPECT_TRUE(IsBookmarked(kChromeBookmark));
   EXPECT_FALSE(InHistory(kChromeHistory));
 }
+
+#if BUILDFLAG(IS_MAC)
+// Arc (macOS only: none on Linux) with two profiles (#481), from the fixture
+// folder src/test/data/arc_import (README.md there): "Personal" (Default) and
+// "Work" (Profile 1), Spaces in both, link rules.
+class KoanArcProfilesImportBrowserTest : public KoanImportBrowserTest {
+ protected:
+  void SetUpOnMainThread() override {
+    // Not the other browsers' fixtures: this Arc only.
+    InProcessBrowserTest::SetUpOnMainThread();
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    base::FilePath source_root;
+    ASSERT_TRUE(
+        base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &source_root));
+    ASSERT_TRUE(base::CopyDirectory(
+        source_root.AppendASCII("koan/test/data/arc_import/Arc"),
+        root_.GetPath(), /*recursive=*/true));
+  }
+
+  SourceProfile FindProfile(std::u16string_view profile) {
+    for (const SourceProfile& source : Detect()) {
+      if (source.importer_name == u"Arc" && source.profile == profile) {
+        return source;
+      }
+    }
+    ADD_FAILURE() << "no such Arc profile";
+    return SourceProfile();
+  }
+
+  PrefService* prefs() { return browser()->GetProfile()->GetPrefs(); }
+
+  std::vector<containers::UserContainer> UserContainers() {
+    return containers::ParseUserContainers(
+        prefs()->GetList(prefs::kUserContainers));
+  }
+
+  // The user container named `name`, Serialize()d, or empty.
+  std::string ContainerNamed(std::string_view name) {
+    for (const containers::UserContainer& container : UserContainers()) {
+      if (container.name == name) {
+        return containers::Serialize(container.id);
+      }
+    }
+    return std::string();
+  }
+
+  // The container a pinned tab restores into once it loads.
+  std::string TabContainer(const char* url) {
+    tabs::TabInterface* tab = PinnedTab(url);
+    return tab ? GetTabSessionData(tab->GetContents(),
+                                   containers::kContainerSessionKey)
+               : "no tab";
+  }
+
+  std::u16string BookmarkFolderOf(const char* url) {
+    const bookmarks::BookmarkNode* node =
+        BookmarkModelFactory::GetForBrowserContext(browser()->GetProfile())
+            ->GetMostRecentlyAddedUserNodeForURL(GURL(url));
+    return node && node->parent() ? node->parent()->GetTitle()
+                                  : u"not bookmarked";
+  }
+};
+
+// "All profiles" first, then each profile by its name; every Arc entry
+// offers the Spaces and says they have their own profiles.
+IN_PROC_BROWSER_TEST_F(KoanArcProfilesImportBrowserTest, ListsAllProfiles) {
+  const std::vector<SourceProfile> sources = Detect();
+  ASSERT_GE(sources.size(), 3u);
+  EXPECT_EQ(importer::kAllProfilesName, sources[0].profile);
+  EXPECT_EQ(root_.GetPath().AppendASCII("Arc/User Data"),
+            sources[0].source_path);
+  // Local State's last used profile first.
+  EXPECT_EQ(u"Work", sources[1].profile);
+  EXPECT_EQ(u"Personal", sources[2].profile);
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_TRUE(sources[i].services_supported & importer::kSpacesImportItem);
+    EXPECT_TRUE(sources[i].services_supported & importer::kSpaceProfilesNote);
+  }
+}
+
+// One run brings every profile: the Work profile made (Personal is the
+// Default), each Space and Favorite in its own, Arc's link rules as routes
+// and its default for links from other apps, and both profiles' bookmarks
+// in a folder each.
+IN_PROC_BROWSER_TEST_F(KoanArcProfilesImportBrowserTest, ImportsEveryProfile) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  EXPECT_TRUE(UserContainers().empty());
+  const std::vector<user_data_importer::ImportItem> ended =
+      Import(FindProfile(importer::kAllProfilesName),
+             user_data_importer::FAVORITES | importer::kSpacesImportItem);
+  EXPECT_TRUE(std::ranges::contains(ended, user_data_importer::FAVORITES));
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 3));
+  EXPECT_THAT(SpaceNames(browser()),
+              testing::ElementsAre(u"Home", u"Projects", u"Clients"));
+
+  // One profile made, for Work.
+  const std::vector<containers::UserContainer> made = UserContainers();
+  ASSERT_EQ(1u, made.size());
+  EXPECT_EQ("Work", made[0].name);
+  const std::string work = ContainerNamed("Work");
+
+  const std::vector<KoanWorkspaceController::SpaceInfo> infos =
+      GetSpaces(browser())->GetSpaces();
+  ASSERT_EQ(3u, infos.size());
+  EXPECT_EQ("", infos[0].container);
+  EXPECT_EQ(work, infos[1].container);
+  EXPECT_EQ(work, infos[2].container);
+  // The tabs load in their Space's profile; so do the Favorites.
+  EXPECT_EQ("", TabContainer("https://home-pinned.example/"));
+  EXPECT_EQ(work, TabContainer("https://projects-pinned.example/"));
+  EXPECT_EQ(work, TabContainer("https://spec.example/"));
+  EXPECT_EQ(work, TabContainer("https://clients-pinned.example/"));
+  EXPECT_EQ("", TabContainer("https://personal-favorite.example/"));
+  EXPECT_EQ(work, TabContainer("https://work-favorite.example/"));
+  EXPECT_TRUE(PinnedTab("https://work-favorite.example/")->IsPinned());
+  EXPECT_FALSE(HasTab("https://unpinned.example/"));
+
+  // The routes Koan can take, to the Spaces by name.
+  EXPECT_EQ((std::vector<SpaceRoute>{{.reference = "git.example",
+                                      .match = SpaceRouteMatch::kContains,
+                                      .space = u"Projects"},
+                                     {.reference = "mail.example/inbox",
+                                      .match = SpaceRouteMatch::kEqualTo,
+                                      .space = u"Home"}}),
+            ParseSpaceRoutes(prefs()->GetList(prefs::kSpaceRoutes)));
+  EXPECT_EQ("Home", prefs()->GetString(prefs::kSpaceRoutingExternalDefault));
+
+  // Bookmarks of both profiles, a folder each (on the empty bar).
+  EXPECT_EQ(u"Personal",
+            BookmarkFolderOf("https://personal-bookmark.example/"));
+  EXPECT_EQ(u"Work", BookmarkFolderOf("https://work-bookmark.example/"));
+}
+
+// Again: the Work profile is reused and no route is added twice; the
+// user's own default for links from other apps stays.
+IN_PROC_BROWSER_TEST_F(KoanArcProfilesImportBrowserTest, ReimportReuses) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  prefs()->SetString(prefs::kSpaceRoutingExternalDefault, "Mine");
+  const SourceProfile all = FindProfile(importer::kAllProfilesName);
+  Import(all, importer::kSpacesImportItem);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 3));
+  Import(all, importer::kSpacesImportItem);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 6));
+  EXPECT_EQ(1u, UserContainers().size());
+  EXPECT_EQ(2u, ParseSpaceRoutes(prefs()->GetList(prefs::kSpaceRoutes)).size());
+  EXPECT_EQ("Mine", prefs()->GetString(prefs::kSpaceRoutingExternalDefault));
+}
+
+// One profile: its Spaces in its profile, only the routes to them.
+IN_PROC_BROWSER_TEST_F(KoanArcProfilesImportBrowserTest, ImportsOneProfile) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  Import(FindProfile(u"Work"), importer::kSpacesImportItem);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  EXPECT_THAT(SpaceNames(browser()),
+              testing::ElementsAre(u"Projects", u"Clients"));
+  const std::string work = ContainerNamed("Work");
+  ASSERT_FALSE(work.empty());
+  // The window's untouched Space took the first, and its profile.
+  EXPECT_EQ(work, GetSpaces(browser())->GetSpaces()[0].container);
+  EXPECT_EQ((std::vector<SpaceRoute>{{.reference = "git.example",
+                                      .match = SpaceRouteMatch::kContains,
+                                      .space = u"Projects"}}),
+            ParseSpaceRoutes(prefs()->GetList(prefs::kSpaceRoutes)));
+  EXPECT_EQ("", prefs()->GetString(prefs::kSpaceRoutingExternalDefault));
+  EXPECT_FALSE(PinnedTab("https://home-pinned.example/"));
+}
+
+// A Space the user gave a profile of its own keeps it: the first imported
+// Space, of another profile, is made new.
+IN_PROC_BROWSER_TEST_F(KoanArcProfilesImportBrowserTest,
+                       KeepsTheActiveSpacesOwnProfile) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  std::optional<containers::UserContainer> mine;
+  {
+    ScopedListPrefUpdate update(prefs(), prefs::kUserContainers);
+    mine = containers::AddUserContainer(update.Get(), u"Mine");
+  }
+  ASSERT_TRUE(mine);
+  const std::string own = containers::Serialize(mine->id);
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  const tab_groups::TabGroupId active = *spaces->GetActiveSpace();
+  spaces->SetSpaceContainer(active, own);
+  const std::u16string name = spaces->GetSpace(active)->name;
+
+  Import(FindProfile(u"Work"), importer::kSpacesImportItem);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 3));
+  EXPECT_THAT(SpaceNames(browser()),
+              testing::ElementsAre(name, u"Projects", u"Clients"));
+  EXPECT_EQ(own, spaces->GetSpaceContainer(active));
+  EXPECT_EQ(ContainerNamed("Work"), spaces->GetSpaces()[1].container);
+}
+
+#endif  // BUILDFLAG(IS_MAC)
 
 }  // namespace koan

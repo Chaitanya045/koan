@@ -5,6 +5,8 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_SIDEBAR_NAV_VIEW_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_SIDEBAR_NAV_VIEW_H_
 
+#include <memory>
+
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_multi_source_observation.h"
@@ -30,11 +32,13 @@ class Label;
 namespace koan {
 
 class KoanSidebarExtensionsView;
+class KoanSpaceExtensionsContextMenu;
 class KoanSiteButton;
 
 // Zen's single-toolbar sidebar header is two pieces:
-// - KoanSidebarNavButtons (back / forward / reload) at the trailing end of
-//   the vertical tab strip's top row, next to the sidebar toggle;
+// - KoanSidebarNavButtons (back / forward / reload; on Linux first Zen's
+//   app menu button, KoanAppMenuButton) at the trailing end of the vertical
+//   tab strip's top row, next to the sidebar toggle;
 // - KoanSidebarNavView below it: a URL pill with the site identity button
 //   (the favicon, which opens the site panel), the site's name, then, while
 //   the sidebar is hovered, the pinned extensions, Zen's copy-URL button
@@ -138,6 +142,8 @@ class KoanSidebarNavView : public views::View,
   raw_ptr<views::Label> url_label_ = nullptr;
   raw_ptr<views::Button> copy_button_ = nullptr;
   raw_ptr<views::Button> extensions_button_ = nullptr;
+  // Its context menu: Extensions in This Space... (#473).
+  std::unique_ptr<KoanSpaceExtensionsContextMenu> extensions_context_menu_;
   raw_ptr<KoanSidebarExtensionsView> extensions_ = nullptr;
   raw_ptr<KoanSiteButton> site_button_ = nullptr;
   bool editing_ = false;

@@ -1,15 +1,30 @@
 diff --git a/chrome/browser/renderer_context_menu/render_view_context_menu.cc b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
+index bd85827..32f83f7 100644
 --- a/chrome/browser/renderer_context_menu/render_view_context_menu.cc
 +++ b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
-@@ -254,6 +254,7 @@
+@@ -254,6 +254,8 @@
  #include "content/public/common/url_constants.h"
  #include "content/public/common/url_utils.h"
  #include "extensions/buildflags/buildflags.h"
++#include "koan/browser/ui/views/koan_extensions_hooks.h"
 +#include "koan/browser/ui/views/koan_glance.h"
  #include "media/base/media_switches.h"
  #include "mojo/public/cpp/bindings/associated_remote.h"
  #include "net/base/network_anonymization_key.h"
-@@ -2120,6 +2121,10 @@ void RenderViewContextMenu::AppendLinkIt
+@@ -1123,9 +1125,9 @@ RenderViewContextMenu::RenderViewContextMenu(
+           browser_context_,
+           this,
+           &menu_model_,
+-          base::BindRepeating(
+-              extensions::context_menu_helpers::MenuItemMatchesParams,
+-              params_)),
++          // Koan: upstream's MenuItemMatchesParams(), and no item of an
++          // extension that is off in the frame's Space profile.
++          koan::ExtensionMenuItemFilter(render_frame_host, params_)),
+       current_url_(render_frame_host.GetLastCommittedURL()),
+       main_frame_url_(render_frame_host.GetMainFrame()->GetLastCommittedURL()),
+       profile_link_submenu_model_(this),
+@@ -2120,6 +2122,10 @@ void RenderViewContextMenu::AppendLinkItems() {
                : vector_icons::kBusinessChromeRefreshOldIcon);
      }
  
@@ -20,7 +35,7 @@ diff --git a/chrome/browser/renderer_context_menu/render_view_context_menu.cc b/
      AppendOpenInWebAppLinkItems();
      AppendOpenWithLinkItems();
  
-@@ -3520,6 +3525,10 @@ bool RenderViewContextMenu::IsCommandIdE
+@@ -3520,6 +3526,10 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
    }
  #endif
  
@@ -31,7 +46,7 @@ diff --git a/chrome/browser/renderer_context_menu/render_view_context_menu.cc b/
    bool enabled = false;
    if (RenderViewContextMenuBase::IsCommandIdKnown(id, &enabled)) {
      return enabled;
-@@ -3914,6 +3923,13 @@ void RenderViewContextMenu::OpenURLWithE
+@@ -3914,6 +3924,13 @@ void RenderViewContextMenu::OpenURLWithExtraHeaders(
  }
  
  void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {

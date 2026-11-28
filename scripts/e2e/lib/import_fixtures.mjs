@@ -1,6 +1,7 @@
-// The fixture profiles of import_sources.mjs (#348, #363): a Zen (with its
-// Spaces in zen-sessions.jsonlz4), a Chrome and an Arc profile (its Spaces
-// in StorableSidebar.json), written under the test root that
+// The fixture profiles of import_sources.mjs (#348, #363, #481): a Zen (with
+// its Spaces in zen-sessions.jsonlz4), a Chrome and an Arc with two
+// profiles (src/test/data/arc_import: Spaces in each, link rules), written
+// under the test root that
 // import_sources.flags passes
 // (--koan-import-test-root={profile}/import-root) by
 // scripts/e2e/setup/import_sources.mjs, before Koan starts, so the first
@@ -8,14 +9,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 export const ZEN_BOOKMARK = 'https://zen-bookmark.example/';
 export const ZEN_HISTORY = 'https://zen-history.example/';
 export const CHROME_BOOKMARK = 'https://chrome-bookmark.example/';
 export const CHROME_HISTORY = 'https://chrome-history.example/';
 export const CHROME_LOGIN = 'https://chrome-login.example/';
-export const ARC_PINNED = 'https://arc-pinned.example/';
-export const ARC_FAVORITE = 'https://arc-favorite.example/';
+// From src/test/data/arc_import (its README.md).
+export const ARC_FIXTURE = fileURLToPath(new URL('../../../src/test/data/arc_import/Arc', import.meta.url));
+export const ARC_PINNED = 'https://projects-pinned.example/';
+export const ARC_FAVORITE = 'https://work-favorite.example/';
 export const ZEN_PINNED = 'https://zen-pinned.example/';
 export const ZEN_ESSENTIAL = 'https://zen-essential.example/';
 export const ZEN_FOLDER_TAB = 'https://zen-folder.example/';
@@ -148,19 +152,8 @@ export async function writeImportFixtures(root) {
       X'763130${HUNTER2}', '${CHROME_LOGIN}', 0, 0);
   `);
   write(path.join(ROOT, 'Keychain', 'Chrome Safe Storage'), 'peanuts');
-  // Arc: a profile, its Spaces, pinned tabs and Favorites beside "User Data".
-  write(path.join(ROOT, 'Arc', 'User Data', 'Default', 'Bookmarks'),
-        JSON.stringify({ version: 1, roots: {} }));
-  write(path.join(ROOT, 'Arc', 'StorableSidebar.json'), JSON.stringify({ sidebar: { containers: [
-    { global: {} }, {
-      topAppsContainerIDs: [{ default: true }, 'top'],
-      spaces: ['s', { id: 's', title: 'Reading', profile: { default: true },
-                      containerIDs: ['pinned', 'p'] }],
-      items: ['top', { id: 'top', childrenIds: ['fav'] },
-              'fav', { id: 'fav', title: 'Favorite', data: { tab: { savedURL: ARC_FAVORITE } } },
-              'p', { id: 'p', childrenIds: ['t'] },
-              't', { id: 't', title: 'Pinned', data: { tab: { savedURL: ARC_PINNED } } }],
-    }] } }));
+  // Arc: two profiles, their Spaces, pinned tabs, Favorites and link rules.
+  fs.cpSync(ARC_FIXTURE, path.join(ROOT, 'Arc'), { recursive: true });
   const status = { zen, chromeHistory, chromeLogin };
   write(statusFile(root), JSON.stringify(status));
   return status;

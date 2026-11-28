@@ -1,0 +1,34 @@
+diff --git a/extensions/browser/api/web_request/web_request_info.cc b/extensions/browser/api/web_request/web_request_info.cc
+index 13c8767..09fab93 100644
+--- a/extensions/browser/api/web_request/web_request_info.cc
++++ b/extensions/browser/api/web_request/web_request_info.cc
+@@ -30,6 +30,7 @@
+ #include "extensions/buildflags/buildflags.h"
+ #include "extensions/common/extension_id.h"
+ #include "ipc/constants.mojom.h"
++#include "koan/browser/containers/koan_container_extensions.h"
+ #include "net/base/ip_endpoint.h"
+ #include "net/base/upload_bytes_element_reader.h"
+ #include "net/base/upload_data_stream.h"
+@@ -287,6 +288,11 @@ WebRequestInfoInitParams::WebRequestInfoInitParams(
+                  content::RenderProcessHost::FromID(global_id.child_id)) {
+     is_privileged = process->IsPrivileged();
+   }
++  // Koan: and in which Space profile (koan_container_extensions.h).
++  koan_partition = koan::containers::PartitionOfRequest(
++      navigation_ui_data ? navigation_ui_data->frame_tree_node_id()
++                         : content::FrameTreeNodeId(),
++      global_id.child_id);
+ 
+   std::vector<std::unique_ptr<UploadDataSource>> data_sources;
+   if (CreateUploadDataSourcesFromResourceRequest(request, &data_sources)) {
+@@ -372,7 +378,8 @@ WebRequestInfo::WebRequestInfo(WebRequestInfoInitParams params)
+       is_service_worker_script(params.is_service_worker_script),
+       navigation_id(std::move(params.navigation_id)),
+       parent_routing_id(params.parent_routing_id),
+-      is_privileged(params.is_privileged) {}
++      is_privileged(params.is_privileged),
++      koan_partition(std::move(params.koan_partition)) {}
+ 
+ WebRequestInfo::~WebRequestInfo() = default;
+ 

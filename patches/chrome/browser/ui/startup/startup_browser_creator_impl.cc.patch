@@ -1,0 +1,22 @@
+diff --git a/chrome/browser/ui/startup/startup_browser_creator_impl.cc b/chrome/browser/ui/startup/startup_browser_creator_impl.cc
+--- a/chrome/browser/ui/startup/startup_browser_creator_impl.cc
++++ b/chrome/browser/ui/startup/startup_browser_creator_impl.cc
+@@ -69,6 +69,7 @@
+ #include "content/public/browser/dom_storage_context.h"
+ #include "content/public/browser/storage_partition.h"
+ #include "content/public/common/content_switches.h"
++#include "koan/browser/ui/views/koan_spaces.h"
+ #include "ui/base/page_transition_types.h"
+ #include "ui/base/window_open_disposition.h"
+ #include "url/origin.h"
+@@ -592,6 +593,10 @@
+         restore_tabbed_browser);
+   }
+ 
++  // Koan: on Linux, links from other apps, for Zen's Space routing
++  // (koan_spaces.h).
++  koan::ScopedCommandLineLinks command_line_links(
++      result.launch_result == LaunchResult::kWithGivenUrls);
+   BrowserWindowInterface* browser = RestoreOrCreateBrowser(
+       tabs, behavior, restore_options, process_startup, is_post_crash_launch);
+ 

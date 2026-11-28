@@ -25,7 +25,7 @@ import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { browserCall, check, connect, evalIn, finish, pages, sleep, viewTree,
+import { centerOf, browserCall, check, connect, evalIn, finish, pages, sleep, viewTree,
          waitFor } from './lib/koan.mjs';
 import { AGENT_HOME, CLI, PROFILE, allow, allowWhy, brief, koan } from './lib/agent.mjs';
 import { IS_MAC, KOAN_PID, alive, fatalInLog, goToAgentTab, realClick, realInput, realInputWhyNot,
@@ -335,7 +335,8 @@ async function clickPillButton(text) {
   }
   ui.close();
   if (!at) return false;
-  return realClick(at.x + button.ax + button.w / 2, at.y + button.ay + button.h / 2, 900);
+  const c = centerOf(button);
+  return realClick(at.x + c.x, at.y + c.y, 900);
 }
 
 await koan(['end']);

@@ -59,31 +59,57 @@ also keeps out-final 14 days), out slices 2 days, logs 7 days, .dmg 7 days
 ## Incremental builds
 
 A full build is ~16 h, but most nightlies change a few files. Runs of
-`macos.yml` pass `incremental: true` to `macos-chain.yml` (release.yml
-passes neither input: a tagged release is always a clean build).
+`macos.yml` and `release.yml` pass `incremental: true` to `macos-chain.yml`.
+The rule (user, 2026-11-28): a full build happens only once per full-build
+input change; after that every trusted build, nightly or release, is
+incremental, and every finished trusted build is the base for the next.
 
 **Only trusted runs become bases.** Once Nightly auto-updates users, objects
 built from unmerged PR code must never be linked into what they install. So
-`keep_base` is true only for a run that built develop itself: the nightly,
-or a manual run on develop without a `ref` input (the `develop` output of
-macos.yml's plan job, the same condition as the release job's). Only such a
-run uploads `koan-mac-out-final.tar.zst`, keeps its source 14 days and
-deletes older runs' bases. Runs without it (a labelled PR, a manual run of
-another ref) may still build on a base, but leave none: their source lives 3
-days, they upload no out-final, and their cleanup deletes only their own
-source and out slices, as before incremental builds. `find_base.sh`
-only accepts a successful run on `$BRANCH` (develop) whose event is
-`schedule` or `workflow_dispatch`, with both archives unexpired; the missing
-out-final of any other run is the second lock.
+`keep_base` is true only for a run that built develop itself (the nightly,
+or a manual run on develop without a `ref` input: the `develop` output of
+macos.yml's plan job, the same condition as the release job's) and for
+release.yml's runs (a `v*` tag, which only org admins can create, on
+develop or a release/* branch). Only such a run uploads
+`koan-mac-out-final.tar.zst`, keeps its source 14 days and deletes older
+runs' bases. Runs without it (a labelled PR, a manual run of another ref)
+may still build on a base, but leave none: their source lives 3 days, they
+upload no out-final, and their cleanup deletes only their own source and
+out slices, as before incremental builds. `find_base.sh` (and
+`prune_bases.sh`) only accept what `scripts/ci/trusted_base.sh` calls
+trusted: a successful run of the nightly workflow on `$BRANCH` (develop)
+whose event is `schedule` or `workflow_dispatch`, or a successful
+release.yml run from a tag push or a dispatch, from develop or from a `v*`
+tag that still points at the run's `head_sha` (a dispatch runs the workflow
+files of its ref, and a branch may be named `v...` too), with both archives
+unexpired; the missing out-final of any other run is the second lock.
+
+**A release as a base.** A release's tree and out/Koan match a nightly's of
+the same commit: the same gn args (`build/koan-mac.gn`), the update test
+hooks off in both (`KOAN_CI_UPDATE_TEST_HOOKS=0` for `release` or
+`keep_base`, `check_update_test_hooks.sh` on both), the version from
+`VERSION` (`//koan/version`), no tag or event read by the build. The only
+release-only steps are `KOAN_RELEASE=1` in `mac_package.sh` (the .dmg's
+name, after out-final is packed) and the publish job's re-signing on its
+own runner. So a nightly built on a release base carries nothing
+release-only. A release run is a base only once it succeeded, i.e. after
+the `release` environment's approval and the publish; one waiting for
+approval isn't picked yet (and keeps its archives through other runs'
+cleanups), and a failed one keeps its archives for a re-run until they
+expire. A release on a release/* branch is a base too when it is the
+newest: `incremental.sh` turns any trusted tree into the commit being
+built, so that only costs rebuild time.
 
 - The fetch job finds that run (`scripts/ci/find_base.sh`).
   **How the base is found:** it asks the API only for runs that can be a
   base, `actions/workflows/<file>/runs?branch=develop&event=schedule` and
-  the same with `event=workflow_dispatch` (up to 3 pages of 100 each),
-  merges them newest first, keeps the successful ones on develop with a
-  base event (filtered by the script too: `?status=success` has left out a
+  the same with `event=workflow_dispatch`, plus
+  `actions/workflows/release.yml/runs?event=push` and `event=workflow_dispatch`
+  (up to 3 pages of 100 each),
+  merges them newest first (`created_at`), keeps the successful trusted ones
+  (filtered by the script too: `?status=success` has left out a
   finished run for hours), and takes the first, other than this run, with
-  both archives unexpired. It used to take the workflow's newest 50 runs of
+  both archives of its platform's prefix unexpired. It used to take the workflow's newest 50 runs of
   any kind and filter them; every label put on any pull request makes a
   run of `linux.yml` and `macos.yml` (`pull_request: labeled`), so a dozen
   labelled pull requests hid the base and every build was a full one
@@ -91,6 +117,29 @@ out-final of any other run is the second lock.
   (a fake `gh` over recorded runs). A pull-request build runs its own
   head's scripts, so a pull request branched before a find_base.sh fix
   needs develop merged in to get it.
+  **When GitHub's API fails** (#589; both chains): every `gh api` call of
+  `find_base.sh`, `trusted_base.sh` and `prune_bases.sh` goes through
+  `gh_api` (`scripts/ci/gh_api.sh`): up to 4 tries, 5, 10 and 20 s apart;
+  a 404 is an answer (no such tag) and isn't retried. It used to be
+  `2>/dev/null || true`, so a transient 5xx or rate limit on the run list
+  or a run's artifact list read as "no base", and PR #588's run
+  46073436923 silently built all of Chromium although 46055294396 was
+  there. **Decision: a lookup that still fails fails the step** (an
+  `::error::` naming the call, GitHub's error above it, a line in the
+  summary); re-run the job. A failed job costs minutes, a needless full
+  build hours (~16 h here, 5 h+ on Linux) and delays every other build
+  behind it. It fails on the first unanswered call, newest run first, so
+  an older base is never taken while a newer run is unknown. Every run it
+  passes over is logged with why (this run, not finished, not successful,
+  not trusted, archives missing or expired), so a full build can be
+  explained from the log. `prune_bases.sh` does the opposite on purpose:
+  an unanswered read deletes nothing more and the step *succeeds* with a
+  `::warning::`, because failing the cleanup would fail this keep_base run
+  and `find_base.sh` would then refuse it as a base; what's left expires
+  in 14 days. (A failed out-final list used to make every base look like
+  it had only its source, i.e. "no base, delete it".) Tests: the fake
+  `gh` of `test_find_base.py` and `test_prune_bases.py` fails a call once
+  (`FAKE_GH_FAIL=<path part>:1`, retried, base found) or always.
   `scripts/ci/incremental.sh` then:
   - deletes the checkout's tracked files and unpacks that run's source
     archive in their place, mtimes and all;
@@ -110,15 +159,48 @@ out-final of any other run is the second lock.
   runner image with a new Xcode or SDK gets a clean build. It also falls
   back when a patch won't reverse or apply, or when the archive is gone.
 - Build 1 downloads the base's `out/Koan` (`koan-mac-out-final`) before
-  building. If that download fails, the build is full but still correct.
+  building. If that download fails, the build is full but still correct,
+  and build 1 says so: a `Lost base` warning and "base run N lost its
+  out/Koan (...); building from scratch" in its summary.
 - The job that finishes packs `out/Koan` as `koan-mac-out-final` **before**
   `mac_package.sh`, which signs `Koan.app` in place and adds the VMP
   signature. The next build then starts from the build's own output.
 - With `keep_base`, source and out-final are kept 14 days. A successful
-  run deletes its own out-N slices, and the source and out-final of older
-  `macos.yml` runs whose own status (`gh api .../runs/<id> --jq .status`,
-  not the list's `status=completed` filter, which has missed runs) is
-  `completed`. A running chain keeps its archives.
+  run deletes its own out-N slices, and older bases as below.
+
+**When bases are deleted** (both chains, `scripts/ci/prune_bases.sh` in the
+`cleanup` job of a successful keep_base run; tests in
+`scripts/tests/test_prune_bases.py`, a fake `gh`). A run picks its base when
+its fetch starts, but build 1 downloads the base's out-final only when the
+fetch is done, up to hours later. The cleanup used to delete every older
+develop run's archives at once, so a develop build finishing in that window
+turned the other build into a full one (#569: pull request #514's run
+46028618466 picked 46019353569, develop run 46026497864's cleanup deleted
+it at ~16:00 UTC, and build 1 built from scratch). Now:
+- an older develop run of the same workflow whose run is still in progress
+  keeps its archives (a running chain needs its source);
+- one that is no base (not successful, or missing its source or out-final)
+  loses both at once;
+- a base stays until a newer base has existed for 12 h (`GRACE_HOURS`):
+  the newer one counts from its run's `updated_at`, this run's from now.
+  12 h covers the fetch's 5 h timeout plus waiting for a runner; after
+  that every run's `find_base.sh` has picked the newer base. With one
+  develop build a day, the previous base goes with the next day's cleanup;
+  a busy day keeps two or three (~7 GB each).
+- It looks the archives up by name (`actions/artifacts?name=`) and checks
+  each run's own status and workflow (`gh api .../runs/<id>`), not a page
+  of the workflow's runs (macos-chain.yml used the newest 50, which #537
+  showed can miss develop's). Releases and nightlies supersede each other;
+  a release run that is no base keeps its archives (a re-run of a failed
+  16 h release needs them). Pull requests' and other refs' archives are
+  never touched.
+
+If a base is lost anyway (a build 1 re-run days later), build 1 reports it
+as above. Retrying with the next base belongs in the fetch, but
+`linux_fetch.sh` and `mac_fetch.sh` are in `KOAN_FULL_BUILD_INPUTS`: any
+change to them makes the next build of every branch a full one, so #569's
+fix left them alone.
+
 - Why `git status` and `git apply` rather than rsync and GNU patch (the
   first Linux version): macOS ships openrsync and BSD patch, which lack the
   needed options.
@@ -146,6 +228,80 @@ most one waiting. Pull requests: `macos-pr-<number>`, cancelled by the next
 push. The release job also has its own `macos-nightly-release` group.
 
 Review of PR #70: [reviews/pr70-review.md](https://github.com/Chaitanya045/koan/blob/ac644383c4884c21aaa7a2a7fc23694e5a5859e0/.agent/notes/reviews/pr70-review.md).
+
+## Resuming
+
+A job resumes the previous one's siso state (out/Koan with `.siso_fs_state`
+and `.siso_deps`, mtimes kept by the archives). Anything outside the
+archives that siso sees differently in the next job can make it redo
+finished work, and that stalls the chain: each job spends its 5 h on the
+same steps and 16 jobs never finish.
+
+**Runner image dates (issue #534).** `develop` run 45816128161 (full
+build): build-01, 02 and 04 ran on `xcode-27-arm64` 20261104.0337.1,
+build-03 on 20261123.0387.2. Build-03 recompiled 21,653 of build-01's
+22,539 objects, and build-04 the same again. siso's own reasons, from the
+`siso_explain` files in `koan-mac-out-4` (`siso_explain.0` is build-03's)
+and the two `.siso_fs_state` files:
+
+1. `//build/modules:mac_sysroot` and `//build/config/mac:sdk_inputs` are
+   `noop.py` actions whose declared outputs are the SDK's `usr/include`
+   (through `out/Koan/sdk/xcode_links`), so siso's state records 3,451 SDK
+   headers as generated files, with their mtime and when the action last
+   ran (GN actions are `restat`, so that time is what siso compares).
+2. The headers' mtime is when the runner image was made: `mach/exc.defs`
+   is 2026-11-04 04:52:34 UTC on 20261104 and 2026-11-23 16:08:34 on
+   20261123. When the disk doesn't match the state, siso drops the entry
+   (hashfs `handleBeforeLocal` / `handleAfterLocal`), with it the action's
+   run time, and then finds the header "older than most recent input
+   ../../build/noop.py", so it runs the action again. Build-02, on the
+   same image as build-01, skipped it.
+3. The rerun makes `gen/build/modules/module.modulemap` dirty ("input
+   out/Koan/phony/build/modules/mac_sysroot: input
+   .../usr/include/arpa/nameser.h: dirty"), which rebuilds
+   `obj/build/modules/system/module.pcm` (Clang's system module), and every
+   object that imports it is dirty: 23,064 steps in build-03, 23,253 in
+   build-04 ("deps for … dirty: input
+   out/Koan/obj/build/modules/system/module.pcm: dirty").
+
+The out archive, `.siso_deps` and the `xcode_links` symlinks (same target
+on both images, made on 11-26 by build-01's gn gen) were fine.
+
+Fix: `mac_build_slice.sh` gives every file of the SDK one mtime
+(2001-01-01 UTC, `sudo find … -exec touch -h`) before siso starts, so the
+state matches the disk on any image. Only when Xcode and the SDK are the
+ones the fetch job recorded in `.cache/ci-toolchain` (same Xcode build, same
+headers); with another, the mtimes stay, siso rebuilds what the new SDK
+changes (correct), and the resume check below is off. The first incremental
+build on a base from before the fix rebuilds once.
+
+**The resume check.** A job that stops at the deadline writes the steps
+siso had left to `out/Koan/koan-ci-resume` with the run id
+(`scripts/ci/build_progress.py record`). Ten minutes into the next job, if
+siso's total is above 1.25 × that + 1,000, the job stops siso and fails
+with an `::error::` and the head of `siso_explain`. A healthy resume
+settles within 2 min at or below what the previous job left (build-02:
+49,796 vs build-01's 52,255 left); build-03 and 04 settled at 68,900 vs
+36,348 and 66,634 vs 39,437. The first `[0/N]` total doesn't tell: build-02
+started at 90,434. Nothing to compare in slice 1 (no state, or a base
+run's).
+
+**Logs.** Each job prints the image (`$ImageOS $ImageVersion`), Xcode, the
+SDK path, the mtimes of `SDKSettings.json` and `mach/exc.defs`, and the
+`xcode_links` targets, before the build and after it (gn gen can replace a
+link), into the job log and `toolchain.txt` in `koan-mac-logs-N`, with
+`siso_explain` (why siso ran each step it ran). The job summary has the
+image. `out/Koan/metal-toolchain` points into a cryptex mount whose name
+changes every boot, but no step's inputs go through it (no siso_explain
+line).
+
+**Linux chain** (`linux-chain.yml`, `linux_build_slice.sh`): not exposed
+to this. Its compile steps use Chromium's clang and Debian sysroot from the
+source archive (`use_sysroot = true`), and `mac_sysroot`/`sdk_inputs` are
+Mac-only; the runner's files only run the build (python3, the shell), and
+siso doesn't track those. Inferred from the build files, not from a
+resumed Linux job's explain. It has the same resume check and copies
+`siso_explain` to its logs.
 
 ## Release signing
 

@@ -104,6 +104,9 @@ class KoanSpaceBarView : public views::View, public gfx::AnimationDelegate {
   std::optional<gfx::Rect> GetSpaceButtonBoundsForTesting(
       const tab_groups::TabGroupId& space) const;
   gfx::Rect GetCreateButtonBoundsForTesting() const;
+  // A Space's button, or null if the bar has none for it.
+  views::View* GetSpaceButtonForTesting(
+      const tab_groups::TabGroupId& space) const;
   bool StripClipsForTesting() const;
 
   // views::View:

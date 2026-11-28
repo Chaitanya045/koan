@@ -45,6 +45,9 @@ source_set("prefs") {
     "//koan/browser/agent:auto_resume",
     "//koan/browser/agent:limits",
     "//koan/browser/containers:access_prefs",
+
+    # ui::SystemTheme (system_theme.h).
+    "//ui/color:color_provider_key",
   ]
 }
 
@@ -160,6 +163,19 @@ source_set("library_logic") {
   ]
   public_deps = [ "//base" ]
   deps = [ "//url" ]
+}
+
+# Which tabs "Close tabs I haven't used for" closes, and the list it keeps
+# them in (koan_tab_auto_close.h). Pure logic.
+source_set("tab_auto_close") {
+  sources = [
+    "koan_tab_auto_close.cc",
+    "koan_tab_auto_close.h",
+  ]
+  public_deps = [
+    "//base",
+    "//url",
+  ]
 }
 
 # A Space's icon and name in its tab group title. Pure logic.
