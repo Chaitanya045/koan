@@ -87,6 +87,14 @@ done
 OS="$(koan_os)"
 # --dry-run may plan for a Mac on Linux (CI): nothing runs.
 if [[ $MODE == dry && -n ${KOAN_FAKE_OS:-} ]]; then OS=$KOAN_FAKE_OS; fi
+# What autoninja builds. On Linux `chrome` means the browser and the agent's
+# `koan` and `koan-relay`, which the Flatpak ships beside it
+# (scripts/ci/linux_package.sh); on the Mac the chrome target has them
+# already (//koan/cli:koan_bundle_data).
+TARGETS=("$TARGET")
+if [[ $OS == linux && $TARGET == chrome ]]; then
+  TARGETS+=(koan/cli:koan koan/cli:koan-relay)
+fi
 if [[ $MODE != dry ]]; then koan_require_env; fi
 export PATH="$ROOT/depot_tools:$PATH"
 SRC="$ROOT/chromium/src"
@@ -304,7 +312,7 @@ dry_run() {
     fi
   fi
   echo "  gn gen       $yes"
-  echo "  build        $yes: autoninja -C $OUT -j $JOBS $TARGET"
+  echo "  build        $yes: autoninja -C $OUT -j $JOBS ${TARGETS[*]}"
   if [[ $OS == mac && $TARGET == chrome && ${KOAN_SIGN:-1} != 0 ]]; then
     echo "  sign         $yes: scripts/mac_sign.sh (the local identity, else ad hoc)"
   else
@@ -356,7 +364,7 @@ if [[ $MODE == gen ]]; then
   exit 0
 fi
 
-build=(autoninja -C "$OUT" -j "$JOBS" "$TARGET")
+build=(autoninja -C "$OUT" -j "$JOBS" "${TARGETS[@]}")
 if [[ $FAST == 0 ]]; then build=(nice -n 10 "${build[@]}"); fi
 # Keep the Mac awake (not the display) while it builds.
 if [[ $OS == mac ]]; then build=(caffeinate -i "${build[@]}"); fi

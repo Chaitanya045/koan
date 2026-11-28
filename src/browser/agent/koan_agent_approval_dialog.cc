@@ -23,6 +23,7 @@
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
@@ -51,9 +52,19 @@ DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kDriveId);
 DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kKeepAwakeId);
 
 std::u16string Signer(const std::string& identity) {
-  if (identity.empty()) {
+  // Linux has no code signatures: the identity there is the executable's
+  // file, or the process for one on a FUSE file system (koan_agent_peer.h).
+  if (identity.empty() || identity.starts_with("file:") ||
+      identity.starts_with("process:")) {
     return u"unsigned";
   }
+#if !BUILDFLAG(IS_MAC)
+  // An ancestor that could not be looked at. (The Mac's dialog calls one "ad
+  // hoc signed"; unchanged here, a follow-up.)
+  if (identity == "unverified") {
+    return u"not verified";
+  }
+#endif
   if (identity == "apple") {
     return u"signed by Apple";
   }

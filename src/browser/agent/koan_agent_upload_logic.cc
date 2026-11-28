@@ -9,6 +9,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "net/base/mime_util.h"
 
 namespace koan::agent {
@@ -112,6 +113,58 @@ bool IsPlainFileName(std::string_view name) {
          name.find('/') == std::string_view::npos &&
          name.find('\\') == std::string_view::npos &&
          name.find('\0') == std::string_view::npos && base::IsStringUTF8(name);
+}
+
+std::vector<base::FilePath> RefusedHomeFolders(const base::FilePath& home) {
+  std::vector<base::FilePath> folders;
+  if (home.empty()) {
+    return folders;
+  }
+  for (const char* folder :
+       {".koan", ".ssh", ".gnupg", "Library/Keychains", "Library/Cookies",
+        ".aws", ".azure", ".config/gcloud", ".config/gh", ".docker", ".kube",
+        ".git-credentials", ".netrc", ".npmrc", ".pypirc"}) {
+    folders.push_back(home.Append(folder));
+  }
+#if BUILDFLAG(IS_LINUX)
+  for (const char* folder : {
+           // GNOME Keyring, KWallet (Plasma 5 and 6, and KDE 4's), pass.
+           ".local/share/keyrings",
+           ".local/share/kwalletd",
+           ".kde/share/apps/kwallet",
+           ".kde4/share/apps/kwallet",
+           ".password-store",
+           // The NSS database Chromium and others keep certificates and
+           // client keys in.
+           ".pki",
+           // Other browsers' profiles: their cookies and saved passwords.
+           ".mozilla",
+           ".config/mozilla",
+           "snap/firefox",
+           ".librewolf",
+           ".config/librewolf",
+           ".zen",
+           ".config/zen",
+           ".floorp",
+           ".config/floorp",
+           ".waterfox",
+           ".config/waterfox",
+           ".thunderbird",
+           ".config/google-chrome",
+           ".config/google-chrome-beta",
+           ".config/google-chrome-unstable",
+           ".config/chromium",
+           ".config/BraveSoftware",
+           ".config/microsoft-edge",
+           ".config/vivaldi",
+           ".config/opera",
+           // Every Flatpak app's own data, Koan's Flatpak profile with it.
+           ".var/app",
+       }) {
+    folders.push_back(home.Append(folder));
+  }
+#endif
+  return folders;
 }
 
 bool IsUnderAny(const base::FilePath& path,

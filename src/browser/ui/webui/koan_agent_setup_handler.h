@@ -10,19 +10,18 @@
 #include "base/values.h"
 #include "content/public/browser/web_ui_message_handler.h"
 
-namespace koan::agent {
-struct AgentSetup;
-}
-
 namespace koan {
 
-// Settings > Agent Control > "Set up agents on this Mac"
-// (koan_agent_setup.h). Messages from the page, each answered with
-// AgentSetupToValue() once the disk work, done off the UI thread, is over:
+// Settings > Agent Control > "Set up agents on this Mac" (this computer on
+// Linux; koan_agent_setup.h). Messages from the page, each answered with
+// AgentSetupToValue() and the machine's name ("machine") once the disk work,
+// done off the UI thread, is over:
 //   koanGetAgentSetup()     what is set up now
 //   koanSetUpAgents()       link ~/.local/bin/koan, write the skills
 //   koanRemoveAgentSetup()  undo it
-// Nothing is written but on the user's click (design decision 10).
+// Nothing is written but on the user's click (design decision 10). In a
+// Flatpak (Linux) nothing is written at all: the answer says "sandboxed"
+// and gives the command the user runs once in a terminal ("setupCommand").
 class KoanAgentSetupHandler : public content::WebUIMessageHandler {
  public:
   KoanAgentSetupHandler();
@@ -37,7 +36,7 @@ class KoanAgentSetupHandler : public content::WebUIMessageHandler {
  private:
   enum class Action { kRead, kSetUp, kRemove };
   void Handle(Action action, const base::ListValue& args);
-  void Reply(base::Value callback_id, const agent::AgentSetup& setup);
+  void Reply(base::Value callback_id, base::DictValue setup);
 
   // The home directory the setup writes under ($KOAN_AGENT_SETUP_HOME for
   // the Mac tests, which never touch the user's), and the `koan` tool of

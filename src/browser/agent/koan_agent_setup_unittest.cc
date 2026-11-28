@@ -9,6 +9,7 @@
 
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace koan::agent {
@@ -34,13 +35,24 @@ TEST(KoanAgentSetupTest, TheEntrySkillOnlyPointsAtKoanSkill) {
   const std::string_view skill = EntrySkill();
   EXPECT_TRUE(IsKoanSkill(skill));
   EXPECT_TRUE(skill.starts_with("---\nname: koan-browser\ndescription: "));
-  for (const char* needed :
-       {"the user's", "Koan", "run `koan skill`", "~/.local/bin/koan",
-        "~/Applications/Koan.app/Contents/Resources/bin/koan",
-        "/Applications/Koan.app/Contents/Resources/bin/koan", "ssh",
-        "AppleScript"}) {
+  for (const char* needed : {
+#if BUILDFLAG(IS_MAC)
+           "~/Applications/Koan.app/Contents/Resources/bin/koan",
+           "/Applications/Koan.app/Contents/Resources/bin/koan", "AppleScript",
+#else
+           "~/.local/share/flatpak/app/dev.koan.Koan/current/active/files/"
+           "koan/koan",
+           "/var/lib/flatpak/app/dev.koan.Koan/current/active/files/koan/koan",
+           "xdotool",
+#endif
+           "the user's", "Koan", "run `koan skill`", "~/.local/bin/koan",
+           "ssh"}) {
     EXPECT_NE(skill.find(needed), std::string_view::npos) << needed;
   }
+#if !BUILDFLAG(IS_MAC)
+  // Issue #489: no Mac wording off the Mac.
+  EXPECT_EQ(skill.find("Mac"), std::string_view::npos);
+#endif
   // Small: the guide is `koan skill`'s, not the entry's.
   EXPECT_LT(skill.size(), 2048u);
   EXPECT_FALSE(IsKoanSkill("---\nname: other\n---\nname: koan-browser\n"));
@@ -79,12 +91,73 @@ TEST(KoanAgentSetupTest, LocalBinOnThePath) {
   EXPECT_FALSE(MentionsLocalBin("alias ll='ls -l'\n"));
 }
 
+#if BUILDFLAG(IS_LINUX)
+// The Flatpak's koan, by the path that follows the installed version.
+TEST(KoanAgentSetupTest, TheLinkFollowsTheFlatpaksUpdates) {
+  const base::FilePath deployed(
+      "/home/u/.local/share/flatpak/app/dev.koan.Koan/x86_64/master/"
+      "0123abcd/files/koan/koan");
+  const base::FilePath stable(
+      "/home/u/.local/share/flatpak/app/dev.koan.Koan/current/active/files/"
+      "koan/koan");
+  EXPECT_EQ(StableFlatpakPath(deployed), stable);
+  EXPECT_EQ(ToolToLink(deployed), stable);
+  EXPECT_EQ(StableFlatpakPath(stable), stable);
+  EXPECT_EQ(*StableFlatpakPath(base::FilePath(
+                "/var/lib/flatpak/app/dev.koan.Koan/aarch64/beta/ff/files")),
+            base::FilePath(
+                "/var/lib/flatpak/app/dev.koan.Koan/current/active/files"));
+  // Not Koan's Flatpak: linked as it is.
+  const base::FilePath built("/home/u/koan/out/Release/koan");
+  EXPECT_FALSE(StableFlatpakPath(built));
+  EXPECT_EQ(ToolToLink(built), built);
+  EXPECT_FALSE(StableFlatpakPath(base::FilePath(
+      "/var/lib/flatpak/app/org.other.App/x86_64/stable/ab/files/koan")));
+  EXPECT_FALSE(StableFlatpakPath(
+      base::FilePath("/var/lib/flatpak/app/dev.koan.Koan/x86_64/master")));
+}
+
+TEST(KoanAgentSetupTest, TheAppPathOfAFlatpakSandbox) {
+  EXPECT_EQ(*FlatpakAppPath("[Application]\nname=dev.koan.Koan\n\n"
+                            "[Instance]\ninstance-id=123\napp-path=/var/lib/"
+                            "flatpak/app/dev.koan.Koan/x86_64/master/ab/files\n"
+                            "branch=master\n"),
+            base::FilePath(
+                "/var/lib/flatpak/app/dev.koan.Koan/x86_64/master/ab/files"));
+  // Only [Instance]'s, only an absolute path without "..".
+  EXPECT_FALSE(FlatpakAppPath("[Application]\napp-path=/x/files\n"));
+  EXPECT_FALSE(FlatpakAppPath("[Instance]\napp-path=files\n"));
+  EXPECT_FALSE(FlatpakAppPath("[Instance]\napp-path=/a/../b\n"));
+  EXPECT_FALSE(FlatpakAppPath(""));
+}
+
+TEST(KoanAgentSetupTest, ACommandPathIsOneShellWord) {
+  EXPECT_EQ(ShellQuoted(base::FilePath("/var/lib/flatpak/app/x/koan")),
+            "/var/lib/flatpak/app/x/koan");
+  EXPECT_EQ(ShellQuoted(base::FilePath("/home/a b/koan")), "'/home/a b/koan'");
+  EXPECT_EQ(ShellQuoted(base::FilePath("/home/it's/koan")),
+            "'/home/it'\\''s/koan'");
+  EXPECT_EQ(ShellQuoted(base::FilePath("/x/$(rm)/koan")), "'/x/$(rm)/koan'");
+}
+#endif
+
+// Where the tool is inside an installed Koan: the app on the Mac, a
+// deployment of the Flatpak on Linux.
+base::FilePath ToolUnder(const base::FilePath& root) {
+#if BUILDFLAG(IS_MAC)
+  return root.Append("Koan.app/Contents/Resources/bin/koan");
+#else
+  return root.Append(
+      "flatpak/app/dev.koan.Koan/x86_64/master/0123/files/koan/koan");
+#endif
+}
+
 class KoanAgentSetupFilesTest : public testing::Test {
  protected:
   void SetUp() override {
     ASSERT_TRUE(dir_.CreateUniqueTempDir());
     home_ = dir_.GetPath().Append("home");
-    app_ = dir_.GetPath().Append("Koan.app/Contents/Resources/bin/koan");
+    app_ = ToolUnder(dir_.GetPath());
     ASSERT_TRUE(base::CreateDirectory(home_));
     ASSERT_TRUE(base::CreateDirectory(app_.DirName()));
     ASSERT_TRUE(base::WriteFile(app_, "#!/bin/sh\n"));
@@ -130,8 +203,7 @@ TEST_F(KoanAgentSetupFilesTest, SetUpLinksTheToolAndWritesEachAgentsSkill) {
   EXPECT_FALSE(setup.on_path);
 
   // Again, after an update that moved the app: the link follows it.
-  const base::FilePath moved =
-      dir_.GetPath().Append("Apps/Koan.app/Contents/Resources/bin/koan");
+  const base::FilePath moved = ToolUnder(dir_.GetPath().Append("Apps"));
   ASSERT_TRUE(base::CreateDirectory(moved.DirName()));
   ASSERT_TRUE(base::WriteFile(moved, "#!/bin/sh\n"));
   ASSERT_TRUE(base::WriteFile(Skill(".claude/skills"),

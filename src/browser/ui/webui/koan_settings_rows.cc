@@ -710,8 +710,12 @@ constexpr Row kRows[] = {
     {.group = "agent-limits",
      .control = Control::kCheckbox,
      .pref = prefs::kAgentControlLowPowerHalves,
+#if BUILDFLAG(IS_MAC)
      .label = "Fewer awake tabs in Low Power Mode on battery (half, at least "
               "one)",
+#else
+     .label = "Fewer awake tabs in power saver mode (half, at least one)",
+#endif
      .is_available = IsAgentControlAllowed,
      .indent = true,
      .local_state = true},

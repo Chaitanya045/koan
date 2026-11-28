@@ -201,7 +201,9 @@ finding 6 is right that this is the dominant real threat on a developer Mac (ano
 What we claim: it cannot **start silently** (first use and any change of paired program or chain prompts, naming the
 verified executable), it cannot be **invisible** (indicator, live chain, audit log), it cannot reach the cookie jar,
 HttpOnly values, the browser, the extensions, the clipboard or incognito, it cannot forge a pairing by editing a file,
-and it is revocable and expiring. Hardening kept for later: a Keychain item whose ACL is the signed CLI (UNVERIFIED that
+and it is revocable and expiring. On Linux, the Flatpak's browser holds a descriptor into the host's `/proc` while a host program is connected
+(§4.6), which a compromised browser process could use beyond the sandbox's file-system confinement.
+Hardening kept for later: a Keychain item whose ACL is the signed CLI (UNVERIFIED that
 Koan.app's ACL can list a second binary, C§5); Touch ID (LocalAuthentication) for strict mode and for `drive`.
 
 ## 4. Transport and protocol
@@ -453,6 +455,94 @@ scrubbed; passkeys and MFA codes go to the user (Koan.userNeeded).
 `commands:["paste"]` pastes the OS clipboard into a focused field and `copy`/`cut` write it. The facade **strips
 `commands`** from every key event. A `clipboard` capability (off) would later admit a Koan-mediated, audited
 `Koan.paste {text}` that never reads the OS clipboard. T-sec-10 tests paste.
+
+### 4.6 Linux and the Flatpak (issue #489, 2026-11-27)
+
+Linux is a product platform equal to the Mac (tracker #490). Before #489 the gateway never started there:
+`GatewayHost::Start()` → `Gateway::Start()` stopped at `kNoPeerResolver`, because `CreatePlatformPeerResolver()`
+returned null off the Mac. What #489 adds, and why each piece is as it is:
+
+- **Socket.** Unchanged: `<profile>/AgentControl/agent.sock`. The Flatpak's profile is
+  `~/.var/app/dev.koan.Koan/config/koan`, which Flatpak bind-mounts at the same path, so the host sees the socket.
+  The fallback for a long path goes to `$XDG_RUNTIME_DIR` on Linux, and for a profile in `~/.var/app/<id>/` to
+  `$XDG_RUNTIME_DIR/app/<id>`, the one runtime directory the sandbox shares with the host
+  (`SandboxRuntimeRoot()`). The sandbox's `/tmp` is private. `agent.json` gains `pidNamespace`: a `koan` on the
+  host signals the browser's pid only in the browser's own namespace (`PidIsComparable()`), else connecting says
+  whether Koan runs.
+- **Who connected (`LinuxPeerResolver`, `koan_agent_peer.cc`).**
+  - The token is the kernel's pidfd of the process that called `connect()` (`SO_PEERPIDFD`, Linux 6.5; older
+    kernels fail closed) and the uid from `SO_PEERCRED`.
+  - In the Flatpak the browser is in its own PID namespace: a host program has pid 0 there and no entry in the
+    sandbox's `/proc`. So a client of the gateway sends one byte, `K` (`kPeerHelloByte`), right after `connect()`,
+    with an `SCM_RIGHTS` descriptor of its `/proc` (`SendPeerHello()`, from `DialBrowser()`).
+  - The resolver reads that byte on its worker (up to 3 s), before the session reads anything. A first byte that
+    is not `K` is left alone, so an older client is not misread: a frame's first byte is the top byte of a length
+    of at most 32 MB.
+  - The descriptor is used only after the kernel confirms it. It must be a procfs root (`PROC_SUPER_MAGIC`,
+    inode 1). `<proc>/self/fdinfo/<our pidfd>` must give `Pid: n > 0`. `self` only resolves where the reader is
+    visible, so the procfs is the browser's own PID namespace or a parent of it, never one the client made. And
+    the pidfd must still be alive once `<proc>/n` is open, since a pid is not reused while its process lives.
+  - What is read through it is the kernel's: `exe`, the uid, and the parents (`stat`; a parent that started after
+    its child is a reused pid and ends the chain as "unverified").
+  - **A /proc with mounts in it (review of #514).** The descriptor belongs to the client's mount namespace. A
+    same-user program can `unshare` a user and mount namespace (keeping its PID namespace, so Koan stays visible
+    and `self` resolves) and bind-mount its own `/proc/<pid>` over `/proc/<Koan's host pid>`, with pidfds of an
+    approved program at every low descriptor number. A plain `openat(proc, "self/fdinfo/<n>")` follows that
+    mount, because a path walk crosses the mounts of the vfsmount it walks, whoever walks it. Koan would then read
+    the helper's descriptor and take the connection for the approved program, with no prompt. So every lookup
+    below a `/proc`, the client's or Koan's own, uses `openat2()` with `RESOLVE_NO_XDEV | RESOLVE_NO_MAGICLINKS |
+    RESOLVE_BENEATH` (`OpenBelow()`). `self` is an ordinary symlink in procfs and still resolves. Each descriptor
+    must be on the root's procfs (`st_dev`). There is no fallback if `openat2()` fails: Flatpak's seccomp list
+    doesn't filter it, and the browser process has no seccomp of its own.
+  - **`exe` is a magic link, and no `openat2()` flag will follow one**, so it is followed by a plain `openat()`.
+    Its text is read from the link itself (opened `O_PATH|O_NOFOLLOW` below the verified directory). A file can be
+    mounted on the link (`move_mount()` onto an `O_PATH` descriptor of it), but what is mounted there is the root
+    of its mount. A process's executable reached through the link is not one, so a mount root is refused
+    (`STATX_ATTR_MOUNT_ROOT`; a binary bind-mounted on its own is refused with it). The path is then read from the
+    opened file, through Koan's own `/proc/self/fd`, and must equal the link's text. So the path and the identity
+    are always those of the same file, even across an exec in between.
+  - `AProcWithMountsInItIsRefused` (`koan_agent_peer_unittest.cc`) builds the attack with an unprivileged user and
+    mount namespace (skipped where those are off). A control shows that a plain `openat()` is fooled, and the
+    resolver must refuse.
+  - Without a hello, or when the peer is visible anyway (the CLI's own resolvers, a non-Flatpak Koan), the
+    process's own `/proc` is used.
+  - `Unchanged()` keeps the pidfd and the `/proc/<pid>` directory, and checks "not exited, same `exe`".
+- **Identity of a program.** Linux has no code signatures. `signing_identity` is
+  `file:<inode>:<ctime s>.<ns>:<size>` of the file `exe` names (`FileIdentity()`).
+  - A replaced file is a new inode. An edit in place moves the ctime, which only the kernel sets.
+  - `st_dev` is left out, because btrfs gives a subvolume a new one after a reboot.
+  - On FUSE (an AppImage), where the server makes up stat, it is `process:<pid>:<start>`: unique, so every new
+    process asks.
+  - The dialog says "unsigned". An update of `koan` or of the agent is a changed program, and asks again, as an
+    ad hoc (cdhash) signature does on the Mac.
+- **Cost, stated (an addition to §3.5).** While a host program is connected, the browser process holds a descriptor
+  into the host's `/proc`, which the program sent. Like any `/proc` entry, it reaches what that program can reach.
+  It gives an agent nothing: agents only get the filtered CDP. But a *compromised browser process* could use it to
+  step outside the Flatpak's file-system confinement while an agent is connected. The alternatives are worse:
+  `org.freedesktop.Flatpak` / `flatpak-spawn --host` is a permanent, full escape; D-Bus credentials give a host pid
+  and no `/proc` to read it in; and the client's own word is what the model forbids.
+- **The tools.**
+  - **Build:** on Linux, `scripts/build.sh chrome` also builds `//koan/cli:koan` and `:koan-relay`.
+  - **Ship:** `linux_package.sh` requires and strips them, and the Flatpak has them as `/app/koan/koan` and
+    `/app/koan/koan-relay`. `/app/bin/koan` stays the launcher.
+  - **Run:** agents on the host run that binary straight from the installation,
+    `<installation>/app/dev.koan.Koan/current/active/files/koan/koan`. Not `flatpak run`, which would put it in a
+    new sandbox, apart from the agent's chain and from the browser. Not a copy, which goes stale.
+  - **Profile:** a `koan` from a Flatpak deployment (`IsInKoanFlatpak()`) uses the Flatpak's profile.
+- **Set up agents.** The sandbox gets no write access to the home folder: writing `~/.local/bin` or an agent's
+  folder (hooks, settings) would be an escape in itself.
+  - **The page:** Settings shows the command to run once, `<the Flatpak's koan> setup`, worked out from `app-path`
+    in `/.flatpak-info` and `StableFlatpakPath()`.
+  - **`koan setup [--remove]`:** a Linux-only command. It runs the same `koan_agent_setup.cc` on the host and
+    links `~/.local/bin/koan` to the path that follows updates.
+  - Outside a Flatpak the button works as on the Mac.
+- **Words.** `kThisMachine` / `kTheMachineThatRunsKoan` (`koan_agent_platform.h`): "this Mac" on the Mac,
+  "this computer" on Linux. They are used in settings, the CLI's help, the guide, the entry skill
+  (`kEntrySkillLinux`) and the upload errors. The Mac's text is unchanged byte for byte.
+- **Not covered yet.**
+  - The unit tests for these paths (`koan_agent_peer_unittest.cc`, socket, setup, `koan_cli_unittest.cc`) are not
+    built in CI: no job builds the unit tests on either platform.
+  - Uploads are limited to the folders the Flatpak can read.
 
 ## 5. Pairing, approval, keys, capabilities
 

@@ -100,6 +100,10 @@ modules:
   - name: koan
     buildsystem: simple
     build-commands:
+      # The browser and the agent's tools, /app/koan/koan and koan-relay
+      # (not on PATH: /app/bin/koan is the launcher). Agents on the host run
+      # them from the installation's files; no extra permission is needed
+      # (.agent/notes/agent-control.md, "Linux and the Flatpak").
       - cp -a koan /app/koan
       # zypak starts the sandboxed processes itself; Chromium only checks
       # that a sandbox binary exists (com.google.Chrome does the same).

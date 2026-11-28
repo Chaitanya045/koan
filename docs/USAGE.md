@@ -1696,6 +1696,8 @@ dev.koan.Koan` (add `--delete-data` to remove the profile too).
 - Koan sees your Downloads, Documents, Pictures, Music and Videos folders,
   not the rest of your home folder. `flatpak override --user
   --filesystem=home dev.koan.Koan` gives it more.
+- Agent control works as on the Mac, with one step of your own: see
+  [Agent control on Linux](#agent-control-on-linux).
 - Koan's window is in Koan's colours, as on the Mac, whatever GTK or Qt
   theme the desktop uses: light or dark follows the desktop's colour-scheme
   setting (in the shadcn look, Settings > Look and Feel > Mode decides), and
@@ -1738,7 +1740,8 @@ Chromium on this computer uses it.
 
 **Agent ready** (Settings > Agent Control, on by default) lets a local agent,
 such as Claude Code or a script, open and work in background tabs. Koan listens
-on a private unix socket in `~/Library/Application Support/Koan/AgentControl/`,
+on a private unix socket in `~/Library/Application Support/Koan/AgentControl/`
+(`~/.var/app/dev.koan.Koan/config/koan/AgentControl/` in the Linux Flatpak),
 and **every new program has to be approved in a dialog that names it** before
 it can do anything. While an agent is connected, a **chip** at the bottom of the
 sidebar, above the Spaces, shows a dot and the agent's name (and how many tabs
@@ -1771,7 +1774,7 @@ Incognito and Guest launches and with another `--user-data-dir` unless you turn
 it on there. Your organisation's `RemoteDebuggingAllowed` policy turns it off.
 
 The limits are settings: awake agent tabs (4, halved on battery in Low Power
-Mode), approval requests per minute (3) and failed attempts before a 5-minute
+Mode; on Linux, in the desktop's power saver mode), approval requests per minute (3) and failed attempts before a 5-minute
 block (5). Approvals last until Koan quits for now. The command line tool and
 the tab features come next (see `.agent/notes/agent-control.md`).
 
@@ -1828,7 +1831,8 @@ choosers, screen sharing and passkeys are refused.
 ### The `koan` tool
 
 Agents use Koan through `koan`, in `Koan.app/Contents/Resources/bin/`
-(`out/Koan/koan` in a build). `koan pair --label "Claude Code"` asks you to
+(`out/Koan/koan` in a build; in the Linux Flatpak, see [Agent control on
+Linux](#agent-control-on-linux)). `koan pair --label "Claude Code"` asks you to
 approve the agent; then `koan open <url>`, `koan snapshot <tab>`,
 `koan act <tab> click @12`, `koan screenshot <tab>`, `koan take-over` (asks
 you, then takes the tab you have in front) and `koan end`.
@@ -2018,3 +2022,32 @@ connection to Koan over a private loopback address. After that it works like
 `koan`: the agent's own tabs only, and every rule of agent control. `koan relay
 stop` ends it; so do Stop and revoking it in Settings.
 
+### Agent control on Linux
+
+The Flatpak listens on `~/.var/app/dev.koan.Koan/config/koan/AgentControl/agent.sock`
+(the host sees that folder at the same path) and needs no extra permission.
+Agents on the computer use the `koan` inside the Flatpak, run on the host from
+the Flatpak's files: `~/.local/share/flatpak/app/dev.koan.Koan/current/active/files/koan/koan`
+for an install with `--user`, `/var/lib/flatpak/app/...` for a system one. It
+needs Linux 6.5 or later (the kernel tells Koan which program connected) and
+must run on the host, not inside another sandbox (a terminal inside a
+sandboxed editor won't do).
+
+Koan's sandbox can't write to your home folder, so **Set up agents on this
+computer** (Settings > Agent Control) shows a command instead of a button;
+copy it and run it once in a terminal:
+
+```sh
+~/.local/share/flatpak/app/dev.koan.Koan/current/active/files/koan/koan setup
+```
+
+It links `~/.local/bin/koan` to that `koan` (by the path that follows
+Koan's updates) and writes the `koan-browser` skill for each agent it finds,
+as the Mac's button does. `koan setup --remove` takes it out. Then, from any
+terminal: `koan status`, and `koan pair --label "Claude Code"`; Koan's dialog
+names the program that asks (Linux has no code signatures, so it says
+"unsigned", and Koan tells programs apart by their executable file: an update
+of the agent or of Koan asks again).
+
+Files an agent attaches (`koan upload`) must be where the Flatpak can read
+them: Documents, Downloads, Music, Pictures or Videos, not `/tmp`.

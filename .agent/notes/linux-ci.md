@@ -227,12 +227,35 @@ runtime repo, so `flatpak install ./Koan-….flatpak` fetches the runtime.
   (Wayland and X11, GPU, Agent control's socket under the sandbox's
   config dir).
 
+## Agent control's tools (#489)
+
+- **Build:** `scripts/build.sh chrome` on Linux builds `chrome koan/cli:koan
+  koan/cli:koan-relay` (`TARGETS` in build.sh; on the Mac `chrome` already
+  has them through `koan_bundle_data`). `linux_build_slice.sh` is unchanged.
+- **Cost:** what the tools need besides their own files is already built
+  for `chrome` (`//base`, BoringSSL, `//net`, the agent's pure source sets).
+  New work is the CLI's ~20 source files and two links (`koan-relay` links
+  `//net`), a minute or two on these 4 cores in a full build and nothing in
+  an incremental one that doesn't touch them. Not measured yet: the first
+  run after the merge says (look for the `koan` steps in `build.log`).
+- **Package:** `linux_package.sh` requires `koan` and `koan-relay` (the
+  dummy build makes fake ones) and strips them with the browser. They are
+  staged into `koan/`, so they land in `/app/koan/koan` and
+  `/app/koan/koan-relay`, beside `chrome`. `/app/bin/koan` is still the
+  launcher.
+- **No new finish-args.** Host agents run the binary from the installation's
+  files (`<installation>/app/dev.koan.Koan/current/active/files/koan/koan`).
+  The socket is in the profile, which the host sees at the same path.
+- Design and security reasoning: agent-control.md §4.6.
+
 ## Open
 
-- Agent control: the `koan` tool is staged into `/app/koan/` if the build
-  makes it, but agents outside the sandbox reach Koan's socket under
-  `~/.var/app/dev.koan.Koan/config/koan/AgentControl/` only if they
-  know that path. Not looked at yet.
+- Agent control on a desktop: pairing, the approval prompt and a screenshot
+  from a host terminal against the `linux-build` Flatpak of #489 (steps in
+  that PR).
+- No CI job builds or runs the unit tests (`koan_agent_unittests`,
+  `koan_cli_unittests`) on Linux; #489's Linux tests run only where someone
+  builds them.
 - Tagged releases (`release.yml`) build only the Mac; a Linux leg (#468)
   must call `linux-chain.yml` with `release: true` and `keep_base: true`, so
   the release builds on the newest trusted Linux build and is one itself

@@ -210,7 +210,9 @@ class AgentLeaseManager : public TabHooksDelegate,
   base::RepeatingClosure on_wake_changed_;
 };
 
-// Whether macOS's Low Power Mode is on (NSProcessInfo; false elsewhere).
+// Whether macOS's Low Power Mode is on (NSProcessInfo); on Linux whether the
+// desktop's power saver is (as Chromium's power monitor reports it); false
+// elsewhere.
 bool IsLowPowerModeEnabled();
 
 }  // namespace koan::agent

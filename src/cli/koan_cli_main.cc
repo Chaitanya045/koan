@@ -47,6 +47,7 @@
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "koan/browser/agent/koan_agent_auth.h"
 #include "koan/browser/agent/koan_agent_frame.h"
 #include "koan/browser/agent/koan_agent_peer.h"
@@ -66,6 +67,10 @@
 #include "koan/cli/koan_cli_snapshot.h"
 #include "koan/cli/koan_cli_upload.h"
 #include "koan/cli/koan_relay_gate.h"
+
+#if BUILDFLAG(IS_LINUX)
+#include "koan/browser/agent/koan_agent_setup.h"  // nogncheck
+#endif
 
 namespace koan::cli {
 namespace {
@@ -667,6 +672,49 @@ std::optional<std::string> SessionFor(Link& link,
 
 // --- Commands
 // -----------------------------------------------------------------
+
+#if BUILDFLAG(IS_LINUX)
+// `koan setup [--remove]`: what Settings > Agent Control > Set up agents does
+// on the Mac, run by the user in a terminal on the host, because Koan's
+// Flatpak cannot write to the home folder (koan_agent_setup.h). The link goes
+// to this koan by the path that follows the Flatpak's updates.
+int Setup(const Command& command) {
+  base::FilePath exe;
+  if (!base::PathService::Get(base::FILE_EXE, &exe)) {
+    return Fail("cannot tell where this koan is");
+  }
+  const base::FilePath tool = agent::ToolToLink(exe);
+  const base::FilePath home = HomeDir();
+  const agent::AgentSetup setup = command.remove_setup
+                                      ? agent::RemoveAgentSetup(home, tool)
+                                      : agent::SetUpAgents(home, tool);
+  if (command.json) {
+    printf("%s\n", base::WriteJson(agent::AgentSetupToValue(setup, home))
+                       .value_or("{}")
+                       .c_str());
+  } else {
+    printf("%s ~/.local/bin/koan%s\n", setup.linked ? "linked" : "not linked:",
+           setup.linked ? (" -> " + tool.value()).c_str() : "");
+    for (const agent::AgentSetup::Agent& agent : setup.agents) {
+      if (!agent.installed && !agent.set_up) {
+        continue;
+      }
+      printf("%s %s\n",
+             agent.set_up ? "set up:" : "not set up:", agent.name.c_str());
+    }
+    if (setup.linked && !setup.on_path) {
+      printf(
+          "~/.local/bin does not seem to be on your shell's PATH: agents use "
+          "the full path, or add export PATH=\"$HOME/.local/bin:$PATH\" to "
+          "~/.bashrc or ~/.zshrc\n");
+    }
+  }
+  for (const std::string& problem : setup.problems) {
+    fprintf(stderr, "koan: %s\n", problem.c_str());
+  }
+  return setup.problems.empty() ? kOk : kFailed;
+}
+#endif
 
 int Pair(const Command& command) {
   std::string error;
@@ -2681,6 +2729,29 @@ bool RelayRuns(const std::string& session) {
       .is_valid();
 }
 
+// Why koan-relay failed, for the `what` it was asked to do ("was not paired",
+// "did not start (see above)").
+std::string RelayFailed(int code, const std::string& what) {
+#if BUILDFLAG(IS_LINUX)
+  // 127: the dynamic loader could not start it (the line above names the
+  // library), or it is not there. koan-relay comes from Koan's Flatpak and
+  // runs on the host, which has to have the libraries //net links: NSS and
+  // GLib (scripts/ci/linux_package.sh prints what it needs).
+  base::FilePath self;
+  if (code == 127 && base::PathService::Get(base::FILE_EXE, &self)) {
+    if (!base::PathExists(self.DirName().Append("koan-relay"))) {
+      return "there is no koan-relay next to this koan (" +
+             self.DirName().value() + ")";
+    }
+    return "koan-relay could not start on this computer: a library it needs "
+           "is missing (named above). Install your system's NSS and GLib "
+           "(libnss3 and libglib2.0-0 on Debian and Ubuntu, nss and glib2 on "
+           "Fedora and Arch), then try again";
+  }
+#endif
+  return "koan-relay " + what;
+}
+
 // `koan agent-browser <args>`: the relay of the args' agent-browser session,
 // paired once (its own approval, naming koan-relay and the agent) and started
 // if it does not run, then agent-browser with AGENT_BROWSER_CDP in its
@@ -2696,13 +2767,20 @@ int AgentBrowser(const Command& command) {
   if (PairedClients(relay_home).empty()) {
     fprintf(stderr,
             "koan: agent-browser needs koan-relay; approve it in Koan...\n");
-    if (RunRelay({"pair"}, command) != 0) {
-      return Fail("koan-relay was not paired", kNotConnected);
+    if (const int code = RunRelay({"pair"}, command); code != 0) {
+      return Fail(RelayFailed(code, "was not paired"), kNotConnected);
     }
   }
-  if (!RelayRuns(*session) &&
-      RunRelay({"serve", "--session", *session}, command) != 0) {
-    return Fail("the relay did not start (see above)", kNotConnected);
+  if (!RelayRuns(*session)) {
+    if (const int code = RunRelay({"serve", "--session", *session}, command);
+        code != 0) {
+#if BUILDFLAG(IS_LINUX)
+      return Fail(RelayFailed(code, "did not start (see above)"),
+                  kNotConnected);
+#else
+      return Fail("the relay did not start (see above)", kNotConnected);
+#endif
+    }
   }
   std::string env;
   std::optional<std::string> url;
@@ -2874,6 +2952,10 @@ int Run(const Command& command) {
       return Relay(command);
     case CommandKind::kShell:
       return Shell(command);
+#if BUILDFLAG(IS_LINUX)
+    case CommandKind::kSetup:
+      return Setup(command);
+#endif
     default:
       break;
   }
@@ -3201,6 +3283,7 @@ int RunInShell(const Command& command, std::unique_ptr<Link>& link) {
     case CommandKind::kStatus:
     case CommandKind::kRelayEnv:
     case CommandKind::kRelayStop:
+    case CommandKind::kSetup:
       return Run(command);
     default:
       break;

@@ -27,15 +27,26 @@ namespace koan::agent {
 inline constexpr size_t kMaxSocketPathLength = 103;
 
 // The per-user temporary directory (macOS: confstr(_CS_DARWIN_USER_TEMP_DIR), a
-// 0700 directory only this user can enter), or /tmp where there is none. A
-// shared /tmp lets another local user create `koan-<uid>` first, which can only
-// deny service but is avoidable.
+// 0700 directory only this user can enter; Linux: $XDG_RUNTIME_DIR, the same),
+// or /tmp where there is none. A shared /tmp lets another local user create
+// `koan-<uid>` first, which can only deny service but is avoidable.
 base::FilePath UserTempRoot();
+
+// Linux: for a profile in a Flatpak's own folder (<home>/.var/app/<app
+// id>/...), <runtime_dir>/app/<app id>, the one runtime directory that Flatpak
+// shares between the sandbox and the host (the sandbox's /tmp and the rest of
+// its runtime directory are its own, so a socket there could not be reached
+// from the host). nullopt for any other profile, or without a runtime
+// directory.
+std::optional<base::FilePath> SandboxRuntimeRoot(
+    const base::FilePath& profile_dir,
+    const base::FilePath& runtime_dir);
 
 // <profile>/AgentControl/agent.sock, or if that is too long for sun_path (a
 // deep --user-data-dir), <tmp_root>/koan-<uid>/<16 hex of the SHA-256 of the
-// profile path>.sock. Without `tmp_root` the per-user temporary directory is
-// tried, then /tmp. nullopt if nothing fits.
+// profile path>.sock. Without `tmp_root` the Flatpak's shared runtime directory
+// (SandboxRuntimeRoot(), Linux), then the per-user temporary directory, then
+// /tmp are tried. nullopt if nothing fits.
 std::optional<base::FilePath> ChooseSocketPath(
     const base::FilePath& profile_dir,
     uid_t uid,

@@ -507,13 +507,21 @@ function renderShortcuts(query) {
 // One button that lets agents on this Mac find Koan: it links
 // ~/.local/bin/koan to the koan tool in this app and writes a small
 // koan-browser skill into each installed agent's skills directory. Only on
-// a click (design decision 10); run it again after an update.
+// a click (design decision 10); run it again after an update. Koan's
+// Flatpak (Linux) cannot write to the home folder: there the pane shows
+// the command that does the same from a terminal (`koan setup`).
 function renderAgentSetup(query) {
   if (!agentSetup ||
-      (query && !matches(query, 'set up agents on this mac', 'agent skill',
+      (query && !matches(query, 'set up agents on this mac',
+                         'set up agents on this computer', 'agent skill',
                          'command line tool', 'koan command',
                          ...agentSetup.agents.map(a => a.name)))) {
     return [];
+  }
+  // "this Mac", or "this computer" on Linux (KoanAgentSetupHandler).
+  const machine = agentSetup.machine || 'this Mac';
+  if (agentSetup.sandboxed) {
+    return renderSandboxedAgentSetup(machine);
   }
   const status = h('span', {class: 'theme-status', id: 'agent-setup-status'});
   // What a click did, said after the pane is drawn again.
@@ -542,14 +550,17 @@ function renderAgentSetup(query) {
           (agentSetup.onPath ? '' :
                '. ~/.local/bin doesn’t seem to be on your shell’s PATH: ' +
                    'agents use the full path instead, or add ' +
-                   'export PATH="$HOME/.local/bin:$PATH" to ~/.zshrc') :
+                   'export PATH="$HOME/.local/bin:$PATH" to ' +
+                   (machine === 'this Mac' ? '~/.zshrc' :
+                                             '~/.bashrc or ~/.zshrc')) :
       `– The koan command: not linked (${agentSetup.link})`;
   return [
     h('section', {class: 'group', id: 'group-agent-setup'},
-      h('h2', {}, 'Set up agents on this Mac'),
+      h('h2', {}, `Set up agents on ${machine}`),
       h('p', {class: 'description'},
-        'Lets the coding agents on this Mac (Claude Code, Codex, Cursor and ' +
-            'others) find Koan on their own: it links the koan command and ' +
+        `Lets the coding agents on ${machine} (Claude Code, Codex, ` +
+            'Cursor and others) find Koan on their own: it links the koan ' +
+            'command and ' +
             'adds a small “koan-browser” skill to each agent’s skills ' +
             'folder. Agents still ask you before they connect. Set up again ' +
             'after you move Koan.'),
@@ -574,6 +585,51 @@ function renderAgentSetup(query) {
             onclick: () => run(() => sendWithPromise('koanRemoveAgentSetup'),
                                'Removed.'),
           }, 'Remove') : null,
+          status))),
+  ];
+}
+
+// Koan's Flatpak: the same setup, as a command the user runs once on the
+// host (the sandbox has no way to write ~/.local/bin or the agents' folders,
+// and a permission that let it would let a compromised browser out).
+function renderSandboxedAgentSetup(machine) {
+  const status = h('span', {class: 'theme-status', id: 'agent-setup-status'});
+  const command = agentSetup.setupCommand;
+  return [
+    h('section', {class: 'group', id: 'group-agent-setup'},
+      h('h2', {}, `Set up agents on ${machine}`),
+      h('p', {class: 'description'},
+        `Lets the coding agents on ${machine} (Claude Code, Codex, Cursor ` +
+            'and others) find Koan on their own: it links the koan ' +
+            'command as ~/.local/bin/koan and adds a small “koan-browser” ' +
+            'skill to each agent’s skills folder. Koan runs in a Flatpak ' +
+            'sandbox and can’t write to your home folder, so run this ' +
+            'once in a terminal. The link follows Koan’s updates. Agents ' +
+            'still ask you before they connect.'),
+      agentSetup.cliExists ? null :
+          h('p', {class: 'description'},
+            'This build of Koan has no koan command.'),
+      h('p', {class: 'description indent', id: 'agent-setup-command'},
+        command),
+      h('p', {class: 'description indent'},
+        'To undo it: the same command with --remove.'),
+      h('div', {class: 'row theme-paste'},
+        h('div', {class: 'theme-actions'},
+          h('button', {
+            id: 'agent-setup-copy',
+            disabled: !agentSetup.cliExists,
+            onclick: async () => {
+              try {
+                await navigator.clipboard.writeText(command);
+                status.textContent = 'Copied. Paste it into a terminal.';
+                status.classList.remove('error');
+              } catch (e) {
+                status.textContent = 'Couldn’t copy: select the command ' +
+                    'above and copy it.';
+                status.classList.add('error');
+              }
+            },
+          }, 'Copy Command'),
           status))),
   ];
 }

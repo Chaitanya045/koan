@@ -22,6 +22,7 @@
 #include "koan/browser/agent/koan_agent_contexts.h"
 #include "koan/browser/agent/koan_agent_events.h"
 #include "koan/browser/agent/koan_agent_filters.h"
+#include "koan/browser/agent/koan_agent_platform.h"
 #include "koan/browser/agent/koan_agent_policy.h"
 #include "koan/browser/agent/koan_agent_reach.h"
 #include "koan/browser/agent/koan_agent_redact.h"
@@ -2379,16 +2380,16 @@ void CdpFacade::Upload(const AgentMessage& message) {
   }
   // The request: 1 to kMaxUploadFiles absolute paths, each with the name the
   // page may see; how long to wait for the page to open its chooser.
-  constexpr std::string_view kForm =
-      "Koan.upload takes files: [{path, name?}] (1 to 32 absolute paths on "
-      "this Mac; name a plain file name) and waitMs (0 to 30000)";
+  const std::string form = base::StrCat(
+      {"Koan.upload takes files: [{path, name?}] (1 to 32 absolute paths on ",
+       kThisMachine, "; name a plain file name) and waitMs (0 to 30000)"});
   FacadeBackend::UploadRequest request;
   const base::ListValue* files = message.params.FindList("files");
   const std::optional<int> wait_ms = message.params.FindInt("waitMs");
   if (!files || files->empty() || files->size() > kMaxUploadFiles ||
       (message.params.Find("waitMs") &&
        (!wait_ms || *wait_ms < 0 || *wait_ms > 30000))) {
-    deny("Koan.invalidParams", kForm);
+    deny("Koan.invalidParams", form);
     return;
   }
   for (const base::Value& value : *files) {
@@ -2398,7 +2399,7 @@ void CdpFacade::Upload(const AgentMessage& message) {
     if (!path || path->empty() || path->size() > 4096 || path->front() != '/' ||
         !base::IsStringUTF8(*path) ||
         (file->Find("name") && (!name || !IsPlainFileName(*name)))) {
-      deny("Koan.invalidParams", kForm);
+      deny("Koan.invalidParams", form);
       return;
     }
     request.files.push_back({*path, name ? *name : std::string()});

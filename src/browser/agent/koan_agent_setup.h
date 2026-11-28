@@ -5,6 +5,7 @@
 #ifndef KOAN_BROWSER_AGENT_KOAN_AGENT_SETUP_H_
 #define KOAN_BROWSER_AGENT_KOAN_AGENT_SETUP_H_
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -23,9 +24,31 @@
 // guide itself comes from the installed `koan`, so it never goes stale. Run
 // again after an update (the link follows the app); Remove undoes it. All of
 // it blocks on the disk: call it off the UI thread.
+//
+// Linux ("this computer"): a Koan in a Flatpak cannot write to the home
+// folder (a permission to write ~/.local/bin or an agent's folder would let a
+// compromised browser out of its sandbox), so Settings shows a command to run
+// once in a terminal instead, `<the Flatpak's koan> setup`, and the same code
+// runs there, on the host. The link points at the Flatpak's path that follows
+// its updates (StableFlatpakPath()).
 namespace koan::agent {
 
 inline constexpr char kSkillName[] = "koan-browser";
+inline constexpr char kFlatpakAppId[] = "dev.koan.Koan";
+
+// Linux: a path inside one deployment of Koan's Flatpak,
+// <installation>/app/dev.koan.Koan/<arch>/<branch>/<commit>/files/..., as the
+// path that follows the installed version, <installation>/app/dev.koan.Koan/
+// current/active/files/... (Flatpak keeps both links current); nullopt for
+// any other path.
+std::optional<base::FilePath> StableFlatpakPath(const base::FilePath& path);
+// The path to link ~/.local/bin/koan to for the tool at `tool`.
+base::FilePath ToolToLink(const base::FilePath& tool);
+// The app-path of [Instance] in a sandbox's /.flatpak-info: where the app's
+// files (/app inside) are on the host.
+std::optional<base::FilePath> FlatpakAppPath(std::string_view flatpak_info);
+// `path` as one word for a POSIX shell.
+std::string ShellQuoted(const base::FilePath& path);
 
 // Where an agent keeps its user-level skills, relative to the home
 // directory. The agent counts as installed if `marker` exists. Several

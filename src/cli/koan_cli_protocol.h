@@ -31,8 +31,18 @@ struct Discovery {
   // agent::kAgentInterfaceVersion of the browser; 0 if it does not say (an
   // older one).
   int agent_version = 0;
+  // Linux: the browser's PID namespace (readlink /proc/self/ns/pid), "" if it
+  // does not say (macOS, an older one).
+  std::string pid_namespace;
 };
 std::optional<Discovery> ParseDiscovery(std::string_view json);
+
+// Whether the browser's pid in `discovery` names a process in the PID
+// namespace `ours` (this process's, "" where there are none), so that a
+// signal 0 to it says whether the browser still runs. A Koan in a Flatpak
+// writes its pid in the sandbox, which on the host is another process or
+// none: there only connecting says whether it runs.
+bool PidIsComparable(const Discovery& discovery, std::string_view ours);
 
 // The [koan:notice] line for a browser whose interface version differs from
 // this koan's (`ours`), or "" if they agree. `discovery`: nullopt if Koan
@@ -40,9 +50,16 @@ std::optional<Discovery> ParseDiscovery(std::string_view json);
 std::string VersionNotice(const std::optional<Discovery>& discovery, int ours);
 
 // The browser's profile directory: $KOAN_USER_DATA_DIR, else Koan's default
-// (~/Library/Application Support/Koan on the Mac, ~/.config/koan elsewhere).
+// (~/Library/Application Support/Koan on the Mac, ~/.config/koan elsewhere;
+// on Linux, for a `koan` that is the Flatpak's (`flatpak`), the Flatpak's
+// own folder, ~/.var/app/dev.koan.Koan/config/koan).
 base::FilePath DefaultUserDataDir(const base::FilePath& home,
-                                  const char* env_override);
+                                  const char* env_override,
+                                  bool flatpak = false);
+
+// Linux: whether `exe` is a file of an installed Flatpak of Koan (under
+// <installation>/app/dev.koan.Koan/, where a `koan` on the host runs from).
+bool IsInKoanFlatpak(const base::FilePath& exe);
 base::FilePath DiscoveryFile(const base::FilePath& user_data_dir);
 
 // ~/.koan: the paired clients (clients/<id>/, 0700, the id never the label)

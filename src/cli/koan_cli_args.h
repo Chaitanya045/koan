@@ -58,6 +58,9 @@ enum class CommandKind {
   // Reads commands from stdin, one per line, and runs them over one
   // connection (ParseShellLine()).
   kShell,
+  // Linux: setup [--remove], what Settings > Agent Control > Set up agents
+  // does on the Mac (Koan's Flatpak cannot write to the home folder).
+  kSetup,
 };
 
 struct Command {
@@ -141,6 +144,8 @@ struct Command {
 
   // shell: --stop-on-error, stop at the first command that fails.
   bool stop_on_error = false;
+  // setup: --remove, undo it (Linux).
+  bool remove_setup = false;
 
   // __hold: the fd to say "ready" on.
   int ready_fd = -1;

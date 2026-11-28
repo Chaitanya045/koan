@@ -9,6 +9,7 @@
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "koan/browser/agent/koan_agent_platform.h"
 
 namespace koan::cli {
 
@@ -34,9 +35,10 @@ bool ResolveUploadPaths(const std::vector<std::string>& given,
     const base::FilePath real = base::MakeAbsoluteFilePath(path);
     base::stat_wrapper_t info;
     if (text.empty() || real.empty() || base::File::Stat(real, &info) != 0) {
-      *error = "Koan.fileNotFound: no file at " + text +
-               " on this Mac (the paths are on the Mac that runs Koan; an "
-               "agent elsewhere copies the file there first, with scp)";
+      *error = "Koan.fileNotFound: no file at " + text + " on " +
+               agent::kThisMachine + " (the paths are on " +
+               agent::kTheMachineThatRunsKoan +
+               "; an agent elsewhere copies the file there first, with scp)";
       return false;
     }
     if (S_ISDIR(info.st_mode)) {

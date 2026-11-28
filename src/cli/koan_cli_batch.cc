@@ -12,6 +12,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "koan/browser/agent/koan_agent_platform.h"
 #include "koan/cli/koan_cli_args.h"
 #include "koan/cli/koan_cli_snapshot.h"
 
@@ -515,9 +516,8 @@ std::string UserNeededLine(std::string_view tab,
                      base::JoinString(reasons, ", ") + ")";
   if (std::ranges::find(reasons, "file-picker") != reasons.end()) {
     return line + ": it opened a file chooser. Answer it with `koan upload " +
-           std::string(tab) +
-           " <path>` (a file you were given, on this Mac), or tell the user "
-           "to choose the file";
+           std::string(tab) + " <path>` (a file you were given, on " +
+           agent::kThisMachine + "), or tell the user to choose the file";
   }
   return line + "; tell the user what it asks";
 }

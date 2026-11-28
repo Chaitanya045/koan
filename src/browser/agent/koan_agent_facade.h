@@ -61,10 +61,10 @@
 // open panel would; with waitMs (at most 30 s) it waits that long for the
 // page to open one. Only on a tab the agent drives (its own, or a user's it
 // was given to drive), never while the user has it (Koan.paused), never on
-// a security interstitial. The paths are on the Mac: the backend checks each
-// is a readable regular file outside Koan's own folders, and the chooser's
-// own rules (one file or `multiple`, `accept`). Audited with the files'
-// names and sizes, never their contents.
+// a security interstitial. The paths are on the machine that runs Koan: the
+// backend checks each is a readable regular file outside Koan's own folders,
+// and the chooser's own rules (one file or `multiple`, `accept`). Audited with
+// the files' names and sizes, never their contents.
 //
 // Screenshots (section 12, "One capture path"): Koan.captureScaled {targetId,
 // longEdge?, scale?, clip?, format?, quality?} copies the frame the tab's

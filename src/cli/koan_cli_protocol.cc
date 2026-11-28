@@ -4,7 +4,9 @@
 
 #include "koan/cli/koan_cli_protocol.h"
 
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -48,7 +50,14 @@ std::optional<Discovery> ParseDiscovery(std::string_view json) {
     discovery.version = *version;
   }
   discovery.agent_version = dict->FindInt("agentVersion").value_or(0);
+  if (const std::string* pid_namespace = dict->FindString("pidNamespace")) {
+    discovery.pid_namespace = *pid_namespace;
+  }
   return discovery;
+}
+
+bool PidIsComparable(const Discovery& discovery, std::string_view ours) {
+  return discovery.pid_namespace.empty() || discovery.pid_namespace == ours;
 }
 
 std::string VersionNotice(const std::optional<Discovery>& discovery, int ours) {
@@ -71,15 +80,40 @@ std::string VersionNotice(const std::optional<Discovery>& discovery, int ours) {
 }
 
 base::FilePath DefaultUserDataDir(const base::FilePath& home,
-                                  const char* env_override) {
+                                  const char* env_override,
+                                  bool flatpak) {
   if (env_override && *env_override) {
     return base::FilePath(env_override);
   }
 #if BUILDFLAG(IS_MAC)
   return home.Append("Library").Append("Application Support").Append("Koan");
 #else
+  if (flatpak) {
+    return home.Append(".var")
+        .Append("app")
+        .Append("dev.koan.Koan")
+        .Append("config")
+        .Append("koan");
+  }
   return home.Append(".config").Append("koan");
 #endif
+}
+
+bool IsInKoanFlatpak(const base::FilePath& exe) {
+  const std::vector<std::string> parts = exe.GetComponents();
+  // <installation>/app/dev.koan.Koan/<arch>/<branch>/<commit>/files/...
+  for (size_t i = 0; i + 1 < parts.size(); ++i) {
+    if (parts[i] != "app" || parts[i + 1] != "dev.koan.Koan") {
+      continue;
+    }
+    for (size_t j = i + 2; j < parts.size(); ++j) {
+      if (parts[j] == "files") {
+        return true;
+      }
+    }
+    return false;
+  }
+  return false;
 }
 
 base::FilePath DiscoveryFile(const base::FilePath& user_data_dir) {

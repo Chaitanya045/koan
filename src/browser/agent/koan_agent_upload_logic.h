@@ -76,6 +76,14 @@ bool IsPlainFileName(std::string_view name);
 bool IsUnderAny(const base::FilePath& path,
                 const std::vector<base::FilePath>& roots);
 
+// The folders under `home` no upload is taken from: Koan's agent keys, and the
+// credential stores of this platform (ssh and GnuPG keys, cloud and developer
+// tokens; on the Mac the keychains and cookies; on Linux the keyrings,
+// KWallet, the NSS database in ~/.pki, other browsers' profiles and every
+// Flatpak app's data in ~/.var/app). Koan's own profile is refused by the
+// caller, which knows where it is.
+std::vector<base::FilePath> RefusedHomeFolders(const base::FilePath& home);
+
 // "1.2 MB": a size for people (the audit log, the CLI's answer).
 std::string SizeText(int64_t bytes);
 

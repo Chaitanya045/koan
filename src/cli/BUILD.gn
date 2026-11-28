@@ -9,7 +9,10 @@ import("//testing/test.gni")
 # frame codec and proofs it shares with the gateway; no //net), so that it
 # starts in a few milliseconds. On the Mac it is copied into
 # Koan.app/Contents/Resources/bin (the patch to chrome/BUILD.gn), so that it
-# is signed with the app.
+# is signed with the app. On Linux scripts/build.sh builds it with `chrome`,
+# and the Flatpak ships it beside the browser, as /app/koan/koan and
+# /app/koan/koan-relay (scripts/ci/linux_package.sh); agents on the host run
+# it from the Flatpak's files (`koan setup` links it).
 assert(is_posix)
 
 # What the tool decides, without I/O: arguments, messages, the snapshot
@@ -50,6 +53,7 @@ source_set("cli_lib") {
     "//koan/browser/agent:auth",
     "//koan/browser/agent:capture",
     "//koan/browser/agent:frame",
+    "//koan/browser/agent:platform",
   ]
 }
 
@@ -85,6 +89,11 @@ executable("koan") {
     "//koan/browser/agent:frame",
     "//koan/browser/agent:peer",
   ]
+  if (is_linux) {
+    # `koan setup`: Settings' "Set up agents", run on the host (Koan's
+    # Flatpak cannot write to the home folder).
+    deps += [ "//koan/browser/agent:setup" ]
+  }
 }
 
 # What `koan-relay` decides, without I/O: who may use its WebSocket, its

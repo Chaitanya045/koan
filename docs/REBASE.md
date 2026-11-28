@@ -322,7 +322,16 @@ and `Close()` cancels a pending read or write; `getsockopt(LOCAL_PEERTOKEN)` is 
 connect time; `SecCodeCopyGuestWithAttributes` with an audit token finds nothing once the process has exec'd or the pid
 was reused; `kSecCSBasicValidateOnly` skips the resources of a bundle; `proc_pidinfo(PROC_PIDTBSDINFO)` has a start
 time (`pbi_start_tvsec`, `pbi_start_tvusec`) and a parent pid (`pbi_ppid`) in public headers, and `proc_pidpath` follows an exec; `confstr(_CS_DARWIN_USER_TEMP_DIR)` is a
-0700 per-user directory. The traffic annotation `koan_agent_gateway` is defined in the gateway; Koan does not run
+0700 per-user directory. On Linux (issue #489) it relies on the kernel, not on Chromium: `SO_PEERPIDFD` (6.5),
+`openat2()` with `RESOLVE_NO_XDEV | RESOLVE_NO_MAGICLINKS | RESOLVE_BENEATH` (5.6), `STATX_ATTR_MOUNT_ROOT` (5.8) and
+a pidfd's `fdinfo` naming its pid in the namespace of the procfs it is read through; and on Chromium only for
+`base::UnixDomainSocket::RecvMsg`/`SendMsg` and the sysroot's headers (`linux/openat2.h`). Guards:
+`koan_agent_unittests` `KoanAgentPeerTest.*`, `AProcWithMountsInItIsRefused` among them. Agent tabs' "fewer awake tabs
+in power saver mode" on Linux (`IsLowPowerModeEnabled()` in `koan_agent_lease.cc`) relies on
+`components/power_monitor/power_monitor_device_source_linux.cc` reporting `kBatteryPower` only while the XDG portal's
+`power-saver-enabled` is true (158: its UPower `OnBattery` is a TODO). If a roll makes it report the battery as well, the
+setting starts to mean "on battery or in power saver mode": re-word its Linux label (`koan_settings_rows.cc`) or read
+the portal in Koan. The traffic annotation `koan_agent_gateway` is defined in the gateway; Koan does not run
 Chromium's annotation auditor, so a change to the fields `net::DefineNetworkTrafficAnnotation` requires shows up as a
 compile error, not as a failed audit; re-check it then.
 
