@@ -203,11 +203,23 @@ scoped_refptr<content::SiteInstance> SiteInstanceForReplacement(
 // CreateRestoredTab() in browser_tabrestore.cc, before it creates the tab:
 // for a saved user container's tab (`extra_data`'s kContainerSessionKey), a
 // SiteInstance fixed to that container, so that the tab restores into it
-// (#111); null for every other tab. An agent container's tab never comes back
-// in its container (OnRestoringContainerTab() in koan_containers.h blanks it).
+// (#111); null for every other tab, and for a deleted profile's
+// (SetUserContainerCheck()). An agent container's tab never comes back in its
+// container (OnRestoringContainerTab() in koan_containers.h blanks it).
 scoped_refptr<content::SiteInstance> SiteInstanceForRestoredTab(
     content::BrowserContext* context,
     const std::map<std::string, std::string>& extra_data);
+
+// Whether `container`, a saved user container, is still one of the user's
+// profiles (Settings > Tab Management > Profiles, #477): a deleted profile's
+// tabs (Recently Closed, a session from before a crash) never restore into
+// it, which would make its partition again. Installed by the containers'
+// browser side (koan::containers::InstallUserContainerCheck(),
+// koan_containers.h) before any window has tabs; until then every saved user
+// container counts.
+using UserContainerCheck = bool (*)(content::BrowserContext* context,
+                                    const ContainerId& container);
+void SetUserContainerCheck(UserContainerCheck check);
 
 // BrowserWebContentsDelegate::IsPrerender2Supported(): whether `contents` may
 // prerender. Not in a container: content builds a prerendered page in the

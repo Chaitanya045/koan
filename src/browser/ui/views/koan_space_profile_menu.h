@@ -7,6 +7,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/functional/callback.h"
@@ -28,6 +29,11 @@ namespace koan {
 
 // The user's containers (prefs::kUserContainers), in the order they were made.
 std::vector<containers::UserContainer> GetUserContainers(Profile* profile);
+
+// A Space's stored container that is still one of the user's profiles,
+// Serialize()d, else empty (Default): a deleted profile's Spaces, and
+// whatever still names it, read as Default (#477).
+std::string SpaceContainerIfListed(Profile* profile, std::string_view stored);
 
 // The name a Space's container (SpaceData::container) goes by: Zen's
 // "Default" for none, else the container's name, or "Profile" for one the

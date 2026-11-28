@@ -588,6 +588,7 @@ class KoanWorkspaceController : public TabStripModelObserver,
   void DropSwitchLayers();
 
   void OnTintPrefChanged();
+  void OnUserContainersChanged();
   // The theme the tabs of `space` other than `except` carry (see
   // ReadSpace()), or nullopt if none does.
   std::optional<std::string> ThemeOfTabs(

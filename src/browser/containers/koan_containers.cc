@@ -4,10 +4,14 @@
 
 #include "koan/browser/containers/koan_containers.h"
 
+#include <memory>
 #include <optional>
+#include <string>
 #include <utility>
 
+#include "base/barrier_closure.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
@@ -16,10 +20,14 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/tabs/public/tab_interface.h"
+#include "content/public/browser/browsing_data_filter_builder.h"
+#include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -29,7 +37,11 @@
 #include "koan/browser/containers/koan_user_containers.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_session_data.h"
+#include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/mojom/clear_data_filter.mojom.h"
+#include "services/network/public/mojom/network_context.mojom.h"
+#include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
@@ -108,6 +120,85 @@ void CloseBlankedTab(base::WeakPtr<content::WebContents> contents) {
     return;
   }
   tab_strip->CloseWebContentsAt(index, TabCloseTypes::CLOSE_NONE);
+}
+
+// Everything a partition holds, as AsyncObliterateStoragePartition() clears
+// it: all but the GPU's shader cache.
+constexpr uint32_t kAllPartitionData =
+    ~content::StoragePartition::REMOVE_DATA_MASK_SHADER_CACHE;
+
+// One of the user's containers, still in their list.
+bool IsUserContainerOf(Profile* profile, const ContainerId& container) {
+  if (!profile || profile->IsOffTheRecord() ||
+      container.kind != ContainerKind::kUser || !container.persistent()) {
+    return false;
+  }
+  for (const UserContainer& listed : ParseUserContainers(
+           profile->GetPrefs()->GetList(prefs::kUserContainers))) {
+    if (listed.id == container) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// SetUserContainerCheck()'s check.
+bool IsListedUserContainer(content::BrowserContext* context,
+                           const ContainerId& container) {
+  return IsUserContainerOf(Profile::FromBrowserContext(context), container);
+}
+
+// Clears all of `partition`, of all time, and nothing else: the browsing data
+// remover would also clear what is kept for the whole profile (site settings,
+// media device ids, the new tab page's storage).
+void ClearPartition(content::StoragePartition* partition,
+                    base::OnceClosure done) {
+  base::RepeatingClosure cleared = base::BarrierClosure(4, std::move(done));
+  partition->ClearData(kAllPartitionData, blink::StorageKey(), base::Time(),
+                       base::Time::Max(), cleared);
+  partition->ClearCodeCaches(base::Time(), base::Time::Max(),
+                             base::RepeatingCallback<bool(const GURL&)>(),
+                             cleared);
+  // (Run also if the network service goes away first.)
+  network::mojom::NetworkContext* network = partition->GetNetworkContext();
+  network->ClearHttpCache(
+      base::Time(), base::Time::Max(), network::mojom::ClearDataFilterPtr(),
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(base::OnceClosure(cleared)));
+  network->ClearHttpAuthCache(
+      base::Time(), base::Time::Max(), network::mojom::ClearDataFilterPtr(),
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(base::OnceClosure(cleared)));
+}
+
+// DeleteUserContainerData(), once the garbage collection request is on disk.
+void ObliterateUserContainer(base::WeakPtr<Profile> profile,
+                             const ContainerId& container,
+                             base::OnceClosure done) {
+  if (!profile) {
+    std::move(done).Run();
+    return;
+  }
+  const content::StoragePartitionConfig config =
+      PartitionConfigFor(profile.get(), container);
+  base::OnceClosure obliterate = base::BindOnce(
+      [](base::WeakPtr<Profile> profile, const std::string& domain,
+         base::OnceClosure done) {
+        if (!profile) {
+          std::move(done).Run();
+          return;
+        }
+        // A folder in use is left to the collection asked for above.
+        profile->AsyncObliterateStoragePartition(domain, base::DoNothing(),
+                                                 std::move(done));
+      },
+      profile, config.partition_domain(), std::move(done));
+  // Not loaded: nothing to clear, and its folder can go at once. (Loading it
+  // would keep the folder until the next start.)
+  if (content::StoragePartition* partition =
+          profile->GetStoragePartition(config, /*can_create=*/false)) {
+    ClearPartition(partition, std::move(obliterate));
+  } else {
+    std::move(obliterate).Run();
+  }
 }
 
 }  // namespace
@@ -205,6 +296,68 @@ void LoadSavedContainers(Profile* profile) {
            profile->GetPrefs()->GetList(prefs::kUserContainers))) {
     profile->GetStoragePartition(PartitionConfigFor(profile, container.id),
                                  /*can_create=*/true);
+  }
+}
+
+void InstallUserContainerCheck() {
+  SetUserContainerCheck(&IsListedUserContainer);
+}
+
+void ClearUserContainerData(Profile* profile,
+                            const ContainerId& container,
+                            base::OnceClosure done) {
+  if (!IsUserContainerOf(profile, container)) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(FROM_HERE,
+                                                             std::move(done));
+    return;
+  }
+  ClearPartition(
+      profile->GetStoragePartition(PartitionConfigFor(profile, container),
+                                   /*can_create=*/true),
+      std::move(done));
+}
+
+void DeleteUserContainerData(Profile* profile,
+                             const ContainerId& container,
+                             base::OnceClosure done) {
+  if (!profile || profile->IsOffTheRecord() ||
+      container.kind != ContainerKind::kUser || !container.persistent()) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(FROM_HERE,
+                                                             std::move(done));
+    return;
+  }
+  // The collection keeps only what is loaded or listed (LoadSavedContainers()
+  // no longer lists it).
+  PrefService* prefs = profile->GetPrefs();
+  prefs->SetBoolean(::prefs::kShouldGarbageCollectStoragePartitions, true);
+  prefs->CommitPendingWrite(base::BindOnce(&ObliterateUserContainer,
+                                           profile->GetWeakPtr(), container,
+                                           std::move(done)));
+}
+
+void RemoveUserContainersData(Profile* profile,
+                              base::Time delete_begin,
+                              base::Time delete_end,
+                              uint64_t remove_mask,
+                              uint64_t origin_type_mask,
+                              content::BrowsingDataFilterBuilder& filter) {
+  // A removal for one partition (also the ones below) is that partition's.
+  const uint64_t mask =
+      remove_mask &
+      content::BrowsingDataRemover::DATA_TYPE_ON_STORAGE_PARTITION;
+  if (!profile || profile->IsOffTheRecord() || !mask ||
+      filter.GetStoragePartitionConfig().has_value()) {
+    return;
+  }
+  for (const UserContainer& container : ParseUserContainers(
+           profile->GetPrefs()->GetList(prefs::kUserContainers))) {
+    // The same origins and domains (Forget About This Site's one site).
+    std::unique_ptr<content::BrowsingDataFilterBuilder> builder = filter.Copy();
+    builder->SetStoragePartitionConfig(
+        PartitionConfigFor(profile, container.id));
+    // Queued after the removal running now (the remover runs one at a time).
+    profile->GetBrowsingDataRemover()->RemoveWithFilter(
+        delete_begin, delete_end, mask, origin_type_mask, std::move(builder));
   }
 }
 

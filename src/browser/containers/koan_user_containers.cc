@@ -29,6 +29,21 @@ constexpr tab_groups::TabGroupColorId kColors[] = {
     tab_groups::TabGroupColorId::kPink,   tab_groups::TabGroupColorId::kPurple,
 };
 
+// The first entry of `list` that is `id`'s.
+base::DictValue* FindEntry(base::ListValue& list, const ContainerId& id) {
+  if (id.kind != ContainerKind::kUser || !id.persistent()) {
+    return nullptr;
+  }
+  for (base::Value& entry : list) {
+    base::DictValue* dict = entry.GetIfDict();
+    const std::string* entry_id = dict ? dict->FindString(kIdKey) : nullptr;
+    if (entry_id && *entry_id == id.id) {
+      return dict;
+    }
+  }
+  return nullptr;
+}
+
 std::optional<tab_groups::TabGroupColorId> ColorFromInt(int value) {
   for (tab_groups::TabGroupColorId color : kColors) {
     if (static_cast<int>(color) == value) {
@@ -141,6 +156,59 @@ std::optional<UserContainer> AddUserContainer(base::ListValue& list,
                   .Set(kNameKey, container.name)
                   .Set(kColorKey, static_cast<int>(container.color)));
   return container;
+}
+
+base::span<const tab_groups::TabGroupColorId> UserContainerColors() {
+  return kColors;
+}
+
+bool RenameUserContainer(base::ListValue& list,
+                         const ContainerId& id,
+                         std::u16string_view name) {
+  base::DictValue* entry = FindEntry(list, id);
+  if (!entry || CheckUserContainerName(name) != UserContainerNameError::kNone) {
+    return false;
+  }
+  entry->Set(kNameKey,
+             base::UTF16ToUTF8(base::TrimWhitespace(name, base::TRIM_ALL)));
+  return true;
+}
+
+bool SetUserContainerColor(base::ListValue& list,
+                           const ContainerId& id,
+                           tab_groups::TabGroupColorId color) {
+  base::DictValue* entry = FindEntry(list, id);
+  if (!entry || !ColorFromInt(static_cast<int>(color))) {
+    return false;
+  }
+  entry->Set(kColorKey, static_cast<int>(color));
+  return true;
+}
+
+bool RemoveUserContainer(base::ListValue& list, const ContainerId& id) {
+  if (!FindEntry(list, id)) {
+    return false;
+  }
+  list.EraseIf([&id](const base::Value& entry) {
+    const base::DictValue* dict = entry.GetIfDict();
+    const std::string* entry_id = dict ? dict->FindString(kIdKey) : nullptr;
+    return entry_id && *entry_id == id.id;
+  });
+  return true;
+}
+
+std::optional<ContainerId> ListedSpaceContainer(const base::ListValue& list,
+                                                std::string_view stored) {
+  const std::optional<ContainerId> container = SpaceContainerFromString(stored);
+  if (!container) {
+    return std::nullopt;
+  }
+  for (const UserContainer& listed : ParseUserContainers(list)) {
+    if (listed.id == *container) {
+      return container;
+    }
+  }
+  return std::nullopt;
 }
 
 std::optional<std::string> NewTabContainer(const NewTabFacts& facts) {

@@ -618,8 +618,7 @@ belongs to a Space, and new tabs open in the active one.
   Deleting a Space keeps its profile and its data, so another Space can
   use it. Each profile has its own Essentials (see Pinned tabs and
   Essentials); an Essential whose profile no Space has any more shows in
-  the Spaces without a profile. Clear browsing data doesn't clear profiles
-  yet. Incognito windows have no profiles.
+  the Spaces without a profile. Incognito windows have no profiles.
 - **Notifications in a profile.** A site in a Space with a profile can ask
   to notify you and show notifications while its tab is open, as in any
   tab. Allow or Block is the site's answer in every Space. Its
@@ -687,6 +686,34 @@ belongs to a Space, and new tabs open in the active one.
   switched to, moved or closed. Your bookmarks, reading list and the Spaces'
   names stay readable to an extension with the permission for them, and it
   can still delete history.
+- **Manage profiles** in Settings > Tab Management > **Profiles**. Each
+  profile shows its colour, its name, the Spaces that use it, its open tabs
+  and how much it keeps on this device.
+  - **Rename**: edit the name and press Return. **Colour**: click one of
+    the eight dots. Every window follows at once: the colour line on tabs,
+    the Set Profile menu and the Create-a-Space form.
+  - **Clear Data…** signs you out of every site in that profile's Spaces:
+    its cookies, site data and cache go, and nothing of another profile or
+    of Default. Its tabs stay open (reload them to see it).
+  - **Delete Profile…** asks first and says which Spaces use it and how
+    many of its tabs are open, naming its Essentials and pinned tabs. Then
+    those Spaces go back to Default (as in Zen) and keep their other tabs
+    (their new tabs open in Default at once), its tabs close, Essentials
+    and pinned tabs too (a page that asks before you leave it can keep its
+    tab), its notifications close, and its history, the tabs Close tabs I
+    haven't used for kept, its extension switches, cookies, logins, site
+    data and cache are deleted from disk. Another profile's and Default's
+    are kept. A folder still in use goes at the next start, and so do
+    visits a crash kept. A closed tab of a deleted profile reopens as a
+    blank tab and closes, so the profile never comes back.
+- **Delete browsing data** (Chromium's Clear browsing data: Settings >
+  Privacy and security > Delete browsing data) clears every profile too:
+  "Cookies and other site data" and "Cached images and files", for the time
+  range you pick, in Default and in each profile. With profiles, the
+  dialog's rows say "in every profile". Browsing history covers every
+  profile's. The Library's **Forget About This Site** forgets the site in
+  the profile its Which profile? filter shows (in every profile with All
+  profiles), and says so.
 - **Unload Space** (right-click the header or a Space button) frees the
   Space's tabs; they reload when you select them. Unload All Other Spaces
   frees all the others. Tabs on screen and tabs in use (playing sound, in
@@ -1195,7 +1222,7 @@ with three sections down its side, and opens on the one you used last:
   middle-click opens it in the background and keeps the Library open.
   Hover a row for its visit time and the forget / reopen buttons;
   right-click for "Forget About This Site" (its history, cookies, site data
-  and cache). Right-click the History tab to clear history from the last
+  and cache, in Default and in every Space profile). Right-click the History tab to clear history from the last
   hour, 12 hours, today, week, month or everything (it asks first, naming
   the range), or to open `chrome://history`. Forgetting and clearing act
   on the profile the filter shows, and the question names it ("in the

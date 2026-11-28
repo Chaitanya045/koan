@@ -27,6 +27,7 @@
 #include "koan/browser/ui/color/koan_look.h"
 #include "koan/browser/ui/color/koan_tokens.h"
 #include "koan/browser/ui/fonts/koan_fonts.h"
+#include "koan/browser/ui/webui/koan_profiles_handler.h"
 #include "koan/browser/ui/webui/koan_settings_handler.h"
 #include "koan/browser/ui/webui/koan_settings_resources.h"
 #include "koan/browser/ui/webui/koan_settings_rows.h"
@@ -277,8 +278,16 @@ void ExtendSettingsUI(content::WebUI& web_ui,
                    "If you brought your Spaces, they keep their separate "
                    "profiles. Sign in again in each: logins don't come "
                    "along.");
+  // Clear browsing data clears the Spaces' profiles too (#477,
+  // koan::containers::RemoveUserContainersData()): the dialog says so.
+  if (!profile->GetPrefs()->GetList(prefs::kUserContainers).empty()) {
+    source.AddString("clearCookies",
+                     "Cookies and other site data, in every profile");
+    source.AddString("clearCache", "Cached images and files, in every profile");
+  }
   web_ui.AddMessageHandler(std::make_unique<KoanSettingsHandler>(
       *profile->GetPrefs(), *g_browser_process->local_state()));
+  web_ui.AddMessageHandler(std::make_unique<KoanProfilesHandler>(*profile));
 #if BUILDFLAG(IS_POSIX)
   web_ui.AddMessageHandler(
       std::make_unique<KoanAgentContainersHandler>(*profile));

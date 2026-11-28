@@ -124,7 +124,8 @@ class SettingsShellTest(unittest.TestCase):
         (WEBUI / f).read_text()
         for f in ('koan_settings_handler.cc',
                   'koan_agent_containers_handler.cc',
-                  'koan_agent_setup_handler.cc'))
+                  'koan_agent_setup_handler.cc',
+                  'koan_profiles_handler.cc'))
     registered = set(re.findall(r'RegisterMessageCallback\(\s*"(\w+)"', handlers))
     sent = set(re.findall(r"(?:sendWithPromise|chrome\.send)\('(\w+)'", JS))
     self.assertTrue(sent)

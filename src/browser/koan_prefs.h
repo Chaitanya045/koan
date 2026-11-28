@@ -457,6 +457,12 @@ inline constexpr char kAgentSavedContainers[] =
 // the order they were made. Each is a saved user container on disk.
 inline constexpr char kUserContainers[] = "koan.containers.user";
 
+// The user's containers deleted in Settings whose visits may still be in the
+// history (#477, koan::ForgetSpaceProfileHistory()): their Serialize()d ids,
+// each kept until a start finds none of its visits left.
+inline constexpr char kDeletedContainersHistory[] =
+    "koan.containers.deleted_history";
+
 // Registers Koan's profile prefs. Called from
 // chrome/browser/ui/tabs/tab_strip_prefs.cc.
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);

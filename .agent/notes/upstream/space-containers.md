@@ -143,8 +143,8 @@ changes.
 | Extensions | Content scripts and webRequest run in container tabs as in any tab. `chrome.tabs.create` opens in the default partition (Zen's add-on rule). `chrome.cookies` sees only the default partition (upstream). Documented. |
 | Downloads | Go through the container's network context, into the profile's one download list. |
 | Incognito | No Spaces, so no containers. No Profile row and no Set Profile. Containers are never made off the record. |
-| Deleting a Space | Its container and data stay, listed for reuse, as Zen leaves containers alone. Deleting a container (and its data) belongs to container management in Settings, a follow-up. |
-| Clear browsing data | Upstream clears the default partition only. Container data stays until the container is deleted. Documented. |
+| Deleting a Space | Its container and data stay, listed for reuse, as Zen leaves containers alone. Deleting a container (and its data) is in Settings (#477, "Managing profiles" below). |
+| Clear browsing data | Clears every user container too, for the same types and time range (#477, below). |
 | URL bar suggestions | Since #474, the history suggestions are the active Space's profile's (`space-history.md`); bookmarks are shared, as in Firefox. Typed URLs open as rule 6. |
 | Switch to Tab | Since #474, only tabs of the active Space's profile (`space-history.md`); off with Keep history apart for each profile, across containers as upstream and Firefox (`switchTabs.searchAllContainers`). Agent tabs stay hidden (existing hook). |
 | Space routing | Rules 3 and 5. The routed tab is created in the routed Space's container before routing moves it. |
@@ -524,3 +524,73 @@ the Pinned Tabs group, `zenTabsManagement.inc.xhtml`):
   hidden split-view Essential still counts toward upstream's tile width
   (`contains_split`).
 
+## Managing profiles (#477)
+
+Date: 2026-11-27. Settings > Tab Management > **Profiles**: rename, colour, Clear Data, Delete,
+and Clear browsing data across profiles. Chromium 158 pristine, Zen 1.24b, Firefox's containers
+(Zen keeps Firefox's container settings), Brave's containers (behaviour only).
+
+### What upstream offers
+
+- `BrowserContext::AsyncObliterateStoragePartition(domain, on_gc_required, done)`
+  (`storage_partition_impl_map.cc` `AsyncObliterate`): `ClearData` (all but the shader cache) on
+  every *loaded* partition of the domain, then a best-effort delete of `Storage/ext/<domain>`
+  except the paths of loaded partitions; `on_gc_required` if something was kept. A loaded partition
+  is never unloaded before the profile goes (`browser_context.h`), so the folder of a profile used
+  this session can only go at the next start.
+- `GarbageCollectStoragePartitionsCommand`: at startup, when
+  `prefs::kShouldGarbageCollectStoragePartitions` is set, deletes every folder under
+  `Storage/ext/` that isn't an extension's, an IWA's or loaded. The C5 hook loads the listed
+  containers first (`LoadSavedContainers()`), so a profile out of the list is collected.
+- `StoragePartition::ClearData(mask, StorageKey(), begin, end)` + `ClearCodeCaches` + the
+  network context's `ClearHttpCache` / `ClearHttpAuthCache`: everything one partition holds.
+- `BrowsingDataRemover` with a `BrowsingDataFilterBuilder` whose `SetStoragePartitionConfig()`
+  is set works on that partition only, for `DATA_TYPE_ON_STORAGE_PARTITION` types. Upstream uses
+  exactly that for isolated web apps in `ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData()`
+  (one nested `RemoveWithFilter()` per IWA partition when the removal named none). But the
+  delegate also clears profile-wide things on a cookies removal (federated site settings, media
+  device salts, origin trial tokens, the new tab page's storage in the *default* partition), so it
+  is right for Clear browsing data (which clears those anyway) and wrong for clearing one profile.
+
+### What Zen and Firefox do
+
+- Zen observes `contextual-identity-deleted` and sets every workspace with that
+  `containerTabId` back to 0 (`ZenSpaceManager.mjs` ~177). Containers are managed in Firefox's
+  settings (Containers: name, colour, icon; Remove).
+- Firefox's Remove asks "If you remove this Container now, N container tabs will be closed",
+  closes them and clears the container's data (`clearData` by `userContextId`). Clear data /
+  Clear recent history clears every container.
+- Brave loops Clear browsing data over its containers and deletes orphaned container folders
+  itself.
+
+### Decisions
+
+| Question | Decision |
+|---|---|
+| Open tabs on delete | **Closed**, as Firefox does, after the question names how many (the Spaces' hidden empty tabs aren't counted). `CloseWebContentsAt(CLOSE_NONE)`: no Recently Closed entry. A Space left without tabs gets its empty tab back, in the default partition (Koan keeps empty Spaces). A page with a "Leave site?" handler can keep its tab; its data is deleted anyway and the tab is in a partition no list names. |
+| The Spaces that used it | Back to **Default** in every window, first (Zen's rule), while they still read it. After that, a Space reads a container that isn't listed as Default (`SpaceContainerIfListed()` in `ReadSpace()` and the stored-Spaces parse), so whatever still names it (a reopened window, `koan.workspaces.list`, a synced record) is Default too, and no new tab can recreate the partition. |
+| A deleted profile's tabs restored later (Recently Closed, a session from before a crash, the stored pinned tabs) | `SiteInstanceForRestoredTab()` asks a check the browser side installs (`SetUserContainerCheck()`, from every window with Spaces before its tabs restore): unlisted → no SiteInstance → the restore hook blanks the tab and closes it. The partition is never made again. |
+| Removing the data, also after a crash | Order: Spaces reset → out of `koan.containers.user` → tabs close → `kShouldGarbageCollectStoragePartitions` set and **committed to disk** → `ClearData` (+ HTTP, code and auth caches) on the partition if loaded → `AsyncObliterateStoragePartition`. A crash before the commit leaves the profile listed and whole (nothing half-deleted); after it, the next start's collection deletes the folder, since nothing loads or lists it. |
+| Clear this profile's data | Partition-only APIs (above), never the browsing data remover, so nothing of another profile or of the profile-wide data is touched. Its tabs stay open. |
+| Clear browsing data across profiles | **The IWA path**: a tiny hook after the IWA block in `RemoveEmbedderData()` calls `koan::containers::RemoveUserContainersData()`, which queues one `RemoveWithFilter()` per listed profile with the same time range, `remove_mask & DATA_TYPE_ON_STORAGE_PARTITION`, origin types, and a `Copy()` of the filter scoped to the profile's partition. So the dialog's time range, Forget About This Site's one site (a `kDelete` filter for its registrable domain) and the browsingData extension API all cover the profiles. Agent containers are not included (they are cleared when their task ends, and deleted in Agent Control). |
+| Its own checkbox in the dialog? | **No**, as Firefox has none: with profiles, the dialog's "Cookies and other site data" and "Cached images and files" read "…, in every profile" (strings overridden in `ExtendSettingsUI()`, no patch). |
+| Forget About This Site | Since #474 (history per profile) the Library acts on the profile its Which profile? filter shows, or every profile with All profiles, and names each partition in its removals itself. A removal that names no partition reaches every profile through the hook, so with Default shown the default partition's own types go in a removal that names the default partition, and the profile-wide types (site settings, engagement) in one with only those, which the hook leaves alone. |
+| What else a profile holds (merged after this was designed) | Delete also covers them. **History** (#474, `visits.app_id`): `ForgetSpaceProfileHistory()` runs the Library's one-profile path (`DeleteProfileHistory()`: a `HistoryDBTask` with `RemoveVisits()`, never an all-time `ExpireHistoryBetween()`), which also forgets the profile's tabs in **Close tabs I haven't used for**'s list (#482, by the container in their session data). The history database writes a removal some seconds later, so the profile stays in `koan.containers.deleted_history`, written with the list, until a start (`ResumeForgettingSpaceProfiles()`, from the first window) finds none of its visits; an id that isn't an unlisted user container is dropped, never read as the default profile's (whose app_id is empty). Every history deletion makes Chromium delete the last session (`BrowsingDataHistoryObserverService` → `RemoveNavigationEntries()` → `SessionService::DeleteLastSession()`, crbug.com/40063610), so that start waits until the session is restored when it is restoring or the last run didn't end cleanly; the first build deleted the visits before the crash restore read the session and lost the whole session (found on the Linux build of d7c3384d). **Extension list** (#473): `extensions_off` in the profile's entry, read from the pref with no cache, so it goes with the entry. **Essentials** (#510): pinned tabs in its partition, closed with its tabs; the question names them and its pinned tabs. **Notifications** (#530): those showing close (`CloseSpaceProfileNotifications()`: a service worker's by the partition in its id, a page's by the container recorded when it showed); a click on one left elsewhere is dropped (`LoadNotificationPartition()`). **Empty tabs** (#561): resetting the Spaces moves them into Default at once. |
+| Rename / colour live | The list is a pref; the Set Profile menu reads it when it opens, the colour line when it paints, and every window repaints its container tabs and updates its Spaces on a change (`OnUserContainersChanged()`); the Create-a-Space form observes it too. Names are refused as New Profile… refuses them; colours are Firefox's eight. |
+| Size on disk | `ComputeDirectorySize()` of each profile's partition path, off the UI thread. Getting the path loads the partition (as `LoadSavedContainers()` does). |
+| Per-profile settings (#445 and its neighbours: a proxy, extensions, developer settings) | The proxy (#445) and the extension list (#473) are keys of the profile's entry, so they go with Delete. Their rows in Settings' profile row are a follow-up (`KoanProfilesHandler::Profiles()` and `renderProfile()`); today they are set from the Space's menu and a switch. |
+| Hooks | One new patch, `chrome_browsing_data_remover_delegate.cc` (5 lines) + its `BUILD.gn` (1 line). Everything else is Koan's: the settings plugin, prefs, the partition core's check, the workspace controller. |
+
+### Tests
+
+- Unit (`koan_containers_unittests`): `UserContainersTest.RenameAndRecolour`,
+  `UserContainersTest.RemoveAndListedSpaceContainer`,
+  `ContainerRestoreTest.DeletedProfilesTabsDontComeBack`.
+- Browser (`KoanSpaceProfilesBrowserTest`): rename and colour reach two windows; delete resets
+  the Spaces in two windows, closes its tabs and keeps the other profile's and the default's
+  cookies; Recently Closed doesn't bring it back; Clear Data clears only it; Clear browsing data
+  and a one-site removal clear the profiles; after a restart its folder is gone; delete forgets
+  its visits, auto-closed tabs and extension list and keeps the others'; its empty tabs are in
+  Default at once and the question counts its Essentials; its notifications close; visits a
+  crash kept go at the next start (`PRE_PRE_`/`PRE_`/`CrashKeptVisitsGoAtTheNextStart`).
+- `scripts/tests/test_settings_shell.py`: the page's messages are the handler's.

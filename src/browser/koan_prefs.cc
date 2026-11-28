@@ -96,6 +96,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterTimePref(kLastResumedTime, base::Time());
   registry->RegisterDictionaryPref(kAgentSavedContainers);
   registry->RegisterListPref(kUserContainers);
+  registry->RegisterListPref(kDeletedContainersHistory);
   registry->RegisterBooleanPref(kAgentControlStrict, false);
   containers::RegisterAgentAccessPrefs(registry);
 }

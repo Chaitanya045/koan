@@ -152,6 +152,67 @@ TEST(UserContainersTest, CheckNameSaysWhy) {
   EXPECT_EQ(kControlCharacter, CheckUserContainerName(u"a\u0007b"));
 }
 
+// Settings > Profiles (#477): rename and recolour change only the named
+// profile, and refuse what Add refuses.
+TEST(UserContainersTest, RenameAndRecolour) {
+  base::ListValue list;
+  const UserContainer work = *AddUserContainer(list, u"Work");
+  const UserContainer home = *AddUserContainer(list, u"Home");
+
+  EXPECT_TRUE(RenameUserContainer(list, work.id, u"  Day job "));
+  EXPECT_TRUE(SetUserContainerColor(list, work.id, TabGroupColorId::kRed));
+  std::vector<UserContainer> parsed = ParseUserContainers(list);
+  ASSERT_EQ(2u, parsed.size());
+  EXPECT_EQ(
+      (UserContainer{
+          .id = work.id, .name = "Day job", .color = TabGroupColorId::kRed}),
+      parsed[0]);
+  EXPECT_EQ(home, parsed[1]);
+
+  // Refused: a bad name, a colour profiles don't have, a profile the list
+  // doesn't have (also an agent's or a throwaway one with the same id).
+  const base::ListValue before = list.Clone();
+  EXPECT_FALSE(RenameUserContainer(list, work.id, u" "));
+  EXPECT_FALSE(RenameUserContainer(list, work.id, u"a\tb"));
+  EXPECT_FALSE(RenameUserContainer(list, work.id, std::u16string(65, u'x')));
+  EXPECT_FALSE(SetUserContainerColor(list, work.id, TabGroupColorId::kGrey));
+  EXPECT_FALSE(RenameUserContainer(list, kWork, u"Other"));
+  EXPECT_FALSE(RenameUserContainer(
+      list, {.kind = ContainerKind::kAgent, .id = work.id.id}, u"Other"));
+  EXPECT_FALSE(SetUserContainerColor(list, kHome, TabGroupColorId::kRed));
+  EXPECT_EQ(before, list);
+
+  EXPECT_EQ(8u, UserContainerColors().size());
+  for (TabGroupColorId color : UserContainerColors()) {
+    EXPECT_TRUE(SetUserContainerColor(list, home.id, color));
+    EXPECT_EQ(color, ParseUserContainers(list)[1].color);
+  }
+}
+
+// Deleting takes out only that profile, and its Spaces read as Default.
+TEST(UserContainersTest, RemoveAndListedSpaceContainer) {
+  base::ListValue list;
+  const UserContainer work = *AddUserContainer(list, u"Work");
+  const UserContainer home = *AddUserContainer(list, u"Home");
+  const std::string work_text = Serialize(work.id);
+  EXPECT_EQ(work.id, ListedSpaceContainer(list, work_text));
+  EXPECT_EQ(home.id, ListedSpaceContainer(list, Serialize(home.id)));
+  // Not one of the user's saved containers, or not listed: Default.
+  EXPECT_FALSE(ListedSpaceContainer(list, ""));
+  EXPECT_FALSE(ListedSpaceContainer(list, "none"));
+  EXPECT_FALSE(ListedSpaceContainer(list, Serialize(kWork)));
+  EXPECT_FALSE(ListedSpaceContainer(
+      list, Serialize({.kind = ContainerKind::kAgent, .id = work.id.id})));
+
+  EXPECT_FALSE(RemoveUserContainer(list, kWork));
+  EXPECT_EQ(2u, list.size());
+  EXPECT_TRUE(RemoveUserContainer(list, work.id));
+  EXPECT_EQ(std::vector<UserContainer>{home}, ParseUserContainers(list));
+  EXPECT_FALSE(ListedSpaceContainer(list, work_text));
+  EXPECT_EQ(home.id, ListedSpaceContainer(list, Serialize(home.id)));
+  EXPECT_FALSE(RemoveUserContainer(list, work.id));
+}
+
 // The rules of .agent/notes/upstream/space-containers.md, by number.
 TEST(NewTabContainerTest, Rules) {
   const std::string work = "user:swork";
