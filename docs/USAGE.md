@@ -601,7 +601,9 @@ belongs to a Space, and new tabs open in the active one.
 - **Profiles: separate logins per Space** (Zen's containers per Space).
   Pick one with the Create-a-Space form's **Profile** row, or right-click
   the header > **Set Profile**. You get Default (no profile), your profiles
-  (each with a colour) and **New Profile…** (name it, then Create). A
+  (each with a colour) and **New Profile…** (name it, then Create:
+  Create waits for a name, and a name longer than 64 characters is
+  refused with a message, the dialog staying open). A
   Space with a profile keeps its own cookies and site data: you can be
   signed into a site in one Space and signed out, or signed in as someone
   else, in another, and a site's saved settings (its localStorage) are kept
@@ -644,6 +646,17 @@ belongs to a Space, and new tabs open in the active one.
   browsing data and `chrome://history` cover every profile's history. One
   thing is not kept apart: a link to a page you visited is drawn in the
   visited colour on that same site in every profile.
+- **A proxy per profile** (#445; no UI yet). A profile can send all its
+  tabs through a proxy, e.g. an SSH tunnel to another machine, so that
+  `localhost:3000` in its Space is that machine's. Everything goes through
+  it, `localhost` too, and nothing goes direct: if the proxy is down, the
+  Space's pages fail. For now, set it with a switch: run `ssh -D 1080 host`,
+  then start Koan with
+  `--koan-container-proxy="<profile name>=socks5://127.0.0.1:1080"` (saved
+  with the profile; `=none` removes it, `=disconnected` makes the Space's
+  pages fail for that run). `http://` and `https://` proxies work too;
+  SOCKS4 doesn't (it would resolve names on this Mac). WebRTC's UDP still
+  goes direct.
 - **Unload Space** (right-click the header or a Space button) frees the
   Space's tabs; they reload when you select them. Unload All Other Spaces
   frees all the others. Tabs on screen and tabs in use (playing sound, in
@@ -918,6 +931,11 @@ Besides the shortcuts above:
   onto the sidebar: the line shows where its tab will go, and letting go
   takes the tab out of the split, to that place, selected (hold Shift to
   keep the selection). The header's unsplit button does it in place.
+- **Split shortcuts** (⌘⌥V / ⌘⌥H, Ctrl+Alt+V / Ctrl+Alt+H on Linux): with
+  another tab selected, the two split; else the tab splits with the next tab
+  of its Space, wrapping to the Space's first, never a tab of another Space.
+  An Essential pairs with the next Essential. With nothing to pair, a new
+  tab opens in an empty pane next to it, as in Zen.
 - Chromium's split views have two panes (Zen's take four, in a grid): a
   third panel (Split Glance over a split, a split shortcut with more tabs
   selected) shows Zen's "Can't add more panels to the split view!" toast.
@@ -1083,6 +1101,27 @@ Koan is set up to stay light (details in `PERFORMANCE.md`):
   (Settings > Tab Management > Performance).
 - **Energy saver** works as in Chrome: on a MacBook it turns on below 20 %
   battery (Settings > Performance > Energy saver).
+- **Close tabs you haven't used** (off by default, Arc's auto-archive):
+  Settings > Tab Management > Performance > "Close tabs I haven't used
+  for": Never, 12 hours, 24 hours, 7 days or 30 days. A tab counts as used
+  while it is the tab its window shows; the time goes on while Koan is
+  closed, so an old tab goes at the next start, once the session is back.
+  Never closed: Essentials, pinned tabs, tabs in a folder, the tab each
+  Space shows, a Space's empty tab, agent tabs, a split view with a tab
+  that stays, and tabs in use (playing sound, in a call, sharing the
+  screen, open in DevTools, with a form you started, downloading, in
+  picture-in-picture, or with a page that would ask before closing).
+  Before the first close ever, a notice says so (with a **Settings**
+  button), and nothing closes until the next check a few minutes later.
+  Closed tabs are in the Library: History > Filter > Closed tabs, kept for
+  120 days (up to 500), apart from ⌘⇧T's recently closed tabs. Click one
+  to reopen it in its Space and profile; forget it with its row's button.
+  Clearing history forgets those it covers; when the Library shows one
+  profile, only that profile's. A tab opened in the background and never
+  looked at counts from when Koan last started, not from when it was
+  opened (a known limit, so it may stay longer; #577). To try it without
+  waiting, start Koan with `--koan-auto-close-tabs-after=<seconds>` (it
+  shortens whatever time is set, not Never).
 
 ## Library
 
@@ -1115,8 +1154,9 @@ with three sections down its side, and opens on the one you used last:
 - **History** (⌘Y or ⌘⇧H): the last 120 days by day. Search, or **Filter**:
   when (today since midnight, this week, this month), sort (by date, site, most visited,
   last visited), what to look through (history or the tabs closed
-  recently) and, once you have a profile, which profile (each opening
-  shows the active Space's; All profiles shows everything). Click a page to open it in a new tab; ⌘-click or
+  recently, including those Koan closed because you hadn't used them; see
+  Memory and power) and, once you have a profile, which profile (each
+  opening shows the active Space's; All profiles shows everything). Click a page to open it in a new tab; ⌘-click or
   middle-click opens it in the background and keeps the Library open.
   Hover a row for its visit time and the forget / reopen buttons;
   right-click for "Forget About This Site" (its history, cookies, site data
@@ -1300,14 +1340,18 @@ space around the card drags the window.
 
   Your choice is saved as your own keys in Settings > Keyboard Shortcuts,
   where you can change any of them later.
-- **Import**: the browsers Koan finds on your Mac, each with its app's icon
+- **Import**: the browsers Koan finds on your Mac (or on Linux: [On
+  Linux](#on-linux)), each with its app's icon
   (Zen, Arc, Google Chrome and the others in [Importing from another
   browser](#importing-from-another-browser), the one you used last first;
   then Safari, Firefox and a bookmarks file), or, if it finds none, "Import
   from another browser…". Pick one, then Next, and Chromium's import dialog
   opens on that browser once the setup is over, where you choose what to
   bring. "Start fresh" (the first choice) or the step's Skip imports
-  nothing, even if you picked a browser before.
+  nothing, even if you picked a browser before. The setup never waits for the
+  list: if finding the browsers (or loading the search engines, which waits
+  for your keyring) takes more than a few seconds, the step offers "Import
+  from another browser…" and the list replaces it once it is ready.
 - **Search engine**: Brave Search is chosen; pick another if you like. It
   applies on Next. In the European Economic Area (and the other regions where
   Chromium shows a search engine choice screen) the step *is* that choice
@@ -1388,32 +1432,93 @@ from …" folder on it.
   Mac without Arc, there is nothing to list.
 - Not imported yet: cookies and open (unpinned) tabs.
 
+### On Linux
+
+On Linux (#493) Koan looks in your home folder, for each browser both where
+its own package keeps its data and where its Flatpak does
+(`~/.var/app/<app id>`):
+
+| Browser | Folders | What comes along |
+|---|---|---|
+| Zen | `~/.zen` or `~/.config/zen`; Flatpak `app.zen_browser.zen` | bookmarks, history, form entries, saved passwords, and its Spaces and pinned tabs |
+| Firefox | `~/.mozilla/firefox` or `~/.config/mozilla/firefox`, the Snap's; Flatpak `org.mozilla.firefox` | bookmarks, history, form entries, saved passwords |
+| Floorp, LibreWolf, Waterfox | `~/.floorp`, `~/.librewolf`, `~/.waterfox` (or under `~/.config`); their Flatpaks | bookmarks, history, form entries, saved passwords |
+| Google Chrome, Brave, Microsoft Edge, Vivaldi, Chromium | `~/.config/google-chrome`, `BraveSoftware/Brave-Browser`, `microsoft-edge`, `vivaldi`, `chromium`; their Flatpaks | bookmarks, history, saved passwords |
+| A bookmarks HTML file | | bookmarks |
+
+Arc and Dia don't exist on Linux. A browser installed both ways is listed
+once, with the profiles of both. Each one shows the icon its package or
+Flatpak installed, else its initial.
+
+- **In Koan's Flatpak** Koan may read those folders and nothing else of your
+  home folder (read-only), plus the Flatpak apps' icons. It sees a browser
+  installed after Koan started once Koan restarts.
+- **Passwords** from Chrome and the other Chromium browsers are encrypted
+  with that browser's key in your keyring ("Chrome Safe Storage" in GNOME
+  Keyring or KeePassXC, "Chrome Keys" in KWallet). Koan reads that one key
+  only when you import passwords. KWallet asks whether Koan may open the
+  wallet: choose **Allow**. Koan never unlocks a locked keyring; if the key
+  isn't there or you refuse, the passwords saved without a keyring (a
+  browser run with `--password-store=basic`) still come along and the
+  others stay behind, as on the Mac when you deny the keychain. Passwords a
+  Flatpak browser saved through the desktop's secret portal (its key is
+  bound to that app) can't be imported: export them as CSV from that
+  browser's password manager and import the file in Koan's.
+- **Zen's and Firefox's passwords** come along through Chromium's Firefox
+  importer (NSS), as Chromium offers Firefox's on Linux, unless the profile
+  has a Primary Password.
+- A browser kept somewhere else (another `XDG_CONFIG_HOME`, a custom
+  profile path outside its folder, Chromium's Snap) isn't found: import its
+  bookmarks from an exported HTML file.
+
 ## Updates
 
-Koan has no automatic updater yet. To update a release, download the newest
-one from the [Releases page](https://github.com/koan-browser/koan/releases)
-and drag it over the old one in Applications (see
-[Installing the macOS build](#installing-the-macos-build)). A build from
-your own clone updates with `git pull && scripts/build.sh`
-([BUILDING-MAC.md](BUILDING-MAC.md#updating)).
+Koan checks its [GitHub releases](https://github.com/koan-browser/koan/releases)
+for a newer version and tells you in the sidebar. It doesn't download or
+install anything yet: on the Mac you download the new disk image and drag it
+over the old one in Applications (see
+[Installing the macOS build](#installing-the-macos-build)); on Linux you
+install the new Flatpak over the old one. A build from your own clone
+updates with `git pull && scripts/build.sh`
+([BUILDING-MAC.md](BUILDING-MAC.md#updating)); the check still looks at the
+releases, not at your clone.
 
-- **Update Complete!** After you start a build whose Chromium version or Koan
-  commit differs from the last one you started, the sidebar shows Zen's
+- **Update Available!** A minute after the first window opens, and then at
+  most every 12 hours, Koan reads the latest release's update manifest
+  (`koan-update.json`). If that release is newer than yours (by version,
+  pre-releases included: 0.0.3-alpha.1 comes before 0.0.3), the sidebar says
+  so once for that version: **What's new** opens the release notes and
+  **Download** the release's page. On Linux, **Download** also copies the
+  command that installs it once it is in your Downloads folder, `flatpak
+  install --user --reinstall ~/Downloads/Koan-<version>-x86_64.flatpak`.
+  Linux shows the notice only once releases carry a Flatpak (#468).
+- **Trust:** Koan only believes a manifest signed with the release key built
+  into it (Ed25519; the key is
+  [`src/browser/updates/koan_update_public_key.txt`](../src/browser/updates/koan_update_public_key.txt)).
+  The signature covers the version and the file's size and SHA-256 for your
+  platform. A manifest that isn't signed, or is signed with another key, or
+  names a file or release notes anywhere but
+  `github.com/koan-browser/koan/releases/`, is ignored. Pre-releases, drafts
+  and the nightlies are never offered: they aren't the latest release.
+- **Update Complete!** After you start a build whose Koan or Chromium
+  version differs from the last one you started, the sidebar shows Zen's
   notification for 15 seconds (it waits while you point at it). **What's new
-  in Koan** opens the commits between the two builds on GitHub; **Something
-  broke?** opens the issues.
-- **Update Available!** Once a day Koan asks GitHub for the newest commit of
-  your clone's develop branch (its `origin` remote, if that is on GitHub). If
-  it is newer than the commit your build was made from, the sidebar says so
-  once for that commit: what's new, **Copy the update command**, and how to
-  update. Koan never downloads or installs anything.
-- **Privacy:** the check is one `GET` to
-  `api.github.com/repos/<owner>/<repo>/commits?sha=develop&per_page=1`. It
-  sends no cookies or credentials, and nothing about you or your build;
-  GitHub sees your IP address, as for any page. No telemetry. Incognito
-  windows never start it.
+  in Koan** opens this version's release page; **Something broke?** opens the
+  issues.
+- **Privacy:** the check is one `GET` of
+  `https://github.com/koan-browser/koan/releases/latest/download/koan-update.json`
+  (GitHub redirects it to its file host). It sends no cookies or
+  credentials, and nothing about you or your build; GitHub sees your IP
+  address, as for any page. No telemetry. Incognito windows never start it.
 - **Turn off:** Settings > Look and Feel > Updates: **Check for updates** and
   **Show a notification after Koan was updated**.
+- **Trying it without a release** (developers): a test build (CI makes one
+  for each pull request, never for a release or a nightly) also takes
+  `--koan-update-manifest-url=<URL>` and `--koan-update-public-key=<base64>`,
+  to read a local manifest signed with a throwaway key
+  (`scripts/ci/update_manifest.py make --key-file <test key>`). In the
+  Flatpak they go in `~/.var/app/dev.koan.Koan/config/koan-flags.conf`.
+  Builds people install don't have them.
 
 ## Haptic feedback (macOS)
 
@@ -1580,7 +1685,8 @@ flatpak run dev.koan.Koan
 
 Flatpak fetches the Freedesktop runtime and the Chromium base app from
 Flathub the first time. Koan then shows up in your app menu. To update,
-install the newer file the same way. To remove it, `flatpak uninstall
+install the newer file the same way, with `--reinstall` (Koan's "Update
+Available!" copies that command for you, see [Updates](#updates)). To remove it, `flatpak uninstall
 dev.koan.Koan` (add `--delete-data` to remove the profile too).
 
 - The profile is in `~/.var/app/dev.koan.Koan/config/koan`.

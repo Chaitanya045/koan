@@ -8,7 +8,7 @@
 import { copyFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  ALT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, createSpace, evalIn, finish,
+  half, whole, ALT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, createSpace, evalIn, finish,
   key as keyTo, pages as tabs, setKoanPref, sleep, visiblePage, waitFor, IS_MAC, META,
 } from './lib/koan.mjs';
 // Library Downloads: Ctrl+Shift+Y, on macOS Cmd+J (koan_shortcut_table.cc).
@@ -68,8 +68,8 @@ const find = (nodes, cls, pred = () => true) =>
   nodes.filter(n => n.cls === cls && pred(n));
 
 async function click(ui, node, { x, y } = {}) {
-  const px = x ?? Math.floor((+node.p.Width || 10) / 2);
-  const py = y ?? Math.floor((+node.p.Height || 10) / 2);
+  const px = whole(x ?? half(+node.p.Width || 10));
+  const py = whole(y ?? half(+node.p.Height || 10));
   for (const type of ['mousePressed', 'mouseReleased']) {
     await ui.send('DOM.dispatchMouseEvent', {
       nodeId: node.nodeId,
@@ -81,7 +81,7 @@ async function click(ui, node, { x, y } = {}) {
 async function mouse(ui, node, type, x, y, button = 'left') {
   await ui.send('DOM.dispatchMouseEvent', {
     nodeId: node.nodeId,
-    event: { type, x, y, button, wheelDirection: 'none' },
+    event: { type, x: whole(x), y: whole(y), button, wheelDirection: 'none' },
   });
 }
 
@@ -274,7 +274,7 @@ const downloads = join(profile, 'Downloads');
     returnByValue: true,
   });
   const box = JSON.parse(r.result.result.value);
-  const at = { x: box.x + 10, y: box.y + 10, button: 'left', clickCount: 1 };
+  const at = { x: whole(box.x + 10), y: whole(box.y + 10), button: 'left', clickCount: 1 };
   await c.send('Input.dispatchMouseEvent', { ...at, type: 'mousePressed' });
   await c.send('Input.dispatchMouseEvent', { ...at, type: 'mouseReleased' });
   c.close();

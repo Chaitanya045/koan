@@ -193,6 +193,15 @@ source_set("split_rearrange") {
   ]
 }
 
+# The split shortcut's choice of a tab to split with (koan_split_partner.h):
+# pure, for the unit tests.
+source_set("split_partner") {
+  sources = [
+    "koan_split_partner.cc",
+    "koan_split_partner.h",
+  ]
+}
+
 # Whether a pinned tab keeps its site (koan_pinned_site.h): pure, so the unit
 # tests need nothing else.
 source_set("pinned_site") {
@@ -295,6 +304,7 @@ test("koan_views_unittests") {
     "koan_space_drag_logic_unittest.cc",
     "koan_space_navigation_unittest.cc",
     "koan_space_routes_unittest.cc",
+    "koan_split_partner_unittest.cc",
     "koan_split_rearrange_unittest.cc",
     "koan_stored_space_unittest.cc",
     "koan_stored_tab_unittest.cc",
@@ -318,6 +328,7 @@ test("koan_views_unittests") {
     ":space_drag_logic",
     ":space_navigation",
     ":space_routes",
+    ":split_partner",
     ":split_rearrange",
     ":stored_space",
     ":stored_tab",
@@ -514,6 +525,8 @@ source_set("impl") {
     "koan_system_accent_observer.h",
     "koan_tab_activation.cc",
     "koan_tab_activation.h",
+    "koan_tab_auto_closer.cc",
+    "koan_tab_auto_closer.h",
     "koan_tab_drag.cc",
     "koan_tab_drag.h",
     "koan_tab_drag_image.cc",
@@ -593,6 +606,7 @@ source_set("impl") {
     ":space_drag_logic",
     ":space_navigation",
     ":space_routes",
+    ":split_partner",
     ":split_rearrange",
     ":stored_space",
     ":stored_tab",
@@ -708,6 +722,7 @@ source_set("impl") {
     "//components/tabs:public",
     "//components/url_formatter",
     "//components/user_prefs",
+    "//components/version_info",
     "//components/vector_icons",
     "//components/viz/common",
     "//components/web_modal",
@@ -722,6 +737,7 @@ source_set("impl") {
     "//koan/browser:renderer_switches",
     "//koan/browser:shortcut_table",
     "//koan/browser:space_title",
+    "//koan/browser:tab_auto_close",
     "//koan/browser:tab_hooks",
     "//koan/browser:vertical_tabs",
     "//koan/browser:welcome_state",
@@ -737,10 +753,11 @@ source_set("impl") {
     "//koan/browser/ui/fonts",
     "//koan/browser/ui/vector_icons",
     "//koan/browser/ui/webui",
-    "//koan/browser/updates:build_info",
     "//koan/browser/updates:update_logic",
+    "//koan/browser/updates:update_source",
     "//koan/browser/window_sync:model",
     "//koan/common:url_constants",
+    "//koan/version",
     "//mojo/public/cpp/bindings",
     "//net",
     "//services/data_decoder/public/cpp",

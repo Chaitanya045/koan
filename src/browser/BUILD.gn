@@ -165,6 +165,19 @@ source_set("library_logic") {
   deps = [ "//url" ]
 }
 
+# Which tabs "Close tabs I haven't used for" closes, and the list it keeps
+# them in (koan_tab_auto_close.h). Pure logic.
+source_set("tab_auto_close") {
+  sources = [
+    "koan_tab_auto_close.cc",
+    "koan_tab_auto_close.h",
+  ]
+  public_deps = [
+    "//base",
+    "//url",
+  ]
+}
+
 # A Space's icon and name in its tab group title. Pure logic.
 source_set("space_title") {
   sources = [

@@ -1,0 +1,4 @@
+# Each round adds a profile to the profile menus: a tall headless screen keeps
+# the menu whole, so its last item (New Profile…) can be clicked. (Later
+# flags win: this replaces koan_test_env.sh's 1280,800.)
+--ozone-override-screen-size=1280,4800

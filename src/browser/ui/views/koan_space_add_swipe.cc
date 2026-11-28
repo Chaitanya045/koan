@@ -181,6 +181,13 @@ float KoanSpaceAddSwipeView::JumpScale() const {
                               gfx::Tween::EASE_IN_OUT, half));
 }
 
+// It paints to a layer of its own, which a theme change (the Mode, or the
+// system's light/dark) doesn't repaint (#564).
+void KoanSpaceAddSwipeView::OnThemeChanged() {
+  views::View::OnThemeChanged();
+  SchedulePaint();
+}
+
 void KoanSpaceAddSwipeView::OnPaint(gfx::Canvas* canvas) {
   const ui::ColorProvider* colors = GetColorProvider();
   if (!shown_ || !colors || width() == 0 || height() == 0) {

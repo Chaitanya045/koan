@@ -14,8 +14,8 @@
 // views' side only) and the AppKit checks are reported as skipped.
 // Run by scripts/mac/suite.sh (sidebar_top_row.flags loads the extension).
 import { execSync } from 'node:child_process';
-import { CDP_PORT, IS_MAC, check, evalIn, finish, onPage, pages, sleep, viewMouse,
-         viewTree, waitFor } from './lib/koan.mjs';
+import { centerOf, half, CDP_PORT, IS_MAC, check, evalIn, finish, onPage, pages, sleep, toastTexts,
+         viewMouse, viewTree, waitFor } from './lib/koan.mjs';
 import { alive, calibrate, fatalInLog, makeKey, ptr, realClick, realInput,
          realInputWhyNot, realKey, skipped, startServer, windowOf } from './lib/mac.mjs';
 
@@ -77,7 +77,7 @@ if (realInput()) {
 }
 const real = () => !!origin && realInput();
 const via = real() ? 'a real click' : 'UI DevTools';
-const centre = v => ({ x: origin.x + v.ax + v.w / 2, y: origin.y + v.ay + v.h / 2 });
+const centre = v => ({ x: origin.x + centerOf(v).x, y: origin.y + centerOf(v).y });
 // A click on `view` (from viewTree()): the real pointer at its centre, or
 // UI DevTools' press and release on it.
 async function press(view, settle = 900) {
@@ -86,7 +86,7 @@ async function press(view, settle = 900) {
     return realClick(c.x, c.y, settle);
   }
   for (const type of ['mousePressed', 'mouseReleased']) {
-    await viewMouse(view, type, Math.round(view.w / 2), Math.round(view.h / 2));
+    await viewMouse(view, type, half(view.w), half(view.h));
   }
   await sleep(settle);
   return true;
@@ -155,8 +155,9 @@ if (copy) {
   if (IS_MAC) execSync('pbcopy', { input: '' });
   if (real()) await hover(copy);
   await press(copy, 300);
-  const toast = await waitFor(async () => (await viewTree()).find(v => v.cls === 'Label' &&
-      v.shown && /^Copied /.test(v.props?.Text ?? ''))?.props.Text, 2500) ?? '';
+  // (toastTexts(): a whole viewTree() can take longer than the toast stays.)
+  const toast = await waitFor(async () => (await toastTexts()).find(t => /^Copied /.test(t)),
+                              2500) ?? '';
   check(`Copy URL (${via}) shows Zen's toast`, toast === 'Copied current URL!', JSON.stringify(toast));
   if (IS_MAC) {
     const text = execSync('pbpaste', { encoding: 'utf8' });

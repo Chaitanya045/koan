@@ -21,7 +21,7 @@
 //   test_helper pins the tab (an extension's pin makes an Essential, as the
 //   menu item does), from a 127.0.0.1 page (test_helper answers those only).
 import {
-  ACCEL, NATIVE_MENUS, NATIVE_MENU_WHY, browserCall, createSpace, evalIn, settingsCall,
+  half, whole, ACCEL, NATIVE_MENUS, NATIVE_MENU_WHY, browserCall, createSpace, evalIn, settingsCall,
   tabMenuCommand, waitFor, sendKey,
 } from './lib/koan.mjs';
 import { askTestHelper, menuKey, menuKeyWhyNot, setKoanPid, skipped, startServer }
@@ -94,7 +94,8 @@ async function uiSession() {
   };
   const mouse = async (node, type, x, y, button = 'left') =>
     ui.send('DOM.dispatchMouseEvent',
-            { nodeId: node.nodeId, event: { type, x, y, button, wheelDirection: 'none' } });
+            { nodeId: node.nodeId, event: { type, x: whole(x), y: whole(y), button,
+                                            wheelDirection: 'none' } });
   const keyEvent = async (node, event) =>
     ui.send('DOM.dispatchKeyEvent', { nodeId: node.nodeId, event });
   return { ui, nodes, find, mouse, keyEvent, close: () => ui.close() };
@@ -174,7 +175,7 @@ async function menuCommand(tabView, item, { click = true } = {}) {
   let root = found ?? menu;
   while (root?.parent) root = root.parent;
   if (found && click) {
-    const x = found.ax + 20, y = found.ay + Math.floor(found.h / 2);
+    const x = found.ax + 20, y = found.ay + half(found.h);
     await s.mouse(root, 'mousePressed', x, y);
     await s.mouse(root, 'mouseReleased', x, y);
   } else if (root) {

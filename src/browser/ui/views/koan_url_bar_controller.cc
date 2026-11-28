@@ -184,6 +184,13 @@ class KoanUrlBarBackdrop : public views::View {
     }
   }
 
+  // The controller puts it on a layer of its own, which a theme change (the
+  // Mode, or the system's light/dark) doesn't repaint (#564).
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    SchedulePaint();
+  }
+
   // views::View:
   bool OnMousePressed(const ui::MouseEvent& event) override {
     // Closing removes this view; not while it handles the event.
@@ -325,6 +332,14 @@ class KoanUrlBarCardDecoration : public views::View {
       glass_ = glass;
       SchedulePaint();
     }
+  }
+
+  // It paints to a layer of its own, which a theme change (the Mode, or the
+  // system's light/dark) doesn't repaint: it would keep the old colours
+  // until something else repaints it (#564).
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    SchedulePaint();
   }
 
   // views::View:

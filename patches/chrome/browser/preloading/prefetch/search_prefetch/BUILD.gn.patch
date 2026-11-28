@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/preloading/prefetch/search_prefetch/BUILD.gn b/chrome/browser/preloading/prefetch/search_prefetch/BUILD.gn
+index 57e6082124e9f65e85b20c4504ba995d5b60dcfa..86e65ababb22e98915f3ba5fd5b3e000e38340d0 100644
+--- a/chrome/browser/preloading/prefetch/search_prefetch/BUILD.gn
++++ b/chrome/browser/preloading/prefetch/search_prefetch/BUILD.gn
+@@ -58,6 +58,7 @@ source_set("impl") {
+     "//chrome/browser/search_engines",
+     "//components/embedder_support:user_agent",
+     "//components/omnibox/browser",
++    "//koan/browser/containers:partition",
+   ]
+ 
+   if (is_android) {

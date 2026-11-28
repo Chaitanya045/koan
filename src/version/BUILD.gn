@@ -4,8 +4,7 @@
 
 # Koan's version from VERSION at the root of the repository
 # (koan_version.py). VERSION is outside //koan's tree as GN sees it, so it
-# reaches ninja through the depfile, as the commit stamp does
-# (//koan/browser/updates:lastchange).
+# reaches ninja through the depfile.
 action("version_header") {
   script = "koan_version.py"
   outputs = [ "$target_gen_dir/koan_version_values.h" ]

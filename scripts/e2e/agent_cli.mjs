@@ -76,7 +76,7 @@ import http from 'node:http';
 import https from 'node:https';
 import os from 'node:os';
 import path from 'node:path';
-import { browserCall, check, decodePng, evalIn, finish, pages, setKoanPref, showPane, sleep,
+import { centerOf, browserCall, check, decodePng, evalIn, finish, pages, setKoanPref, showPane, sleep,
          viewTree, waitFor } from './lib/koan.mjs';
 import { IS_MAC, KOAN_LOG, alive, clickThroughRoot, fatalInLog, goToAgentTab, realInput, realInputWhyNot,
          rootMouse, rootOf, skip, skipped, startServer, windowOf } from './lib/mac.mjs';
@@ -144,8 +144,8 @@ async function allow(title, printed) {
   const vs = await viewTree();
   const button = vs.find(v => v.nodeId === found.button.nodeId) ?? found.button;
   const root = rootOf({ views: vs.filter(v => v.widget === button.widget) });
-  await rootMouse(root, ['mousePressed', 'mouseReleased'], button.ax + button.w / 2,
-                  button.ay + button.h / 2);
+  const c = centerOf(button);
+  await rootMouse(root, ['mousePressed', 'mouseReleased'], c.x, c.y);
   return true;
 }
 

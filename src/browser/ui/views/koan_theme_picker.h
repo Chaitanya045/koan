@@ -82,6 +82,10 @@ class KoanThemePicker : public gfx::AnimationDelegate,
   views::Widget* widget() const { return widget_.get(); }
 
  private:
+  // The anchor rect that puts the panel (with its padding and border) at
+  // `panel_in_screen`: the FLOAT frame centres its bounds on the anchor
+  // rect, and those include its shadow, which isn't the same on every side.
+  gfx::Rect FrameRectForPanel(const gfx::Rect& panel_in_screen) const;
   void OnWidgetClosed();
   // On macOS: the popover material behind the panel, at its bounds, in its
   // scheme.

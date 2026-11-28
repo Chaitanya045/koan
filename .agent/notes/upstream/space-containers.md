@@ -105,7 +105,15 @@ isn't in its Space's container: a new blank page is made in the right partition,
 and with the same selection, and the old one is closed. This one rule covers every way a Space
 gets an empty tab: Create Space (made before the Space has its data), a Space recreated from
 `koan.workspaces.list`, a closed Space coming back, the adopted last tab, and a container changed
-on an existing Space (Set Profile, or another window's sync).
+on an existing Space (Set Profile, or another window's sync). Create Space and Set Profile also
+run it at once, before they return (#543): until then the empty tab is in the partition of the
+Space that was active, and a bookmark or a link dropped on it in that task would load there.
+
+The profile menu (Default, the profiles, New Profile…) is a submenu of the Space menu, so its
+command ids are apart from the Space menu's: views runs a menu command by looking its id up in the
+whole menu, parent first (`MenuModelAdapter::ExecuteCommand()`). With the same ids, Set Profile ▸
+Default ran Change Name and ▸ New Profile… ran Change Icon (#543; macOS's native menus were not
+affected).
 
 **The indicator** (`PaintSidebarTab`, no new patch). A 2 px line in the container's colour sits
 at the start edge of a tab row, inset by half the corner radius; Essentials get 3 px, clipped to
@@ -140,7 +148,7 @@ changes.
 | URL bar suggestions | Since #474, the history suggestions are the active Space's profile's (`space-history.md`); bookmarks are shared, as in Firefox. Typed URLs open as rule 6. |
 | Switch to Tab | Since #474, only tabs of the active Space's profile (`space-history.md`); off with Keep history apart for each profile, across containers as upstream and Firefox (`switchTabs.searchAllContainers`). Agent tabs stay hidden (existing hook). |
 | Space routing | Rules 3 and 5. The routed tab is created in the routed Space's container before routing moves it. |
-| Prerender / NoStatePrefetch / preconnect | Off in container tabs (C4, B10). The prerendered page would be built in the default partition. Accepted cost. |
+| Prerender / NoStatePrefetch / preconnect / search prefetch | Off in container tabs (C4, B10, and the search prefetch and browser-side preconnect hooks in `space-proxy.md`). Each would load or connect in the default partition, with its cookies and outside a Space's proxy. Accepted cost. |
 | Discard | The replacement is created in the old tab's partition (C3). |
 | chrome:// pages in a container Space | Open in the default partition (rule 2), except the new tab page. A URL typed into such a page then loads in the default partition. Accepted: settings pages are rare starting points. |
 | Agent containers | Untouched: agent tabs never take a Space's container, and agent Spaces have none. |

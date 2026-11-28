@@ -1955,7 +1955,25 @@ void KoanThemePicker::PlaceBeside(const gfx::Rect& tabs_in_screen,
   const int y = tabs.y();
 #endif
   // (Moved onto the screen if it doesn't fit, as Zen's popup is.)
-  delegate_->SetAnchorRect(gfx::Rect(gfx::Point(x, y), size));
+  delegate_->SetAnchorRect(
+      FrameRectForPanel(gfx::Rect(gfx::Point(x, y), size)));
+}
+
+gfx::Rect KoanThemePicker::FrameRectForPanel(
+    const gfx::Rect& panel_in_screen) const {
+  // Chromium's bubble shadow (BubbleBorder::STANDARD_SHADOW, off macOS) is
+  // offset 2px down, so it reaches 4px further below the panel than above
+  // it, and a panel-sized anchor rect would put the panel 2px above it. The
+  // frame's rect is the panel's (whose 1px border is the frame's stroke)
+  // with the shadow around it (BubbleBorder::GetInsets(): the default
+  // elevation, which the picker keeps). On macOS the window server draws the
+  // shadow (NO_SHADOW): the frame is the panel.
+  gfx::Rect frame = panel_in_screen;
+  if (delegate_->GetShadow() == views::BubbleBorder::STANDARD_SHADOW) {
+    frame.Inset(-(views::BubbleBorder::GetBorderAndShadowInsets() -
+                  gfx::Insets(views::BubbleBorder::kBorderThicknessDip)));
+  }
+  return frame;
 }
 
 void KoanThemePicker::SetWelcomeMode() {
@@ -1965,7 +1983,7 @@ void KoanThemePicker::SetWelcomeMode() {
 }
 
 void KoanThemePicker::SetAnchorRect(const gfx::Rect& anchor) {
-  delegate_->SetAnchorRect(anchor);
+  delegate_->SetAnchorRect(FrameRectForPanel(anchor));
 }
 
 void KoanThemePicker::Close() {

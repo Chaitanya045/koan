@@ -15,7 +15,7 @@
 // (KOAN_INPUT=real) and are reported as skipped otherwise. A pane's order is
 // read from the sidebar's split row (its titles left to right), which
 // follows the split's tab order.
-import { ACCEL, ALT, check, evalIn, finish, front, key, onPage, pages, sleep,
+import { half, ACCEL, ALT, check, evalIn, finish, front, key, onPage, pages, sleep,
          viewTree, waitFor, browserCall } from './lib/koan.mjs';
 import { calibrate, hold, makeKey, ptr, realClick, realInput, realInputWhyNot,
          realKey, realPointer, skipped, startServer } from './lib/mac.mjs';
@@ -74,11 +74,11 @@ check('No header shows before the pointer comes', headers(vs).length === 0,
       `${headers(vs).length} shown`);
 
 const screen = v => ({ x: calibration.x + v.ax, y: calibration.y + v.ay });
-const middle = v => ({ x: screen(v).x + v.w / 2, y: screen(v).y + v.h / 2 });
+const middle = v => ({ x: screen(v).x + half(v.w), y: screen(v).y + half(v.h) });
 // The header's buttons: 54 x 23, centred on the pane's top, 5 up into the gap;
 // the grip 7 in, the unsplit button 8 after it (koan_split_header.cc).
-const grip = v => ({ x: screen(v).x + v.w / 2 - 12, y: screen(v).y + 7 });
-const unsplit = v => ({ x: screen(v).x + v.w / 2 + 12, y: screen(v).y + 7 });
+const grip = v => ({ x: screen(v).x + half(v.w) - 12, y: screen(v).y + 7 });
+const unsplit = v => ({ x: screen(v).x + half(v.w) + 12, y: screen(v).y + 7 });
 // The local time to the ms, as the Koan log's VLOG lines print it
 // (HHMMSS.mmm), to set the checks against "Koan: split header N shows".
 const stamp = () => {

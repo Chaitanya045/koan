@@ -7,6 +7,7 @@
 // (an empty pane with the URL bar, koan_split_view.h). Pages are chrome://
 // ones, which load without a server.
 
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -25,12 +26,16 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/split_tabs/split_tab_visual_data.h"
+#include "components/tab_groups/tab_group_id.h"
 #include "components/tabs/public/split_tab_data.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
+#include "koan/browser/koan_shortcut_table.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
+#include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_split_header.h"
 #include "koan/browser/ui/views/koan_split_rearrange.h"
@@ -132,6 +137,44 @@ bool ChildWidgetShows(BrowserView* browser_view, std::string_view name) {
 const split_tabs::SplitTabVisualData& VisualData(TabStripModel* tab_strip,
                                                  tabs::TabInterface* tab) {
   return *tab_strip->GetSplitData(*tab->GetSplit())->visual_data();
+}
+
+// The split shortcut (Cmd+Option+V, Ctrl+Alt+V on Linux) in `browser`.
+bool RunSplitShortcut(BrowserWindowInterface* browser) {
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
+  return browser_view && KoanBrowserViewController::From(browser_view)
+                             ->shortcuts()
+                             ->Run(shortcuts::Action::kSplitVertical);
+}
+
+// A first Space with a page at `url`, active, and a "Work" Space after it
+// in the tab strip with chrome://chrome-urls/ in it. Returns the Work tab,
+// or null.
+tabs::TabInterface* PageThenWorkSpace(BrowserWindowInterface* browser,
+                                      const GURL& url) {
+  KoanWorkspaceController* spaces = GetSpaces(browser);
+  TabStripModel* tab_strip = browser->GetTabStripModel();
+  if (!spaces || !WaitForSpaceCount(browser, 1) ||
+      !ui_test_utils::NavigateToURL(browser, url)) {
+    return nullptr;
+  }
+  tabs::TabInterface* page = tab_strip->GetActiveTab();
+  spaces->CreateSpace(u"Work", u"", {});
+  if (!WaitForSpaceCount(browser, 2) ||
+      !ui_test_utils::NavigateToURLWithDisposition(
+          browser, GURL("chrome://chrome-urls/"),
+          WindowOpenDisposition::kNewForegroundTab,
+          ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP)) {
+    return nullptr;
+  }
+  tabs::TabInterface* work = tab_strip->GetActiveTab();
+  if (work == page || !work->GetGroup() ||
+      work->GetGroup() == page->GetGroup()) {
+    return nullptr;
+  }
+  spaces->SwitchTo(*page->GetGroup());
+  tab_strip->ActivateTabAt(tab_strip->GetIndexOfTab(page));
+  return tab_strip->GetActiveTab() == page ? work : nullptr;
 }
 
 }  // namespace
@@ -506,6 +549,100 @@ IN_PROC_BROWSER_TEST_F(KoanSplitViewBrowserTest,
   EXPECT_TRUE(base::test::RunUntil(
       [&] { return ChildWidgetShows(browser_view, "KoanSplitHeader"); }));
   header->OnHeaderHovered(0, false);
+}
+
+// Issue #553: the split shortcut on the only tab of a Space, with another
+// Space's tab next in the tab strip, never takes that tab (Zen's
+// toggleShortcut() only looks at the visible tabs, the Space's). It opens
+// Zen's one-tab split in this Space, and the other Space keeps its tab.
+IN_PROC_BROWSER_TEST_F(KoanSplitViewBrowserTest,
+                       SplitShortcutNeverTakesATabOfTheNextSpace) {
+  TabStripModel* tab_strip = browser()->GetTabStripModel();
+  tabs::TabInterface* work =
+      PageThenWorkSpace(browser(), GURL("chrome://version/"));
+  ASSERT_TRUE(work);
+  tabs::TabInterface* page = tab_strip->GetActiveTab();
+  const std::optional<tab_groups::TabGroupId> work_space = work->GetGroup();
+  ASSERT_GT(tab_strip->GetIndexOfTab(work), tab_strip->GetIndexOfTab(page));
+
+  ASSERT_TRUE(RunSplitShortcut(browser()));
+  EXPECT_FALSE(work->IsSplit());
+  EXPECT_EQ(work->GetGroup(), work_space);
+  ASSERT_TRUE(page->IsSplit());
+  const std::vector<tabs::TabInterface*> panes = SplitTabs(tab_strip, page);
+  ASSERT_EQ(panes.size(), 2u);
+  for (tabs::TabInterface* pane : panes) {
+    EXPECT_EQ(pane->GetGroup(), page->GetGroup());
+  }
+}
+
+// Zen's toggleShortcut(): on the last tab of a Space the shortcut wraps to
+// the Space's first tab, not the next Space's.
+IN_PROC_BROWSER_TEST_F(KoanSplitViewBrowserTest,
+                       SplitShortcutWrapsToTheSpacesFirstTab) {
+  TabStripModel* tab_strip = browser()->GetTabStripModel();
+  tabs::TabInterface* work =
+      PageThenWorkSpace(browser(), GURL("chrome://version/"));
+  ASSERT_TRUE(work);
+  tabs::TabInterface* first = tab_strip->GetActiveTab();
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL("chrome://chrome-urls/"),
+      WindowOpenDisposition::kNewForegroundTab,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  tabs::TabInterface* last = tab_strip->GetActiveTab();
+  ASSERT_EQ(last->GetGroup(), first->GetGroup());
+  ASSERT_GT(tab_strip->GetIndexOfTab(work), tab_strip->GetIndexOfTab(last));
+
+  ASSERT_TRUE(RunSplitShortcut(browser()));
+  EXPECT_FALSE(work->IsSplit());
+  ASSERT_TRUE(last->IsSplit());
+  EXPECT_EQ(last->GetSplit(), first->GetSplit());
+}
+
+// Zen's visibleTabs leave out a collapsed folder's tabs: on the last tab of
+// a Space the shortcut skips a tab in a folder nested in a collapsed one
+// (Koan's folders aren't tab groups, so upstream's IsTabCollapsed() doesn't
+// know them) and wraps to the Space's first shown tab.
+IN_PROC_BROWSER_TEST_F(KoanSplitViewBrowserTest,
+                       SplitShortcutSkipsATabInACollapsedFolder) {
+  TabStripModel* tab_strip = browser()->GetTabStripModel();
+  tabs::TabInterface* work =
+      PageThenWorkSpace(browser(), GURL("chrome://version/"));
+  ASSERT_TRUE(work);
+  tabs::TabInterface* home = tab_strip->GetActiveTab();
+  KoanFolderController* folders = KoanFolderController::FromBrowser(browser());
+  ASSERT_TRUE(folders);
+  std::vector<tabs::TabInterface*> pages;
+  for (int i = 0; i < 2; ++i) {
+    ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+        browser(), GURL("chrome://chrome-urls/"),
+        WindowOpenDisposition::kNewForegroundTab,
+        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+    pages.push_back(tab_strip->GetActiveTab());
+  }
+  tabs::TabInterface* in_folder = pages[0];
+  tabs::TabInterface* last = pages[1];
+  const int outer = folders->CreateFolder({}, /*parent=*/0,
+                                          folders->GetActiveSpace(), u"Outer",
+                                          /*rename=*/false);
+  folders->CreateFolder({in_folder}, outer, folders->GetActiveSpace(), u"Inner",
+                        /*rename=*/false);
+  tab_strip->ActivateTabAt(tab_strip->GetIndexOfTab(last));
+  folders->SetCollapsed(outer, true);
+  // The folder's tab moved to the top of the Space, ahead of the others.
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return tab_strip->GetIndexOfTab(in_folder) < tab_strip->GetIndexOfTab(home);
+  }));
+  ASSERT_EQ(tab_strip->GetActiveTab(), last);
+  ASSERT_TRUE(folders->GetRootMostCollapsed(folders->GetFolderOf(in_folder)));
+  ASSERT_GT(tab_strip->GetIndexOfTab(work), tab_strip->GetIndexOfTab(last));
+
+  ASSERT_TRUE(RunSplitShortcut(browser()));
+  EXPECT_FALSE(in_folder->IsSplit());
+  EXPECT_FALSE(work->IsSplit());
+  ASSERT_TRUE(last->IsSplit());
+  EXPECT_EQ(last->GetSplit(), home->GetSplit());
+  EXPECT_TRUE(folders->GetFolder(outer)->collapsed);
 }
 
 }  // namespace koan

@@ -254,6 +254,12 @@ write_args() {
     ln -sfn "$(dirname "$metal")" "$OUT/metal-toolchain"
     echo "angle_metal_toolchain_dir = \"$PWD/$OUT/metal-toolchain\"" >> "$new"
   fi
+  # Koan's test-only update hooks (src/browser/updates/BUILD.gn). CI sets
+  # this only for a run that is neither a release nor a base for the nightlies
+  # (scripts/ci/linux_env.sh, mac_env.sh).
+  if [[ ${KOAN_UPDATE_TEST_HOOKS:-0} == 1 ]]; then
+    echo "koan_update_test_hooks = true" >> "$new"
+  fi
   if cmp -s "$new" "$OUT/args.gn"; then rm "$new"; else mv "$new" "$OUT/args.gn"; fi
 }
 
