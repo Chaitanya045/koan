@@ -163,7 +163,10 @@ void ForgetSpaceProfileHistory(Profile* profile,
 
 // Once per run of `profile`, from its first window: deletes again the visits
 // of the profiles in prefs::kDeletedContainersHistory, and drops each whose
-// visits were all gone already.
+// visits were all gone already. Waits for the session to be restored first
+// when it is being restored or the last run didn't end cleanly: Chromium
+// deletes the last session on every history deletion, and the restore after
+// a crash reads it.
 void ResumeForgettingSpaceProfiles(Profile* profile);
 
 }  // namespace koan

@@ -11,6 +11,7 @@
 #include <set>
 #include <utility>
 
+#include "base/callback_list.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/memory/weak_ptr.h"
@@ -20,6 +21,7 @@
 #include "base/uuid.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/sessions/exit_type_service.h"
 #include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/ui/browser_tabrestore.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -163,6 +165,14 @@ class ProfileHistoryDeletions : public base::SupportsUserData::Data {
   // Whether ResumeForgettingSpaceProfiles() ran this time Koan is running.
   bool TakeResume() { return !std::exchange(resumed_, true); }
 
+  // Runs `run` once the session of `profile` is restored (in this run).
+  void RunAfterSessionRestore(Profile* profile, base::OnceClosure run) {
+    after_restore_ = std::move(run);
+    restored_subscription_ = SessionRestore::RegisterOnSessionRestoredCallback(
+        base::BindRepeating(&ProfileHistoryDeletions::OnSessionRestored,
+                            weak_factory_.GetWeakPtr(), profile));
+  }
+
   base::WeakPtr<ProfileHistoryDeletions> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
   }
@@ -175,8 +185,16 @@ class ProfileHistoryDeletions : public base::SupportsUserData::Data {
     std::optional<history::VisitID> visit;
   };
 
+  void OnSessionRestored(Profile* profile, Profile* restored, int) {
+    if (restored->GetOriginalProfile() == profile && after_restore_) {
+      std::move(after_restore_).Run();
+    }
+  }
+
   int next_id_ = 0;
   bool resumed_ = false;
+  base::OnceClosure after_restore_;
+  base::CallbackListSubscription restored_subscription_;
   std::vector<Deletion> pending_;
   base::CancelableTaskTracker tracker_;
   base::WeakPtrFactory<ProfileHistoryDeletions> weak_factory_{this};
@@ -839,9 +857,11 @@ void ForgetSpaceProfileHistory(Profile* profile,
                            base::OnceCallback<void(bool)>());
 }
 
-void ResumeForgettingSpaceProfiles(Profile* profile) {
-  if (!profile || profile->IsOffTheRecord() ||
-      !ProfileHistoryDeletions::GetOrCreate(profile)->TakeResume()) {
+namespace {
+
+void ForgetDeletedSpaceProfiles(base::WeakPtr<Profile> weak_profile) {
+  Profile* profile = weak_profile.get();
+  if (!profile) {
     return;
   }
   history::HistoryService* history = HistoryServiceFactory::GetForProfile(
@@ -879,6 +899,34 @@ void ResumeForgettingSpaceProfiles(Profile* profile) {
         profile, history, id, {}, base::Time(),
         base::BindOnce(&OnDeletedProfileChecked, profile->GetWeakPtr(), id));
   }
+}
+
+}  // namespace
+
+void ResumeForgettingSpaceProfiles(Profile* profile) {
+  if (!profile || profile->IsOffTheRecord() ||
+      profile->GetPrefs()->GetList(prefs::kDeletedContainersHistory).empty()) {
+    return;
+  }
+  ProfileHistoryDeletions* deletions =
+      ProfileHistoryDeletions::GetOrCreate(profile);
+  if (!deletions->TakeResume()) {
+    return;
+  }
+  // A history deletion deletes the last session too
+  // (BrowsingDataHistoryObserverService: RemoveNavigationEntries()), which a
+  // restore still being made, or the one after a crash (posted, or offered
+  // by the bubble), reads. So not before the session is back; if it never
+  // comes back this run, at a later start.
+  if (!profile->restored_last_session() &&
+      (SessionRestore::IsRestoring(profile) ||
+       ExitTypeService::GetLastSessionExitType(profile) != ExitType::kClean)) {
+    deletions->RunAfterSessionRestore(
+        profile,
+        base::BindOnce(&ForgetDeletedSpaceProfiles, profile->GetWeakPtr()));
+    return;
+  }
+  ForgetDeletedSpaceProfiles(profile->GetWeakPtr());
 }
 
 }  // namespace koan
