@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -104,6 +105,8 @@ void KoanWelcomeHandler::OnJavascriptDisallowed() {
   weak_factory_.InvalidateWeakPtrs();
   importer_list_.reset();
   engines_loaded_ = {};
+  data_timeout_.Stop();
+  callback_id_.reset();
 }
 
 void KoanWelcomeHandler::RegisterMessages() {
@@ -135,34 +138,67 @@ void KoanWelcomeHandler::HandleGetWelcomeData(const base::ListValue& args) {
   if (host->callbacks().page_ready) {
     host->callbacks().page_ready.Run();
   }
+  // A new request (the page reloaded) starts over.
+  weak_factory_.InvalidateWeakPtrs();
+  callback_id_ = args[0].Clone();
+  import_sources_.clear();
+  import_sources_loaded_ = false;
   // The browsers to import from first (Chromium's import dialog's list).
   importer_list_ = std::make_unique<ImporterList>();
   importer_list_->DetectSourceProfiles(
       g_browser_process->GetApplicationLocale(),
       /*include_interactive_profiles=*/true,
       base::BindOnce(&KoanWelcomeHandler::OnImportSourcesLoaded,
-                     weak_factory_.GetWeakPtr(), args[0].Clone()));
-}
-
-void KoanWelcomeHandler::OnImportSourcesLoaded(base::Value callback_id) {
-  // On a first run the search engines may still be loading.
-  TemplateURLService* service = GetTemplateURLService(/*editable=*/false);
-  if (service && !service->loaded()) {
-    engines_loaded_ = service->RegisterOnLoadedCallback(
-        base::BindOnce(&KoanWelcomeHandler::ResolveWelcomeData,
-                       weak_factory_.GetWeakPtr(), std::move(callback_id)));
+                     weak_factory_.GetWeakPtr()));
+  // On a first run the search engines may still be loading (they wait for
+  // the profile's encryption key, which a keyring may hold back).
+  engines_loaded_ = {};
+  if (TemplateURLService* service = GetTemplateURLService(/*editable=*/false);
+      service && !service->loaded()) {
+    engines_loaded_ = service->RegisterOnLoadedCallback(base::BindOnce(
+        &KoanWelcomeHandler::OnEnginesLoaded, weak_factory_.GetWeakPtr()));
     service->Load();
-    return;
   }
-  ResolveWelcomeData(std::move(callback_id));
+  data_timeout_.Start(FROM_HERE, kWelcomeDataTimeout,
+                      base::BindOnce(&KoanWelcomeHandler::ResolveWelcomeData,
+                                     weak_factory_.GetWeakPtr()));
 }
 
-void KoanWelcomeHandler::ResolveWelcomeData(base::Value callback_id) {
-  if (!importer_list_) {
+void KoanWelcomeHandler::OnImportSourcesLoaded() {
+  import_sources_loaded_ = true;
+  if (callback_id_) {
+    MaybeResolveWelcomeData();
     return;
   }
+  // Past the timeout: the page takes the list for its import step.
+  FireWebUIListener("import-sources-changed", ImportSourceRows());
+}
+
+void KoanWelcomeHandler::OnEnginesLoaded() {
+  if (callback_id_) {
+    MaybeResolveWelcomeData();
+    return;
+  }
+  FireWebUIListener("engines-changed", EngineData());
+}
+
+bool KoanWelcomeHandler::EnginesReady() const {
+  const TemplateURLService* service = GetTemplateURLService(/*editable=*/false);
+  return !service || service->loaded();
+}
+
+void KoanWelcomeHandler::MaybeResolveWelcomeData() {
+  if (import_sources_loaded_ && EnginesReady()) {
+    ResolveWelcomeData();
+  }
+}
+
+base::ListValue KoanWelcomeHandler::ImportSourceRows() {
   base::ListValue sources;
   import_sources_.clear();
+  if (!importer_list_ || !import_sources_loaded_) {
+    return sources;
+  }
   for (size_t i = 0; i < importer_list_->count(); ++i) {
     const user_data_importer::SourceProfile& source =
         importer_list_->GetSourceProfileAt(i);
@@ -182,6 +218,31 @@ void KoanWelcomeHandler::ResolveWelcomeData(base::Value callback_id) {
     import_sources_.push_back(source);
   }
   importer_list_.reset();
+  return sources;
+}
+
+base::DictValue KoanWelcomeHandler::EngineData() const {
+  // In a choice screen region nothing is chosen for the user (the EEA's
+  // rules for a choice screen); elsewhere Brave is, until the user picks
+  // another. None before the engines load (the step is then skipped, and
+  // nothing is chosen until it is known whether it is a choice screen).
+  const bool loaded = EnginesReady();
+  const bool choice_screen = loaded && IsChoiceScreenRegion();
+  return base::DictValue()
+      .Set("engines", loaded ? SearchEngines() : base::ListValue())
+      .Set("choiceScreen", choice_screen)
+      .Set("defaultEngine", loaded && !choice_screen
+                                ? base::Value(BraveEngine().id)
+                                : base::Value());
+}
+
+void KoanWelcomeHandler::ResolveWelcomeData() {
+  if (!callback_id_) {
+    return;
+  }
+  data_timeout_.Stop();
+  const base::Value callback_id = std::move(*callback_id_);
+  callback_id_.reset();
 
   base::ListValue rows;
   const base::DictValue& overrides =
@@ -202,21 +263,11 @@ void KoanWelcomeHandler::ResolveWelcomeData(base::Value callback_id) {
                                        : "zen"));
   }
 
-  base::ListValue engines = SearchEngines();
-  // In a choice screen region nothing is chosen for the user (the EEA's
-  // rules for a choice screen); elsewhere Brave is, until the user picks
-  // another.
-  const bool choice_screen = IsChoiceScreenRegion();
   ResolveJavascriptCallback(
-      callback_id,
-      base::DictValue()
-          .Set("isMac", static_cast<bool>(BUILDFLAG(IS_MAC)))
-          .Set("shortcutRows", std::move(rows))
-          .Set("importSources", std::move(sources))
-          .Set("engines", std::move(engines))
-          .Set("choiceScreen", choice_screen)
-          .Set("defaultEngine",
-               choice_screen ? base::Value() : base::Value(BraveEngine().id)));
+      callback_id, EngineData()
+                       .Set("isMac", static_cast<bool>(BUILDFLAG(IS_MAC)))
+                       .Set("shortcutRows", std::move(rows))
+                       .Set("importSources", ImportSourceRows()));
 }
 
 TemplateURLService* KoanWelcomeHandler::GetTemplateURLService(

@@ -1340,14 +1340,18 @@ space around the card drags the window.
 
   Your choice is saved as your own keys in Settings > Keyboard Shortcuts,
   where you can change any of them later.
-- **Import**: the browsers Koan finds on your Mac, each with its app's icon
+- **Import**: the browsers Koan finds on your Mac (or on Linux: [On
+  Linux](#on-linux)), each with its app's icon
   (Zen, Arc, Google Chrome and the others in [Importing from another
   browser](#importing-from-another-browser), the one you used last first;
   then Safari, Firefox and a bookmarks file), or, if it finds none, "Import
   from another browser…". Pick one, then Next, and Chromium's import dialog
   opens on that browser once the setup is over, where you choose what to
   bring. "Start fresh" (the first choice) or the step's Skip imports
-  nothing, even if you picked a browser before.
+  nothing, even if you picked a browser before. The setup never waits for the
+  list: if finding the browsers (or loading the search engines, which waits
+  for your keyring) takes more than a few seconds, the step offers "Import
+  from another browser…" and the list replaces it once it is ready.
 - **Search engine**: Brave Search is chosen; pick another if you like. It
   applies on Next. In the European Economic Area (and the other regions where
   Chromium shows a search engine choice screen) the step *is* that choice
@@ -1427,6 +1431,45 @@ from …" folder on it.
   start again). Arc runs only on macOS and Windows: on Linux, and on the
   Mac without Arc, there is nothing to list.
 - Not imported yet: cookies and open (unpinned) tabs.
+
+### On Linux
+
+On Linux (#493) Koan looks in your home folder, for each browser both where
+its own package keeps its data and where its Flatpak does
+(`~/.var/app/<app id>`):
+
+| Browser | Folders | What comes along |
+|---|---|---|
+| Zen | `~/.zen` or `~/.config/zen`; Flatpak `app.zen_browser.zen` | bookmarks, history, form entries, saved passwords, and its Spaces and pinned tabs |
+| Firefox | `~/.mozilla/firefox` or `~/.config/mozilla/firefox`, the Snap's; Flatpak `org.mozilla.firefox` | bookmarks, history, form entries, saved passwords |
+| Floorp, LibreWolf, Waterfox | `~/.floorp`, `~/.librewolf`, `~/.waterfox` (or under `~/.config`); their Flatpaks | bookmarks, history, form entries, saved passwords |
+| Google Chrome, Brave, Microsoft Edge, Vivaldi, Chromium | `~/.config/google-chrome`, `BraveSoftware/Brave-Browser`, `microsoft-edge`, `vivaldi`, `chromium`; their Flatpaks | bookmarks, history, saved passwords |
+| A bookmarks HTML file | | bookmarks |
+
+Arc and Dia don't exist on Linux. A browser installed both ways is listed
+once, with the profiles of both. Each one shows the icon its package or
+Flatpak installed, else its initial.
+
+- **In Koan's Flatpak** Koan may read those folders and nothing else of your
+  home folder (read-only), plus the Flatpak apps' icons. It sees a browser
+  installed after Koan started once Koan restarts.
+- **Passwords** from Chrome and the other Chromium browsers are encrypted
+  with that browser's key in your keyring ("Chrome Safe Storage" in GNOME
+  Keyring or KeePassXC, "Chrome Keys" in KWallet). Koan reads that one key
+  only when you import passwords. KWallet asks whether Koan may open the
+  wallet: choose **Allow**. Koan never unlocks a locked keyring; if the key
+  isn't there or you refuse, the passwords saved without a keyring (a
+  browser run with `--password-store=basic`) still come along and the
+  others stay behind, as on the Mac when you deny the keychain. Passwords a
+  Flatpak browser saved through the desktop's secret portal (its key is
+  bound to that app) can't be imported: export them as CSV from that
+  browser's password manager and import the file in Koan's.
+- **Zen's and Firefox's passwords** come along through Chromium's Firefox
+  importer (NSS), as Chromium offers Firefox's on Linux, unless the profile
+  has a Primary Password.
+- A browser kept somewhere else (another `XDG_CONFIG_HOME`, a custom
+  profile path outside its folder, Chromium's Snap) isn't found: import its
+  bookmarks from an exported HTML file.
 
 ## Updates
 

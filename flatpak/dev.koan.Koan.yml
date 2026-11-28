@@ -7,7 +7,8 @@
 #
 # finish-args follow com.google.Chrome's on Flathub (camera, FIDO keys,
 # printing, notifications, keyrings, media keys, the usual XDG folders),
-# without its dconf module for GNOME proxy settings.
+# without its dconf module for GNOME proxy settings; plus read-only access
+# to the other browsers' folders, for the import.
 app-id: dev.koan.Koan
 runtime: org.freedesktop.Platform
 runtime-version: '25.08'
@@ -49,6 +50,44 @@ finish-args:
   - --filesystem=xdg-music
   - --filesystem=xdg-pictures
   - --filesystem=xdg-videos
+  # Import from other browsers (#493): read-only, exactly the folders
+  # Koan looks for them in (koan_import_sources.cc, kept the same by
+  # scripts/tests/test_flatpak_import_paths.py), and the Flatpak apps'
+  # icons. Their passwords' keys come through org.freedesktop.secrets and
+  # kwalletd5/6 above, which Koan has for its own key.
+  - --filesystem=~/.zen:ro
+  - --filesystem=~/.config/zen:ro
+  - --filesystem=~/.var/app/app.zen_browser.zen/.zen:ro
+  - --filesystem=~/.var/app/app.zen_browser.zen/config/zen:ro
+  - --filesystem=~/.config/google-chrome:ro
+  - --filesystem=~/.var/app/com.google.Chrome/config/google-chrome:ro
+  - --filesystem=~/.config/BraveSoftware/Brave-Browser:ro
+  - --filesystem=~/.var/app/com.brave.Browser/config/BraveSoftware/Brave-Browser:ro
+  - --filesystem=~/.config/microsoft-edge:ro
+  - --filesystem=~/.var/app/com.microsoft.Edge/config/microsoft-edge:ro
+  - --filesystem=~/.config/vivaldi:ro
+  - --filesystem=~/.var/app/com.vivaldi.Vivaldi/config/vivaldi:ro
+  - --filesystem=~/.config/chromium:ro
+  - --filesystem=~/.var/app/org.chromium.Chromium/config/chromium:ro
+  - --filesystem=~/.floorp:ro
+  - --filesystem=~/.config/floorp:ro
+  - --filesystem=~/.var/app/one.ablaze.floorp/.floorp:ro
+  - --filesystem=~/.var/app/one.ablaze.floorp/config/floorp:ro
+  - --filesystem=~/.librewolf:ro
+  - --filesystem=~/.config/librewolf:ro
+  - --filesystem=~/.var/app/io.gitlab.librewolf-community/.librewolf:ro
+  - --filesystem=~/.var/app/io.gitlab.librewolf-community/config/librewolf:ro
+  - --filesystem=~/.waterfox:ro
+  - --filesystem=~/.config/waterfox:ro
+  - --filesystem=~/.var/app/net.waterfox.waterfox/.waterfox:ro
+  - --filesystem=~/.var/app/net.waterfox.waterfox/config/waterfox:ro
+  - --filesystem=~/.config/mozilla/firefox:ro
+  - --filesystem=~/.mozilla/firefox:ro
+  - --filesystem=~/snap/firefox/common/.mozilla/firefox:ro
+  - --filesystem=~/.var/app/org.mozilla.firefox/.mozilla/firefox:ro
+  - --filesystem=~/.var/app/org.mozilla.firefox/config/mozilla/firefox:ro
+  - --filesystem=xdg-data/flatpak/exports/share/icons:ro
+  - --filesystem=/var/lib/flatpak/exports/share/icons:ro
 modules:
   # Same version as com.google.Chrome on Flathub.
   - name: zypak
