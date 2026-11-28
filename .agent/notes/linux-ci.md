@@ -71,6 +71,15 @@ objects built from unmerged code never end up in the published Flatpak, and
 a pull request that moves `CHROMIUM_VERSION` can't delete `develop`'s base.
 Forks' pull requests are never built.
 
+**When GitHub's API fails** during the lookup (#589), `find_base.sh` retries
+each call (`scripts/ci/gh_api.sh`, 4 tries) and then **fails the "Find a
+build to build on" step**, naming the call and GitHub's error: re-run the
+job. It used to read the failure as "no base" and build all of Chromium
+(5 h+ here, holding the runners every other PR waits for); a failed step
+costs minutes. The cleanup's `prune_bases.sh` instead deletes nothing more
+and succeeds with a warning, so the run stays a base. Details and the
+reasons under "How the base is found" in macos-ci.md.
+
 siso goes by mtime, so reusing out/ alone is useless: a fresh checkout
 re-dates every file. `scripts/ci/incremental.sh` instead turns the base
 run's source archive into this commit's tree: the checkout's tracked files are

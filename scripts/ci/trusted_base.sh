@@ -22,10 +22,15 @@
 #
 # Needs WORKFLOW, BRANCH, RELEASE_WORKFLOW and GH_REPO.
 
+# shellcheck source=scripts/ci/gh_api.sh
+source "$(dirname "${BASH_SOURCE[0]}")/gh_api.sh"
+
 # trusted_base_run <workflow file> <event> <head_branch> <head_sha>
-# Succeeds when a run with these is a trusted build (above).
+# Succeeds when a run with these is a trusted build (above). Returns 1 when
+# it is not, and 2 when GitHub couldn't be asked about the run's tag
+# (gh_api has said why): that is neither yes nor no (#589).
 trusted_base_run() {
-  local workflow="$1" event="$2" branch="$3" sha="$4" ref type target
+  local workflow="$1" event="$2" branch="$3" sha="$4" ref type target rc
   if [[ $workflow == "$WORKFLOW" ]]; then
     [[ $branch == "$BRANCH" && ($event == schedule || $event == workflow_dispatch) ]]
     return
@@ -39,12 +44,21 @@ trusted_base_run() {
   # annotated tag's too) must be the run's. git/ref/ matches the name
   # exactly (git/refs/ would take a prefix).
   [[ $branch =~ ^v[0-9A-Za-z.-]+$ && $sha =~ ^[0-9a-f]{40}$ ]] || return 1
-  ref="$(gh api "repos/$GH_REPO/git/ref/tags/$branch" \
-    --jq '.object.type + " " + .object.sha' 2>/dev/null)" || return 1
+  # No such tag (404): not trusted.
+  ref="$(gh_api "repos/$GH_REPO/git/ref/tags/$branch" \
+    --jq '.object.type + " " + .object.sha')" || {
+    rc=$?
+    ((rc == GH_API_NOT_FOUND)) && return 1
+    return 2
+  }
   read -r type target <<<"$ref"
   if [[ $type == tag ]]; then
-    ref="$(gh api "repos/$GH_REPO/git/tags/$target" \
-      --jq '.object.type + " " + .object.sha' 2>/dev/null)" || return 1
+    ref="$(gh_api "repos/$GH_REPO/git/tags/$target" \
+      --jq '.object.type + " " + .object.sha')" || {
+      rc=$?
+      ((rc == GH_API_NOT_FOUND)) && return 1
+      return 2
+    }
     read -r type target <<<"$ref"
   fi
   [[ $type == commit && $target == "$sha" ]]

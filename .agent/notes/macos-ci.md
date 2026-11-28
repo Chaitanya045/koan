@@ -117,6 +117,29 @@ built, so that only costs rebuild time.
   (a fake `gh` over recorded runs). A pull-request build runs its own
   head's scripts, so a pull request branched before a find_base.sh fix
   needs develop merged in to get it.
+  **When GitHub's API fails** (#589; both chains): every `gh api` call of
+  `find_base.sh`, `trusted_base.sh` and `prune_bases.sh` goes through
+  `gh_api` (`scripts/ci/gh_api.sh`): up to 4 tries, 5, 10 and 20 s apart;
+  a 404 is an answer (no such tag) and isn't retried. It used to be
+  `2>/dev/null || true`, so a transient 5xx or rate limit on the run list
+  or a run's artifact list read as "no base", and PR #588's run
+  46073436923 silently built all of Chromium although 46055294396 was
+  there. **Decision: a lookup that still fails fails the step** (an
+  `::error::` naming the call, GitHub's error above it, a line in the
+  summary); re-run the job. A failed job costs minutes, a needless full
+  build hours (~16 h here, 5 h+ on Linux) and delays every other build
+  behind it. It fails on the first unanswered call, newest run first, so
+  an older base is never taken while a newer run is unknown. Every run it
+  passes over is logged with why (this run, not finished, not successful,
+  not trusted, archives missing or expired), so a full build can be
+  explained from the log. `prune_bases.sh` does the opposite on purpose:
+  an unanswered read deletes nothing more and the step *succeeds* with a
+  `::warning::`, because failing the cleanup would fail this keep_base run
+  and `find_base.sh` would then refuse it as a base; what's left expires
+  in 14 days. (A failed out-final list used to make every base look like
+  it had only its source, i.e. "no base, delete it".) Tests: the fake
+  `gh` of `test_find_base.py` and `test_prune_bases.py` fails a call once
+  (`FAKE_GH_FAIL=<path part>:1`, retried, base found) or always.
   `scripts/ci/incremental.sh` then:
   - deletes the checkout's tracked files and unpacks that run's source
     archive in their place, mtimes and all;

@@ -31,6 +31,19 @@ path, jq = args[1], args[args.index('--jq') + 1]
 data = json.load(open(os.environ['FAKE_GH_DATA']))
 with open(os.environ['FAKE_GH_LOG'], 'a') as log:
   log.write(path + '\n')
+fail = os.environ.get('FAKE_GH_FAIL')
+if fail:
+  # FAKE_GH_FAIL=<part of the path>:<times>: that many calls fail like a
+  # GitHub outage, then they work ('always': never).
+  part, times = fail.rsplit(':', 1)
+  if part in path:
+    count_file = os.environ['FAKE_GH_DATA'] + '.failed'
+    failed = int(open(count_file).read()) if os.path.exists(count_file) else 0
+    if times == 'always' or failed < int(times):
+      open(count_file, 'w').write(str(failed + 1))
+      sys.stderr.write('gh: HTTP 502: Server Error (https://api.github.com/'
+                       + path + ')\n')
+      sys.exit(1)
 url = urllib.parse.urlsplit(path)
 query = dict(urllib.parse.parse_qsl(url.query))
 parts = url.path.split('/')
@@ -109,23 +122,31 @@ class FindBaseTest(unittest.TestCase):
     return self.add_run(event=event, branch=branch, workflow='release.yml',
                         sha=sha, **kwargs)
 
-  def find(self, run='0', workflow='linux.yml', prefix='koan-linux', **extra):
+  def run_find(self, run='0', workflow='linux.yml', prefix='koan-linux',
+               **extra):
     data = self.tmp / 'data.json'
     data.write_text(json.dumps({'runs': self.runs,
                                 'artifacts': self.artifacts,
                                 'tags': self.tags,
                                 'tag_objects': self.tag_objects}))
+    (self.tmp / 'data.json.failed').unlink(missing_ok=True)
     self.log = self.tmp / 'gh.log'
     self.log.write_text('')
     env = dict(os.environ, FAKE_GH_DATA=str(data), FAKE_GH_LOG=str(self.log),
                PATH=f'{self.tmp / "bin"}{os.pathsep}{os.environ["PATH"]}',
-               GH_REPO='owner/repo', RUN=run, BRANCH='develop')
-    env.pop('GITHUB_OUTPUT', None)
-    env.pop('RELEASE_WORKFLOW', None)
+               GH_REPO='owner/repo', RUN=run, BRANCH='develop',
+               GH_API_DELAY='0')
+    for key in ('GITHUB_OUTPUT', 'GITHUB_STEP_SUMMARY', 'RELEASE_WORKFLOW',
+                'FAKE_GH_FAIL', 'GH_API_TRIES'):
+      env.pop(key, None)
     env.update(extra)
-    out = subprocess.run(['bash', str(SCRIPT), workflow, prefix], env=env,
-                         capture_output=True, text=True, check=True).stdout
-    return out.strip().splitlines()[-1]
+    return subprocess.run(['bash', str(SCRIPT), workflow, prefix], env=env,
+                          capture_output=True, text=True)
+
+  def find(self, **kwargs):
+    result = self.run_find(**kwargs)
+    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+    return result.stdout.strip().splitlines()[-1]
 
   def test_base_behind_more_than_50_pull_request_runs(self):
     # #537: a dozen labelled pull requests made more than 50 runs after the
@@ -237,6 +258,73 @@ class FindBaseTest(unittest.TestCase):
     self.add_release(artifacts=BOTH)
     self.assertEqual(self.find(RELEASE_WORKFLOW=''), f'base_run={nightly}')
     self.assertNotIn('release.yml', self.log.read_text())
+
+
+  # #589: a GitHub API error was read as "no runs" or "no archives", and
+  # the build silently became a full one.
+
+  def test_a_call_that_fails_once_is_retried(self):
+    base = self.add_run(artifacts=BOTH)
+    for part in ('/workflows/linux.yml/', f'/runs/{base}/artifacts'):
+      with self.subTest(part=part):
+        result = self.run_find(FAKE_GH_FAIL=f'{part}:1')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip().splitlines()[-1],
+                         f'base_run={base}')
+        self.assertIn('failed (try 1 of 4', result.stderr)
+        self.assertIn('HTTP 502', result.stderr)
+
+  def test_a_call_that_always_fails_fails_the_lookup(self):
+    older = self.add_run(artifacts=BOTH)
+    newer = self.add_run(artifacts=BOTH)
+    summary = self.tmp / 'summary.md'
+    output = self.tmp / 'output'
+    for part, call in (('/workflows/linux.yml/', 'the runs of linux.yml'),
+                       (f'/runs/{newer}/artifacts',
+                        f'the archives of run {newer}')):
+      with self.subTest(part=part):
+        result = self.run_find(FAKE_GH_FAIL=f'{part}:always',
+                               GITHUB_STEP_SUMMARY=str(summary),
+                               GITHUB_OUTPUT=str(output))
+        self.assertEqual(result.returncode, 1, result.stdout)
+        # Which call, and what GitHub said; no base, and not the older run
+        # either (the newer one may be the base).
+        self.assertIn(f'::error::could not look up {call}', result.stdout)
+        self.assertIn('re-run this job', result.stdout)
+        self.assertRegex(result.stderr, r'failed 4 times; GitHub said: '
+                                        r'gh: HTTP 502')
+        self.assertNotIn('base_run=', result.stdout)
+        self.assertFalse(output.exists())
+        self.assertIn('Base lookup: could not look up', summary.read_text())
+        tries = [p for p in self.log.read_text().split() if part in p]
+        self.assertEqual(len(tries), 4)
+    self.assertEqual(self.find(), f'base_run={newer}')
+    self.assertNotEqual(older, newer)
+
+  def test_a_tag_lookup_that_always_fails_fails_the_lookup(self):
+    self.add_run(artifacts=BOTH)
+    self.add_release(tag='v1.0.0', artifacts=BOTH)
+    result = self.run_find(FAKE_GH_FAIL='/git/ref/tags/v1.0.0:always',
+                           GH_API_TRIES='2')
+    self.assertEqual(result.returncode, 1, result.stdout)
+    self.assertIn('::error::could not look up the tag of run', result.stdout)
+    self.assertIn('failed 2 times', result.stderr)
+
+  def test_every_run_passed_over_is_logged_with_why(self):
+    self.add_run(conclusion='failure', artifacts=BOTH)
+    source_only = self.add_run(artifacts=['koan-linux-source.tar.zst'])
+    moved = self.add_release(tag='v2.0.0', artifacts=BOTH)
+    self.tags['v2.0.0'] = {'type': 'commit', 'sha': 'f' * 40}
+    this = self.add_run(artifacts=BOTH)
+    out = self.run_find(run=str(this)).stdout
+    self.assertIn(f'run {this} (linux.yml, schedule, develop): this run', out)
+    self.assertIn('not successful (failure)', out)
+    self.assertIn(f'run {source_only} (linux.yml, schedule, develop): '
+                  'archives missing or expired (unexpired: '
+                  'koan-linux-source.tar.zst)', out)
+    self.assertIn(f'run {moved} (release.yml, push, v2.0.0): not trusted', out)
+    self.assertIn('among 4 candidates: a full build', out)
+    self.assertEqual(out.strip().splitlines()[-1], 'base_run=')
 
 
 if __name__ == '__main__':
