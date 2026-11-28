@@ -36,6 +36,7 @@
 #include "koan/browser/ui/views/koan_space_profile_menu.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_tab_auto_closer.h"
+#include "koan/browser/ui/views/koan_window_sync.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 
 namespace koan {
@@ -147,8 +148,10 @@ std::vector<SpaceProfileInfo> GetSpaceProfiles(Profile* profile) {
       [&](BrowserWindowInterface* browser) {
         TabStripModel* tab_strip = browser->GetTabStripModel();
         for (int i = 0; tab_strip && i < tab_strip->count(); ++i) {
-          // (A Space's empty tab isn't a tab the user sees.)
-          if (IsEmptyTab(tab_strip->GetTabAtIndex(i))) {
+          // (A Space's empty tab isn't a tab the user sees, and a synced
+          // Essential or pinned tab counts once, where its page is.)
+          if (IsEmptyTab(tab_strip->GetTabAtIndex(i)) ||
+              IsWindowSyncPlaceholder(tab_strip->GetWebContentsAt(i))) {
             continue;
           }
           const std::optional<containers::ContainerId> container =

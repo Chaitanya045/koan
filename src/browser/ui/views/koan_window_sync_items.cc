@@ -693,4 +693,8 @@ void KoanWindowSyncClient::TabGroupedStateChanged(
   ScheduleItemsReport();
 }
 
+bool IsWindowSyncPlaceholder(content::WebContents* contents) {
+  return IsPlaceholder(contents);
+}
+
 }  // namespace koan

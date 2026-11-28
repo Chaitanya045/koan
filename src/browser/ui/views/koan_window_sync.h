@@ -232,6 +232,10 @@ bool IsBlankWindow(const BrowserView* browser_view);
 // (koan_window_sync_hooks.h) is creating it.
 void MarkBlankWindowIfRequested(BrowserView* browser_view);
 
+// Whether `contents` is a synced tab's placeholder (an Essential or a pinned
+// tab in a window that doesn't have its page): a copy, not a tab of its own.
+bool IsWindowSyncPlaceholder(content::WebContents* contents);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_WINDOW_SYNC_H_

@@ -37,7 +37,8 @@ struct SpaceProfileInfo {
   // The Spaces that use it, by name, each once, in sidebar order.
   std::vector<std::u16string> spaces;
   // Its open tabs, in every window, Essentials too (not the Spaces' hidden
-  // empty tabs).
+  // empty tabs; a synced Essential or pinned tab once, not each window's
+  // copy).
   int open_tabs = 0;
   // Of those, its Essentials (#510: the profile's own grid) and its pinned
   // tabs, which the question names: they close too.

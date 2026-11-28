@@ -618,6 +618,16 @@ IN_PROC_BROWSER_TEST_F(KoanSpaceProfilesBrowserTest,
   EXPECT_EQ(2, listed[0].open_tabs);
   EXPECT_EQ(1, listed[0].essentials);
   EXPECT_EQ(0, listed[0].pinned_tabs);
+  // A second window has the Essential too (window sync's copy): still one.
+  second_ = CreateBrowser(profile());
+  ASSERT_TRUE(GetSpaces(second_));
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    TabStripModel* other = second_->GetTabStripModel();
+    return other->IndexOfFirstNonPinnedTab() > 0;
+  }));
+  listed = GetSpaceProfiles(profile());
+  EXPECT_EQ(2, listed[0].open_tabs);
+  EXPECT_EQ(1, listed[0].essentials);
 
   // The empty tabs of the Spaces that use it.
   const auto empty_tab_containers = [&] {
