@@ -918,6 +918,13 @@ void OnWindowBackgroundLayerCreated(views::View* view,
   if (controller && controller->theme()->PaintsTranslucent()) {
     MakeTranslucentLayer(view);
   }
+#if BUILDFLAG(IS_LINUX)
+  // The new layer has no rounded corners: lay the window out again to give
+  // them back (koan::RoundContentsToWindowCorners()).
+  if (view->parent()) {
+    view->parent()->InvalidateLayout();
+  }
+#endif
 }
 
 bool PaintWindowBackground(gfx::Canvas* canvas,

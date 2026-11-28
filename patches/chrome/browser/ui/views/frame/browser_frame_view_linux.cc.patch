@@ -1,0 +1,33 @@
+diff --git a/chrome/browser/ui/views/frame/browser_frame_view_linux.cc b/chrome/browser/ui/views/frame/browser_frame_view_linux.cc
+--- a/chrome/browser/ui/views/frame/browser_frame_view_linux.cc
++++ b/chrome/browser/ui/views/frame/browser_frame_view_linux.cc
+@@ -8,6 +8,7 @@
+ #include "chrome/browser/ui/views/chrome_layout_provider.h"
+ #include "chrome/browser/ui/views/frame/browser_native_widget_aura_linux.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++#include "koan/browser/ui/views/koan_window_corners.h"
+ #include "ui/base/hit_test.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/gfx/geometry/insets_f.h"
+@@ -56,9 +57,10 @@
+           ? gfx::InsetsF(layout_->RestoredMirroredFrameBorderInsets())
+           : gfx::InsetsF();
+   float radius = GetRestoredCornerRadiusDip();
++  // Koan: the bottom corners too, as on the Mac.
+   return views::GetRestoredClipRegion(
+       gfx::RectF(GetLocalBounds()), border,
+-      gfx::RoundedCornersF(radius, radius, 0, 0));
++      koan::RestoredWindowCorners(GetBrowserView(), radius));
+ }
+ 
+ // static
+@@ -208,7 +210,8 @@
+   if (auto* const widget = GetWidget();
+       widget && !widget->IsFullscreen() && !widget->IsMaximized()) {
+     const float radius_dip = GetRestoredCornerRadiusDip();
+-    return gfx::RoundedCornersF(radius_dip, radius_dip, 0, 0);
++    // Koan: the bottom corners too, as on the Mac.
++    return koan::RestoredWindowCorners(GetBrowserView(), radius_dip);
+   }
+   return gfx::RoundedCornersF();
+ }
