@@ -100,10 +100,12 @@ class KoanWindowSyncClient : public KoanWindowSync::Window,
 
  private:
   // Joins the sync, once the session restore (if any) gave the window its
-  // Spaces.
+  // Spaces and, after a crash, once the restore that may still come into
+  // the window is decided (JoinWhenReady()).
   void Join();
+  void JoinWhenReady();
   void OnSessionRestored(Profile* profile, int tab_count);
-  void JoinAfterRestore();
+  void OnCrashAcked();
 
   // --- Spaces ---
 
@@ -165,6 +167,10 @@ class KoanWindowSyncClient : public KoanWindowSync::Window,
   raw_ptr<KoanWindowSync> sync_ = nullptr;
   base::ScopedObservation<views::Widget, views::WidgetObserver>
       widget_observation_{this};
+  // Set from OnAddedToWidget() until Join() (or the window goes), and
+  // whether it waits for upstream to take a crash as acknowledged.
+  bool waiting_to_join_ = false;
+  bool waiting_for_crash_ack_ = false;
   base::CallbackListSubscription session_restored_subscription_;
   base::CallbackListSubscription spaces_changed_subscription_;
   std::map<tab_groups::TabGroupId, std::string> space_ids_;

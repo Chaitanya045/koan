@@ -27,6 +27,7 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_folders.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
+#include "koan/browser/ui/views/koan_spaces.h"
 
 namespace koan {
 
@@ -42,6 +43,7 @@ constexpr TabRestoreHook kTabRestoreHooks[] = {
 };
 constexpr WindowRestoreHook kWindowRestoreHooks[] = {
     {kFolderSessionKey, &OnRestoringFolders},
+    {kShownSpaceSessionKey, &OnRestoringShownSpace},
 };
 
 // Koan's entries of a restored tab's or window's extra data.

@@ -103,6 +103,7 @@ source_set("browsertests_impl") {
     "browser/koan_command_palette_browsertest.cc",
     "browser/koan_container_proxy_browsertest.cc",
     "browser/koan_container_push_browsertest.cc",
+    "browser/koan_crash_restore_browsertest.cc",
     "browser/koan_essentials_drop_browsertest.cc",
     "browser/koan_essentials_profiles_browsertest.cc",
     "browser/koan_fullscreen_browsertest.cc",

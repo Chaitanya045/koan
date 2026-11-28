@@ -66,6 +66,20 @@ bool IsInSpaceForm(const views::View* tab_strip_view,
 // Spaces are off.
 bool IsEmptyTab(const tabs::TabInterface* tab);
 
+// The window's session data (koan_session_data.h) naming the Space it shows
+// and its selected tab, by place: {"space": <its place among the window's
+// Spaces>, "tab": <the tab's place in it>} or {"space": ..., "essential":
+// <the Essential's place>}. Upstream selects the session's tab and Space
+// only in a window it restores into empty; restored into the window a crash
+// launch opened (the crash bubble's Restore, or Koan's after a launch with
+// a URL), the session comes back on them from this
+// (KoanWorkspaceController::MergeStartupSpaceAfterRestore(), #554).
+inline constexpr char kShownSpaceSessionKey[] = "koan.workspaces.shown";
+// Its WindowRestoreHook.
+void OnRestoringShownSpace(BrowserWindowInterface* browser,
+                           const std::string& data,
+                           bool from_session_restore);
+
 // A tab the sidebar doesn't show: Zen's empty tab, or an Essential of a
 // profile whose grid the window doesn't show (Zen's container-specific
 // Essentials, koan_essentials_profiles.h). ⌘1-⌘9 and Ctrl+Tab pass over it.

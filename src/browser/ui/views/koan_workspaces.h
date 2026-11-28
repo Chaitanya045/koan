@@ -193,6 +193,9 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // The Spaces in sidebar order, and the active one.
   std::vector<SpaceInfo> GetSpaces() const;
   std::optional<tab_groups::TabGroupId> GetActiveSpace() const;
+  // A session is being restored into this window, which showed `data`
+  // (kShownSpaceSessionKey's): called before its tabs are added.
+  void OnSessionShownRestoring(const std::string& data);
   std::optional<SpaceInfo> GetSpace(const tab_groups::TabGroupId& space) const;
   // A Space's id in the stored Spaces (prefs::kWorkspaceList's "id"), made
   // the first time it's asked for and kept while the window is open. A fresh
@@ -462,13 +465,21 @@ class KoanWorkspaceController : public TabStripModelObserver,
   // Brings back closed Spaces, puts loose (ungrouped, unpinned) tabs into a
   // Space and focuses one.
   void EnsureOneSpaceShown();
-  // A session restored into this window (Restore after a crash) leaves the
-  // Space the window started in, with its new tab page: closes it (Zen's
-  // restore adds no Space). Only that Space, and only if it is untouched.
-  void DropStartupSpaceAfterRestore();
-  // Whether `space` is the window's one Space from before a session restore
-  // that is still one untouched new tab page: what restoring replaces.
-  bool IsUntouchedStartupSpace(const tab_groups::TabGroupId& space) const;
+  // A session restored into this window (Restore after a crash, Koan's or
+  // the bubble's) leaves the Space the window started in beside the
+  // session's, named as the session's first one may be: its tabs (a URL the
+  // launch was given, tabs the user opened while the bubble waited) move to
+  // the restored Space shown, its new tab page closes, and it goes (Zen's
+  // restore adds no Space, #554). Only that Space, and only while it is the
+  // launch's (IsLaunchSpace()); other Spaces made before the restore stay.
+  void MergeStartupSpaceAfterRestore();
+  // Whether `space` (the window's one Space from before a session restore)
+  // is still as the launch made it: the default name, no icon, theme or
+  // profile, and no tab pinned in it.
+  bool IsLaunchSpace(const tab_groups::TabGroupId& space) const;
+  // Writes the Space shown and the selected tab to the window's session
+  // (kShownSpaceSessionKey) when they changed.
+  void StoreShownInSession();
   void OnSessionRestored(Profile* profile, int tab_count);
   // Upstream's group state a Space can't have: collapsed (its tabs hidden,
   // with no header to expand it), and a Chrome colour on a group that didn't
@@ -644,10 +655,33 @@ class KoanWorkspaceController : public TabStripModelObserver,
   std::set<tab_groups::TabGroupId> deleting_;
   // A session restore is adding Spaces to this window (set by its first new
   // Space), the window's only Space from before it, and whether the restore
-  // finished, so that Space is to go if it is still untouched.
+  // finished, so that Space is merged into the restored ones
+  // (MergeStartupSpaceAfterRestore()).
   bool restore_started_ = false;
   std::optional<tab_groups::TabGroupId> pre_restore_space_;
-  bool drop_startup_space_ = false;
+  // Every Space the window had when the restore started: none of them is a
+  // target of the merge.
+  std::set<tab_groups::TabGroupId> pre_restore_spaces_;
+  bool merge_startup_space_ = false;
+  // The Space the window's launch made for the tabs it opened with, and
+  // those tabs (a URL the launch was given, its New Tab page), until a
+  // restore into the window merges it.
+  std::optional<tab_groups::TabGroupId> launch_space_;
+  std::vector<tabs::TabHandle> launch_tabs_;
+  // What the session restored into this window showed
+  // (OnSessionShownRestoring()), by place, and the window's Essentials from
+  // before that restore.
+  struct SessionShown {
+    int space = -1;
+    int tab = -1;
+    int essential = -1;
+  };
+  std::optional<SessionShown> session_shown_;
+  std::vector<tabs::TabHandle> pre_restore_essentials_;
+  // The tab selected when the restore into this window started.
+  tabs::TabHandle pre_restore_active_;
+  // What StoreShownInSession() wrote last.
+  std::string stored_shown_;
   base::CallbackListSubscription session_restored_subscription_;
   // The Space shown last, for animating and as a fallback.
   std::optional<tab_groups::TabGroupId> last_space_;
