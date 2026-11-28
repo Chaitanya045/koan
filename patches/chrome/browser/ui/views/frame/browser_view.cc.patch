@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index 7b568f6..21df210 100644
+index 7b568f6de760af21d6e9d2aa44415a7cef617c51..08d6e1070982e4d1339954e299f469e483b1030c 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
 @@ -310,6 +310,8 @@
@@ -63,7 +63,18 @@ index 7b568f6..21df210 100644
      return false;
    }
  #endif  // !BUILDFLAG(IS_CHROMEOS)
-@@ -4632,6 +4645,12 @@ views::CloseRequestResult BrowserView::OnWindowCloseRequested() {
+@@ -3951,6 +3964,10 @@ views::View* BrowserView::GetInitiallyFocusedView() {
+ }
+ 
+ bool BrowserView::ShouldShowWindowTitle() const {
++  // Koan: a quick window's top row is Koan's (koan_browser_view_hooks.h).
++  if (koan::OwnsWindowTopRow(this)) {
++    return false;
++  }
+   return WindowFeatureController::From(browser_)->SupportsWindowFeature(
+       WindowFeatureController::WindowFeature::kFeatureTitleBar);
+ }
+@@ -4632,6 +4649,16 @@ views::CloseRequestResult BrowserView::OnWindowCloseRequested() {
  }
  
  int BrowserView::NonClientHitTest(const gfx::Point& point) {
@@ -72,11 +83,15 @@ index 7b568f6..21df210 100644
 +  if (koan::IsWindowCoveredAt(this, point)) {
 +    return HTCLIENT;
 +  }
++  // Koan: the empty part of a quick window's top row moves the window.
++  if (koan::IsWindowCaptionAt(this, point)) {
++    return HTCAPTION;
++  }
 +
  #if BUILDFLAG(IS_MAC)
    // The top container while in immersive fullscreen on macOS lives in another
    // Widget (OverlayWidgetMac). This means that BrowserView does not need to
-@@ -4820,7 +4839,9 @@ int BrowserView::NonClientHitTest(const gfx::Point& point) {
+@@ -4820,7 +4847,9 @@ int BrowserView::NonClientHitTest(const gfx::Point& point) {
    // otherwise within the bounds of this view, the point is considered to be
    // within the client area.
    gfx::Rect bounds_from_toolbar_top = bounds();
@@ -87,7 +102,7 @@ index 7b568f6..21df210 100644
    if (bounds_from_toolbar_top.Contains(point)) {
      return HTCLIENT;
    }
-@@ -6031,7 +6052,11 @@ void BrowserView::OnImmersiveFullscreenEntered() {
+@@ -6031,7 +6060,11 @@ void BrowserView::OnImmersiveFullscreenEntered() {
      control->CloseMenu();
    }
  

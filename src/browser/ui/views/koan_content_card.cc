@@ -14,6 +14,7 @@
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_content_radius.h"
+#include "koan/browser/ui/views/koan_quick_window_controller.h"
 #include "koan/browser/ui/views/koan_window_controls.h"
 
 #if BUILDFLAG(IS_MAC)
@@ -99,7 +100,18 @@ bool UseContentCard(const BrowserView* browser_view) {
          draws_sidebar && allowed_in_fullscreen;
 }
 
+bool DrawsContentCard(const BrowserView* browser_view) {
+  return UseContentCard(browser_view) ||
+         (IsQuickWindow(browser_view) && !IsWindowFullscreen(browser_view));
+}
+
 gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
+  if (IsQuickWindow(browser_view)) {
+    // Below its top row (the toolbar, directly above the card, as in a window
+    // with the toolbar shown), the margin on the other sides.
+    return gfx::Insets::TLBR(0, kContentCardMargin, kContentCardMargin,
+                             kContentCardMargin);
+  }
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
   if (IsContentFullscreen(browser_view)) {
     // The page's own fullscreen: it fills the screen (Koan's card is
@@ -151,7 +163,7 @@ gfx::Insets ContentCardInsets(const BrowserView* browser_view) {
 gfx::RoundedCornersF ActiveContentsRadii(
     const BrowserView* browser_view,
     const gfx::RoundedCornersF& default_radii) {
-  return UseContentCard(browser_view) &&
+  return DrawsContentCard(browser_view) &&
                  !IsBorderlessFullscreen(browser_view) &&
                  !IsContentFullscreen(browser_view)
              ? gfx::RoundedCornersF(ContentCardCornerRadius())

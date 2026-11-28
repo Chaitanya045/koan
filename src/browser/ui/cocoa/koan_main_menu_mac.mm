@@ -38,6 +38,7 @@
 #include "koan/browser/koan_features.h"
 #include "koan/browser/koan_shortcut_table.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_quick_window_controller.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/accelerators/platform_accelerator_cocoa.h"
@@ -297,6 +298,15 @@ NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
 }
 
 - (void)perform:(NSMenuItem*)item {
+  // New Quick Window also from a quick window (a popup, which
+  // ActiveController() leaves out).
+  if (static_cast<Action>(item.tag) == Action::kNewQuickWindow) {
+    if (BrowserWindowInterface* browser =
+            GetLastActiveBrowserWindowInterfaceWithAnyProfile()) {
+      koan::OpenEmptyQuickWindow(browser->GetProfile());
+    }
+    return;
+  }
   if (koan::KoanBrowserViewController* controller = ActiveController()) {
     controller->shortcuts()->Run(static_cast<Action>(item.tag));
   }
@@ -364,6 +374,10 @@ NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
       return chrome::IsCommandEnabled(browser, IDC_CLOSE_WINDOW);
     }
     return window && (window.styleMask & NSWindowStyleMaskClosable);
+  }
+  if (item.action == @selector(perform:) &&
+      static_cast<Action>(item.tag) == Action::kNewQuickWindow) {
+    return GetLastActiveBrowserWindowInterfaceWithAnyProfile() != nullptr;
   }
   koan::KoanBrowserViewController* controller = ActiveController();
   if (!controller) {
@@ -571,7 +585,8 @@ void ExtendMainMenu(NSMenu* main_menu, bool is_pwa) {
   }
 
   // File: Zen's New Blank Window (Cmd+Shift+N, a window without Spaces or
-  // window sync) after New Window, and New Private Window.
+  // window sync) and Koan's New Quick Window (Cmd+Option+N, Arc's Little
+  // Arc) after New Window, and New Private Window.
   if (NSMenu* file = [main_menu itemWithTag:IDC_FILE_MENU].submenu) {
     for (NSMenuItem* item in file.itemArray) {
       if (IsChromeCommand(item, IDC_NEW_INCOGNITO_WINDOW)) {
@@ -579,8 +594,10 @@ void ExtendMainMenu(NSMenu* main_menu, bool is_pwa) {
       }
     }
     HideItems(file, {IDC_NEW_ISOLATED_WINDOW});
-    InsertAfter(file, IDC_NEW_WINDOW,
-                @[ ActionItem(Action::kNewBlankWindow, target) ]);
+    InsertAfter(file, IDC_NEW_WINDOW, @[
+      ActionItem(Action::kNewBlankWindow, target),
+      ActionItem(Action::kNewQuickWindow, target)
+    ]);
     // Close Window (⇧⌘W) sends -performClose: to the key window, which AppKit
     // validates and runs against the window's own close button. Koan hides
     // and fades AppKit's traffic lights (koan_traffic_lights_mac.mm), and on

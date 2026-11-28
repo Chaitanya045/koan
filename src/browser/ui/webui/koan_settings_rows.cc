@@ -208,6 +208,15 @@ constexpr char kNewTabPageNote[] =
     "A new tab page set by your administrator or by an extension is shown "
     "instead.";
 
+// Where links from other apps open (#472): Space routing, or Arc's Little
+// Arc.
+constexpr Option kExternalLinkTargets[] = {
+    {prefs::kExternalLinksInSpace, "A Space (Space routing)"},
+    {prefs::kExternalLinksInQuickWindow, "A quick window"},
+};
+constexpr char kExternalLinkTargetsNote[] =
+    "A link that matches a Space route still opens in its Space.";
+
 // Zen's close-shortcut behaviours for pinned tabs, in Zen's order.
 constexpr Option kPinnedTabCloseBehaviors[] = {
     {"reset-unload-switch", "Reset URL, unload and switch to next tab"},
@@ -582,6 +591,12 @@ constexpr Row kRows[] = {
      .note = "The URL bar suggests only the active Space's profile's pages "
              "and tabs, and the Library's History shows that profile first. "
              "Bookmarks, passwords and autofill stay shared."},
+    {.group = "workspaces",
+     .control = Control::kMenu,
+     .pref = prefs::kExternalLinksOpenIn,
+     .label = "Links from other apps open in",
+     .options = kExternalLinkTargets,
+     .note = kExternalLinkTargetsNote},
     {.group = "pinned-tabs",
      .control = Control::kCheckbox,
      .pref = prefs::kPinnedTabRestoreToPinnedUrl,

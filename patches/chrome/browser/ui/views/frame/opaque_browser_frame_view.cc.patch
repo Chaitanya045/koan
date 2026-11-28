@@ -1,7 +1,15 @@
 diff --git a/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc b/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
 --- a/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
 +++ b/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc
-@@ -119,7 +119,10 @@
+@@ -27,6 +27,7 @@
+ #include "chrome/grit/theme_resources.h"
+ #include "components/strings/grit/components_strings.h"
+ #include "content/public/browser/web_contents.h"
++#include "koan/browser/ui/views/koan_browser_view_hooks.h"
+ #include "third_party/skia/include/core/SkPath.h"
+ #include "ui/accessibility/ax_enums.mojom.h"
+ #include "ui/base/hit_test.h"
+@@ -119,7 +120,10 @@ class CaptionButtonBackgroundImageSource : public gfx::CanvasImageSource {
  };
  
  bool HitTestCaptionButton(views::Button* button, const gfx::Point& point) {
@@ -12,3 +20,23 @@ diff --git a/chrome/browser/ui/views/frame/opaque_browser_frame_view.cc b/chrome
           button->GetMirroredBounds().Contains(point);
  }
  
+@@ -531,7 +535,8 @@ gfx::Size OpaqueBrowserFrameView::GetBrowserViewMinimumSize() const {
+ }
+ 
+ bool OpaqueBrowserFrameView::ShouldShowCaptionButtons() const {
+-  return GetShowWindowTitleBar();
++  // Koan: a quick window's Close is in its own top row.
++  return GetShowWindowTitleBar() && !koan::OwnsWindowTopRow(GetBrowserView());
+ }
+ 
+ bool OpaqueBrowserFrameView::IsRegularOrGuestSession() const {
+@@ -591,7 +596,8 @@ bool OpaqueBrowserFrameView::UseCustomFrame() const {
+ }
+ 
+ bool OpaqueBrowserFrameView::IsFrameCondensed() const {
+-  return BrowserFrameView::IsFrameCondensed() || !ShouldShowCaptionButtons();
++  // Koan: not for the buttons hidden above; the frame keeps its border.
++  return BrowserFrameView::IsFrameCondensed() || !GetShowWindowTitleBar();
+ }
+ 
+ OpaqueBrowserFrameView::FrameButtonStyle

@@ -9,6 +9,7 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_download_animation.h"
+#include "koan/browser/ui/views/koan_quick_window_controller.h"
 #include "koan/browser/ui/views/koan_welcome.h"
 #include "koan/browser/ui/views/koan_window_glass.h"
 #include "ui/gfx/animation/animation.h"
@@ -46,6 +47,17 @@ bool IsWindowCoveredAt(BrowserView* browser_view, const gfx::Point& point) {
 
 int ClientAreaTopForHitTest(int client_area_top) {
   return std::max(0, client_area_top);
+}
+
+bool IsWindowCaptionAt(BrowserView* browser_view, const gfx::Point& point) {
+  const KoanBrowserViewController* controller =
+      browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
+  return controller && controller->quick_window() &&
+         controller->quick_window()->IsCaptionAt(point);
+}
+
+bool OwnsWindowTopRow(const BrowserView* browser_view) {
+  return IsQuickWindow(browser_view);
 }
 
 }  // namespace koan

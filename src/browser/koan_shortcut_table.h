@@ -61,6 +61,9 @@ enum class Action {
   // Zen's New Blank Window: a window without Spaces and without window sync
   // (koan_window_sync.h OpenBlankWindow()).
   kNewBlankWindow,
+  // Koan's: an empty quick window (Arc's Little Arc, #472;
+  // koan_quick_window_controller.h OpenEmptyQuickWindow()).
+  kNewQuickWindow,
   kNewPrivateWindow,
   // Zen's "Quit Application" (Firefox's key_quitApplication): a key on Linux
   // only; on macOS ⌘Q is the menu bar's Quit, outside this table.

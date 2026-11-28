@@ -64,8 +64,10 @@ void OnFocusLocationBarCommand(BrowserWindowInterface* browser);
 // in the Glance page: returns true after loading `url` there, so the caller
 // skips its own navigation. False otherwise (no Glance session, a new-tab
 // disposition such as Alt+Enter, or not a web URL, which closes the card and
-// goes to the tab). Called from ChromeOmniboxClient::OnAutocompleteAccept(),
-// after MaybeAdjustOmniboxDisposition().
+// goes to the tab). The same for the bar New Quick Window opened
+// (KoanUrlBarController::OpenForQuickWindow()): the pick opens in a quick
+// window. Called from ChromeOmniboxClient::OnAutocompleteAccept(), after
+// MaybeAdjustOmniboxDisposition().
 bool MaybeOpenOmniboxMatchInGlance(BrowserWindowInterface* browser,
                                    const GURL& url,
                                    ui::PageTransition transition,
@@ -201,7 +203,8 @@ void AdjustOmniboxPopupBounds(views::View* location_bar,
 // The colour the location bar of `location_bar` (a LocationBarView) paints and
 // gives its omnibox as its background: clear, while a glass URL bar card (Zen's
 // acrylic-urlbar) is open in its window, over the card's translucent fill;
-// else `color`. Called from LocationBarView::RefreshBackground().
+// in a quick window the colour of its top row; else `color`. Called from
+// LocationBarView::RefreshBackground().
 SkColor AdjustLocationBarBackground(views::View* location_bar, SkColor color);
 
 // Whether `browser_view`'s floating URL bar is open as a glass card: the

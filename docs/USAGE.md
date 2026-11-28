@@ -37,6 +37,7 @@ listed behaves as in Chrome.
 | Open / close the Library | ⌥⇧L | |
 | Library: History; Downloads | ⌘Y or ⌘⇧H; ⌘J (Firefox's) | History page; Downloads page (⌘⇧J) |
 | New window; New Blank Window (no Spaces, not synced) | ⌘N (Chrome's); ⌘⇧N | New Incognito Window (now ⌘⇧P) |
+| New Quick Window (Arc's Little Arc: the URL bar, for a quick window) | ⌘⌥N | New Split View |
 | New private window | ⌘⇧P | |
 | Inspect element | ⌘⌥L, ⌘⇧L | Downloads (⌘⌥L), collapse of the vertical tab strip (⌘⇧L); ⌘⌥C still works |
 | Mute site | ⌃M (Control, as in Firefox) | |
@@ -66,8 +67,8 @@ follow the shortcuts in effect (also after you change one in Settings):
 
 - **Zen** (app menu): Settings… (⌘,), which opens Settings on Look and Feel.
 - **File:** New Blank Window (⌘⇧N, Zen's: a window without Spaces, outside
-  window sync) after New Window, and New Private Window (⌘⇧P) for
-  Chrome's Incognito.
+  window sync) and New Quick Window (⌘⌥N, see "Quick window") after New
+  Window, and New Private Window (⌘⇧P) for Chrome's Incognito.
 - **View:** Appearance > Automatic / Light / Dark first, as in Zen; Chrome's
   bookmark bar, full-screen toolbar, full URLs, AI, Lens, vertical tabs, Cast
   and Developer items are hidden. (Zen's Toolbars, Sidebar and Collapse
@@ -125,6 +126,7 @@ Ctrl where the Mac uses ⌘, and a few keys of their own:
 | Library: History | Ctrl+H or Ctrl+Shift+H | History page (Ctrl+H) |
 | Inspect element | Ctrl+Shift+L | |
 | New Blank Window (no Spaces, not synced) | Ctrl+Shift+N | New incognito window |
+| New Quick Window (Arc's Little Arc: the URL bar, for a quick window) | Ctrl+Alt+Shift+N | |
 | New private window | Ctrl+Shift+P | Print using system dialog |
 | Mute site | Ctrl+M | |
 | Bookmarks | Ctrl+B | |
@@ -597,7 +599,34 @@ belongs to a Space, and new tabs open in the active one.
   matches. On Linux that includes a link given on Koan's command line,
   which is how other apps (and `xdg-open`) open a link in Koan. Right-click a tab > Add Route for Domain adds a route for its
   site (one per selected tab's site) and opens the settings. Essentials and
-  pinned tabs are never routed.
+  pinned tabs are never routed. Links from other apps are a link clicked in
+  Mail or Slack, `open <url>` on a Mac, `koan <url>`, `xdg-open <url>` or
+  `flatpak run dev.koan.Koan <url>` on Linux while Koan runs.
+- **Quick window** (Arc's Little Arc). Settings > Tab Management >
+  Workspaces > **Links from other apps open in: A quick window** (the
+  default is A Space). A link from another app then opens in a small window
+  of its own, centred, over the app you clicked it in, without a sidebar, so
+  the main window keeps what it shows. It has one top row and no title bar:
+  the site's address (drag it to move the window, double-click it to
+  maximize), Move to Space and Close; on a Mac the window buttons sit at the
+  row's start and the red one is the close. The page is below it, inset with
+  rounded corners like the main window's. Read it and close it (Esc, ⌘W,
+  Close or the red button), or keep it:
+  **Move to Space** lists your Spaces (the one you used last first) and
+  moves the page there as a tab, as it is (no reload, the scroll position
+  and what you typed stay); ⌘O moves it to the Space you used last at once.
+  A link that matches a Space route still goes to its Space. The page opens
+  in the profile of the Space it would have gone to (the default route for
+  external links, else the Space you used last), so your logins there
+  apply; moved to a Space with another profile it keeps its own and shows
+  the colour line. Links the page opens in a new tab open in the main
+  window. **New Quick Window** (⌘⌥N on a Mac, Ctrl+Alt+Shift+N on Linux,
+  File > New Quick Window, or the command palette) opens the floating URL
+  bar for a quick window: what you open from it opens in one. Quick
+  windows have no Spaces, aren't synced, aren't in the Library and don't
+  come back after a restart. Private windows, a window that shows only a
+  new tab page and Koan without any window open keep opening links as
+  before.
 - **Profiles: separate logins per Space** (Zen's containers per Space).
   Pick one with the Create-a-Space form's **Profile** row, or right-click
   the header > **Set Profile**. You get Default (no profile), your profiles

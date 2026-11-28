@@ -169,6 +169,19 @@ TEST(KoanShortcutTable, MacDefaultsAreZens) {
 }
 #endif  // BUILDFLAG(IS_MAC)
 
+// Arc's New Little Arc Window key on macOS (Chrome's New Split View key
+// there); elsewhere Ctrl+Alt+N is Create Space, so it takes Shift too.
+TEST(KoanShortcutTable, NewQuickWindowKey) {
+#if BUILDFLAG(IS_MAC)
+  EXPECT_EQ(KeysOf(Action::kNewQuickWindow),
+            Keys({Key(ui::VKEY_N, kCmd | kAlt)}));
+#else
+  EXPECT_EQ(KeysOf(Action::kNewQuickWindow),
+            Keys({Key(ui::VKEY_N, kCtrl | kAlt | kShift)}));
+#endif
+  EXPECT_FALSE(IsBound(Key(ui::VKEY_N, kCtrl | kAlt), Action::kNewQuickWindow));
+}
+
 // No key runs two actions.
 TEST(KoanShortcutTable, NoKeyIsBoundToTwoActions) {
   std::set<std::pair<int, int>> seen;

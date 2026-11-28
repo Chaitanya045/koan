@@ -53,6 +53,7 @@
 #include "koan/browser/ui/views/koan_loading_indicator.h"
 #include "koan/browser/ui/views/koan_media_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
+#include "koan/browser/ui/views/koan_quick_window_controller.h"
 #include "koan/browser/ui/views/koan_session_data.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
@@ -190,6 +191,9 @@ KoanBrowserViewController::KoanBrowserViewController(BrowserView* browser_view)
       shortcuts_(std::make_unique<KoanShortcutController>(browser_view, this)),
       command_palette_(std::make_unique<KoanCommandPalette>(this)) {
   ++g_live_count;
+  if (IsQuickWindow(browser_view)) {
+    quick_window_ = std::make_unique<KoanQuickWindowController>(browser_view);
+  }
   if (TemplateURLService* service = TemplateURLServiceFactory::GetForProfile(
           browser_view->browser()->GetProfile())) {
     ai_starter_pack_filter_ = std::make_unique<AiStarterPackFilter>(service);
@@ -216,6 +220,7 @@ void KoanBrowserViewController::CreateFor(BrowserView* browser_view) {
   CHECK(!From(browser_view));
   // Before the controllers, which ask whether the window has Spaces.
   MarkBlankWindowIfRequested(browser_view);
+  MarkQuickWindowIfRequested(browser_view);
   browser_view->SetProperty(
       kKoanBrowserViewControllerKey,
       std::make_unique<KoanBrowserViewController>(browser_view));
@@ -264,6 +269,9 @@ void KoanBrowserViewController::TearDown() {
   window_drag_->OnBrowserViewDestroying();
   welcome_->OnBrowserViewDestroying();
   agent_indicator_->OnBrowserViewDestroying();
+  if (quick_window_) {
+    quick_window_->OnBrowserViewDestroying();
+  }
 }
 
 // static
@@ -318,6 +326,9 @@ void KoanBrowserViewController::OnViewAddedToWidget(
     // After the welcome: both post a task, and the URL bar's must run after
     // the welcome's (FIFO) so it sees whether the welcome is showing.
     url_bar_->OnAddedToWidget();
+    if (quick_window_) {
+      quick_window_->OnAddedToWidget();
+    }
   }
 }
 
@@ -336,6 +347,9 @@ void KoanBrowserViewController::OnViewBoundsChanged(
   split_header_->OnBrowserViewLayout();
   welcome_->OnBrowserViewLayout();
   agent_indicator_->OnBrowserViewLayout();
+  if (quick_window_) {
+    quick_window_->OnBrowserViewLayout();
+  }
 }
 
 void KoanBrowserViewController::OnWidgetDestroying(views::Widget* widget) {

@@ -40,6 +40,7 @@
 #include "koan/browser/ui/views/koan_keyboard_state.h"
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
+#include "koan/browser/ui/views/koan_quick_window_controller.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_split_partner.h"
@@ -69,6 +70,7 @@ bool CreatesSomething(shortcuts::Action action) {
     case shortcuts::Action::kNewTab:
     case shortcuts::Action::kNewWindow:
     case shortcuts::Action::kNewBlankWindow:
+    case shortcuts::Action::kNewQuickWindow:
     case shortcuts::Action::kNewPrivateWindow:
     case shortcuts::Action::kNewWorkspace:
     case shortcuts::Action::kNewEmptySplit:
@@ -396,6 +398,10 @@ bool KoanShortcutController::Run(Action action) {
     case Action::kNewBlankWindow:
       OpenBlankWindow(browser_view_->GetProfile());
       return true;
+    case Action::kNewQuickWindow:
+      // The most recent normal window's URL bar, also from a quick window
+      // (the menu bar's item) or a private one.
+      return OpenEmptyQuickWindow(browser_view_->GetProfile());
     case Action::kNewPrivateWindow:
       return Command(IDC_NEW_INCOGNITO_WINDOW);
     case Action::kQuit:

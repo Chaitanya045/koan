@@ -33,7 +33,7 @@ namespace koan {
 // Hook for BrowserNativeWidgetMac::GetWindowFrameTitlebarHeight() (a hook
 // patch): the height the traffic lights are centred in, or null to leave it
 // to Chromium (the toolbar's height). `browser_view` is the window's
-// BrowserView.
+// BrowserView. A quick window's: its top row's (OwnsWindowTopRow()).
 std::optional<int> GetTrafficLightsTitlebarHeight(
     const views::View* browser_view);
 
