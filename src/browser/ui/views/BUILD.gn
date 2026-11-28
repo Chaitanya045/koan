@@ -280,6 +280,12 @@ source_set("url_pill_buttons") {
   sources = [ "koan_url_pill_buttons.h" ]
 }
 
+# Ctrl+Tab's walk through the recently used tabs (koan_recent_tab_walk.h):
+# pure, like :extension_drop.
+source_set("recent_tab_walk") {
+  sources = [ "koan_recent_tab_walk.h" ]
+}
+
 # Which recreated Space a stored per-Space entry (a folder) belongs to.
 source_set("stored_space") {
   sources = [
@@ -301,6 +307,7 @@ test("koan_views_unittests") {
     "koan_lights_geometry_unittest.cc",
     "koan_loading_bar_unittest.cc",
     "koan_pinned_site_unittest.cc",
+    "koan_recent_tab_walk_unittest.cc",
     "koan_sidebar_corners_unittest.cc",
     "koan_sidebar_curve_unittest.cc",
     "koan_space_drag_logic_unittest.cc",
@@ -325,6 +332,7 @@ test("koan_views_unittests") {
     ":lights_geometry",
     ":loading_bar",
     ":pinned_site",
+    ":recent_tab_walk",
     ":sidebar_corners",
     ":sidebar_curve",
     ":space_drag_logic",
@@ -607,6 +615,7 @@ source_set("impl") {
     ":lights_geometry",
     ":loading_bar",
     ":pinned_site",
+    ":recent_tab_walk",
     ":sidebar_corners",
     ":sidebar_curve",
     ":space_drag_logic",

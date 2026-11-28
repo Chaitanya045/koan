@@ -8,9 +8,22 @@
 
 namespace koan {
 
-bool IsControlKeyDown() {
-  // The hardware state now, not that of the event being handled.
-  return (NSEvent.modifierFlags & NSEventModifierFlagControl) != 0;
+namespace {
+
+class MacControlKeyState : public ControlKeyState {
+ public:
+  bool IsDown() const override {
+    // The hardware state now, not that of the event being handled.
+    return (NSEvent.modifierFlags & NSEventModifierFlagControl) != 0;
+  }
+};
+
+}  // namespace
+
+// static
+std::unique_ptr<ControlKeyState> ControlKeyState::Create(
+    views::Widget* widget) {
+  return std::make_unique<MacControlKeyState>();
 }
 
 }  // namespace koan

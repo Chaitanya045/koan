@@ -37,7 +37,6 @@
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
-#include "koan/browser/ui/views/koan_keyboard_state.h"
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_sidebar_tabs_controller.h"
@@ -115,6 +114,7 @@ void KoanShortcutController::OnAddedToWidget() {
   }
   focus_manager_ = browser_view_->GetFocusManager();
   RegisterAccelerators();
+  control_key_ = ControlKeyState::Create(browser_view_->GetWidget());
 }
 
 void KoanShortcutController::RegisterAccelerators() {
@@ -171,6 +171,9 @@ void KoanShortcutController::OnShortcutsChanged() {
 
 void KoanShortcutController::OnBrowserViewDestroying() {
   pref_change_registrar_.RemoveAll();
+  control_release_timer_.Stop();
+  recent_walk_.End();
+  control_key_.reset();
   if (focus_manager_) {
     focus_manager_->UnregisterAccelerators(this);
     focus_manager_ = nullptr;
@@ -543,48 +546,41 @@ std::vector<tabs::TabHandle> KoanShortcutController::RecentTabs(
 void KoanShortcutController::CycleToRecentTab(TabStripModel* model,
                                               bool forward) {
   tabs::TabInterface* active = model->GetActiveTab();
-  // A new walk, unless this press continues one: Ctrl still held since the
-  // last, and the tab it showed still the active one.
-  const bool continues =
-      !recent_walk_.empty() && IsControlKeyDown() && active &&
-      recent_walk_[recent_walk_index_] == active->GetHandle();
-  if (!continues) {
-    recent_walk_ = RecentTabs(model);
-    recent_walk_index_ = 0;
+  const bool control_down = control_key_ && control_key_->IsDown();
+  // A new walk, unless this press continues one.
+  if (!recent_walk_.Continues(
+          active ? std::optional(active->GetHandle()) : std::nullopt,
+          control_down)) {
+    recent_walk_.Start(RecentTabs(model));
     // The first press goes to the last tab shown, Shift or not (Firefox opens
     // its all-tabs list on a first Ctrl+Shift+Tab instead).
     forward = true;
   }
-  const size_t count = recent_walk_.size();
   // Firefox's advanceFocus(): on round the list, the active tab (its first)
   // included; a tab that has gone since the walk began is passed over.
-  for (size_t step = 0; step + 1 < count; ++step) {
-    recent_walk_index_ =
-        (recent_walk_index_ + (forward ? 1 : count - 1)) % count;
-    tabs::TabInterface* tab = recent_walk_[recent_walk_index_].Get();
-    const int index = tab ? model->GetIndexOfTab(tab) : TabStripModel::kNoTab;
-    if (index == TabStripModel::kNoTab) {
-      continue;
-    }
-    if (tab != active) {
-      model->ActivateTabAt(
-          index, TabStripUserGestureDetails(
-                     TabStripUserGestureDetails::GestureType::kKeyboard));
-    }
-    break;
+  const std::optional<tabs::TabHandle> reached =
+      recent_walk_.Step(forward, [model](tabs::TabHandle handle) {
+        tabs::TabInterface* tab = handle.Get();
+        return tab && model->GetIndexOfTab(tab) != TabStripModel::kNoTab;
+      });
+  if (reached && reached->Get() != active) {
+    model->ActivateTabAt(
+        model->GetIndexOfTab(reached->Get()),
+        TabStripUserGestureDetails(
+            TabStripUserGestureDetails::GestureType::kKeyboard));
   }
-  if (IsControlKeyDown()) {
+  if (control_key_ && control_key_->IsDown()) {
     control_release_timer_.Start(FROM_HERE, base::Milliseconds(50), this,
                                  &KoanShortcutController::CheckControlReleased);
   } else {
-    recent_walk_.clear();
+    recent_walk_.End();
   }
 }
 
 void KoanShortcutController::CheckControlReleased() {
-  if (!IsControlKeyDown()) {
+  if (!control_key_ || !control_key_->IsDown()) {
     control_release_timer_.Stop();
-    recent_walk_.clear();
+    recent_walk_.End();
   }
 }
 
