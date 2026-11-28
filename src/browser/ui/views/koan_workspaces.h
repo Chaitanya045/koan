@@ -678,6 +678,8 @@ class KoanWorkspaceController : public TabStripModelObserver,
   };
   std::optional<SessionShown> session_shown_;
   std::vector<tabs::TabHandle> pre_restore_essentials_;
+  // The tab selected when the restore into this window started.
+  tabs::TabHandle pre_restore_active_;
   // What StoreShownInSession() wrote last.
   std::string stored_shown_;
   base::CallbackListSubscription session_restored_subscription_;

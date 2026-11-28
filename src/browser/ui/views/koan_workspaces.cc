@@ -1614,6 +1614,7 @@ void KoanWorkspaceController::OnSessionRestored(Profile* profile,
     if (!merge_startup_space_) {
       session_shown_.reset();
       pre_restore_essentials_.clear();
+      pre_restore_active_ = tabs::TabHandle();
     }
     ScheduleUpdate();
   }
@@ -1649,6 +1650,8 @@ void KoanWorkspaceController::MergeStartupSpaceAfterRestore() {
       std::exchange(session_shown_, std::nullopt);
   const std::vector<tabs::TabHandle> essentials_before =
       std::exchange(pre_restore_essentials_, {});
+  const tabs::TabHandle active_before =
+      std::exchange(pre_restore_active_, tabs::TabHandle());
   // Gone: the restore replaced its one New Tab page, and selected the
   // session's tab itself (upstream does only in a window it restores into
   // empty).
@@ -1703,15 +1706,19 @@ void KoanWorkspaceController::MergeStartupSpaceAfterRestore() {
           model->GetTabAtIndex(static_cast<int>(tabs.start()) + session->tab);
     }
   }
-  // The tab the launch showed (a URL it was given), if it still is the
-  // Space's last one. Not a tab the user opened while the crash bubble
-  // waited.
-  tabs::TabInterface* launch_tab = nullptr;
-  if (GetActiveSpace() == space) {
-    launch_tab = model->GetActiveTab();
-  } else if (auto it = last_active_tabs_.find(*space);
-             it != last_active_tabs_.end()) {
-    launch_tab = it->second.Get();
+  // The tab the launch showed (a URL it was given): the one selected when
+  // the restore started, if it was in the launch's Space. (The restore can
+  // take focus away from that Space without selecting another tab, so
+  // neither the Space shown now nor its remembered tab says.) Else the
+  // Space's remembered tab. Not a tab the user opened while the crash
+  // bubble waited.
+  tabs::TabInterface* launch_tab = active_before.Get();
+  if (!launch_tab || launch_tab->GetGroup() != space) {
+    launch_tab = nullptr;
+    if (auto it = last_active_tabs_.find(*space);
+        it != last_active_tabs_.end()) {
+      launch_tab = it->second.Get();
+    }
   }
   if (launch_tab &&
       !std::ranges::contains(launch_tabs, launch_tab->GetHandle())) {
@@ -1780,6 +1787,9 @@ void KoanWorkspaceController::OnSessionShownRestoring(const std::string& data) {
   // session's tab and Space itself in a window it creates.
   if (model->empty()) {
     return;
+  }
+  if (tabs::TabInterface* active = model->GetActiveTab()) {
+    pre_restore_active_ = active->GetHandle();
   }
   const std::optional<base::Value> value =
       base::JSONReader::Read(data, base::JSON_PARSE_RFC);
@@ -2024,10 +2034,11 @@ void KoanWorkspaceController::EnsureOneSpaceShown() {
         const tab_groups::TabGroupId id = NewSpaceGroup(indices);
         WriteSpace(id, {.name = kDefaultSpaceName});
         // The window's first Space, made for the tabs it opened with (no
-        // session restored into it, no stored Spaces): a restore into the
-        // window later merges it (MergeStartupSpaceAfterRestore()).
-        if (!started_ &&
-            !SessionRestore::IsRestoring(browser_view_->GetProfile())) {
+        // stored Spaces; a window a restore makes has its tabs in Spaces): a
+        // restore into the window merges it (MergeStartupSpaceAfterRestore()).
+        // Also while that restore runs already: Koan's after a crash is
+        // posted from the launch's first tab, and may start before this.
+        if (!started_) {
           launch_space_ = id;
           launch_tabs_ = handles;
         }
@@ -3109,6 +3120,12 @@ void KoanWorkspaceController::OnTabGroupChanged(const TabGroupChange& change) {
     pre_restore_spaces_.clear();
     for (const SpaceInfo& info : before) {
       pre_restore_spaces_.insert(info.id);
+    }
+    // (A session saved before kShownSpaceSessionKey has no hook call.)
+    if (!pre_restore_active_.Get()) {
+      if (tabs::TabInterface* active = change.model->GetActiveTab()) {
+        pre_restore_active_ = active->GetHandle();
+      }
     }
     if (launch_space_ && pre_restore_spaces_.contains(*launch_space_)) {
       pre_restore_space_ = launch_space_;

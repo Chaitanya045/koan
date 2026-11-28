@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 
+#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/run_loop.h"
@@ -49,6 +50,7 @@
 #include "koan/browser/ui/views/koan_window_sync_client.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
@@ -88,6 +90,9 @@ class KoanCrashRestoreBrowserTest : public InProcessBrowserTest {
   }
 
  protected:
+  // The URL the launch was given (the test launcher's about:blank).
+  virtual bool IsLaunchUrl(const GURL& url) { return url.IsAboutBlank(); }
+
   // Two Spaces: "Space", with a tab pinned in it and a normal tab, and
   // "Work" (with an icon) with a normal tab, shown. With `with_read`, a third
   // one, "Read", with two tabs, the first selected. `shown` names the Space
@@ -196,7 +201,7 @@ class KoanCrashRestoreBrowserTest : public InProcessBrowserTest {
       for (int index : TabsOfSpace(tab_strip, space.id)) {
         tabs::TabInterface* tab = tab_strip->GetTabAtIndex(index);
         content::WebContents* contents = tab->GetContents();
-        if (contents->GetVisibleURL().IsAboutBlank()) {
+        if (IsLaunchUrl(contents->GetVisibleURL())) {
           if (launch_tabs) {
             launch_tabs->push_back(base::StrCat(
                 {name, tab_strip->active_index() == index ? " active" : ""}));
@@ -265,6 +270,35 @@ class KoanCrashRestoreNoUrlBrowserTest : public KoanCrashRestoreBrowserTest {
   }
 };
 
+// Launched with a web page, as from a link in another app: the URL goes
+// through Space routing as it opens, which about:blank doesn't.
+class KoanCrashRestoreHttpUrlBrowserTest : public KoanCrashRestoreBrowserTest {
+ public:
+  KoanCrashRestoreHttpUrlBrowserTest() {
+    set_open_about_blank_on_browser_launch(false);
+  }
+
+  void SetUp() override {
+    // Listening before the launch, which opens its URL.
+    ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
+    KoanCrashRestoreBrowserTest::SetUp();
+  }
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    KoanCrashRestoreBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendArg(LaunchUrl().spec());
+  }
+
+  void SetUpOnMainThread() override {
+    embedded_test_server()->StartAcceptingConnections();
+    KoanCrashRestoreBrowserTest::SetUpOnMainThread();
+  }
+
+ protected:
+  GURL LaunchUrl() { return embedded_test_server()->GetURL("/title1.html"); }
+  bool IsLaunchUrl(const GURL& url) override { return url == LaunchUrl(); }
+};
+
 }  // namespace
 
 // A clean restart restores the session at launch.
@@ -323,6 +357,31 @@ IN_PROC_BROWSER_TEST_F(KoanCrashRestoreNoUrlBrowserTest,
   ASSERT_EQ(ExitType::kCrashed,
             ExitTypeService::GetLastSessionExitType(browser()->GetProfile()));
   EXPECT_THAT(WaitForRestoredState(), testing::IsEmpty());
+}
+
+// Step 3 of the PR's test: the silent restore after a crash, started with a
+// web page, while the session showed "Space" on its last tab. The page's
+// tab goes to the end of "Space" and is selected, not the session's tab.
+IN_PROC_BROWSER_TEST_F(KoanCrashRestoreHttpUrlBrowserTest,
+                       PRE_CrashSelectsTheLaunchUrl) {
+  ASSERT_NO_FATAL_FAILURE(SetUpSpaces(/*with_read=*/false, u"Space"));
+  EndAsCrash();
+}
+
+IN_PROC_BROWSER_TEST_F(KoanCrashRestoreHttpUrlBrowserTest,
+                       CrashSelectsTheLaunchUrl) {
+  ASSERT_EQ(ExitType::kCrashed,
+            ExitTypeService::GetLastSessionExitType(browser()->GetProfile()));
+  EXPECT_THAT(WaitForRestoredState(), testing::ElementsAre("Space active"));
+  TabStripModel* tab_strip = browser()->GetTabStripModel();
+  EXPECT_EQ(LaunchUrl(), tab_strip->GetActiveWebContents()->GetVisibleURL());
+  // Last in its Space.
+  const std::optional<tab_groups::TabGroupId> group =
+      tab_strip->GetActiveTab()->GetGroup();
+  ASSERT_TRUE(group);
+  EXPECT_EQ(tab_strip->active_index(), TabsOfSpace(tab_strip, *group).back());
+  EXPECT_EQ(1, browser()->GetProfile()->GetPrefs()->GetInteger(
+                   prefs::kResumedCrashes));
 }
 
 // A crash soon after a silent restore asks first (the bubble, as upstream),
