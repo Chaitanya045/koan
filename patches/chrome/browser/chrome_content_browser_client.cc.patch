@@ -1,8 +1,8 @@
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 565bd580ba6172469d31079a4e455eb05020488c..57f2ef37caa16b28a05084c599201edcfb5b150a 100644
+index 565bd580ba6172469d31079a4e455eb05020488c..3647ad72be8af61c04d557b6f2229c92f324526c 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -411,6 +411,12 @@
+@@ -411,6 +411,13 @@
  #include "google_apis/google_api_keys.h"
  #include "gpu/config/gpu_switches.h"
  #include "ipc/ipc_channel_proxy.h"
@@ -10,12 +10,13 @@ index 565bd580ba6172469d31079a4e455eb05020488c..57f2ef37caa16b28a05084c599201edc
 +#include "koan/browser/koan_renderer_switches.h"
 +#include "koan/browser/containers/koan_container_partition.h"
 +#include "koan/browser/ui/views/koan_glance.h"
++#include "koan/browser/ui/views/koan_page_notifications.h"
 +#include "koan/browser/ui/views/koan_window_background.h"
 +#include "koan/browser/ui/webui/koan_settings_url.h"
  #include "media/base/media_switches.h"
  #include "media/media_buildflags.h"
  #include "media/mojo/buildflags.h"
-@@ -3160,6 +3166,8 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
+@@ -3160,6 +3167,8 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
        for (auto& part : extra_parts_) {
          part->AppendExtraRendererCommandLineSwitches(command_line, *process);
        }
@@ -24,7 +25,7 @@ index 565bd580ba6172469d31079a4e455eb05020488c..57f2ef37caa16b28a05084c599201edc
      }
  
  #if BUILDFLAG(IS_CHROMEOS)
-@@ -4125,6 +4133,14 @@ GetPreferredColorScheme(const WebPreferences& web_prefs,
+@@ -4125,6 +4134,14 @@ GetPreferredColorScheme(const WebPreferences& web_prefs,
                                         ui::ColorProviderKey::ColorMode::kLight
                                     ? blink::mojom::PreferredColorScheme::kLight
                                     : blink::mojom::PreferredColorScheme::kDark;
@@ -39,7 +40,7 @@ index 565bd580ba6172469d31079a4e455eb05020488c..57f2ef37caa16b28a05084c599201edc
      }
      const auto effective_page_colors =
          PageColorsController::GetEffectivePageColors(*profile.GetPrefs());
-@@ -4141,6 +4157,14 @@ GetPreferredColorScheme(const WebPreferences& web_prefs,
+@@ -4141,6 +4158,14 @@ GetPreferredColorScheme(const WebPreferences& web_prefs,
            web_contents->GetColorProvider().GetColor(kColorToolbar))
            ? blink::mojom::PreferredColorScheme::kDark
            : blink::mojom::PreferredColorScheme::kLight;
@@ -54,7 +55,7 @@ index 565bd580ba6172469d31079a4e455eb05020488c..57f2ef37caa16b28a05084c599201edc
  #endif
  
  #if BUILDFLAG(ENABLE_GUEST_VIEW)
-@@ -4633,6 +4657,13 @@ bool ChromeContentBrowserClient::CanCreateWindow(
+@@ -4633,6 +4658,13 @@ bool ChromeContentBrowserClient::CanCreateWindow(
      }
    }
  
@@ -68,7 +69,7 @@ index 565bd580ba6172469d31079a4e455eb05020488c..57f2ef37caa16b28a05084c599201edc
    const BlockedWindowParams blocked_params(
        target_url, opener->GetGlobalFrameToken(), source_origin,
        opener->GetSiteInstance(), referrer, frame_name, disposition, features,
-@@ -5237,6 +5268,11 @@ void ChromeContentBrowserClient::BrowserURLHandlerCreated(
+@@ -5237,6 +5269,11 @@ void ChromeContentBrowserClient::BrowserURLHandlerCreated(
      part->BrowserURLHandlerCreated(handler);
    }
  
@@ -80,7 +81,16 @@ index 565bd580ba6172469d31079a4e455eb05020488c..57f2ef37caa16b28a05084c599201edc
    // Handler to rewrite chrome://about and chrome://sync URLs.
    handler->AddHandlerPair(&HandleChromeAboutAndChromeSyncRewrite,
                            BrowserURLHandler::null_handler());
-@@ -7335,6 +7371,14 @@ content::SerialDelegate* ChromeContentBrowserClient::GetSerialDelegate() {
+@@ -5730,6 +5767,8 @@ void ChromeContentBrowserClient::OpenURL(
+   NavigateParams nav_params(Profile::FromBrowserContext(browser_context),
+                             params.url, params.transition);
+   nav_params.FillNavigateParamsFromOpenURLParams(params);
++  // Koan: a service worker in a Space's profile opens its window there.
++  koan::PlaceServiceWorkerWindow(site_instance, nav_params);
+ 
+   Navigate(&nav_params);
+   std::move(callback).Run(nav_params.navigated_or_inserted_contents);
+@@ -7335,6 +7374,14 @@ content::SerialDelegate* ChromeContentBrowserClient::GetSerialDelegate() {
  bool ChromeContentBrowserClient::IsSecurityLevelAcceptableForWebAuthn(
      content::RenderFrameHost* rfh,
      const url::Origin& caller_origin) {
@@ -95,7 +105,7 @@ index 565bd580ba6172469d31079a4e455eb05020488c..57f2ef37caa16b28a05084c599201edc
    const Profile* profile =
        Profile::FromBrowserContext(rfh->GetBrowserContext());
    if (profile->GetPrefs()->GetBoolean(
-@@ -7511,6 +7555,15 @@ ChromeContentBrowserClient::CreateLoginDelegate(
+@@ -7511,6 +7558,15 @@ ChromeContentBrowserClient::CreateLoginDelegate(
    }
  #endif  // BUILDFLAG(IS_CHROMEOS)
  
@@ -111,7 +121,7 @@ index 565bd580ba6172469d31079a4e455eb05020488c..57f2ef37caa16b28a05084c599201edc
    if (!http_auth_coordinator_) {
      http_auth_coordinator_ = CreateHttpAuthCoordinator();
    }
-@@ -7591,6 +7644,13 @@ bool ChromeContentBrowserClient::HandleExternalProtocol(
+@@ -7591,6 +7647,13 @@ bool ChromeContentBrowserClient::HandleExternalProtocol(
      // applications.
      return false;
    }
@@ -125,7 +135,7 @@ index 565bd580ba6172469d31079a4e455eb05020488c..57f2ef37caa16b28a05084c599201edc
  #endif  //! BUILDFLAG(IS_ANDROID)
  
  #if BUILDFLAG(ENABLE_EXTENSIONS)
-@@ -8841,6 +8901,11 @@ bool ChromeContentBrowserClient::IsFindInPageDisabledForOrigin(
+@@ -8841,6 +8904,11 @@ bool ChromeContentBrowserClient::IsFindInPageDisabledForOrigin(
  std::unique_ptr<content::AnchorElementPreconnectDelegate>
  ChromeContentBrowserClient::CreateAnchorElementPreconnectDelegate(
      content::RenderFrameHost& render_frame_host) {

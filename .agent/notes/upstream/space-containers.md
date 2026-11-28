@@ -129,7 +129,7 @@ changes.
 |---|---|
 | What isolates | Cookies, localStorage, sessionStorage, IndexedDB, Cache Storage, the HTTP cache, service workers, HTTP auth, the network context (sockets, HSTS state), shared workers, renderer processes. Each is per StoragePartition. |
 | What's shared | Bookmarks, passwords, autofill, site permissions (content settings are per profile; Firefox shares them too), extensions, downloads, zoom. As in Firefox's containers. History is kept apart per profile since #474 (`space-history.md`): one history, each visit tagged with its profile. |
-| Notifications / push | Since #478: a page's own notifications (`new Notification()`) are allowed in a Space's profile; service-worker notifications and push stay refused there. See "Notifications (#478)" below. Agent containers: all refused, as before. |
+| Notifications / push | Since #478: a page's own notifications (`new Notification()`) are allowed in a Space's profile. Since #530: a service worker's too (`registration.showNotification()`), routed to that profile's worker. Push stays refused there. See "Notifications (#478)" and "Service-worker notifications (#530)" below. Agent containers: all refused, as before. |
 | WebUSB / HID / Serial / Bluetooth | Upstream refuses them in non-default partitions. Kept (Brave keeps it too). |
 | Tab moved to another Space (menu, drag, Move To) | Keeps its partition, as in Zen. A WebContents can't change partition, and reopening would lose the page's state and form input. The colour line then shows it is in another container. |
 | Tab dragged to another window | Same WebContents, same partition. |
@@ -207,7 +207,7 @@ Others:
 | Case | Decision | Why |
 |---|---|---|
 | A page's notifications in a Space's profile (user container) | **Allowed.** The page asks, and the answer is the site's, shared with the default partition and every profile, like any site permission (Firefox's containers share them too). | Nothing in that path depends on the partition. |
-| Service-worker notifications (`registration.showNotification()`, also from an open page) in a Space's profile | **Refused** (`PERMISSION_DENIED`, the promise rejects). | A click or close would read the default partition's notification database and wake the default partition's service worker (`DispatchNotificationEvent()`): at best nothing happens, at worst another account's worker gets it. |
+| Service-worker notifications (`registration.showNotification()`, also from an open page) in a Space's profile | **Allowed since #530** (refused by #478's N1 until then). | The notification's id names its partition, so its click and close reach that profile's worker: "Service-worker notifications (#530)" below. |
 | Push in a Space's profile | **Refused**: content sees no push service there (`SERVICE_NOT_AVAILABLE`, "push service not available"), as with Chromium's push kill switch. | Messages are routed by origin to the default partition (`DeliverMessage()`), and the subscription key would collide with the default partition's registration ids. Making it work needs the partition in the subscription (stored in prefs per profile), in delivery, and in the notification click path: four content patches plus a stored-format change. A follow-up, not this issue. Whether Koan's builds can push at all (they configure no Google API keys, and GCM needs them) is a separate, unverified question. |
 | Agent containers | **Unchanged**: every permission refused, never asked (B1). | Agents must not notify the user as a site. |
 | Other partitions (extensions, isolated apps, guests) | Upstream's. | Koan's hook answers only for its own containers. |
@@ -241,10 +241,8 @@ Others:
 - **B1, grown** (`components/permissions/permission_util.cc`, `IsPermissionBlockedInPartition()`): one call,
   `koan::containers::PermissionBlockedInContainer(process, permission == NOTIFICATIONS)`; true for an agent container,
   false for notifications in a valid user container, else upstream decides. 4 lines more than the agent block it replaces.
-- **N1** `content/browser/notifications/blink_notification_service_impl.cc` (`DisplayPersistentNotification()`):
-  refuses in a partition whose domain is a user container's (`IsUserPartitionDomain()`, `:domain`, which content
-  already depends on). No extension point: content decides and stores the notification before the embedder hears
-  of it.
+- **N1** (gone since #530) `content/browser/notifications/blink_notification_service_impl.cc`
+  (`DisplayPersistentNotification()`) refused in a partition whose domain is a user container's.
 - **N2** `content/browser/push_messaging/push_messaging_manager.cc` (`GetService()`): no push service for a process in
   a user container. Every subscribe, unsubscribe and lookup already handles a missing service.
 - **N3** `content/public/browser/notification_event_dispatcher.h` + `notification_event_dispatcher_impl.{h,cc}`:
@@ -278,6 +276,9 @@ Date: 2026-11-28. Chromium 158 (pristine).
 - Push is refused in Koan's containers (N2; agent containers have no notification permission), so they never have a
   subscription of their own. **H1** (below) drops both events for a Koan container's partition. Other partitions
   (extensions', isolated apps', guests') keep upstream's behaviour: an isolated app's push is its partition's.
+  H1 holds only while N2 refuses push in containers: if push is ever allowed in a Space's profile (#530 part 2),
+  H1 must change with it, to unsubscribe that profile's own subscriptions (keyed by partition) instead of dropping
+  the events.
 
 ### Hooks (#596)
 
@@ -285,6 +286,145 @@ Date: 2026-11-28. Chromium 158 (pristine).
   return first when the partition's domain is a Koan container's
   (`koan::containers::IsContainerPartitionDomain()`, `:domain`), or when the context has no partition any more (at
   shutdown). No extension point: the observer is content's, and the push service gets no partition to tell them apart.
+
+## Service-worker notifications (#530)
+
+Date: 2026-11-28. Chromium 158 (pristine). Part 1 of #530; part 2 (push) is the design note at the end, with no
+code yet.
+
+### What upstream does
+
+- A service worker's notification (`registration.showNotification()`, a *persistent* one) is written to the
+  partition's own notification database (`PlatformNotificationContextImpl`, one per StoragePartition, under its
+  `Platform Notifications` folder) and shown through the profile's `PlatformNotificationServiceImpl`. Its id is made
+  in `DoWriteNotificationData()` by `NotificationIdGenerator::GenerateForPersistentNotification()`:
+  `p[b]#<origin>#<0|1><number|tag>`. The number is the profile's (`ReadNextPersistentNotificationId()`); with a tag
+  the id is the origin and the tag only, so the same site's notifications in two partitions with one tag had one id.
+- What the platform keeps is that id, the origin and the profile (macOS: in the notification's userInfo, across a
+  restart; Linux: in memory, closed at exit). A click, an action button or a close goes
+  `PersistentNotificationHandler::OnClick()` / `OnClose()` → `NotificationEventDispatcherImpl::
+  DispatchNotificationClickEvent()` / `DispatchNotificationCloseEvent()` → `DispatchNotificationEvent()`, which takes
+  `BrowserContext::GetStoragePartitionForUrl(origin)` (the default partition for a web site) and reads the
+  notification there by id (`ReadNotificationDataAndRecordInteraction()`), then finds the service worker by the
+  stored registration id in that partition (`FindReadyRegistrationForId()`). Nothing else is looked up. If the read
+  fails, `OnClickCompleted()` closes the notification (`kDatabaseError`).
+- `getNotifications()` and `notification.close()` from a page or worker use its own partition's database
+  (`BlinkNotificationServiceImpl`), so they are already per partition.
+- `clients.openWindow()` from the click goes `service_worker_client_utils::OpenWindow()` →
+  `ContentBrowserClient::OpenURL(site_instance, params)` with the worker's SiteInstance, and
+  `ChromeContentBrowserClient::OpenURL()` navigates with `NavigateParams` that carry no partition: the tab is the
+  active Space's. Content then looks for the new window among the worker's partition's clients
+  (`DidNavigate()`), so in another partition the promise resolves to null. `client.focus()` activates the client's
+  own tab (`WebContents::Activate()`), which Koan already follows into its Space (upstream's focus mode exits, the
+  Space of the active tab shows).
+- DevTools' background-service log of these events (`devtools_event_logging.cc`) also takes the origin's partition.
+
+**Brave** lets containers have the notification permission (`chromium_src/components/permissions/permission_util.cc`)
+and has no override of `notification_event_dispatcher_impl.cc` or `platform_notification_context_impl.cc` (GitHub
+code search, 2026-11-28): a container's service-worker notification is shown, and its click goes to the default
+partition, where the id isn't found and the notification is closed. **Firefox** keys a notification by its
+principal, origin attributes and so the container included (UNVERIFIED: Firefox's `dom/notification`, not in Zen's
+tree), so its clicks reach the container's worker.
+
+### Design
+
+**The partition travels in the id.** The notification's id is the one thing content, the platform and macOS's
+Notification Center keep with a notification, and the per-partition database is keyed by it, so the id is where the
+partition goes. For a user container (a Space's profile) the id is `p[b]koanuser<id>#<origin>#...`: the
+partition's domain before the first `#` (`TagPersistentNotificationId()`, `koan_partition_domain.h`, no deps).
+`DispatchNotificationEvent()` reads it back (`PartitionDomainOfNotificationId()`) and takes that partition instead
+of the origin's. Only well-formed user container domains count (`koanuser` and 2-40 lowercase letters), before the
+origin, so the site's tag (after it) can't make one. The default partition's ids are upstream's, unchanged.
+
+| Case | Decision |
+|---|---|
+| Show in a Space's profile | Allowed (#478's N1 refusal removed). The permission is the site's, shared, as for a page's notifications. |
+| Click, action button, reply, close | Reach the profile's worker: the dispatcher reads that partition's database. The default partition's and another profile's never see it: their databases don't have the id. |
+| The same site and tag in two profiles | Two ids, two notifications (they replaced each other before). |
+| `getNotifications()` | Already the partition's own database; returns that profile's only. |
+| The label | The line under the title names a Space with the profile after the site, as a page's (`OnShowingServiceWorkerNotification()`): the Space of a tab of the site in that profile, else the shown Space if it has the profile, else the first that has it, windows by last use; with none, the profile's name. |
+| `clients.openWindow()` | Opens in the profile, in that same Space (`PlaceServiceWorkerWindow()` sets `params.browser` and `params.group`; `koan::SiteInstanceForNewTab()` rule 6 then gives the Space's profile), and the Space shows with the new tab. With no Space of that profile, the tab still opens in the profile (`params.source_site_instance` = the worker, rule 3), in the Space it opens in, with the profile's line. A payment handler's window takes the same path. |
+| `client.focus()` | The client's own tab, so its own Space (Koan follows the active tab). |
+| Restart, a notification still on screen (macOS) | Its id still names the profile, so the click routes there. Koan loads the partition first if the profile is listed (`koan::LoadNotificationPartition()` in `PersistentNotificationHandler::OnClick()`/`OnClose()`, N8), since no tab of it may have loaded it yet. |
+| A profile that no longer exists | Not listed, so N8 doesn't load it, and N6 looks the partition up with `can_create = false`: the click, action or close is dropped (`kDatabaseError`, upstream then closes the notification) and the partition, folder and all, isn't created again. In the session the profile was deleted in, its partition is still loaded (content can't unload one) and its database is what the deletion left. |
+| Agent containers | Unchanged: no permission (B1), so no notification. Their domains are never tagged or read back. |
+| DevTools' notification log | Still the default partition's (not hooked; rare and harmless). |
+
+### Hooks
+
+- **N5** `content/browser/notifications/platform_notification_context_impl.{h,cc}`: a `const std::string
+  koan_partition_domain_` member (2 lines + comment), set in the constructor from the partition
+  (`ServiceWorkerContextWrapper::storage_partition()`, set before the context is made; 6 lines), and one call in
+  `DoWriteNotificationData()` after the id is generated (2 lines + comment). The id has to be made on the database's
+  sequence, where the partition can't be read.
+- **N6** `content/browser/notifications/notification_event_dispatcher_impl.cc` (`DispatchNotificationEvent()`, the
+  N3 patch's second hunk): after upstream's `GetStoragePartitionForUrl()`, the partition the id names, only if loaded
+  (`can_create = false`); none drops the event (14 lines + comment). No extension point: content picks the partition
+  from the origin alone.
+- **N8** `chrome/browser/notifications/persistent_notification_handler.cc` (`OnClick()`, `OnClose()`, right before
+  the dispatch): `koan::LoadNotificationPartition()` loads the partition the id names if that profile is listed
+  (`koan.containers.user`), so N6 finds it after a restart; content can't read Koan's profile list. 2 lines each +
+  include, `chrome/browser/notifications/BUILD.gn` already has `//koan/browser/ui/views` (N4).
+- **N7** `chrome/browser/notifications/platform_notification_service_impl.cc` (`DisplayPersistentNotification()`,
+  the N4 patch's second hunk: one call, `koan::OnShowingServiceWorkerNotification()`) and
+  `chrome/browser/chrome_content_browser_client.cc` (`OpenURL()`: one call, `koan::PlaceServiceWorkerWindow()`;
+  the file's existing patch grows by a hunk and an include). `NotificationDisplayService::Observer` sees a
+  notification only as const; `NavigateParams` has no field for the worker's SiteInstance.
+- **N1 removed** (`blink_notification_service_impl.cc`, 13 lines): that file is pristine again.
+
+### Push (#530 part 2): design note
+
+**Does push work in Koan today, in the default partition?** Yes, checked on 2026-11-28 with the develop nightly
+(eb72989) on Linux, a local test site and a real VAPID key (`~/work/koan/.cache/pr-test/out/530/tools/push_probe.mjs`):
+`pushManager.subscribe()` resolved after about 33 s with an FCM endpoint (`https://jmt17.google.com/fcm/send/...`),
+FCM accepted an empty VAPID-signed message (201), and the worker got the `push` event and showed its notification
+within seconds. Koan's log has GCM errors on the way (`PHONE_REGISTRATION_ERROR`, then MCS `401 Authentication
+Failed: wrong_secret`, "Failed to log in to GCM, resetting connection"), but GCM retries and gets through: Web Push
+uses GCM's check-in and registration, not the Google API keys Koan doesn't have. Not checked: the Mac build (same
+code), and how long a connection stays up. Google could stop serving unkeyed Chromium builds; nothing says it does
+today.
+
+**What carrying the partition through push takes** (Chromium 158):
+1. **Subscription identity.** A subscription is a `push_messaging::AppIdentifier`
+   (`components/push_messaging/app_identifier.cc`: an app id `wp:<origin>#<guid>`, kept in
+   `prefs::kPushMessagingAppIdentifierMap` with the value `origin#registration id#expiration#user-visible`), found by
+   `PushMessagingAppIdentifier::FindByServiceWorker(profile, origin, registration_id)`. Registration ids are per partition and start at 0, so
+   the same site's worker in two partitions often has the same id. The partition must join the stored value (a
+   stored-format change, read back by an old Koan as a malformed entry and dropped) and every lookup.
+2. **Content's calls carry no partition.** `PushMessagingService::SubscribeFromDocument/Worker()` get a frame or a
+   process (the embedder can derive the partition), but `GetSubscriptionInfo()` and `Unsubscribe()` get only
+   origin and registration id; `PushMessagingManager` (content) would pass it: a `content/public` API change.
+3. **Delivery.** `PushMessagingServiceImpl::OnMessage()` → `PushMessagingRouter::DeliverMessage()` →
+   `GetStoragePartitionForUrl(origin)`: the partition from the app identifier must reach the router (another
+   `content/public` change). `PushMessagingNotificationManager::EnforceUserVisibleOnlyRequirements()` counts the
+   origin's notifications in `GetStoragePartitionForUrl(origin)` too (`push_messaging_notification_manager.cc`), and
+   would show Chromium's "This site has been updated in the background" for every profile message without the fix.
+   `GetSWData()`, `ClearPushSubscriptionId()`, `UpdatePushSubscriptionId()` (content statics) also take the origin's
+   partition.
+4. **The click** of a notification a push message shows: done by part 1 (it is shown from the profile's worker, so
+   its id names the profile).
+5. **Clean-up.** `PushMessagingContext` (one per partition) tells the profile's push service
+   `DidDeleteServiceWorkerRegistration(origin, registration_id)` and `DidDeleteServiceWorkerDatabase()` with no
+   partition. Without push in profiles this unsubscribed the default partition's subscription with the same origin
+   and registration id when a site's worker in a Space's profile (or an agent container) was unregistered or its
+   data cleared, and a profile's wiped worker database unsubscribed every subscription of the user. #597 fixed that
+   on its own (**H1**, `push_messaging_context.cc`, "Push and a container's service workers (#596)" above): it drops
+   both events for a container's partition. Push per profile must change H1: the events must then reach the
+   profile's own subscriptions (with the partition), not be dropped.
+
+That is about six to eight hook patches (content: `push_messaging_manager.cc`, `push_messaging_router.cc`,
+`push_messaging_context.cc`, `push_messaging_service.h` and its statics; components and chrome:
+`components/push_messaging/app_identifier.{h,cc}`, `push_messaging_app_identifier.cc`, `push_messaging_service_impl.cc`,
+`push_messaging_notification_manager.cc`), a few of them over 20 lines, plus the stored-format change: more than
+#511 counted, and the largest patch set of any Koan feature in one upstream area.
+
+**Is it worth it?** Push works in Koan, so the keys don't settle it; the cost does. What users get: a profile's web
+mail, calendar or chat notifies while its tab is closed. What they have since part 1: the same notifications while
+the tab is open, which is how most people use those apps on a desktop, plus the site panel's note. Recommendation:
+**keep push refused in profiles for now** (the site panel note and USAGE.md say so), the clean-up bug above is fixed on
+its own (#597's H1, which protects default-partition subscriptions today and must change with it), and do push per profile as its own issue
+only if users ask, with the app-identifier change designed to stay readable by upstream's parser (a separate pref
+for Koan's partition per app id, so an old Koan or an upstream reset loses only the profile subscriptions).
 
 ## Tests
 
@@ -299,11 +439,13 @@ Date: 2026-11-28. Chromium 158 (pristine).
   - a moved tab keeps its partition
   - the empty tab follows Set Profile
   - the list and the session restore the Space's container
-- **Notifications** (#478): `ContainerPermissionsTest` (`koan_containers_unittests`: the hook, and upstream's
-  check around it); browser tests `KoanSpaceNotificationsBrowserTest.*` (a page in a Space's profile gets the
-  prompt and shows a notification naming its Space; a default tab still does, and the answer is shared; a click
-  shows the tab in its Space; service-worker notifications and push are refused; the site panel's note); Mac steps
-  in `scripts/mac/steps/space_notifications.md`.
+- **Notifications** (#478, #530): `ContainerPermissionsTest` and `PartitionNotificationIdTest`
+  (`koan_containers_unittests`: the hook, and upstream's check around it; the id with the partition); browser tests
+  `KoanSpaceNotificationsBrowserTest.*` (a page in a Space's profile gets the prompt and shows a notification naming
+  its Space; a default tab still does, and the answer is shared; a click shows the tab in its Space; a service
+  worker's notification in profile A reaches A's worker only, not Default's or profile B's, with its own
+  `getNotifications()`; `openWindow()` opens in A's Space and `focus()` shows it; a click or close for a gone profile finds
+  nothing and creates no partition; a listed profile's partition is loaded for its notification's events; push is refused; the site panel's note); Mac steps in `scripts/mac/steps/space_notifications.md`.
 - **Push** (#596): browser tests `KoanContainerPushBrowserTest.*` (a worker with the default subscription's origin
   and registration id, unregistered in a Space's profile or cleared with an agent container, leaves the subscription;
   the default partition's own unregistration still unsubscribes it).

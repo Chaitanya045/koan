@@ -229,6 +229,7 @@ test("koan_containers_unittests") {
     "koan_container_proxy_unittest.cc",
     "koan_container_restore_unittest.cc",
     "koan_history_profiles_unittest.cc",
+    "koan_partition_domain_unittest.cc",
     "koan_user_containers_unittest.cc",
   ]
   deps = [

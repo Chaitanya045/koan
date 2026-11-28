@@ -9,7 +9,7 @@ diff --git a/chrome/browser/notifications/platform_notification_service_impl.cc 
  #include "services/metrics/public/cpp/ukm_builders.h"
  #include "third_party/blink/public/common/notifications/notification_resources.h"
  #include "third_party/blink/public/common/notifications/platform_notification_data.h"
-@@ -277,6 +278,8 @@
+@@ -277,6 +278,8 @@ void PlatformNotificationServiceImpl::DisplayNotification(
    message_center::Notification notification =
        CreateNotificationFromData(origin, notification_id, notification_data,
                                   notification_resources, document_url);
@@ -17,4 +17,13 @@ diff --git a/chrome/browser/notifications/platform_notification_service_impl.cc 
 +  koan::OnShowingPageNotification(profile_, notification);
    auto metadata = std::make_unique<NonPersistentNotificationMetadata>();
    metadata->document_url = document_url;
+ 
+@@ -326,6 +329,8 @@ void PlatformNotificationServiceImpl::DisplayPersistentNotification(
+   message_center::Notification notification =
+       CreateNotificationFromData(origin, notification_id, notification_data,
+                                  notification_resources, service_worker_scope);
++  // Koan: names the Space of a service worker in a Space's profile.
++  koan::OnShowingServiceWorkerNotification(profile_, notification);
+   auto metadata = std::make_unique<PersistentNotificationMetadata>();
+   metadata->service_worker_scope = service_worker_scope;
  

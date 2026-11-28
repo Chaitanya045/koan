@@ -624,12 +624,19 @@ belongs to a Space, and new tabs open in the active one.
   to notify you and show notifications while its tab is open, as in any
   tab. Allow or Block is the site's answer in every Space. Its
   notifications name the Space after the site ("mail.example.com · Work").
-  Clicking a site's notification, in any Space, shows its Space and tab. Push notifications, which a
-  site sends while it is closed, and notifications from a site's service
-  worker don't work in a profile yet: the site panel (the URL bar's site
-  icon) says so. Some sites only offer push; they can't turn notifications
-  on in a profile. In practice, sites that notify through a service worker,
-  as many mail and calendar apps do, still can't notify in a profile
+  Clicking a site's notification, in any Space, shows its Space and tab.
+  Notifications a site shows from its service worker while it is open (as
+  many mail, calendar and chat apps do) work in a profile too, and name a
+  Space with that profile. Clicking one, or one of its buttons, and closing
+  it reach that site in that profile only, never the same site in another
+  Space's profile or in Default; when the site then opens or shows a tab,
+  it does so in that profile, in its Space (the one with the site open, else
+  the Space shown if it has the profile, else the first that has it). A
+  notification still on screen after a restart (macOS keeps them in
+  Notification Center) still goes to its profile. Push notifications, which
+  a site sends while it is closed, don't work in a profile: the site panel
+  (the URL bar's site icon) says so, and a site that only offers push can't
+  turn notifications on there
   ([#530](https://github.com/koan-browser/koan/issues/530)).
 - **History per profile** (Koan's own; Settings > Tab Management >
   Workspaces > **Keep history apart for each profile**, on). Each visit
