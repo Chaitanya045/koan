@@ -267,9 +267,10 @@ Date: 2026-11-28. Chromium 158 (pristine).
   `OnStorageWiped()` → `DidDeleteServiceWorkerDatabase()`. Neither passes the partition.
 - `PushMessagingServiceImpl` keys a subscription by origin and registration id
   (`PushMessagingAppIdentifier::FindByServiceWorker()`), and registration ids come from each partition's own
-  service-worker database, which starts at 0 (`ServiceWorkerDatabase`, `INITDATA_NEXT_REGISTRATION_ID`). So a site's
-  first worker in a Space's profile or an agent container has the same id as its first worker in the default
-  partition. Unregistering it there, or clearing the container's data (`StoragePartition::ClearData()` deletes every
+  service-worker database, a counter from 0 (`ServiceWorkerDatabase`, `INITDATA_NEXT_REGISTRATION_ID`). So a site's
+  worker in a Space's profile or an agent container has the id of its subscribed worker in the default partition
+  whenever the two counters line up. On a fresh Linux profile the default partition's id 0 is a built-in
+  extension's worker, so a site's first worker there is 1, and a profile's second worker is 1 too. Unregistering it there, or clearing the container's data (`StoragePartition::ClearData()` deletes every
   registration, which sends `OnRegistrationDeleted()`), unsubscribes the default partition's subscription:
   `UnsubscribeInternal()` clears the subscription id from the **default** partition's worker
   (`PushMessagingService::ClearPushSubscriptionId()`, `GetStoragePartitionForUrl(origin)`), deletes the app

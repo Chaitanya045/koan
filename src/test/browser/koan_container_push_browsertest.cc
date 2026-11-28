@@ -12,10 +12,13 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 
+#include "base/containers/flat_set.h"
 #include "base/functional/bind.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/run_until.h"
 #include "base/time/time.h"
@@ -70,7 +73,7 @@ class RegistrationWatcher
   }
 
   // Whether registration `id` was deleted.
-  bool deleted(int64_t id) const { return deleted_ == id; }
+  bool deleted(int64_t id) const { return deleted_.contains(id); }
 
   // content::ServiceWorkerContextObserverSynchronous:
   void OnRegistrationStoredSync(int64_t registration_id,
@@ -79,12 +82,12 @@ class RegistrationWatcher
   }
   void OnRegistrationDeletedSync(int64_t registration_id,
                                  const GURL& scope) override {
-    deleted_ = registration_id;
+    deleted_.insert(registration_id);
   }
 
  private:
   std::optional<int64_t> stored_;
-  std::optional<int64_t> deleted_;
+  base::flat_set<int64_t> deleted_;
   base::ScopedObservation<content::ServiceWorkerContext,
                           content::ServiceWorkerContextObserverSynchronous>
       observation_{this};
@@ -129,14 +132,15 @@ class KoanContainerPushBrowserTest : public InProcessBrowserTest {
                     .id = containers::NewContainerId(/*persistent=*/false)}));
   }
 
-  // Registers the push test worker of `host` in `partition`; its
-  // registration id.
+  // Registers the push test worker of `host` in `partition`, for `scope_path`;
+  // its registration id.
   std::optional<int64_t> Register(content::StoragePartition* partition,
-                                  const std::string& host) {
+                                  const std::string& host,
+                                  const std::string& scope_path = kScope) {
     content::ServiceWorkerContext* context =
         partition->GetServiceWorkerContext();
     RegistrationWatcher watcher(context);
-    const GURL scope = embedded_test_server()->GetURL(host, kScope);
+    const GURL scope = embedded_test_server()->GetURL(host, scope_path);
     blink::mojom::ServiceWorkerRegistrationOptions options(
         scope, blink::mojom::ScriptType::kClassic,
         blink::mojom::ServiceWorkerUpdateViaCache::kImports);
@@ -157,6 +161,25 @@ class KoanContainerPushBrowserTest : public InProcessBrowserTest {
     run_loop.Run();
     EXPECT_EQ(blink::ServiceWorkerStatusCode::kOk, status);
     return watcher.WaitForStored();
+  }
+
+  // Registers the site's worker in `partition` with registration id `id`:
+  // the id of the default partition's subscribed worker. Registration ids are
+  // a counter of each partition's own, from 0, and the default partition can
+  // be ahead (a built-in extension's worker), so other workers of the site
+  // (other scopes) take the ids before it. Nullopt, or another id, if ids
+  // are not a counter per partition any more.
+  std::optional<int64_t> RegisterWithId(content::StoragePartition* partition,
+                                        int64_t id) {
+    for (int pad = 0; pad < id; ++pad) {
+      const std::optional<int64_t> got = Register(
+          partition, kSite,
+          std::string(kScope) + "pad" + base::NumberToString(pad) + "/");
+      if (!got || *got >= id - 1) {
+        break;
+      }
+    }
+    return Register(partition, kSite);
   }
 
   // Unregisters `host`'s worker in `partition`, as the page's
@@ -253,10 +276,10 @@ IN_PROC_BROWSER_TEST_F(KoanContainerPushBrowserTest,
   ASSERT_TRUE(id);
   content::StoragePartition* space = SpaceProfilePartition();
   ASSERT_TRUE(space);
-  // The collision: registration ids start over in each partition. If upstream
+  // The collision: registration ids are each partition's own. If upstream
   // makes them unique per profile, this fails, and the hook may go
   // (docs/REBASE.md).
-  ASSERT_EQ(id, Register(space, kSite));
+  ASSERT_EQ(id, RegisterWithId(space, *id));
 
   base::HistogramTester histograms;
   RegistrationWatcher watcher(space->GetServiceWorkerContext());
@@ -276,7 +299,7 @@ IN_PROC_BROWSER_TEST_F(KoanContainerPushBrowserTest,
   ASSERT_TRUE(id);
   content::StoragePartition* agent = AgentPartition();
   ASSERT_TRUE(agent);
-  ASSERT_EQ(id, Register(agent, kSite));
+  ASSERT_EQ(id, RegisterWithId(agent, *id));
 
   base::HistogramTester histograms;
   RegistrationWatcher watcher(agent->GetServiceWorkerContext());
