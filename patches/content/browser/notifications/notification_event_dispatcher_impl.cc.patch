@@ -1,7 +1,35 @@
 diff --git a/content/browser/notifications/notification_event_dispatcher_impl.cc b/content/browser/notifications/notification_event_dispatcher_impl.cc
 --- a/content/browser/notifications/notification_event_dispatcher_impl.cc
 +++ b/content/browser/notifications/notification_event_dispatcher_impl.cc
-@@ -514,6 +514,15 @@
+@@ -21,8 +21,10 @@
+ #include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/storage_partition.h"
++#include "content/public/browser/storage_partition_config.h"
+ #include "content/public/browser/weak_document_ptr.h"
+ #include "content/public/common/persistent_notification_status.h"
++#include "koan/browser/containers/koan_partition_domain.h"
+ #include "third_party/blink/public/common/notifications/platform_notification_data.h"
+ #include "third_party/blink/public/common/storage_key/storage_key.h"
+ 
+@@ -364,6 +366,16 @@ void DispatchNotificationEvent(
+ 
+   StoragePartition* partition =
+       browser_context->GetStoragePartitionForUrl(origin);
++  // Koan: a Space's profile's notification goes to that profile's partition,
++  // which its id names (koan/browser/containers/koan_partition_domain.h).
++  if (const std::string_view koan_domain =
++          koan::containers::PartitionDomainOfNotificationId(notification_id);
++      !koan_domain.empty()) {
++    partition = browser_context->GetStoragePartition(
++        StoragePartitionConfig::Create(browser_context, koan_domain,
++                                       /*partition_name=*/"",
++                                       /*in_memory=*/false));
++  }
+ 
+   scoped_refptr<ServiceWorkerContextWrapper> service_worker_context =
+       static_cast<ServiceWorkerContextWrapper*>(
+@@ -514,6 +526,15 @@ void NotificationEventDispatcherImpl::DispatchNotificationCloseEvent(
                       std::move(dispatch_complete_callback)));
  }
  

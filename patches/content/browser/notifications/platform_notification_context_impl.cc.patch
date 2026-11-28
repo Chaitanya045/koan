@@ -1,0 +1,43 @@
+diff --git a/content/browser/notifications/platform_notification_context_impl.cc b/content/browser/notifications/platform_notification_context_impl.cc
+--- a/content/browser/notifications/platform_notification_context_impl.cc
++++ b/content/browser/notifications/platform_notification_context_impl.cc
+@@ -20,6 +20,7 @@
+ #include "content/browser/notifications/notification_trigger_constants.h"
+ #include "content/browser/notifications/platform_notification_service_proxy.h"
+ #include "content/browser/service_worker/service_worker_context_wrapper.h"
++#include "content/browser/storage_partition_impl.h"
+ #include "content/public/browser/browser_context.h"
+ #include "content/public/browser/browser_task_traits.h"
+ #include "content/public/browser/browser_thread.h"
+@@ -30,6 +31,7 @@
+ #include "content/public/browser/platform_notification_service.h"
+ #include "content/public/common/content_client.h"
+ #include "content/public/common/content_features.h"
++#include "koan/browser/containers/koan_partition_domain.h"
+ #include "third_party/blink/public/common/notifications/notification_resources.h"
+ #include "third_party/blink/public/common/permissions/permission_utils.h"
+ 
+@@ -107,6 +109,12 @@ PlatformNotificationContextImpl::PlatformNotificationContextImpl(
+     : path_(path),
+       browser_context_(browser_context),
+       service_worker_context_(service_worker_context),
++      koan_partition_domain_(
++          service_worker_context && service_worker_context->storage_partition()
++              ? service_worker_context->storage_partition()
++                    ->GetConfig()
++                    .partition_domain()
++              : std::string()),
+       has_shutdown_(false) {
+   CHECK_CURRENTLY_ON(BrowserThread::UI, base::NotFatalUntil::M159);
+ }
+@@ -1039,6 +1047,10 @@ void PlatformNotificationContextImpl::DoWriteNotificationData(
+       notification_id_generator_.GenerateForPersistentNotification(
+           origin, database_data.notification_data.tag,
+           database_data.is_shown_by_browser, persistent_notification_id);
++  // Koan: a Space's profile's notification names its partition, for its
++  // click and close (NotificationEventDispatcherImpl).
++  notification_id = koan::containers::TagPersistentNotificationId(
++      std::move(notification_id), koan_partition_domain_);
+ 
+   // Eagerly delete data for replaced notifications from the database.
+   if (!database_data.notification_data.tag.empty()) {

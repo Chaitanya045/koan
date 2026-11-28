@@ -121,6 +121,12 @@ class RenderTest(unittest.TestCase):
     self.assertIn('FAIL', report)
     self.assertIn('`new/hook.cc`: 6 lines', report)
 
+  def test_a_removed_patch_is_listed(self):
+    report, missing = pr.render({}, {'gone/hook.cc': (13, 1)}, set(),
+                                'origin/develop')
+    self.assertIn('`gone/hook.cc`: removed (was 13 lines)', report)
+    self.assertEqual(missing, [])
+
   def test_large_patches_are_listed_but_do_not_fail(self):
     head = {'a/big.cc': (pr.LARGE_LINES, 3)}
     report, missing = pr.render(head, dict(head), set(), 'b')

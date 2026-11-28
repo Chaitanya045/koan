@@ -173,7 +173,7 @@ def render(head, base, rows, base_ref):
     lines += ['**%s**' % title, '']
     for path, before, after in items:
       size = ('%d lines' % after if before is None else
-              '%d lines (was %d)' % (before, after) if after is None else
+              'removed (was %d lines)' % before if after is None else
               '%d -> %d lines' % (before, after))
       lines.append('- `%s`: %s' % (path, size))
     lines.append('')

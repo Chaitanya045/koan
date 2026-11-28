@@ -8,8 +8,10 @@
 #include <string>
 
 class Profile;
+struct NavigateParams;
 
 namespace content {
+class SiteInstance;
 class WebContents;
 }  // namespace content
 
@@ -17,12 +19,16 @@ namespace message_center {
 class Notification;
 }  // namespace message_center
 
-// A page's own notifications (`new Notification()`, Chromium's
-// non-persistent ones) in Koan's Spaces (#478,
-// .agent/notes/upstream/space-containers.md, "Notifications"). A page in a
-// Space's profile may show them like any tab; service-worker notifications
-// and push stay refused there. The page is the one content's
-// NotificationEventDispatcher listens to for the notification's events.
+// Notifications in Koan's Spaces (.agent/notes/upstream/space-containers.md,
+// "Notifications"). A page's own notifications (`new Notification()`,
+// Chromium's non-persistent ones, #478): a page in a Space's profile may show
+// them like any tab; the page is the one content's NotificationEventDispatcher
+// listens to for the notification's events. A service worker's
+// (`registration.showNotification()`, persistent ones, #530): content keeps
+// the profile's partition in the notification's id, so its events reach that
+// profile's service worker (koan/browser/containers/koan_partition_domain.h);
+// here they name a Space, and the worker's windows open in one. Push stays
+// refused in a Space's profile.
 namespace koan {
 
 // PlatformNotificationServiceImpl::DisplayNotification(), before it shows
@@ -41,6 +47,27 @@ void OnShowingPageNotification(Profile* profile,
 // site opens in that Space and its profile.
 void OnPageNotificationClicked(Profile* profile,
                                const std::string& notification_id);
+
+// PlatformNotificationServiceImpl::DisplayPersistentNotification(), before it
+// shows `notification`, a service worker's notification of `profile`: for one
+// in a Space's profile (its id names a user container), the line under the
+// title names a Space with that profile after the site, as a page's does: the
+// Space of a tab of the site in that profile, else the active Space if it has
+// the profile, else the first that has it; with none, the profile's name.
+// Upstream's otherwise.
+void OnShowingServiceWorkerNotification(
+    Profile* profile,
+    message_center::Notification& notification);
+
+// ChromeContentBrowserClient::OpenURL(), before it navigates `params`: a
+// service worker's window (`clients.openWindow()`, also a payment handler's)
+// from `worker`, its SiteInstance. For a worker in a Space's profile the tab
+// opens in that profile, in a Space that has it (the one
+// OnShowingServiceWorkerNotification() names), which then shows; with no
+// such Space, in the profile in the Space it opens in. Upstream's (the
+// Space's profile) otherwise.
+void PlaceServiceWorkerWindow(content::SiteInstance* worker,
+                              NavigateParams& params);
 
 // The line under a page notification's title for a page in a Space's
 // profile: the site (as Chromium shows it), then the Space.

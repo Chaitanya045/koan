@@ -6,8 +6,11 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "base/containers/lru_cache.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
@@ -15,6 +18,8 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+#include "chrome/browser/ui/navigator/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -23,6 +28,9 @@
 #include "components/tabs/public/tab_interface.h"
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/notification_event_dispatcher.h"
+#include "content/public/browser/security_principal.h"
+#include "content/public/browser/site_instance.h"
+#include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/containers/koan_container_partition.h"
 #include "koan/browser/ui/views/koan_space_profile_menu.h"
@@ -117,6 +125,103 @@ void ShowSpace(BrowserWindowInterface* window,
   BringToFront(window);
 }
 
+// The line under the title: the site, then `name` (a Space's or a profile's),
+// the site cut to its domain if both don't fit.
+void SetSpaceContext(message_center::Notification& notification,
+                     const std::u16string& name) {
+  std::u16string site = url_formatter::FormatOriginForSecurityDisplay(
+      url::Origin::Create(notification.origin_url()),
+      url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS);
+  if (PageNotificationContext(site, name).size() > kMaxContextLength) {
+    if (const std::string domain =
+            net::registry_controlled_domains::GetDomainAndRegistry(
+                notification.origin_url(),
+                net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+        !domain.empty()) {
+      site = base::UTF8ToUTF16(domain);
+    }
+  }
+  notification.set_context_message(PageNotificationContext(site, name));
+}
+
+// The user container a service worker's notification is in (its id names it),
+// or nullopt.
+std::optional<containers::ContainerId> ContainerOfNotification(
+    Profile* profile,
+    const std::string& notification_id) {
+  const std::string_view domain =
+      containers::PartitionDomainOfNotificationId(notification_id);
+  if (domain.empty()) {
+    return std::nullopt;
+  }
+  std::optional<containers::ContainerId> container =
+      containers::ContainerFromPartitionConfig(
+          content::StoragePartitionConfig::Create(profile, domain,
+                                                  /*partition_name=*/"",
+                                                  /*in_memory=*/false));
+  if (!container || container->kind != containers::ContainerKind::kUser) {
+    return std::nullopt;
+  }
+  return container;
+}
+
+// A Space of a window and the window.
+struct ProfileSpace {
+  raw_ptr<BrowserWindowInterface> window = nullptr;
+  std::optional<tab_groups::TabGroupId> space;
+};
+
+// A Space of `profile` whose profile is `container`, for a site (`origin`) of
+// that profile: the Space of a tab of the site in that profile, else a
+// window's active Space if it has the profile, else the first Space that has
+// it; windows in the order they were last active. No window if none has it.
+ProfileSpace FindProfileSpace(Profile* profile,
+                              const containers::ContainerId& container,
+                              const url::Origin& origin) {
+  std::vector<BrowserWindowInterface*> windows;
+  ForEachCurrentBrowserWindowInterfaceOrderedByActivation(
+      [&](BrowserWindowInterface* window) {
+        if (window->GetProfile() == profile &&
+            window->GetType() == BrowserWindowInterface::TYPE_NORMAL &&
+            KoanWorkspaceController::FromTabStrip(window->GetTabStripModel())) {
+          windows.push_back(window);
+        }
+        return true;
+      });
+  for (BrowserWindowInterface* window : windows) {
+    TabStripModel* strip = window->GetTabStripModel();
+    for (int i = 0; i < strip->count(); ++i) {
+      tabs::TabInterface* tab = strip->GetTabAtIndex(i);
+      content::WebContents* contents = tab->GetContents();
+      if (tab->GetGroup() && containers::ContainerOf(contents) == container &&
+          url::Origin::Create(contents->GetLastCommittedURL())
+              .IsSameOriginWith(origin)) {
+        return {window, tab->GetGroup()};
+      }
+    }
+  }
+  const std::string serialized = containers::Serialize(container);
+  for (BrowserWindowInterface* window : windows) {
+    KoanWorkspaceController* spaces =
+        KoanWorkspaceController::FromTabStrip(window->GetTabStripModel());
+    if (const std::optional<tab_groups::TabGroupId> active =
+            spaces->GetActiveSpace();
+        active && spaces->GetSpaceContainer(*active) == serialized) {
+      return {window, active};
+    }
+  }
+  for (BrowserWindowInterface* window : windows) {
+    for (const KoanWorkspaceController::SpaceInfo& space :
+         KoanWorkspaceController::FromTabStrip(window->GetTabStripModel())
+             ->GetSpaces()) {
+      if (space.container == serialized) {
+        return {window, space.id};
+      }
+    }
+  }
+  return {};
+}
+
 }  // namespace
 
 void OnShowingPageNotification(Profile* profile,
@@ -159,19 +264,58 @@ void OnShowingPageNotification(Profile* profile,
     name = SpaceProfileName(
         profile, containers::Serialize(*containers::ContainerOf(contents)));
   }
-  std::u16string site = url_formatter::FormatOriginForSecurityDisplay(
-      url::Origin::Create(notification.origin_url()),
-      url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS);
-  if (PageNotificationContext(site, name).size() > kMaxContextLength) {
-    if (const std::string domain =
-            net::registry_controlled_domains::GetDomainAndRegistry(
-                notification.origin_url(),
-                net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
-        !domain.empty()) {
-      site = base::UTF8ToUTF16(domain);
+  SetSpaceContext(notification, name);
+}
+
+void OnShowingServiceWorkerNotification(
+    Profile* profile,
+    message_center::Notification& notification) {
+  const std::optional<containers::ContainerId> container =
+      ContainerOfNotification(profile, notification.id());
+  if (!container) {
+    return;
+  }
+  std::u16string name;
+  const ProfileSpace found = FindProfileSpace(
+      profile, *container, url::Origin::Create(notification.origin_url()));
+  if (found.window) {
+    if (const std::optional<KoanWorkspaceController::SpaceInfo> space =
+            KoanWorkspaceController::FromTabStrip(
+                found.window->GetTabStripModel())
+                ->GetSpace(*found.space)) {
+      name = space->name;
     }
   }
-  notification.set_context_message(PageNotificationContext(site, name));
+  if (name.empty()) {
+    name = SpaceProfileName(profile, containers::Serialize(*container));
+  }
+  SetSpaceContext(notification, name);
+}
+
+void PlaceServiceWorkerWindow(content::SiteInstance* worker,
+                              NavigateParams& params) {
+  Profile* profile = params.initiating_profile;
+  if (!worker || !profile || profile->IsOffTheRecord()) {
+    return;
+  }
+  const std::optional<containers::ContainerId> container =
+      containers::ContainerFromPartitionConfig(
+          worker->GetSecurityPrincipal().GetStoragePartitionConfig());
+  if (!container || container->kind != containers::ContainerKind::kUser) {
+    return;
+  }
+  const ProfileSpace found = FindProfileSpace(
+      profile, *container,
+      params.initiator_origin.value_or(url::Origin::Create(params.url)));
+  if (found.window) {
+    // Its Space's profile (koan::SiteInstanceForNewTab(): a tab no page
+    // opened takes its Space's), and a foreground tab shows its Space.
+    params.browser = found.window.get();
+    params.group = found.space;
+    return;
+  }
+  // No Space has the profile: as a page's tab, the worker's partition.
+  params.source_site_instance = worker;
 }
 
 void OnPageNotificationClicked(Profile* profile,
