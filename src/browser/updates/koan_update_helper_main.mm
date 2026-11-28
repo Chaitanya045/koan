@@ -397,7 +397,8 @@ int HelperMain() {
   const base::FilePath marker_path =
       command_line.GetSwitchValuePath(kHelperMarkerSwitch);
   if (marker_path.empty() || !marker_path.IsAbsolute()) {
-    fprintf(stderr, "usage: %s --pid=<pid> --marker=<path> ...\n", kHelperName);
+    LOG(ERROR) << "usage: " << kHelperName
+               << " --pid=<pid> --marker=<path> ...";
     WaitForParentExit(pid);
     return 2;
   }
