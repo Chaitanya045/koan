@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/net/BUILD.gn b/chrome/browser/net/BUILD.gn
+--- a/chrome/browser/net/BUILD.gn
++++ b/chrome/browser/net/BUILD.gn
+@@ -226,6 +226,7 @@
+     "//components/variations/net",
+     "//components/webui/flags",
+     "//crypto",
++    "//koan/browser/containers:proxy_hook",
+     "//sandbox/policy",
+     "//services/network:network_service",
+     "//services/strings",

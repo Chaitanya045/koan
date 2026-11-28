@@ -148,7 +148,7 @@ changes.
 | URL bar suggestions | Since #474, the history suggestions are the active Space's profile's (`space-history.md`); bookmarks are shared, as in Firefox. Typed URLs open as rule 6. |
 | Switch to Tab | Since #474, only tabs of the active Space's profile (`space-history.md`); off with Keep history apart for each profile, across containers as upstream and Firefox (`switchTabs.searchAllContainers`). Agent tabs stay hidden (existing hook). |
 | Space routing | Rules 3 and 5. The routed tab is created in the routed Space's container before routing moves it. |
-| Prerender / NoStatePrefetch / preconnect | Off in container tabs (C4, B10). The prerendered page would be built in the default partition. Accepted cost. |
+| Prerender / NoStatePrefetch / preconnect / search prefetch | Off in container tabs (C4, B10, and the search prefetch and browser-side preconnect hooks in `space-proxy.md`). Each would load or connect in the default partition, with its cookies and outside a Space's proxy. Accepted cost. |
 | Discard | The replacement is created in the old tab's partition (C3). |
 | chrome:// pages in a container Space | Open in the default partition (rule 2), except the new tab page. A URL typed into such a page then loads in the default partition. Accepted: settings pages are rare starting points. |
 | Agent containers | Untouched: agent tabs never take a Space's container, and agent Spaces have none. |

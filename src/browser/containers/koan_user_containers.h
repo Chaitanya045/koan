@@ -14,6 +14,7 @@
 #include "base/values.h"
 #include "components/tab_groups/tab_group_color.h"
 #include "koan/browser/containers/koan_container_partition.h"
+#include "koan/browser/containers/koan_container_proxy.h"
 
 // Zen's containers per Space (#318, .agent/notes/upstream/space-containers.md):
 // the user's own containers, which Zen's UI calls profiles, and the rules for
@@ -24,11 +25,13 @@ namespace koan::containers {
 
 // One of the user's containers: a saved user container (ContainerKind::kUser,
 // on disk), its name and its colour (Firefox's container colour, here one of
-// the tab group colours, so it has Chromium's colour ids in light and dark).
+// the tab group colours, so it has Chromium's colour ids in light and dark),
+// and the proxy its tabs go through, if any (#445, koan_container_proxy.h).
 struct UserContainer {
   ContainerId id;
   std::string name;
   tab_groups::TabGroupColorId color = tab_groups::TabGroupColorId::kBlue;
+  std::optional<ProxySetting> proxy;
 
   friend bool operator==(const UserContainer&, const UserContainer&) = default;
 };
@@ -40,8 +43,14 @@ std::optional<ContainerId> SpaceContainerFromString(std::string_view text);
 
 // The containers of `list` (prefs::kUserContainers), in order. Entries that
 // aren't a saved user container with a name, and repeated ids, are dropped;
-// an unknown colour is blue.
+// an unknown colour is blue, an invalid proxy none.
 std::vector<UserContainer> ParseUserContainers(const base::ListValue& list);
+
+// Sets the proxy of the container `id` in `list` to `proxy` (nullopt: none).
+// False if `list` has no such container.
+bool SetUserContainerProxy(base::ListValue& list,
+                           const ContainerId& id,
+                           const std::optional<ProxySetting>& proxy);
 
 // The longest name a container takes, in UTF-16 code units, once trimmed.
 inline constexpr size_t kMaxUserContainerNameLength = 64;

@@ -1,0 +1,25 @@
+diff --git a/chrome/browser/ui/views/bookmarks/bookmark_button.cc b/chrome/browser/ui/views/bookmarks/bookmark_button.cc
+index 99b91c34ea6bd369bfc07942c2c9642788bed130..effb94ec8cbd5346390c41c65da6f1cd9193c5ba 100644
+--- a/chrome/browser/ui/views/bookmarks/bookmark_button.cc
++++ b/chrome/browser/ui/views/bookmarks/bookmark_button.cc
+@@ -30,6 +30,7 @@
+ #include "content/public/browser/navigation_handle.h"
+ #include "content/public/browser/preloading_data.h"
+ #include "content/public/browser/web_contents.h"
++#include "koan/browser/containers/koan_container_partition.h"
+ #include "services/network/public/cpp/constants.h"
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/page_transition_types.h"
+@@ -309,6 +310,12 @@ void BookmarkButton::StartPreconnecting(GURL url) {
+       GetBookmarkBarPreloadPipelineManager()->IsPreloadingStarted()) {
+     return;
+   }
++  // Koan: not for a container's tab: the predictor preconnects in the
++  // default partition, outside its proxy.
++  if (koan::containers::IsContainerContents(
++          browser_->GetTabStripModel()->GetActiveWebContents())) {
++    return;
++  }
+ 
+   auto* loading_predictor = predictors::LoadingPredictorFactory::GetForProfile(
+       browser_->GetProfile());

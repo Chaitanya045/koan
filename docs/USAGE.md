@@ -646,6 +646,17 @@ belongs to a Space, and new tabs open in the active one.
   browsing data and `chrome://history` cover every profile's history. One
   thing is not kept apart: a link to a page you visited is drawn in the
   visited colour on that same site in every profile.
+- **A proxy per profile** (#445; no UI yet). A profile can send all its
+  tabs through a proxy, e.g. an SSH tunnel to another machine, so that
+  `localhost:3000` in its Space is that machine's. Everything goes through
+  it, `localhost` too, and nothing goes direct: if the proxy is down, the
+  Space's pages fail. For now, set it with a switch: run `ssh -D 1080 host`,
+  then start Koan with
+  `--koan-container-proxy="<profile name>=socks5://127.0.0.1:1080"` (saved
+  with the profile; `=none` removes it, `=disconnected` makes the Space's
+  pages fail for that run). `http://` and `https://` proxies work too;
+  SOCKS4 doesn't (it would resolve names on this Mac). WebRTC's UDP still
+  goes direct.
 - **Unload Space** (right-click the header or a Space button) frees the
   Space's tabs; they reload when you select them. Unload All Other Spaces
   frees all the others. Tabs on screen and tabs in use (playing sound, in
