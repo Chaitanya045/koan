@@ -306,12 +306,13 @@ async function headerMenu() {
 }
 let menu;
 // Change Name..., Change Icon..., Theme..., Set Profile (#322's
-// containers), the Spaces, Unload Space, Unload All Other Spaces, Create
-// Space, Delete Space, Space Routing Settings (#233's routing): 11 with two
+// containers), Extensions... (#473, with koan-space-extensions on, its
+// default), the Spaces, Unload Space, Unload All Other Spaces, Create
+// Space, Delete Space, Space Routing Settings (#233's routing): 12 with two
 // Spaces (koan_space_menu.cc).
-const HEADER_MENU_ITEMS = 11;
-// Unload Space's place: after the four entries and the two Spaces.
-const UNLOAD_ITEM = 6;
+const HEADER_MENU_ITEMS = 12;
+// Unload Space's place: after the five entries and the two Spaces.
+const UNLOAD_ITEM = 7;
 if (NATIVE_MENUS) {
   skipped('The header menu has Zen\'s entries and the Spaces', NATIVE_MENU_WHY);
 } else {
