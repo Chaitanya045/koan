@@ -60,6 +60,7 @@
 #include "base/files/scoped_file.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
+#include "base/logging/logging_settings.h"
 #include "base/mac/launch_application.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
@@ -364,7 +365,7 @@ bool SwapBack(InstallMarker marker,
                << " back";
     return false;
   }
-  const std::string error = CheckAndSwap(marker, requirement);
+  const std::string error = CheckAndSwap(marker, old_requirement);
   if (!error.empty()) {
     LOG(ERROR) << "Couldn't put " << marker.from_version << " back: " << error;
     return false;
@@ -402,11 +403,11 @@ int HelperMain() {
   }
   const base::FilePath log_path = marker_path.DirName().Append(kHelperLogName);
   RotateLog(log_path);
-  logging::LoggingSettings logging;
-  logging.logging_dest = logging::LOG_TO_FILE | logging::LOG_TO_STDERR;
-  logging.log_file_path = log_path.value().c_str();
-  logging.delete_old = logging::APPEND_TO_OLD_LOG_FILE;
-  logging::InitLogging(logging);
+  logging::LoggingSettings settings;
+  settings.logging_dest = logging::LOG_TO_FILE | logging::LOG_TO_STDERR;
+  settings.log_file_path = log_path.value().c_str();
+  settings.delete_old = logging::APPEND_TO_OLD_LOG_FILE;
+  logging::InitLogging(settings);
 
   LOG(INFO) << "Waiting for " << pid << " to exit"
             << (roll_back ? " to roll back" : " to install")
