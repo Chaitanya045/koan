@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/extensions/api/top_sites/top_sites_api.cc b/chrome/browser/extensions/api/top_sites/top_sites_api.cc
-index a67a4a8..2528aec 100644
+index a67a4a8..35eec2e 100644
 --- a/chrome/browser/extensions/api/top_sites/top_sites_api.cc
 +++ b/chrome/browser/extensions/api/top_sites/top_sites_api.cc
 @@ -15,6 +15,7 @@
@@ -17,9 +17,9 @@ index a67a4a8..2528aec 100644
 -  ts->GetMostVisitedURLs(
 -      base::BindOnce(&TopSitesGetFunction::OnMostVisitedURLsAvailable, this));
 +  // Koan: without the sites only visited in Space profiles the extension is
-+  // off in.
++  // off in (none for a caller with no extension).
 +  ts->GetMostVisitedURLs(koan::TopSitesForExtension(
-+      browser_context(), extension_id(),
++      browser_context(), extension() ? extension()->id() : std::string(),
 +      base::BindOnce(&TopSitesGetFunction::OnMostVisitedURLsAvailable, this)));
  
    // GetMostVisitedURLs() will invoke the callback synchronously if the URLs are

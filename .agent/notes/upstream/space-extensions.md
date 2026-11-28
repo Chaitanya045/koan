@@ -73,7 +73,12 @@ strip), which call them with no extension: `ExtensionFunction::extension()` is n
 `extension_id()` dereferences it. The bookmarks side panel calls `tabs.query` as it opens, so the
 first version of the `tabs_api.cc` hunks crashed on every Ctrl+B. Each hook asks only when the
 caller has an extension (`extension() && ...extension()->id()`, as the window, tab object and
-event hooks already did); a WebUI page sees every tab, as upstream.
+event hooks already did); a WebUI page sees every tab, as upstream. The history, sessions and
+topSites hooks (#544) do the same since #604: no WebUI page calls those APIs today, but one that
+starts to (as the bookmarks side panel did with `tabs.query`) would crash them, so a caller with no
+extension asks with an empty id, which is off nowhere. `captureVisibleTab` is the one hook that
+still calls `extension_id()`: upstream dereferences `extension()` on its next line. Every new hook
+in an extension function asks `extension() ? extension()->id() : std::string()`.
 
 ### Which profile a request is in
 
