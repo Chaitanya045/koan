@@ -110,11 +110,21 @@ Keep WhyKept(const TabFacts& tab,
 // and when the closer last saw it on screen (`last_seen`, the tab's
 // kLastSeenSessionKey). A tab on screen for hours counts from when it was
 // left, not from when it was shown.
-base::Time LastUsed(base::Time last_shown, base::Time last_seen);
+//
+// A tab not on screen since it was opened (`opened_unseen`, the tab's
+// kOpenedUnseenSessionKey; null if it was shown) counts from when it was
+// opened instead of `last_shown`: Chromium saves a tab's last-active time
+// only when the tab is shown, so a restored tab that never was gets the
+// restore time, and its age would start again at every restart (#577).
+base::Time LastUsed(base::Time last_shown,
+                    base::Time last_seen,
+                    base::Time opened_unseen);
 
-// The per-tab session data key (koan_session_data.h) of when the closer last
-// saw the tab on screen, and its value's form.
+// The per-tab session data keys (koan_session_data.h) of when the closer last
+// saw the tab on screen, and of when a tab that hasn't been on screen since
+// was opened (removed once it is shown), and their values' form.
 inline constexpr char kLastSeenSessionKey[] = "koan.last_seen";
+inline constexpr char kOpenedUnseenSessionKey[] = "koan.opened_unseen";
 std::string SerializeTime(base::Time time);
 // A null time for anything that isn't SerializeTime()'s.
 base::Time ParseTime(std::string_view text);
@@ -151,7 +161,8 @@ struct ClosedTab {
   // Its Space's tab group token (tab_groups::TabGroupId::ToString()), or
   // empty: where it reopens if its window still has that Space.
   std::string space;
-  // Its Koan session data (koan_session_data.h) without kLastSeenSessionKey:
+  // Its Koan session data (koan_session_data.h) without kLastSeenSessionKey
+  // and kOpenedUnseenSessionKey:
   // its container (#318, so it reopens in the same profile), Space theme and
   // the like, given back as a reopened closed tab's.
   std::map<std::string, std::string> data;

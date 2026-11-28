@@ -218,9 +218,31 @@ TEST(KoanTabAutoCloseTest, LastUsedIsWhenTheTabWasLeft) {
   const base::Time shown = Now() - base::Days(2);
   const base::Time left = Now() - base::Hours(1);
   // Shown two days ago and on screen until an hour ago: used an hour ago.
-  EXPECT_EQ(left, LastUsed(shown, left));
-  EXPECT_EQ(left, LastUsed(left, shown));
-  EXPECT_EQ(shown, LastUsed(shown, base::Time()));
+  EXPECT_EQ(left, LastUsed(shown, left, base::Time()));
+  EXPECT_EQ(left, LastUsed(left, shown, base::Time()));
+  EXPECT_EQ(shown, LastUsed(shown, base::Time(), base::Time()));
+}
+
+TEST(KoanTabAutoCloseTest, ANeverShownTabCountsFromWhenItWasOpened) {
+  // Opened in the background 13 hours ago and never shown; Koan restarted
+  // just now, so Chromium's last-active time is the restore (#577).
+  const base::Time opened = Now() - base::Hours(13);
+  const base::Time restored = Now() - base::Seconds(30);
+  TabFacts tab{.last_used = LastUsed(restored, base::Time(),
+                                     ParseTime(SerializeTime(opened)))};
+  EXPECT_EQ(opened, tab.last_used);
+  EXPECT_EQ(Keep::kNone, WhyKept(tab, {}, Now(), base::Hours(12)));
+  // Without it, the restart started its age again.
+  TabFacts reset{.last_used = LastUsed(restored, base::Time(), base::Time())};
+  EXPECT_EQ(Keep::kRecentlyUsed, WhyKept(reset, {}, Now(), base::Hours(12)));
+  // Opened an hour ago: it stays.
+  TabFacts recent{.last_used =
+                      LastUsed(restored, base::Time(), Now() - base::Hours(1))};
+  EXPECT_EQ(Keep::kRecentlyUsed, WhyKept(recent, {}, Now(), base::Hours(12)));
+  // Seen on screen later than it was opened (the key not cleared yet): the
+  // later time counts.
+  EXPECT_EQ(Now() - base::Hours(2),
+            LastUsed(restored, Now() - base::Hours(2), opened));
 }
 
 TEST(KoanTabAutoCloseTest, TimeCountsAcrossARestart) {
@@ -228,7 +250,8 @@ TEST(KoanTabAutoCloseTest, TimeCountsAcrossARestart) {
   // closes at the first check with a 7 day limit.
   const base::Time seen = Now() - base::Days(8);
   const std::string stored = SerializeTime(seen);
-  TabFacts tab{.last_used = LastUsed(seen - base::Hours(3), ParseTime(stored))};
+  TabFacts tab{.last_used = LastUsed(seen - base::Hours(3), ParseTime(stored),
+                                     base::Time())};
   EXPECT_EQ(seen, tab.last_used);
   EXPECT_EQ(Keep::kNone, WhyKept(tab, {}, Now(), base::Days(7)));
 }
