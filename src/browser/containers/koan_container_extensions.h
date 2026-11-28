@@ -5,6 +5,7 @@
 #ifndef KOAN_BROWSER_CONTAINERS_KOAN_CONTAINER_EXTENSIONS_H_
 #define KOAN_BROWSER_CONTAINERS_KOAN_CONTAINER_EXTENSIONS_H_
 
+#include <map>
 #include <optional>
 #include <set>
 #include <string>
@@ -32,8 +33,10 @@ class WebContents;
 // (webRequest, declarativeNetRequest; navigations too), doesn't see its tabs
 // (tabs.query, windows' tab lists, tab and webNavigation events, tab objects)
 // and can't address them (tab ids, the active tab, capture, the debugger,
-// activeTab, its action, commands and context menu items there). Default:
-// every extension is on everywhere.
+// activeTab, its action, commands and context menu items there), and gets
+// none of its entries in the stores every profile shares (history, closed
+// tabs, top sites, downloads: #544). Default: every extension is on
+// everywhere.
 //
 // This is the part the hooks in //extensions and //chrome/browser/extensions
 // call, so it reads the list itself: //base, //components/prefs,
@@ -147,6 +150,49 @@ class ScopedExtensionCall {
 // off in `contents`'s profile. False outside a function, so browser-internal
 // tab lookups are unchanged.
 bool IsCallingExtensionOffIn(content::WebContents* contents);
+
+// The extension whose function is running (ScopedExtensionCall), or empty.
+std::string_view CallingExtensionId();
+
+// --- The stores every profile shares (#544) ---
+//
+// History, recently closed tabs, top sites and downloads are the browser
+// profile's, shared by every Space profile. What an extension that is off in a
+// profile gets of them leaves out that profile's entries: a visit by its tag
+// (koan_history_profiles.h), a closed tab by the container in its session data
+// (kContainerSessionKey), a download by its partition. The hooks are in
+// koan_extension_events.h and koan_extension_history.h.
+
+// The profiles `extension_id` is off in: Serialize()d saved user containers,
+// as a Space, a visit's tag and a closed tab's session data name them.
+std::set<std::string> ProfilesExtensionIsOffIn(const base::ListValue& list,
+                                               std::string_view extension_id);
+// The same in `context`. Empty with the flag off.
+std::set<std::string> ProfilesExtensionIsOffIn(content::BrowserContext* context,
+                                               std::string_view extension_id);
+
+// Whether `extension_id` is off in the profile `session_data` names: a closed
+// tab's (sessions::tab_restore::Tab::extra_data). A tab of the default
+// partition (no container) has none.
+bool IsExtensionOffInSessionData(
+    const base::ListValue& list,
+    const std::map<std::string, std::string>& session_data,
+    std::string_view extension_id);
+bool IsExtensionOffInSessionData(
+    content::BrowserContext* context,
+    const std::map<std::string, std::string>& session_data,
+    std::string_view extension_id);
+
+// Every extension that is off in the profile of a visit with `app_id` (its
+// tag, VisitRow::app_id). Empty for the default profile's visits.
+std::set<std::string> ExtensionsOffForVisit(
+    content::BrowserContext* context,
+    const std::optional<std::string>& app_id);
+
+// Every extension that is off in the partition `config` of `context`.
+std::set<std::string> ExtensionsOffInPartition(
+    content::BrowserContext* context,
+    const content::StoragePartitionConfig& config);
 
 }  // namespace koan::containers
 

@@ -56,19 +56,23 @@ source_set("partition") {
   ]
 }
 
-# The events about a tab that an extension which is off in its Space profile
-# doesn't get (koan_extension_events.h, #473): for webNavigation's helpers,
-# which can't depend on //koan/browser/ui/views. Depends on
-# //extensions/browser, so //extensions/browser can't depend on it (it uses
-# :partition).
+# The events about a tab, a visit or a download that an extension which is
+# off in its Space profile doesn't get, and the downloads and closed tabs it
+# can't see (koan_extension_events.h, #473, #544): for webNavigation's helpers,
+# which can't depend on //koan/browser/ui/views, and the tabs, history,
+# downloads and sessions APIs. Depends on //extensions/browser, so
+# //extensions/browser can't depend on it (it uses :partition).
 source_set("extension_events") {
   sources = [
     "koan_extension_events.cc",
     "koan_extension_events.h",
   ]
+  public_deps = [ "//base" ]
   deps = [
     ":partition",
-    "//base",
+    "//components/download/public/common:public",
+    "//components/sessions",
+    "//content/public/browser",
     "//extensions/browser",
     "//extensions/common",
   ]

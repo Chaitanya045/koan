@@ -7,9 +7,10 @@
 // Space's profile injects nothing into its tabs, sees none of their requests
 // (webRequest, declarativeNetRequest; subresources and navigations), doesn't
 // see the tabs (tabs.query, tab and webNavigation events), can't address them
-// (tab ids, the active tab) and has no context menu item in them, and still
-// works in every other Space. A change applies to the profile's open tabs by
-// restarting them.
+// (tab ids, the active tab) and has no context menu item in them, gets none
+// of the profile's history, closed tabs, top sites and downloads (#544), and
+// still works in every other Space. A change applies to the profile's open
+// tabs by restarting them.
 
 #include <memory>
 #include <optional>
@@ -17,24 +18,35 @@
 #include <string>
 
 #include "base/files/file_path.h"
+#include "base/files/scoped_temp_dir.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/run_until.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/context_menu_matcher.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
+#include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/navigator/browser_navigator.h"
 #include "chrome/browser/ui/navigator/browser_navigator_params.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/download/public/common/download_item.h"
+#include "components/history/core/browser/top_sites.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/sessions/core/tab_restore_service.h"
+#include "components/sessions/core/tab_restore_types.h"
 #include "components/tabs/public/tab_interface.h"
+#include "content/public/browser/download_manager.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
@@ -46,6 +58,7 @@
 #include "extensions/test/test_extension_dir.h"
 #include "koan/browser/containers/koan_container_extensions.h"
 #include "koan/browser/containers/koan_container_partition.h"
+#include "koan/browser/containers/koan_history_profiles.h"
 #include "koan/browser/containers/koan_user_containers.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_space_extensions.h"
@@ -61,16 +74,18 @@ namespace koan {
 namespace {
 
 // A content script that marks the page, a webRequest listener that keeps the
-// requests it sees (type and URL), webNavigation.onCommitted and
-// tabs.onUpdated listeners that keep the URLs they get, a context menu item,
-// and a declarativeNetRequest rule that blocks "koan-blocked" (fetches, page
-// loads, iframes).
+// requests it sees (type and URL), webNavigation.onCommitted,
+// tabs.onUpdated, history.onVisited and downloads.onCreated listeners that keep
+// the URLs they get, tabs.onActivated and onRemoved listeners that keep the tab
+// ids, a context menu item, and a declarativeNetRequest rule that blocks
+// "koan-blocked" (fetches, page loads, iframes).
 constexpr char kManifest[] = R"({
   "name": "Koan Space extensions test",
   "version": "1",
   "manifest_version": 3,
   "permissions": ["webRequest", "declarativeNetRequest", "scripting", "tabs",
-                  "webNavigation", "contextMenus"],
+                  "webNavigation", "contextMenus", "history", "sessions",
+                  "topSites", "downloads"],
   "host_permissions": ["<all_urls>"],
   "background": {"service_worker": "background.js"},
   "content_scripts": [{
@@ -93,6 +108,17 @@ constexpr char kBackground[] = R"(
       (details) => { self.committed.push(details.url); });
   chrome.tabs.onUpdated.addListener(
       (id, info, tab) => { self.updated.push(tab.url || ''); });
+  self.visited = [];
+  self.downloaded = [];
+  self.activated = [];
+  self.removed = [];
+  chrome.history.onVisited.addListener(
+      (item) => { self.visited.push(item.url); });
+  chrome.downloads.onCreated.addListener(
+      (item) => { self.downloaded.push(item.url); });
+  chrome.tabs.onActivated.addListener(
+      (info) => { self.activated.push(info.tabId); });
+  chrome.tabs.onRemoved.addListener((id) => { self.removed.push(id); });
   chrome.contextMenus.create(
       {id: 'koan-item', title: 'Koan test item', contexts: ['all']},
       () => { chrome.runtime.lastError; chrome.test.sendMessage('ready'); });
@@ -225,6 +251,61 @@ class KoanSpaceExtensionsBrowserTest : public InProcessBrowserTest {
                              ".some(u => u.includes('", marker, "')));"}))
         .GetIfBool()
         .value_or(false);
+  }
+
+  // Whether `list` (self.activated, self.removed) has the tab's id.
+  bool HasTabId(const std::string& list, int id) {
+    return RunInBackground(
+               base::StrCat({"chrome.test.sendScriptResult(self.", list,
+                             ".includes(", base::NumberToString(id), "));"}))
+        .GetIfBool()
+        .value_or(false);
+  }
+
+  // The URLs `call` (a promise of a list of objects with `field`) gives, one
+  // per line.
+  std::string Urls(const std::string& call, const std::string& field) {
+    base::Value result = RunInBackground(base::StrCat(
+        {call, ".then((items) => chrome.test.sendScriptResult(items.map(",
+         "(item) => item.", field, ").join('\\n')));"}));
+    return result.is_string() ? result.GetString() : std::string();
+  }
+
+  // What history.search for every page gives, one "<url> <visitCount>" per
+  // line.
+  std::string HistorySearch() {
+    base::Value result = RunInBackground(
+        "chrome.history.search({text: '', startTime: 0, maxResults: 100})"
+        ".then((items) => chrome.test.sendScriptResult(items.map("
+        "(item) => item.url + ' ' + item.visitCount).join('\\n')));");
+    return result.is_string() ? result.GetString() : std::string();
+  }
+
+  // How many visits history.getVisits gives for `url`.
+  int VisitsOf(const GURL& url) {
+    base::Value result = RunInBackground(
+        base::StrCat({"chrome.history.getVisits({url: '", url.spec(),
+                      "'}).then((visits) => "
+                      "chrome.test.sendScriptResult(visits.length));"}));
+    return result.GetIfInt().value_or(-1);
+  }
+
+  // Downloads `path` from `contents`'s page, as a link with a download
+  // attribute does (in the tab's partition).
+  void DownloadFrom(content::WebContents* contents, const std::string& path) {
+    ASSERT_TRUE(content::ExecJs(
+        contents, base::StrCat({"const a = document.createElement('a');"
+                                "a.href = '",
+                                path,
+                                "'; a.download = 'koan.html';"
+                                "document.body.appendChild(a); a.click();"})));
+  }
+
+  // Closes `contents` into the recently closed list, as Cmd+W does.
+  void CloseTab(content::WebContents* contents) {
+    TabStripModel* model = browser()->tab_strip_model();
+    model->CloseWebContentsAt(model->GetIndexOfWebContents(contents),
+                              TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
   }
 
   // Whether chrome.tabs.query({}) lists the tab.
@@ -410,6 +491,148 @@ IN_PROC_BROWSER_TEST_F(KoanSpaceExtensionsBrowserTest,
   // And Bank's tab is still hidden while another is active.
   EXPECT_FALSE(Listed(in_bank));
   EXPECT_FALSE(HasMenuItem(in_bank));
+}
+
+// The stores every profile shares (#544): history, the recently closed tabs,
+// top sites and downloads give the extension nothing of the profile it is off
+// in, and id-only tab events about its tabs don't reach it; all of these
+// still work for another profile's tabs.
+IN_PROC_BROWSER_TEST_F(KoanSpaceExtensionsBrowserTest,
+                       SharedStoresLeaveOutTheProfile) {
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  ASSERT_TRUE(spaces);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  base::ScopedTempDir downloads;
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(downloads.CreateUniqueTempDir());
+  }
+  profile()->GetPrefs()->SetFilePath(::prefs::kDownloadDefaultDirectory,
+                                     downloads.GetPath());
+  profile()->GetPrefs()->SetBoolean(::prefs::kPromptForDownload, false);
+  ASSERT_NO_FATAL_FAILURE(LoadTestExtension());
+  const std::string bank = AddProfile(u"Bank");
+  const std::string work = AddProfile(u"Work");
+  SetOff(bank, true);
+  const GURL both = embedded_test_server()->GetURL("/title1.html?both");
+
+  // Bank, where it is off: a page only Bank visits, one both visit, and a
+  // download.
+  spaces->CreateSpace(u"Bank", u"", {}, bank);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  content::WebContents* in_bank = OpenInActiveSpace("/title1.html?bank-only");
+  ASSERT_TRUE(in_bank);
+  const int bank_tab = extensions::ExtensionTabUtil::GetTabId(in_bank);
+  ASSERT_TRUE(content::NavigateToURL(in_bank, both));
+  ASSERT_NO_FATAL_FAILURE(DownloadFrom(in_bank, "/title2.html?bank-download"));
+
+  // Work, where it is on: the same.
+  spaces->CreateSpace(u"Work", u"", {}, work);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 3));
+  content::WebContents* in_work = OpenInActiveSpace("/title1.html?work-only");
+  ASSERT_TRUE(in_work);
+  const int work_tab = extensions::ExtensionTabUtil::GetTabId(in_work);
+  ASSERT_TRUE(content::NavigateToURL(in_work, both));
+  ASSERT_NO_FATAL_FAILURE(DownloadFrom(in_work, "/title2.html?work-download"));
+
+  // history.onVisited: only Work's visits.
+  EXPECT_TRUE(
+      base::test::RunUntil([&] { return Has("visited", "work-only"); }));
+  EXPECT_TRUE(base::test::RunUntil([&] { return Has("visited", "?both"); }));
+  EXPECT_FALSE(Has("visited", "bank-only"));
+  EXPECT_EQ(1, RunInBackground("chrome.test.sendScriptResult(self.visited"
+                               ".filter(u => u.includes('?both')).length);")
+                   .GetIfInt()
+                   .value_or(-1));
+
+  // history.search and getVisits: the page both visited has Work's visit
+  // only; Bank's page isn't there at all.
+  const std::string found = HistorySearch();
+  EXPECT_NE(std::string::npos, found.find("work-only")) << found;
+  EXPECT_EQ(std::string::npos, found.find("bank-only")) << found;
+  EXPECT_NE(std::string::npos, found.find(both.spec() + " 1")) << found;
+  EXPECT_EQ(1, VisitsOf(both));
+  EXPECT_EQ(0,
+            VisitsOf(embedded_test_server()->GetURL("/title1.html?bank-only")));
+  EXPECT_EQ(1,
+            VisitsOf(embedded_test_server()->GetURL("/title1.html?work-only")));
+
+  // downloads.search and onCreated: Work's download only, and Bank's can't be
+  // looked up by its id.
+  content::DownloadManager* manager = profile()->GetDownloadManager();
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    content::DownloadManager::DownloadVector items;
+    manager->GetAllDownloads(&items);
+    return items.size() == 2u;
+  }));
+  EXPECT_TRUE(
+      base::test::RunUntil([&] { return Has("downloaded", "work-download"); }));
+  EXPECT_FALSE(Has("downloaded", "bank-download"));
+  const std::string listed = Urls("chrome.downloads.search({})", "url");
+  EXPECT_NE(std::string::npos, listed.find("work-download")) << listed;
+  EXPECT_EQ(std::string::npos, listed.find("bank-download")) << listed;
+  {
+    content::DownloadManager::DownloadVector items;
+    manager->GetAllDownloads(&items);
+    for (download::DownloadItem* item : items) {
+      const bool in_bank_download =
+          item->GetURL().spec().find("bank-download") != std::string::npos;
+      SCOPED_TRACE(item->GetURL().spec());
+      EXPECT_EQ(in_bank_download ? "" : item->GetURL().spec(),
+                Urls(base::StrCat({"chrome.downloads.search({id: ",
+                                   base::NumberToString(item->GetId()), "})"}),
+                     "url"));
+    }
+  }
+
+  // tabs.onActivated: switching to Bank's tab isn't announced, to Work's is.
+  TabStripModel* model = browser()->tab_strip_model();
+  model->ActivateTabAt(model->GetIndexOfWebContents(in_bank));
+  model->ActivateTabAt(model->GetIndexOfWebContents(in_work));
+  EXPECT_TRUE(
+      base::test::RunUntil([&] { return HasTabId("activated", work_tab); }));
+  EXPECT_FALSE(HasTabId("activated", bank_tab));
+
+  // topSites.get: Work's page, not Bank's.
+  scoped_refptr<history::TopSites> top_sites =
+      TopSitesFactory::GetForProfile(profile());
+  ASSERT_TRUE(top_sites);
+  top_sites->SyncWithHistory();
+  EXPECT_TRUE(base::test::RunUntil([&] {
+    return Urls("chrome.topSites.get()", "url").find("work-only") !=
+           std::string::npos;
+  }));
+  EXPECT_EQ(std::string::npos,
+            Urls("chrome.topSites.get()", "url").find("bank-only"));
+
+  // sessions.getRecentlyClosed and tabs.onRemoved: Work's closed tab only,
+  // and Bank's can't be restored by its id.
+  CloseTab(in_bank);
+  CloseTab(in_work);
+  EXPECT_TRUE(
+      base::test::RunUntil([&] { return HasTabId("removed", work_tab); }));
+  EXPECT_FALSE(HasTabId("removed", bank_tab));
+  sessions::TabRestoreService* restore =
+      TabRestoreServiceFactory::GetForProfile(profile());
+  ASSERT_TRUE(restore);
+  std::optional<SessionID> bank_closed;
+  for (const auto& entry : restore->entries()) {
+    if (entry->type == sessions::tab_restore::Type::TAB &&
+        entry->extra_data.contains(containers::kContainerSessionKey) &&
+        entry->extra_data.at(containers::kContainerSessionKey) == bank) {
+      bank_closed = entry->id;
+    }
+  }
+  ASSERT_TRUE(bank_closed);
+  const std::string closed =
+      Urls("chrome.sessions.getRecentlyClosed()", "tab && item.tab.url");
+  EXPECT_NE(std::string::npos, closed.find("?both")) << closed;
+  EXPECT_EQ(std::string::npos, closed.find("bank")) << closed;
+  base::Value restored = RunInBackground(base::StrCat(
+      {"chrome.sessions.restore('", base::NumberToString(bank_closed->id()),
+       "').then(() => chrome.test.sendScriptResult('ok'),"
+       " () => chrome.test.sendScriptResult('error'));"}));
+  EXPECT_EQ("error", restored.is_string() ? restored.GetString() : "");
 }
 
 // Done applies a change to the profile's open tabs: they reload in new

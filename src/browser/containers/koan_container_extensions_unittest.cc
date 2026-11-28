@@ -4,7 +4,9 @@
 
 #include "koan/browser/containers/koan_container_extensions.h"
 
+#include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 
@@ -21,6 +23,7 @@
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/web_contents_tester.h"
+#include "koan/browser/containers/koan_history_profiles.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -121,6 +124,54 @@ TEST(ContainerExtensionsListTest, SetsAndClearsTheList) {
 
   // A container the list doesn't have.
   EXPECT_FALSE(SetExtensionsOff(list, Saved(), {kPasswords}));
+}
+
+// The profiles an extension is off in (#544): what history, closed tabs, top
+// sites and downloads leave out for it, named as a visit's tag and a closed
+// tab's session data name them.
+TEST(ContainerExtensionsListTest, ListsTheProfilesAnExtensionIsOffIn) {
+  const ContainerId work = Saved();
+  const ContainerId bank = Saved();
+  base::ListValue list =
+      ListWith(work, base::ListValue().Append(kPasswords).Append(kShopping));
+  list.Append(base::DictValue()
+                  .Set("id", bank.id)
+                  .Set(kExtensionsOffKey, base::ListValue().Append(kShopping)));
+  // An entry with an id that isn't a saved container's has no list.
+  list.Append(base::DictValue()
+                  .Set("id", NewContainerId(/*persistent=*/false))
+                  .Set(kExtensionsOffKey, base::ListValue().Append(kShopping)));
+  EXPECT_EQ(ProfilesExtensionIsOffIn(list, kPasswords),
+            std::set<std::string>{Serialize(work)});
+  EXPECT_EQ(ProfilesExtensionIsOffIn(list, kShopping),
+            std::set<std::string>({Serialize(work), Serialize(bank)}));
+  EXPECT_TRUE(ProfilesExtensionIsOffIn(list, "cccccccccccccccccccccccccccccccc")
+                  .empty());
+  EXPECT_TRUE(ProfilesExtensionIsOffIn(list, "not an id").empty());
+  EXPECT_TRUE(ProfilesExtensionIsOffIn(base::ListValue(), kPasswords).empty());
+}
+
+// sessions.getRecentlyClosed: a closed tab's profile is the container in its
+// session data; a tab of the default partition has none.
+TEST(ContainerExtensionsListTest, AClosedTabIsInItsSessionDatasProfile) {
+  const ContainerId work = Saved();
+  const base::ListValue list =
+      ListWith(work, base::ListValue().Append(kPasswords));
+  const std::map<std::string, std::string> in_work = {
+      {kContainerSessionKey, Serialize(work)}, {"koan.space", "x"}};
+  EXPECT_TRUE(IsExtensionOffInSessionData(list, in_work, kPasswords));
+  EXPECT_FALSE(IsExtensionOffInSessionData(list, in_work, kShopping));
+  EXPECT_FALSE(IsExtensionOffInSessionData(list, {}, kPasswords));
+  EXPECT_FALSE(IsExtensionOffInSessionData(
+      list, {{kContainerSessionKey, Serialize(Saved())}}, kPasswords));
+  EXPECT_FALSE(IsExtensionOffInSessionData(
+      list, {{kContainerSessionKey, "not a container"}}, kPasswords));
+  // An agent container with the same id isn't the user's.
+  EXPECT_FALSE(IsExtensionOffInSessionData(
+      list,
+      {{kContainerSessionKey,
+        Serialize({.kind = ContainerKind::kAgent, .id = work.id})}},
+      kPasswords));
 }
 
 class ContainerExtensionsTest : public testing::Test {
@@ -226,6 +277,32 @@ TEST_F(ContainerExtensionsTest, ARequestIsInItsFramesOrProcesssPartition) {
   EXPECT_FALSE(IsExtensionOffForRequest(&context_, std::nullopt, kPasswords));
 }
 
+// A visit's tag and a download's partition name the profile whose list
+// applies (#544).
+TEST_F(ContainerExtensionsTest, ListsWhatIsOffForAVisitOrAPartition) {
+  EXPECT_EQ(ExtensionsOffForVisit(&context_,
+                                  HistoryAppIdForProfile(Serialize(work_))),
+            std::set<std::string>{kPasswords});
+  // The default profile's visits (no tag), another app's tag, a profile with
+  // no list.
+  EXPECT_TRUE(ExtensionsOffForVisit(&context_, std::nullopt).empty());
+  EXPECT_TRUE(ExtensionsOffForVisit(&context_, "com.example.app").empty());
+  EXPECT_TRUE(ExtensionsOffForVisit(&context_,
+                                    HistoryAppIdForProfile(Serialize(Saved())))
+                  .empty());
+  EXPECT_EQ(
+      ExtensionsOffInPartition(&context_, PartitionConfigFor(&context_, work_)),
+      std::set<std::string>{kPasswords});
+  EXPECT_TRUE(
+      ExtensionsOffInPartition(
+          &context_, content::StoragePartitionConfig::CreateDefault(&context_))
+          .empty());
+  EXPECT_EQ(ProfilesExtensionIsOffIn(&context_, kPasswords),
+            std::set<std::string>{Serialize(work_)});
+  EXPECT_TRUE(IsExtensionOffInSessionData(
+      &context_, {{kContainerSessionKey, Serialize(work_)}}, kPasswords));
+}
+
 // GetTabById()'s check: only while an extension's function runs, and for
 // that extension.
 TEST_F(ContainerExtensionsTest, TheCallingExtensionIsTheOneRunning) {
@@ -234,6 +311,7 @@ TEST_F(ContainerExtensionsTest, TheCallingExtensionIsTheOneRunning) {
   {
     ScopedExtensionCall call(kPasswords);
     EXPECT_TRUE(IsCallingExtensionOffIn(work_tab.get()));
+    EXPECT_EQ(CallingExtensionId(), kPasswords);
     {
       // A function no extension calls (WebUI).
       ScopedExtensionCall webui("");
@@ -246,6 +324,7 @@ TEST_F(ContainerExtensionsTest, TheCallingExtensionIsTheOneRunning) {
     EXPECT_FALSE(IsCallingExtensionOffIn(work_tab.get()));
   }
   EXPECT_FALSE(IsCallingExtensionOffIn(work_tab.get()));
+  EXPECT_TRUE(CallingExtensionId().empty());
 }
 
 }  // namespace

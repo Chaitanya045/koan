@@ -17,6 +17,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/web_contents.h"
+#include "koan/browser/containers/koan_history_profiles.h"
 #include "koan/browser/containers/koan_partition_domain.h"
 #include "koan/browser/koan_features.h"
 
@@ -225,6 +226,94 @@ ScopedExtensionCall::~ScopedExtensionCall() = default;
 bool IsCallingExtensionOffIn(content::WebContents* contents) {
   return g_calling_extension &&
          IsExtensionOffInContents(contents, *g_calling_extension);
+}
+
+std::string_view CallingExtensionId() {
+  return g_calling_extension ? std::string_view(*g_calling_extension)
+                             : std::string_view();
+}
+
+std::set<std::string> ProfilesExtensionIsOffIn(const base::ListValue& list,
+                                               std::string_view extension_id) {
+  std::set<std::string> profiles;
+  if (!IsExtensionId(extension_id)) {
+    return profiles;
+  }
+  for (const base::Value& entry : list) {
+    const base::DictValue* dict = entry.GetIfDict();
+    const std::string* id = dict ? dict->FindString(kIdKey) : nullptr;
+    if (!id) {
+      continue;
+    }
+    const ContainerId container{ContainerKind::kUser, *id};
+    if (container.persistent() && IsValidContainerId(container.id) &&
+        IsExtensionOffIn(list, container, extension_id)) {
+      profiles.insert(Serialize(container));
+    }
+  }
+  return profiles;
+}
+
+std::set<std::string> ProfilesExtensionIsOffIn(content::BrowserContext* context,
+                                               std::string_view extension_id) {
+  if (!base::FeatureList::IsEnabled(features::kKoanSpaceExtensions)) {
+    return {};
+  }
+  const base::ListValue* list = UserContainersOf(context);
+  return list ? ProfilesExtensionIsOffIn(*list, extension_id)
+              : std::set<std::string>();
+}
+
+bool IsExtensionOffInSessionData(
+    const base::ListValue& list,
+    const std::map<std::string, std::string>& session_data,
+    std::string_view extension_id) {
+  const auto container = session_data.find(kContainerSessionKey);
+  if (container == session_data.end()) {
+    return false;
+  }
+  const std::optional<ContainerId> id = Parse(container->second);
+  return id && IsExtensionOffIn(list, *id, extension_id);
+}
+
+bool IsExtensionOffInSessionData(
+    content::BrowserContext* context,
+    const std::map<std::string, std::string>& session_data,
+    std::string_view extension_id) {
+  if (!session_data.contains(kContainerSessionKey) ||
+      !base::FeatureList::IsEnabled(features::kKoanSpaceExtensions)) {
+    return false;
+  }
+  const base::ListValue* list = UserContainersOf(context);
+  return list && IsExtensionOffInSessionData(*list, session_data, extension_id);
+}
+
+std::set<std::string> ExtensionsOffForVisit(
+    content::BrowserContext* context,
+    const std::optional<std::string>& app_id) {
+  const std::string profile = HistoryProfileFromAppId(app_id);
+  const std::optional<ContainerId> container =
+      profile.empty() ? std::nullopt : Parse(profile);
+  if (!container ||
+      !base::FeatureList::IsEnabled(features::kKoanSpaceExtensions)) {
+    return {};
+  }
+  const base::ListValue* list = UserContainersOf(context);
+  return list ? ExtensionsOffIn(*list, *container) : std::set<std::string>();
+}
+
+std::set<std::string> ExtensionsOffInPartition(
+    content::BrowserContext* context,
+    const content::StoragePartitionConfig& config) {
+  if (config.is_default() ||
+      !config.partition_domain().starts_with(kUserPartitionDomainPrefix) ||
+      !base::FeatureList::IsEnabled(features::kKoanSpaceExtensions)) {
+    return {};
+  }
+  const std::optional<ContainerId> container =
+      ContainerFromPartitionConfig(config);
+  const base::ListValue* list = container ? UserContainersOf(context) : nullptr;
+  return list ? ExtensionsOffIn(*list, *container) : std::set<std::string>();
 }
 
 }  // namespace koan::containers

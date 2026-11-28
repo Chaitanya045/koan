@@ -1,4 +1,4 @@
-# Steps: extensions per Space profile (#473)
+# Steps: extensions per Space profile (#473, #544)
 
 For the Mac loop and the hands-on tester, on macOS and on Linux (the Flatpak). Use a fresh profile past the welcome.
 The design note is `.agent/notes/upstream/space-extensions.md`; the browser tests
@@ -26,7 +26,11 @@ video used the same files, with a `key` to fix the id.)
     "contextMenus",
     "sidePanel",
     "debugger",
-    "activeTab"
+    "activeTab",
+    "history",
+    "sessions",
+    "topSites",
+    "downloads"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -109,6 +113,13 @@ for (const name of ['onBeforeNavigate', 'onCommitted', 'onCompleted']) {
 chrome.tabs.onUpdated.addListener((id, info, tab) => add('tabs.onUpdated', {tabId: id, url: tab.url || '', title: tab.title || ''}));
 chrome.tabs.onCreated.addListener(tab => add('tabs.onCreated', {tabId: tab.id, url: tab.url || tab.pendingUrl || ''}));
 chrome.tabs.onActivated.addListener(info => add('tabs.onActivated', {tabId: info.tabId}));
+for (const name of ['onRemoved', 'onMoved', 'onAttached', 'onDetached', 'onZoomChange']) {
+  chrome.tabs[name].addListener((a, b) => add('tabs.' + name, {tabId: a.tabId ?? a}));
+}
+chrome.history.onVisited.addListener(item => add('history.onVisited', {url: item.url}));
+chrome.history.onVisitRemoved.addListener(r => add('history.onVisitRemoved', {urls: (r.urls || []).join(' ')}));
+chrome.downloads.onCreated.addListener(item => add('downloads.onCreated', {id: item.id, url: item.url}));
+chrome.downloads.onChanged.addListener(delta => add('downloads.onChanged', {id: delta.id}));
 chrome.contextMenus.onClicked.addListener((info, tab) => add('contextMenus.onClicked', {url: info.pageUrl, tabUrl: tab?.url || ''}));
 chrome.commands.onCommand.addListener((command, tab) => add('commands.onCommand', {command, url: tab?.url || ''}));
 chrome.action.onClicked.addListener(tab => add('action.onClicked', {url: tab?.url || ''}));
@@ -172,8 +183,23 @@ give `ok: ...` or `error: No tab with id`.
 | SE19 | Page loads (review finding 1). In Bank open `https://example.com/?koan-blocked-main`; in the plain Space the same URL. | Bank: the page loads, and Log for `koan-blocked-main` is empty. Plain: "This page has been blocked by an extension" (ERR_BLOCKED_BY_CLIENT), and Log has its `webRequest` `main_frame` entry. |
 | SE20 | Iframes. In the page's console of a Bank tab and then a plain tab on `https://example.com/`: `f = document.createElement('iframe'); f.src = 'https://example.org/?koan-blocked-sub'; document.body.append(f)`, then the same with `?sub-ok`. | Bank: both frames load, Log for `koan-blocked-sub` and `sub-ok` is empty, no bar marker in the frames. Plain: the first frame is blocked, the second loads; Log has `sub_frame` entries and `webNavigation.onCommitted` with `frameId` > 0. |
 | SE21 | Cookies with `extraHeaders`. Sign in somewhere in Bank (or run `document.cookie = 'k=bank'` in a Bank page and reload). | Log has no `headers` entry with Bank's URL or cookie. In a plain tab the same gives `headers` entries with its `Cookie`. |
-| SE22 | Tabs and their events (finding 2). With a Bank tab and a plain tab open, run `(await chrome.tabs.query({})).map(t => t.url)` and `(await chrome.windows.getAll({populate: true})).flatMap(w => w.tabs.map(t => t.url))`; load a new page in Bank. | Neither lists Bank's tab. Log has no `tabs.onUpdated`, `tabs.onCreated` or `webNavigation.*` entry for Bank's URLs. It has `tabs.onActivated` entries with a tab id when you switch to Bank (ids only, the accepted gap). In the plain Space all of them are there, with URLs and titles. |
+| SE22 | Tabs and their events (finding 2). With a Bank tab and a plain tab open, run `(await chrome.tabs.query({})).map(t => t.url)` and `(await chrome.windows.getAll({populate: true})).flatMap(w => w.tabs.map(t => t.url))`; load a new page in Bank. | Neither lists Bank's tab. Log has no `tabs.onUpdated`, `tabs.onCreated` or `webNavigation.*` entry for Bank's URLs. It has no `tabs.onActivated` entry when you switch to Bank (#544: the events with ids only aren't sent either). In the plain Space all of them are there, with URLs and titles. |
 | SE23 | The active tab. With Bank's tab active: `await tryCall(() => chrome.tabs.getZoom())`, `await tryCall(() => chrome.tabs.update({url: 'https://example.org/'}))`, `await tryCall(() => chrome.tabs.captureVisibleTab())`. | All three `error:` ("No selected tab", the last "turned off in this tab's profile"), and Bank's tab doesn't navigate. With a plain tab active all three work. |
 | SE24 | The debugger. `await tryCall(() => chrome.debugger.attach({tabId: ID}, '1.3'))` with Bank's tab id, and `(await chrome.debugger.getTargets()).map(t => t.url)`. | Attach: `error:`. getTargets doesn't list Bank's pages. For a plain tab attach works (a "started debugging" bar shows; `chrome.debugger.detach({tabId: ID})`). |
 | SE25 | Context menu (finding 3). Right-click a Bank page, then a plain page. | Bank: no "Koan 473 item". Plain: "Koan 473 item"; clicking it adds a `contextMenus.onClicked` entry with the page's URL. |
 | SE26 | Shortcuts. In a Bank tab press Alt+Shift+J, then Alt+Shift+K; then the same in a plain tab. | Bank: nothing: no `commands.onCommand` in Log, no side panel. Plain: a `commands.onCommand` entry with the plain tab's URL, and the side panel opens. |
+
+### The stores every profile shares (#544)
+
+Bank has the extension off; Work is another profile where it is on. Visit `https://example.com/?bank-only` and
+`https://example.org/?both` in a Bank tab, `https://example.net/?work-only` and `https://example.org/?both` in a
+Work tab.
+
+| # | Do | Expect |
+|---|---|---|
+| SE27 | History. In the extension's console: `(await chrome.history.search({text: '', startTime: 0})).map(h => [h.url, h.visitCount])`, `(await chrome.history.getVisits({url: 'https://example.com/?bank-only'})).length`, `(await chrome.history.getVisits({url: 'https://example.org/?both'})).length`, and Log for `history.onVisited`. | No `bank-only`; `?both` with visit count 1 (Work's); 0 and 1 visits; Log has `history.onVisited` for `work-only` and one `?both`, none for `bank-only`. |
+| SE28 | Forgetting a page. Library > History, Which profile? Bank, right-click `bank-only` > Forget This Page. | No `history.onVisitRemoved` entry naming `bank-only` in Log. Forget `work-only` in Work: an entry naming it. |
+| SE29 | Top sites. `(await chrome.topSites.get()).map(s => s.url)`. | No `bank-only` (only Bank visited it); `work-only` and `?both` can be there. |
+| SE30 | Downloads. Download a file in Bank (e.g. right-click a link > Save Link As..., or any download link), then one in Work; `(await chrome.downloads.search({})).map(d => [d.id, d.url])`, then `await chrome.downloads.search({id: ID})` and `await tryCall(() => chrome.downloads.show(ID))` with Bank's download's id (chrome://downloads has the order). | Only Work's download is listed; Bank's id gives `[]` and `error: Invalid downloadId`. Log has `downloads.onCreated`/`onChanged` for Work's only. After a restart the same (the partition is kept with the download). |
+| SE31 | Closed tabs. Close a Bank tab and a Work tab, then `(await chrome.sessions.getRecentlyClosed()).map(s => s.tab?.url ?? s.window.tabs.map(t => t.url))` and `await tryCall(() => chrome.sessions.restore())`. | Work's tab only. Restore without an id, with Bank's tab closed last: `error: There are no recently closed sessions.` (it doesn't reopen Bank's tab). |
+| SE32 | Tab events with ids only. Switch to a Bank tab and back, move it, zoom it (Cmd/Ctrl +), close it. | No `tabs.onActivated`, `onMoved`, `onZoomChange` or `onRemoved` with Bank's tab id in Log; the same in Work gives each. |

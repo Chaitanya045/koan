@@ -672,11 +672,14 @@ belongs to a Space, and new tabs open in the active one.
   shares the Default one, so it has no list of its own: turning an
   extension off there asks for a new profile's name and gives the Space that
   profile, with the extension off. Every extension is on everywhere until
-  you turn it off, new ones too. What every profile shares stays readable
-  to an extension with the permission for it: your history (so the pages
-  you visited in the profile), downloads, recently closed tabs, bookmarks
-  and the Spaces' names. It also still learns that a tab it can't see was
-  switched to, moved or closed (tab ids only).
+  you turn it off, new ones too. It doesn't get the profile's part of what
+  every profile shares either: the pages you visited there (a page you
+  visited there and in another profile shows with the other visits only),
+  the tabs you closed there, the sites you only visit there among the top
+  sites, the downloads you started there, and when a tab of the profile is
+  switched to, moved or closed. Your bookmarks, reading list and the Spaces'
+  names stay readable to an extension with the permission for them, and it
+  can still delete history.
 - **Unload Space** (right-click the header or a Space button) frees the
   Space's tabs; they reload when you select them. Unload All Other Spaces
   frees all the others. Tabs on screen and tabs in use (playing sound, in

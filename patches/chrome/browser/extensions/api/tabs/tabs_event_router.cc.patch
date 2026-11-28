@@ -1,16 +1,17 @@
 diff --git a/chrome/browser/extensions/api/tabs/tabs_event_router.cc b/chrome/browser/extensions/api/tabs/tabs_event_router.cc
-index f575867..a97df63 100644
+index f575867..9fb5dfa 100644
 --- a/chrome/browser/extensions/api/tabs/tabs_event_router.cc
 +++ b/chrome/browser/extensions/api/tabs/tabs_event_router.cc
-@@ -27,6 +27,7 @@
+@@ -27,6 +27,8 @@
  #include "content/public/browser/web_contents.h"
  #include "extensions/browser/event_router.h"
  #include "extensions/common/event_args.h"
 +#include "koan/browser/containers/koan_container_extensions.h"
++#include "koan/browser/containers/koan_extension_events.h"
  #include "third_party/blink/public/common/page/page_zoom.h"
  
  namespace extensions {
-@@ -61,6 +62,11 @@ bool WillDispatchTabUpdatedEvent(
+@@ -61,6 +63,11 @@ bool WillDispatchTabUpdatedEvent(
      std::optional<base::ListValue>& event_args_out,
      mojom::EventFilteringInfoPtr& event_filtering_info_out,
      bool* dispatch_separate_event_out) {
@@ -22,7 +23,7 @@ index f575867..a97df63 100644
    auto scrub_tab_behavior = ExtensionTabUtil::GetScrubTabBehavior(
        extension, target_context, contents);
    api::tabs::Tab tab_object = ExtensionTabUtil::CreateTabObject(
-@@ -93,6 +99,11 @@ bool WillDispatchTabCreatedEvent(
+@@ -93,6 +100,11 @@ bool WillDispatchTabCreatedEvent(
      std::optional<base::ListValue>& event_args_out,
      mojom::EventFilteringInfoPtr& event_filtering_info_out,
      bool* dispatch_separate_event_out) {
@@ -34,3 +35,89 @@ index f575867..a97df63 100644
    ExtensionTabUtil::ScrubTabBehavior scrub_tab_behavior =
        ExtensionTabUtil::GetScrubTabBehavior(extension, target_context,
                                              contents);
+@@ -357,6 +369,8 @@ void TabsEventRouter::DispatchTabRemovedEvent(
+ 
+   Profile* profile =
+       Profile::FromBrowserContext(web_contents.GetBrowserContext());
++  // Koan: not to an extension that is off in the tab's Space profile.
++  koan::containers::ScopedEventSkip koan_skip(&web_contents);
+   DispatchEvent(profile, events::TABS_ON_REMOVED,
+                 api::tabs::OnRemoved::kEventName, std::move(args),
+                 EventRouter::UserGestureState::kUnknown);
+@@ -383,6 +397,8 @@ void TabsEventRouter::DispatchTabDetachedEvent(
+ 
+   Profile* profile =
+       Profile::FromBrowserContext(web_contents.GetBrowserContext());
++  // Koan: not to an extension that is off in the tab's Space profile.
++  koan::containers::ScopedEventSkip koan_skip(&web_contents);
+   DispatchEvent(profile, events::TABS_ON_DETACHED,
+                 api::tabs::OnDetached::kEventName, std::move(args),
+                 EventRouter::UserGestureState::kUnknown);
+@@ -402,6 +418,8 @@ void TabsEventRouter::DispatchEvent(
+   auto event = std::make_unique<Event>(histogram_value, event_name,
+                                        std::move(args), profile);
+   event->user_gesture = user_gesture;
++  // Koan: what the tab's events skip (the callers' ScopedEventSkip).
++  koan::containers::SkipExtensionsInScope(*event);
+   event_router->BroadcastEvent(std::move(event));
+ }
+ 
+@@ -450,6 +468,8 @@ void TabsEventRouter::OnTabAdded(TabListInterface& tab_list,
+ 
+     Profile* profile =
+         Profile::FromBrowserContext(contents->GetBrowserContext());
++    // Koan: not to an extension that is off in the tab's Space profile.
++    koan::containers::ScopedEventSkip koan_skip(contents);
+     DispatchEvent(profile, events::TABS_ON_ATTACHED,
+                   api::tabs::OnAttached::kEventName, std::move(args),
+                   EventRouter::UserGestureState::kUnknown);
+@@ -496,6 +516,8 @@ void TabsEventRouter::OnActiveTabChanged(TabListInterface& tab_list,
+   // deprecated events take two arguments: tabId, {windowId}.
+   Profile* profile =
+       Profile::FromBrowserContext(tab_contents->GetBrowserContext());
++  // Koan: not to an extension that is off in the tab's Space profile.
++  koan::containers::ScopedEventSkip koan_skip(tab_contents);
+ 
+   DispatchEvent(profile, events::TABS_ON_SELECTION_CHANGED,
+                 api::tabs::OnSelectionChanged::kEventName, args,
+@@ -564,6 +586,8 @@ void TabsEventRouter::OnTabMoved(TabListInterface& tab_list,
+ 
+   Profile* profile =
+       Profile::FromBrowserContext(web_contents->GetBrowserContext());
++  // Koan: not to an extension that is off in the tab's Space profile.
++  koan::containers::ScopedEventSkip koan_skip(web_contents);
+   DispatchEvent(profile, events::TABS_ON_MOVED, api::tabs::OnMoved::kEventName,
+                 std::move(args), EventRouter::UserGestureState::kUnknown);
+ }
+@@ -582,9 +606,13 @@ void TabsEventRouter::OnHighlightedTabsChanged(
+     return;
+   }
+ 
++  // Koan: not to an extension that is off in the Space profile of any of
++  // the tabs.
++  koan::containers::ScopedEventSkip koan_skip;
+   for (tabs::TabInterface* tab : highlighted_tabs) {
+     content::WebContents* web_contents = tab->GetContents();
+     CHECK(web_contents);
++    koan_skip.Add(web_contents);  // Koan
+ 
+     // All the tabs should be in the same window, so just grab the window ID and
+     // browser context from the first.
+@@ -623,6 +651,8 @@ void TabsEventRouter::OnWebContentsReplaced(
+   args->data.Append(new_tab_id);
+   args->data.Append(old_tab_id);
+ 
++  // Koan: not to an extension that is off in the tab's Space profile.
++  koan::containers::ScopedEventSkip koan_skip(old_contents);
+   DispatchEvent(Profile::FromBrowserContext(new_contents->GetBrowserContext()),
+                 events::TABS_ON_REPLACED, api::tabs::OnReplaced::kEventName,
+                 std::move(args), EventRouter::UserGestureState::kUnknown);
+@@ -669,6 +699,8 @@ void TabsEventRouter::OnZoomChanged(
+       Profile::FromBrowserContext(data.web_contents->GetBrowserContext());
+   auto event_args = base::MakeRefCounted<EventArgs>(
+       api::tabs::OnZoomChange::Create(zoom_change_info));
++  // Koan: not to an extension that is off in the tab's Space profile.
++  koan::containers::ScopedEventSkip koan_skip(data.web_contents);
+   DispatchEvent(profile, events::TABS_ON_ZOOM_CHANGE,
+                 api::tabs::OnZoomChange::kEventName, std::move(event_args),
+                 EventRouter::UserGestureState::kUnknown);
