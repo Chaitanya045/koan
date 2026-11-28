@@ -12,25 +12,33 @@
 // still works in every other Space. A change applies to the profile's open
 // tabs by restarting them. Its side panel stays closed there, and the pages
 // that use the tabs API with no extension (the bookmarks side panel,
-// chrome://bookmarks) keep working in every Space (#602).
+// chrome://bookmarks) keep working in every Space (#602), as do the history,
+// sessions and topSites functions called with no extension (#604).
 
 #include <memory>
 #include <optional>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "base/callback_list.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/run_until.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/types/expected.h"
 #include "base/values.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/extensions/api/history/history_api.h"
+#include "chrome/browser/extensions/api/sessions/sessions_api.h"
+#include "chrome/browser/extensions/api/top_sites/top_sites_api.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/context_menu_matcher.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
@@ -64,8 +72,11 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "extensions/browser/api_test_utils.h"
 #include "extensions/browser/background_script_executor.h"
+#include "extensions/browser/extension_function.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/mojom/context_type.mojom.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/test_extension_dir.h"
 #include "koan/browser/containers/koan_container_extensions.h"
@@ -470,6 +481,53 @@ class KoanSpaceExtensionsBrowserTest : public InProcessBrowserTest {
     return result.is_ok() ? "not a string" : result.ExtractError();
   }
 
+  // The `field` (a dotted path) of each item `function` gives, one per line,
+  // when it is called as a WebUI page would call it: with no extension.
+  std::string FieldsWithNoExtension(scoped_refptr<ExtensionFunction> function,
+                                    const std::string& args,
+                                    const std::string& field) {
+    EXPECT_FALSE(function->extension());
+    function->set_source_context_type(extensions::mojom::ContextType::kWebUi);
+    std::optional<base::Value> result =
+        extensions::api_test_utils::RunFunctionAndReturnSingleResult(
+            function, args, profile());
+    std::string fields;
+    if (result && result->is_list()) {
+      for (const base::Value& item : result->GetList()) {
+        const std::string* value =
+            item.is_dict() ? item.GetDict().FindStringByDottedPath(field)
+                           : nullptr;
+        if (value) {
+          base::StrAppend(&fields, {*value, "\n"});
+        }
+      }
+    }
+    return fields;
+  }
+
+  // The URL of the tab sessions.restore gives back when it is called with
+  // no extension (`args`: [] or [sessionId]; the pending URL while the tab
+  // loads), or its error.
+  std::string RestoreWithNoExtension(const std::string& args) {
+    auto function = base::MakeRefCounted<extensions::SessionsRestoreFunction>();
+    EXPECT_FALSE(function->extension());
+    function->set_source_context_type(extensions::mojom::ContextType::kWebUi);
+    base::expected<base::ListValue, std::string> result =
+        extensions::api_test_utils::RunFunctionAndReturnExpected(function, args,
+                                                                 profile());
+    if (!result.has_value()) {
+      return result.error();
+    }
+    const base::DictValue* session =
+        result->empty() ? nullptr : (*result)[0].GetIfDict();
+    const base::DictValue* tab = session ? session->FindDict("tab") : nullptr;
+    const std::string* url = tab ? tab->FindString("url") : nullptr;
+    if (!url || url->empty()) {
+      url = tab ? tab->FindString("pendingUrl") : nullptr;
+    }
+    return url ? *url : "no tab";
+  }
+
   extensions::TestExtensionDir dir_;
   std::string extension_id_;
 };
@@ -738,6 +796,72 @@ IN_PROC_BROWSER_TEST_F(KoanSpaceExtensionsBrowserTest,
        "').then(() => chrome.test.sendScriptResult('ok'),"
        " () => chrome.test.sendScriptResult('error'));"}));
   EXPECT_EQ("error", restored.is_string() ? restored.GetString() : "");
+}
+
+// The history, sessions and topSites functions called with no extension, as
+// a WebUI page calls an extension API (#604): they don't crash, and nothing
+// is off for such a caller, so they give the pages of a Space profile the
+// test extension is off in.
+IN_PROC_BROWSER_TEST_F(KoanSpaceExtensionsBrowserTest,
+                       SharedStoresWithNoExtension) {
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  ASSERT_TRUE(spaces);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  ASSERT_NO_FATAL_FAILURE(LoadTestExtension());
+  const std::string bank = AddProfile(u"Bank");
+  SetOff(bank, true);
+  spaces->CreateSpace(u"Bank", u"", {}, bank);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  const GURL first = embedded_test_server()->GetURL("/title1.html?bank-first");
+  const GURL second =
+      embedded_test_server()->GetURL("/title1.html?bank-second");
+  content::WebContents* first_tab = OpenUrlInActiveSpace(first);
+  content::WebContents* second_tab = OpenUrlInActiveSpace(second);
+  ASSERT_TRUE(first_tab);
+  ASSERT_TRUE(second_tab);
+
+  // history.search and getVisits.
+  EXPECT_TRUE(base::test::RunUntil([&] {
+    return FieldsWithNoExtension(
+               base::MakeRefCounted<extensions::HistorySearchFunction>(),
+               R"([{"text": "", "startTime": 0, "maxResults": 100}])", "url")
+               .find("bank-first") != std::string::npos;
+  }));
+  EXPECT_FALSE(FieldsWithNoExtension(
+                   base::MakeRefCounted<extensions::HistoryGetVisitsFunction>(),
+                   base::StrCat({R"([{"url": ")", first.spec(), R"("}])"}),
+                   "visitId")
+                   .empty());
+
+  // topSites.get.
+  scoped_refptr<history::TopSites> top_sites =
+      TopSitesFactory::GetForProfile(profile());
+  ASSERT_TRUE(top_sites);
+  top_sites->SyncWithHistory();
+  EXPECT_TRUE(base::test::RunUntil([&] {
+    return FieldsWithNoExtension(
+               base::MakeRefCounted<extensions::TopSitesGetFunction>(), "[]",
+               "url")
+               .find("bank-first") != std::string::npos;
+  }));
+
+  // sessions.getRecentlyClosed, then sessions.restore of the most recent
+  // entry and of one by its id.
+  CloseTab(first_tab);
+  CloseTab(second_tab);
+  const std::string closed = FieldsWithNoExtension(
+      base::MakeRefCounted<extensions::SessionsGetRecentlyClosedFunction>(),
+      "[]", "tab.url");
+  EXPECT_EQ(base::StrCat({second.spec(), "\n", first.spec(), "\n"}), closed);
+  const std::vector<std::string> ids = base::SplitString(
+      FieldsWithNoExtension(
+          base::MakeRefCounted<extensions::SessionsGetRecentlyClosedFunction>(),
+          "[]", "tab.sessionId"),
+      "\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  ASSERT_EQ(2u, ids.size());
+  EXPECT_EQ(second.spec(), RestoreWithNoExtension("[]"));
+  EXPECT_EQ(first.spec(),
+            RestoreWithNoExtension(base::StrCat({R"([")", ids[1], R"("])"})));
 }
 
 // Done applies a change to the profile's open tabs: they reload in new

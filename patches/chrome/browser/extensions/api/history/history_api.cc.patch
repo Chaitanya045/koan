@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/extensions/api/history/history_api.cc b/chrome/browser/extensions/api/history/history_api.cc
-index 534aefc..e8b1c2a 100644
+index 534aefc..d55405e 100644
 --- a/chrome/browser/extensions/api/history/history_api.cc
 +++ b/chrome/browser/extensions/api/history/history_api.cc
 @@ -37,6 +37,9 @@
@@ -42,16 +42,19 @@ index 534aefc..e8b1c2a 100644
      EventRouter::Get(profile)->BroadcastEvent(std::move(event));
    }
  }
-@@ -296,6 +308,8 @@ ExtensionFunction::ResponseAction HistoryGetVisitsFunction::Run() {
+@@ -296,6 +308,11 @@ ExtensionFunction::ResponseAction HistoryGetVisitsFunction::Run() {
  void HistoryGetVisitsFunction::QueryComplete(
      history::QueryURLAndVisitsResult result) {
    VisitItemList visit_item_vec;
-+  // Koan: not the visits of Space profiles the extension is off in.
-+  koan::EraseVisitsOffFor(browser_context(), extension_id(), result.visits);
++  // Koan: not the visits of Space profiles the extension is off in (a caller
++  // with no extension, a WebUI page: none off).
++  koan::EraseVisitsOffFor(browser_context(),
++                          extension() ? extension()->id() : std::string(),
++                          result.visits);
    if (result.success && !result.visits.empty()) {
      for (const history::VisitRow& visit : result.visits) {
        visit_item_vec.push_back(GetVisitItem(visit));
-@@ -333,10 +347,12 @@ ExtensionFunction::ResponseAction HistorySearchFunction::Run() {
+@@ -333,10 +350,14 @@ ExtensionFunction::ResponseAction HistorySearchFunction::Run() {
  
    history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
        GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
@@ -59,9 +62,11 @@ index 534aefc..e8b1c2a 100644
 -                   base::BindOnce(&HistorySearchFunction::SearchComplete,
 -                                  base::Unretained(this)),
 -                   &task_tracker_);
-+  // Koan: without the visits of Space profiles the extension is off in.
++  // Koan: without the visits of Space profiles the extension is off in (none
++  // for a caller with no extension).
 +  koan::QueryHistoryForExtension(
-+      hs, browser_context(), extension_id(), search_text, options,
++      hs, browser_context(), extension() ? extension()->id() : std::string(),
++      search_text, options,
 +      base::BindOnce(&HistorySearchFunction::SearchComplete,
 +                     base::Unretained(this)),
 +      &task_tracker_);

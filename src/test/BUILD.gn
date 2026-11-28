@@ -138,6 +138,7 @@ source_set("browsertests_impl") {
     "//chrome/browser/content_settings:content_settings_factory",
     "//chrome/browser/extensions",
     "//chrome/browser/extensions:test_support",
+    "//chrome/browser/extensions/api/history",
     "//chrome/browser/history",
     "//chrome/browser/importer",
     "//chrome/browser/metrics",
