@@ -657,6 +657,26 @@ belongs to a Space, and new tabs open in the active one.
   pages fail for that run). `http://` and `https://` proxies work too;
   SOCKS4 doesn't (it would resolve names on this Mac). WebRTC's UDP still
   goes direct.
+- **Extensions per profile.** Right-click the header > **Extensions…**
+  (or right-click the URL pill's Extensions button > **Extensions in This
+  Space…**) lists your extensions with a switch each for the Space's
+  profile. An extension you turn off there can't see or change that
+  profile's tabs: no content scripts, it sees none of their requests or
+  page loads (its ad or tracker rules don't apply there either), it doesn't
+  get them in its tab lists or tab and navigation events, it can't reach
+  them (scripting, screenshots, the debugger), and its button, side panel,
+  keyboard shortcuts and context menu items do nothing while one of those
+  tabs is active. It keeps working in every other Space. **Done** saves the list (with the profile, so every Space using the
+  profile, every window and a restart agree) and reloads the profile's open
+  tabs, which is what makes the change reach them. A Space without a profile
+  shares the Default one, so it has no list of its own: turning an
+  extension off there asks for a new profile's name and gives the Space that
+  profile, with the extension off. Every extension is on everywhere until
+  you turn it off, new ones too. What every profile shares stays readable
+  to an extension with the permission for it: your history (so the pages
+  you visited in the profile), downloads, recently closed tabs, bookmarks
+  and the Spaces' names. It also still learns that a tab it can't see was
+  switched to, moved or closed (tab ids only).
 - **Unload Space** (right-click the header or a Space button) frees the
   Space's tabs; they reload when you select them. Unload All Other Spaces
   frees all the others. Tabs on screen and tabs in use (playing sound, in

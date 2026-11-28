@@ -78,6 +78,9 @@
       {"koan-folders", "Koan folders",                                       \
        "Zen's tab folders at the top of each Space in the sidebar.",         \
        kOsDesktop, FEATURE_VALUE_TYPE(koan::features::kKoanFolders)},        \
+      {"koan-space-extensions", "Koan extensions per Space",                 \
+       "Turn extensions off in a Space's profile.", kOsDesktop,              \
+       FEATURE_VALUE_TYPE(koan::features::kKoanSpaceExtensions)},            \
       {"koan-new-tab", "Koan new tab page",                                  \
        "Zen's blank new tab page instead of Chromium's.", kOsDesktop,        \
        FEATURE_VALUE_TYPE(koan::features::kKoanNewTab)},

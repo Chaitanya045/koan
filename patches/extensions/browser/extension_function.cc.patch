@@ -1,0 +1,23 @@
+diff --git a/extensions/browser/extension_function.cc b/extensions/browser/extension_function.cc
+index 6205531..22b7690 100644
+--- a/extensions/browser/extension_function.cc
++++ b/extensions/browser/extension_function.cc
+@@ -48,6 +48,7 @@
+ #include "extensions/common/constants.h"
+ #include "extensions/common/extension_api.h"
+ #include "extensions/common/mojom/renderer.mojom.h"
++#include "koan/browser/containers/koan_container_extensions.h"
+ #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom.h"
+ #include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom-forward.h"
+ 
+@@ -490,6 +491,10 @@ ExtensionFunction::ResponseAction ExtensionFunction::RunWithValidation() {
+     DCHECK(!error.empty() || bad_message_);
+     return bad_message_ ? ValidationFailure(this) : RespondNow(Error(error));
+   }
++  // Koan: the tabs the function looks up know who asks, so a Space profile
++  // the extension is off in hides its tabs (koan_container_extensions.h).
++  koan::containers::ScopedExtensionCall koan_call(
++      extension() ? extension()->id() : std::string());
+   return Run();
+ }
+ 

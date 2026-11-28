@@ -56,6 +56,11 @@ BASE_DECLARE_FEATURE(kKoanWelcome);
 // Koan's blank new tab page, like Zen's, instead of Chromium's.
 BASE_DECLARE_FEATURE(kKoanNewTab);
 
+// Extensions turned off per Space profile (#473): the Space menu's
+// Extensions... and the hooks that keep them out of the profile's pages
+// (koan_container_extensions.h). Off, every extension is on everywhere.
+BASE_DECLARE_FEATURE(kKoanSpaceExtensions);
+
 bool IsSidebarEnabled();
 bool IsCompactModeEnabled();
 bool IsSidebarSingleReflowEnabled();
