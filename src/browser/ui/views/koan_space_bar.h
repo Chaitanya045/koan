@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "koan/browser/ui/views/koan_space_drag_logic.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -28,11 +29,11 @@ class KoanSpaceStripView;
 
 // Zen's sidebar bottom bar: an optional leading button (the Library's) at
 // the start, "+" with Zen's Create menu at the end, and between them the
-// Space switcher, one narrow button per Space, centred: the current Space
-// shows its icon (or a dot for none) in colour, the others a small grey dot
-// until hovered. Like Zen, the Space buttons are hidden while there is only
-// one Space. In a sidebar too narrow for a row (icons only), they stack
-// above "+" at full size.
+// Space switcher (the row reversed with the sidebar on the right, as Zen's),
+// one narrow button per Space, centred: the current Space shows its icon (or a
+// dot for none) in colour, the others a small grey dot until hovered. Like Zen,
+// the Space buttons are hidden while there is only one Space. In a sidebar too
+// narrow for a row (icons only), they stack above "+" at full size.
 //
 // The switcher is a strip of its own that clips its buttons. When they don't
 // fit at their narrowest, it scrolls sideways like Zen's (overflow-x: auto,
@@ -150,6 +151,8 @@ class KoanSpaceBarView : public views::View, public gfx::AnimationDelegate {
   raw_ptr<KoanSpaceButton> reorder_button_ = nullptr;
   int reorder_start_ = 0;
   bool reordering_ = false;
+  // Watches which side the sidebar is on: the row is reversed on the right.
+  PrefChangeRegistrar side_registrar_;
 };
 
 }  // namespace koan

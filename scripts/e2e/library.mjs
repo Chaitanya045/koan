@@ -1,15 +1,17 @@
 // End-to-end test of the Library against a real build: its shortcuts
 // (Alt+Shift+L, Ctrl+H, Ctrl+Shift+Y) and sidebar button, History (search,
 // filters, forget, open), Downloads (a real download, its actions and type
-// filters, a dangerous one) and Spaces (rename, reorder), and closing with
-// Esc. What History deletes is checked in library_history.mjs.
+// filters, a dangerous one) and Spaces (rename, reorder), closing with Esc,
+// and opening and closing it with clicks on its button, the sidebar on
+// either side. What History deletes is checked in library_history.mjs.
 //
 //   scripts/e2e/run.sh library     (opens scripts/e2e/pages/library.html)
 import { copyFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   half, whole, ALT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, createSpace, evalIn, finish,
-  key as keyTo, pages as tabs, setKoanPref, sleep, visiblePage, waitFor, IS_MAC, META,
+  key as keyTo, pages as tabs, setKoanPref, sleep, viewTree, visiblePage, waitFor, IS_MAC,
+  META,
 } from './lib/koan.mjs';
 // Library Downloads: Ctrl+Shift+Y, on macOS Cmd+J (koan_shortcut_table.cc).
 const DOWNLOADS_KEY = IS_MAC ? [74, META, 'j'] : [89, CTRL | SHIFT, 'Y'];
@@ -456,6 +458,108 @@ check('...with the side column on the left', state.sectionX === 110,
 // --- Esc closes the Library. ---
 await key(ESC, 0, 'Escape');
 check('Esc closes the Library', !(await library()).open);
+
+// --- The Library button opens it, and a second click on the same spot
+// closes it (#542): the open panel covers the sidebar there, and its back
+// button ("Close library") must be in that corner, with the sidebar on
+// either side. Both clicks go to the root view of the widget under the
+// point, which routes them like real input. ---
+
+// A widget's place in the window (its bounds in the screen, less the
+// window's) and its root view, in one UI DevTools session.
+async function widgetAt(ui, name) {
+  const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result.root;
+  const widgets = [];
+  const walk = n => {
+    const a = n.attributes ?? [];
+    if (n.nodeName === 'Widget') widgets.push({ n, name: a[a.indexOf('name') + 1] });
+    for (const c of n.children ?? []) walk(c);
+  };
+  walk(doc);
+  const origin = async w => {
+    const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId: w.n.nodeId });
+    for (const rule of r.result?.matchedCSSRules ?? []) {
+      for (const p of rule.rule.style.cssProperties) {
+        if (p.name === 'ClientAreaBoundsInScreen') return p.value.split(' ')[0].split(',').map(Number);
+      }
+    }
+    return [0, 0];
+  };
+  const firstView = n => n.nodeName === 'View' ? n
+      : (n.children ?? []).map(firstView).find(Boolean);
+  const browser = widgets.find(w => w.name === 'BrowserWidget');
+  const widget = widgets.find(w => w.name === name);
+  if (!browser || !widget) return null;
+  const [bx, by] = await origin(browser);
+  const [x, y] = await origin(widget);
+  return { x: x - bx, y: y - by, root: firstView(widget.n) };
+}
+
+// Clicks the point (x, y) of the window in the widget named `name`.
+async function clickInWidget(name, x, y) {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  try {
+    await ui.send('DOM.enable');
+    await ui.send('CSS.enable');
+    const widget = await widgetAt(ui, name);
+    if (!widget?.root) return false;
+    for (const type of ['mousePressed', 'mouseReleased']) {
+      await ui.send('DOM.dispatchMouseEvent', {
+        nodeId: widget.root.nodeId,
+        event: { type, x: whole(x - widget.x), y: whole(y - widget.y), button: 'left',
+                 wheelDirection: 'none' },
+      });
+    }
+    return true;
+  } finally {
+    ui.close();
+  }
+}
+
+// The Library button's centre in the window, and whether the open Library's
+// back button is there.
+async function libraryCorner() {
+  const vs = await viewTree();
+  const button = vs.find(v => v.cls === 'KoanLibraryButton' && v.shown && v.wname === 'BrowserWidget');
+  if (!button) return null;
+  const x = whole(button.ax + half(button.w)), y = whole(button.ay + half(button.h));
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await ui.send('DOM.enable');
+  await ui.send('CSS.enable');
+  const lib = await widgetAt(ui, 'KoanLibrary');
+  ui.close();
+  const back = vs.find(v => v.wname === 'KoanLibrary' && v.shown &&
+                            (v.props.TooltipText ?? v.props.Tooltip) === 'Close library');
+  const onBack = !!(lib && back) &&
+      x - lib.x >= back.ax && x - lib.x < back.ax + back.w &&
+      y - lib.y >= back.ay && y - lib.y < back.ay + back.h;
+  return { x, y, onBack };
+}
+
+const settled = async want => await waitFor(async () => {
+  const s = await library();
+  return s.open === want ? s : null;
+}, 3000) ?? await library();
+
+for (const side of ['left', 'right']) {
+  await setKoanPref('koan.tabs.on_right', side === 'right');
+  await sleep(800);
+  const corner = await libraryCorner();
+  check(`[${side}] the Library button is in the sidebar`, !!corner);
+  if (!corner) continue;
+  await clickInWidget('BrowserWidget', corner.x, corner.y);
+  const opened = await settled(true);
+  check(`[${side}] a click on the Library button opens the Library`, opened.open);
+  await sleep(800);  // (The panel's slide has settled.)
+  const after = await libraryCorner();
+  check(`[${side}] ...with its back button ("Close library") over the Library button`,
+        after?.onBack, JSON.stringify(after));
+  await clickInWidget('KoanLibrary', corner.x, corner.y);
+  const closed = await settled(false);
+  check(`[${side}] a second click on the same spot closes it`, !closed.open);
+  await sleep(600);
+}
+await setKoanPref('koan.tabs.on_right', false);
 
 // --- With tabs on the right, the panel comes from the right, mirrored. ---
 await setKoanPref('koan.tabs.on_right', true);
