@@ -149,6 +149,23 @@ void DeleteProfileHistory(Profile* profile,
                           const std::set<GURL>& urls,
                           base::Time begin);
 
+// Delete Profile... in Settings (#477, koan_space_profiles.h): forgets the
+// closed tabs of the Space profile `history_profile` and deletes all its
+// visits, as DeleteProfileHistory() does for the Library. It stays in
+// prefs::kDeletedContainersHistory, written to disk with the profile's
+// removal from the list, until a start finds none of its visits left
+// (ResumeForgettingSpaceProfiles()): the history database writes a removal
+// some seconds later, so a crash in between would keep the visits. Nothing
+// is deleted where history can't be (the AllowDeletingBrowserHistory
+// policy).
+void ForgetSpaceProfileHistory(Profile* profile,
+                               std::string_view history_profile);
+
+// Once per run of `profile`, from its first window: deletes again the visits
+// of the profiles in prefs::kDeletedContainersHistory, and drops each whose
+// visits were all gone already.
+void ResumeForgettingSpaceProfiles(Profile* profile);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_TAB_AUTO_CLOSER_H_

@@ -104,8 +104,9 @@ void DeleteUserContainerData(Profile* profile,
                              base::OnceClosure done);
 
 // ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(), for a removal that
-// names no partition (Clear browsing data, Forget About This Site, the
-// browsingData extension API): the same removal, for the types kept in a
+// names no partition (Clear browsing data, the browsingData extension API;
+// the Library's Forget About This Site names each partition itself, #474):
+// the same removal, for the types kept in a
 // partition (cookies, site data, caches), in each of the user's containers,
 // as Chromium does for isolated web apps.
 void RemoveUserContainersData(Profile* profile,

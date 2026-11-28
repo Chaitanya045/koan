@@ -50,11 +50,13 @@
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/containers/koan_container_partition.h"
 #include "koan/browser/containers/koan_history_profiles.h"
+#include "koan/browser/containers/koan_user_containers.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/koan_switches.h"
 #include "koan/browser/ui/vector_icons/vector_icons.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_folder_controller.h"
+#include "koan/browser/ui/views/koan_library_view.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_session_data.h"
 #include "koan/browser/ui/views/koan_spaces.h"
@@ -158,6 +160,9 @@ class ProfileHistoryDeletions : public base::SupportsUserData::Data {
   // For the deletions' history tasks: they outlive the Library that asked.
   base::CancelableTaskTracker* tracker() { return &tracker_; }
 
+  // Whether ResumeForgettingSpaceProfiles() ran this time Koan is running.
+  bool TakeResume() { return !std::exchange(resumed_, true); }
+
   base::WeakPtr<ProfileHistoryDeletions> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
   }
@@ -171,6 +176,7 @@ class ProfileHistoryDeletions : public base::SupportsUserData::Data {
   };
 
   int next_id_ = 0;
+  bool resumed_ = false;
   std::vector<Deletion> pending_;
   base::CancelableTaskTracker tracker_;
   base::WeakPtrFactory<ProfileHistoryDeletions> weak_factory_{this};
@@ -187,17 +193,20 @@ class ProfileHistoryDeletions : public base::SupportsUserData::Data {
 // top sites and the rest take as everything gone.
 class RemoveProfileVisitsTask : public history::HistoryDBTask {
  public:
+  // `done`, if set, gets whether there were visits to remove.
   RemoveProfileVisitsTask(std::string app_id,
                           std::set<GURL> urls,
                           base::Time begin,
                           base::WeakPtr<ProfileHistoryDeletions> deletions,
-                          int id)
+                          int id,
+                          base::OnceCallback<void(bool)> done)
       : app_id_(std::move(app_id)),
         urls_(std::move(urls)),
         begin_(begin),
         origin_(base::SequencedTaskRunner::GetCurrentDefault()),
         deletions_(std::move(deletions)),
-        id_(id) {}
+        id_(id),
+        done_(std::move(done)) {}
 
   // Destroyed on the sequence that scheduled it, after the notice.
   ~RemoveProfileVisitsTask() override {
@@ -226,6 +235,7 @@ class RemoveProfileVisitsTask : public history::HistoryDBTask {
     if (visits.empty()) {
       return true;
     }
+    removed_ = true;
     // The notice goes to the same sequence, after this.
     origin_->PostTask(FROM_HERE,
                       base::BindOnce(&ProfileHistoryDeletions::SetVisit,
@@ -234,7 +244,11 @@ class RemoveProfileVisitsTask : public history::HistoryDBTask {
     return true;
   }
 
-  void DoneRunOnMainThread() override {}
+  void DoneRunOnMainThread() override {
+    if (done_) {
+      std::move(done_).Run(removed_);
+    }
+  }
 
  private:
   const std::string app_id_;
@@ -243,6 +257,9 @@ class RemoveProfileVisitsTask : public history::HistoryDBTask {
   const scoped_refptr<base::SequencedTaskRunner> origin_;
   const base::WeakPtr<ProfileHistoryDeletions> deletions_;
   const int id_;
+  base::OnceCallback<void(bool)> done_;
+  // Set on the database's sequence, read after it on the main one.
+  bool removed_ = false;
 };
 
 // The profile (koan_history_profiles.h) whose closed tab has the Koan session
@@ -283,6 +300,8 @@ KoanTabAutoCloser::KoanTabAutoCloser(BrowserView* browser_view)
           profile(), ServiceAccessType::EXPLICIT_ACCESS)) {
     history_observation_.Observe(history);
   }
+  // A deleted Space profile's visits that a crash may have left (#477).
+  ResumeForgettingSpaceProfiles(profile());
   // The tabs already in the window (OnTabStripModelChanged() marks the ones
   // inserted from now on).
   TabStripModel* model = browser->GetTabStripModel();
@@ -734,11 +753,16 @@ void ForgetAutoClosedTab(Profile* profile, const std::string& id) {
       auto_close::RemoveClosedTab(prefs->GetList(prefs::kAutoClosedTabs), id));
 }
 
-void DeleteProfileHistory(Profile* profile,
-                          history::HistoryService* history,
-                          std::string_view history_profile,
-                          const std::set<GURL>& urls,
-                          base::Time begin) {
+namespace {
+
+// DeleteProfileHistory(), with `done` for the visits' removal (never run
+// without a history service).
+void DeleteProfileHistoryThen(Profile* profile,
+                              history::HistoryService* history,
+                              std::string_view history_profile,
+                              const std::set<GURL>& urls,
+                              base::Time begin,
+                              base::OnceCallback<void(bool)> done) {
   PrefService* prefs = profile->GetPrefs();
   const base::ListValue& list = prefs->GetList(prefs::kAutoClosedTabs);
   const size_t count = list.size();
@@ -763,8 +787,98 @@ void DeleteProfileHistory(Profile* profile,
       FROM_HERE,
       std::make_unique<RemoveProfileVisitsTask>(
           containers::HistoryAppIdForProfile(history_profile), urls, begin,
-          deletions->GetWeakPtr(), deletions->Add()),
+          deletions->GetWeakPtr(), deletions->Add(), std::move(done)),
       deletions->tracker());
+}
+
+// The visits of a deleted profile `history_profile` are gone if `removed` is
+// false: it no longer needs forgetting.
+void OnDeletedProfileChecked(base::WeakPtr<Profile> profile,
+                             const std::string& history_profile,
+                             bool removed) {
+  if (!profile || removed) {
+    return;
+  }
+  ScopedListPrefUpdate update(profile->GetPrefs(),
+                              prefs::kDeletedContainersHistory);
+  update->EraseValue(base::Value(history_profile));
+}
+
+}  // namespace
+
+void DeleteProfileHistory(Profile* profile,
+                          history::HistoryService* history,
+                          std::string_view history_profile,
+                          const std::set<GURL>& urls,
+                          base::Time begin) {
+  DeleteProfileHistoryThen(profile, history, history_profile, urls, begin,
+                           base::OnceCallback<void(bool)>());
+}
+
+void ForgetSpaceProfileHistory(Profile* profile,
+                               std::string_view history_profile) {
+  // (Never the default profile's: an id that isn't a saved user container
+  // would get its app_id.)
+  if (!profile || profile->IsOffTheRecord() ||
+      containers::HistoryAppIdForProfile(history_profile).empty() ||
+      !IsDeletingHistoryAllowed(profile)) {
+    return;
+  }
+  {
+    ScopedListPrefUpdate update(profile->GetPrefs(),
+                                prefs::kDeletedContainersHistory);
+    const base::Value id(history_profile);
+    if (!std::ranges::contains(*update, id)) {
+      update->Append(id.Clone());
+    }
+  }
+  DeleteProfileHistoryThen(profile,
+                           HistoryServiceFactory::GetForProfile(
+                               profile, ServiceAccessType::EXPLICIT_ACCESS),
+                           history_profile, {}, base::Time(),
+                           base::OnceCallback<void(bool)>());
+}
+
+void ResumeForgettingSpaceProfiles(Profile* profile) {
+  if (!profile || profile->IsOffTheRecord() ||
+      !ProfileHistoryDeletions::GetOrCreate(profile)->TakeResume()) {
+    return;
+  }
+  history::HistoryService* history = HistoryServiceFactory::GetForProfile(
+      profile, ServiceAccessType::EXPLICIT_ACCESS);
+  const base::ListValue& pending =
+      profile->GetPrefs()->GetList(prefs::kDeletedContainersHistory);
+  if (pending.empty() || !history) {
+    return;
+  }
+  const base::ListValue& listed =
+      profile->GetPrefs()->GetList(prefs::kUserContainers);
+  std::vector<std::string> ids;
+  bool unlisted_only = true;
+  for (const base::Value& id : pending) {
+    // A listed profile's history is never forgotten here, nor the default
+    // profile's (whose app_id anything else would get).
+    if (id.is_string() &&
+        !containers::HistoryAppIdForProfile(id.GetString()).empty() &&
+        !containers::ListedSpaceContainer(listed, id.GetString())) {
+      ids.push_back(id.GetString());
+    } else {
+      unlisted_only = false;
+    }
+  }
+  if (!unlisted_only) {
+    base::ListValue kept;
+    for (const std::string& id : ids) {
+      kept.Append(id);
+    }
+    profile->GetPrefs()->SetList(prefs::kDeletedContainersHistory,
+                                 std::move(kept));
+  }
+  for (const std::string& id : ids) {
+    DeleteProfileHistoryThen(
+        profile, history, id, {}, base::Time(),
+        base::BindOnce(&OnDeletedProfileChecked, profile->GetWeakPtr(), id));
+  }
 }
 
 }  // namespace koan

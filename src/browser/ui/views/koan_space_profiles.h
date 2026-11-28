@@ -39,6 +39,10 @@ struct SpaceProfileInfo {
   // Its open tabs, in every window, Essentials too (not the Spaces' hidden
   // empty tabs).
   int open_tabs = 0;
+  // Of those, its Essentials (#510: the profile's own grid) and its pinned
+  // tabs, which the question names: they close too.
+  int essentials = 0;
+  int pinned_tabs = 0;
 };
 
 // The profiles, in the order they were made.
@@ -75,11 +79,14 @@ bool ClearSpaceProfileData(Profile* profile,
                            base::OnceClosure done);
 
 // Delete profile...: in every window, the Spaces that use it go back to
-// Default (Zen's rule when a container is deleted) and its tabs close
-// (Firefox's), then it leaves the list and its data is deleted, folder and
-// all (koan::containers::DeleteUserContainerData()). Nothing of another
-// profile or of the default partition is touched. Runs `done` when the data
-// is gone; false (and nothing done) for a profile the list doesn't have.
+// Default (Zen's rule when a container is deleted; their empty tabs move into
+// Default at once), it leaves the list, its tabs close (Firefox's), its
+// Essentials and pinned tabs too, and the notifications it shows; its visits
+// and closed tabs are forgotten (ForgetSpaceProfileHistory()) and its data
+// is deleted, folder and all (koan::containers::DeleteUserContainerData()).
+// Its extension list (#473) was part of its entry in the list. Nothing of
+// another profile or of the default partition is touched. Runs `done` when the
+// data is gone; false (and nothing done) for a profile the list doesn't have.
 bool DeleteSpaceProfile(Profile* profile,
                         const std::string& id,
                         base::OnceClosure done);

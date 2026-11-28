@@ -696,19 +696,24 @@ belongs to a Space, and new tabs open in the active one.
     its cookies, site data and cache go, and nothing of another profile or
     of Default. Its tabs stay open (reload them to see it).
   - **Delete Profile…** asks first and says which Spaces use it and how
-    many of its tabs are open. Then those Spaces go back to Default (as in
-    Zen) and keep their other tabs, its tabs close (a page that asks before
-    you leave it can keep its tab), and its cookies, logins, site data and
-    cache are deleted from disk. A folder still in use goes at the next
-    start. A closed tab of a deleted profile reopens as a blank tab and
-    closes, so the profile never comes back.
+    many of its tabs are open, naming its Essentials and pinned tabs. Then
+    those Spaces go back to Default (as in Zen) and keep their other tabs
+    (their new tabs open in Default at once), its tabs close, Essentials
+    and pinned tabs too (a page that asks before you leave it can keep its
+    tab), its notifications close, and its history, the tabs Close tabs I
+    haven't used for kept, its extension switches, cookies, logins, site
+    data and cache are deleted from disk. Another profile's and Default's
+    are kept. A folder still in use goes at the next start, and so do
+    visits a crash kept. A closed tab of a deleted profile reopens as a
+    blank tab and closes, so the profile never comes back.
 - **Delete browsing data** (Chromium's Clear browsing data: Settings >
   Privacy and security > Delete browsing data) clears every profile too:
   "Cookies and other site data" and "Cached images and files", for the time
   range you pick, in Default and in each profile. With profiles, the
-  dialog's rows say "in every profile". History is shared, so it is cleared
-  once. The Library's **Forget About This Site** forgets the site in every
-  profile, and says so.
+  dialog's rows say "in every profile". Browsing history covers every
+  profile's. The Library's **Forget About This Site** forgets the site in
+  the profile its Which profile? filter shows (in every profile with All
+  profiles), and says so.
 - **Unload Space** (right-click the header or a Space button) frees the
   Space's tabs; they reload when you select them. Unload All Other Spaces
   frees all the others. Tabs on screen and tabs in use (playing sound, in

@@ -5,17 +5,22 @@
 #include "koan/browser/ui/views/koan_page_notifications.h"
 
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "base/containers/lru_cache.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/notifications/notification_display_service.h"
+#include "chrome/browser/notifications/notification_display_service_factory.h"
+#include "chrome/browser/notifications/notification_handler.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
@@ -55,6 +60,9 @@ struct NotificationSource {
   // closed since.
   base::WeakPtr<BrowserWindowInterface> window;
   std::optional<tab_groups::TabGroupId> space;
+  // The page's container, for closing its notifications when its profile is
+  // deleted (CloseSpaceProfileNotifications()).
+  std::optional<containers::ContainerId> container;
 };
 
 // The latest page notifications' sources, by notification id. An entry stays
@@ -249,6 +257,7 @@ void OnShowingPageNotification(Profile* profile,
                     .contents = contents->GetWeakPtr(),
                     .window = window ? window->GetWeakPtr() : nullptr,
                     .space = tab ? tab->GetGroup() : std::nullopt,
+                    .container = containers::ContainerOf(contents),
                 });
 
   if (!IsInSpaceProfile(contents)) {
@@ -366,6 +375,47 @@ void OnPageNotificationClicked(Profile* profile,
 std::u16string PageNotificationContext(const std::u16string& site,
                                        const std::u16string& space) {
   return space.empty() ? site : base::StrCat({site, u" · ", space});
+}
+
+void CloseSpaceProfileNotifications(Profile* profile,
+                                    const containers::ContainerId& container) {
+  if (!profile || profile->IsOffTheRecord() ||
+      container.kind != containers::ContainerKind::kUser) {
+    return;
+  }
+  NotificationDisplayService* display =
+      NotificationDisplayServiceFactory::GetForProfile(profile);
+  if (!display) {
+    return;
+  }
+  // (Its pages' sources, now: the tabs are about to close.)
+  std::set<std::string> pages;
+  for (const auto& [id, source] : Sources()) {
+    if (source.container == container) {
+      pages.insert(id);
+    }
+  }
+  display->GetDisplayed(base::BindOnce(
+      [](base::WeakPtr<Profile> profile,
+         const containers::ContainerId& container,
+         const std::set<std::string>& pages, std::set<std::string> displayed,
+         bool supports_synchronization) {
+        NotificationDisplayService* display =
+            profile ? NotificationDisplayServiceFactory::GetForProfile(
+                          profile.get())
+                    : nullptr;
+        if (!display) {
+          return;
+        }
+        for (const std::string& id : displayed) {
+          if (pages.contains(id)) {
+            display->Close(NotificationHandler::Type::WEB_NON_PERSISTENT, id);
+          } else if (ContainerOfNotification(profile.get(), id) == container) {
+            display->Close(NotificationHandler::Type::WEB_PERSISTENT, id);
+          }
+        }
+      },
+      profile->GetWeakPtr(), container, std::move(pages)));
 }
 
 bool ShowsProfileNotificationNote(content::WebContents* contents) {

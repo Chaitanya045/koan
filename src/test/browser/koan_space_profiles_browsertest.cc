@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -20,10 +21,17 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/run_loop.h"
+#include "base/task/cancelable_task_tracker.h"
 #include "base/test/run_until.h"
 #include "base/test/test_future.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/notifications/notification_display_service.h"
+#include "chrome/browser/notifications/notification_display_service_factory.h"
+#include "chrome/browser/notifications/notification_display_service_tester.h"
+#include "chrome/browser/notifications/notification_handler.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/sessions/tab_restore_service_load_waiter.h"
@@ -38,9 +46,16 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings.h"
+#include "components/content_settings/core/common/content_settings_types.h"
+#include "components/history/core/browser/history_service.h"
+#include "components/history/core/browser/history_types.h"
+#include "components/keyed_service/core/service_access_type.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/tab_groups/tab_group_color.h"
+#include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/storage_partition.h"
@@ -48,9 +63,13 @@
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/browsing_data_remover_test_util.h"
+#include "koan/browser/containers/koan_container_extensions.h"
 #include "koan/browser/containers/koan_container_partition.h"
+#include "koan/browser/containers/koan_history_profiles.h"
+#include "koan/browser/containers/koan_partition_domain.h"
 #include "koan/browser/containers/koan_user_containers.h"
 #include "koan/browser/koan_prefs.h"
+#include "koan/browser/koan_tab_auto_close.h"
 #include "koan/browser/ui/views/koan_space_profile_menu.h"
 #include "koan/browser/ui/views/koan_space_profiles.h"
 #include "koan/browser/ui/views/koan_spaces.h"
@@ -60,8 +79,11 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
+#include "ui/base/models/image_model.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/message_center/public/cpp/notification.h"
+#include "ui/message_center/public/cpp/notifier_id.h"
 #include "url/gurl.h"
 
 namespace koan {
@@ -189,6 +211,77 @@ class KoanSpaceProfilesBrowserTest : public InProcessBrowserTest {
 
   GURL Page(const std::string& host) {
     return embedded_test_server()->GetURL(host, "/title1.html");
+  }
+
+  history::HistoryService* history() {
+    return HistoryServiceFactory::GetForProfile(
+        profile(), ServiceAccessType::EXPLICIT_ACCESS);
+  }
+
+  // The pages with visits in the profile `container` (none: the default).
+  std::set<GURL> Pages(const std::string& container) {
+    history::QueryOptions options;
+    options.duplicate_policy = history::QueryOptions::KEEP_ALL_DUPLICATES;
+    options.app_id = containers::HistoryAppIdForProfile(container);
+    base::test::TestFuture<history::QueryResults> results;
+    base::CancelableTaskTracker tracker;
+    history()->QueryHistory(u"", options, results.GetCallback(), &tracker);
+    std::set<GURL> pages;
+    for (const history::URLResult& result : results.Take()) {
+      pages.insert(result.url());
+    }
+    return pages;
+  }
+
+  // A visit to `url` in the profile `container`, as a tab of it records one.
+  void AddVisit(const GURL& url, const std::string& container) {
+    history::HistoryAddPageArgs args;
+    args.url = url;
+    args.time = base::Time::Now();
+    args.redirects = {url};
+    args.transition = ui::PAGE_TRANSITION_TYPED;
+    args.app_id = containers::HistoryAppIdForProfile(container);
+    history()->AddPage(args);
+  }
+
+  // A tab "Close tabs I haven't used for" closed, of the profile `container`.
+  void AddAutoClosedTab(const GURL& url, const std::string& container) {
+    auto_close::ClosedTab tab;
+    tab.id = container.empty() ? "plain" : container;
+    tab.url = url;
+    tab.closed = base::Time::Now();
+    if (!container.empty()) {
+      tab.data[containers::kContainerSessionKey] = container;
+    }
+    PrefService* prefs = profile()->GetPrefs();
+    prefs->SetList(
+        prefs::kAutoClosedTabs,
+        auto_close::AddClosedTab(prefs->GetList(prefs::kAutoClosedTabs), tab,
+                                 base::Time::Now()));
+  }
+
+  // The profiles of the closed tabs "Close tabs I haven't used for" keeps.
+  std::multiset<std::string> AutoClosedTabProfiles() {
+    std::multiset<std::string> profiles;
+    for (const base::Value& entry :
+         profile()->GetPrefs()->GetList(prefs::kAutoClosedTabs)) {
+      if (std::optional<auto_close::ClosedTab> tab =
+              auto_close::ClosedTab::FromValue(entry)) {
+        const auto it = tab->data.find(containers::kContainerSessionKey);
+        profiles.insert(it == tab->data.end() ? std::string() : it->second);
+      }
+    }
+    return profiles;
+  }
+
+  // prefs::kDeletedContainersHistory.
+  std::vector<std::string> DeletedHistory() {
+    std::vector<std::string> ids;
+    for (const base::Value& id :
+         profile()->GetPrefs()->GetList(prefs::kDeletedContainersHistory)) {
+      ids.push_back(id.is_string() ? id.GetString() : std::string());
+    }
+    return ids;
   }
 
   // A second window, for "every window".
@@ -388,9 +481,12 @@ IN_PROC_BROWSER_TEST_F(KoanSpaceProfilesBrowserTest,
   }));
 }
 
-// Forget About This Site forgets the site in every profile, and only it.
+// A removal for one site that names no partition (a filtered Clear browsing
+// data, the browsingData extension API) reaches every profile, for that site
+// only. (The Library's Forget About This Site names each partition itself,
+// #474, so with one profile shown it stays in that one.)
 IN_PROC_BROWSER_TEST_F(KoanSpaceProfilesBrowserTest,
-                       ForgetAboutThisSiteForgetsItInEveryProfile) {
+                       SiteRemovalReachesEveryProfile) {
   ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
   const std::string work = AddProfile(u"Work");
   SetCookie(OpenInNewSpace(browser(), u"Work", work, Page("a.test")), "a");
@@ -402,7 +498,6 @@ IN_PROC_BROWSER_TEST_F(KoanSpaceProfilesBrowserTest,
   SetCookie(params.navigated_or_inserted_contents, "b");
   ASSERT_EQ((std::vector<std::string>{"a", "b"}), *CookieNames(work));
 
-  // What the Library's Forget About This Site asks the remover for.
   auto filter = content::BrowsingDataFilterBuilder::Create(
       content::BrowsingDataFilterBuilder::Mode::kDelete);
   filter->AddRegisterableDomain("a.test");
@@ -453,6 +548,215 @@ IN_PROC_BROWSER_TEST_F(KoanSpaceProfilesBrowserTest,
   for (const auto& space : spaces->GetSpaces()) {
     EXPECT_EQ("", space.container);
   }
+}
+
+// Deleting a profile forgets its history (#474) and the tabs "Close tabs I
+// haven't used for" kept (#482), and its extension list (#473) goes with its
+// entry. Another profile's and the default profile's are kept.
+IN_PROC_BROWSER_TEST_F(KoanSpaceProfilesBrowserTest,
+                       DeleteForgetsItsHistoryClosedTabsAndExtensions) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  ui_test_utils::WaitForHistoryToLoad(history());
+  const std::string work = AddProfile(u"Work");
+  const std::string home = AddProfile(u"Home");
+  // Visits in each, the same page in two.
+  ASSERT_TRUE(OpenInNewSpace(browser(), u"None", "", Page("a.test")));
+  ASSERT_TRUE(OpenInNewSpace(browser(), u"Work", work, Page("w.test")));
+  ASSERT_TRUE(OpenInNewSpace(browser(), u"Home", home, Page("h.test")));
+  AddVisit(Page("a.test"), work);
+  AddVisit(Page("a.test"), home);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return Pages(work) == std::set<GURL>{Page("a.test"), Page("w.test")} &&
+           Pages(home) == std::set<GURL>{Page("a.test"), Page("h.test")} &&
+           Pages("").contains(Page("a.test"));
+  }));
+  AddAutoClosedTab(Page("w.test"), work);
+  AddAutoClosedTab(Page("h.test"), home);
+  AddAutoClosedTab(Page("a.test"), "");
+  const std::string extension(32, 'a');
+  {
+    ScopedListPrefUpdate update(profile()->GetPrefs(), prefs::kUserContainers);
+    ASSERT_TRUE(
+        containers::SetExtensionsOff(update.Get(), IdOf(work), {extension}));
+    ASSERT_TRUE(
+        containers::SetExtensionsOff(update.Get(), IdOf(home), {extension}));
+  }
+
+  base::test::TestFuture<void> deleted;
+  ASSERT_TRUE(DeleteSpaceProfile(profile(), work, deleted.GetCallback()));
+  ASSERT_TRUE(deleted.Wait());
+
+  EXPECT_TRUE(base::test::RunUntil([&] { return Pages(work).empty(); }));
+  EXPECT_EQ((std::set<GURL>{Page("a.test"), Page("h.test")}), Pages(home));
+  EXPECT_TRUE(Pages("").contains(Page("a.test")));
+  EXPECT_EQ((std::multiset<std::string>{"", home}), AutoClosedTabProfiles());
+  const base::ListValue& listed =
+      profile()->GetPrefs()->GetList(prefs::kUserContainers);
+  EXPECT_TRUE(containers::ExtensionsOffIn(listed, IdOf(work)).empty());
+  EXPECT_EQ(std::set<std::string>{extension},
+            containers::ExtensionsOffIn(listed, IdOf(home)));
+  ASSERT_EQ(1u, listed.size());
+  // Kept for the next start, which checks that the visits are gone.
+  EXPECT_EQ(std::vector<std::string>{work}, DeletedHistory());
+}
+
+// A Space's empty tab is in Default as soon as its profile is deleted (#561),
+// not with the next update. The question names the profile's Essentials
+// (#510), which close with it.
+IN_PROC_BROWSER_TEST_F(KoanSpaceProfilesBrowserTest,
+                       DeleteMovesTheEmptyTabAtOnceAndNamesEssentials) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  const std::string work = AddProfile(u"Work");
+  content::WebContents* tab =
+      OpenInNewSpace(browser(), u"Work", work, Page("a.test"));
+  ASSERT_TRUE(tab);
+  ASSERT_TRUE(OpenInNewSpace(browser(), u"Work 2", work, Page("b.test")));
+  TabStripModel* tab_strip = browser()->GetTabStripModel();
+  tab_strip->SetTabPinned(tab_strip->GetIndexOfWebContents(tab), true);
+  std::vector<SpaceProfileInfo> listed = GetSpaceProfiles(profile());
+  ASSERT_EQ(1u, listed.size());
+  EXPECT_EQ(2, listed[0].open_tabs);
+  EXPECT_EQ(1, listed[0].essentials);
+  EXPECT_EQ(0, listed[0].pinned_tabs);
+
+  // The empty tabs of the Spaces that use it.
+  const auto empty_tab_containers = [&] {
+    std::vector<std::optional<containers::ContainerId>> found;
+    KoanWorkspaceController* spaces = GetSpaces(browser());
+    for (const auto& space : spaces->GetSpaces()) {
+      if (!space.name.starts_with(u"Work")) {
+        continue;
+      }
+      for (int i = 0; i < tab_strip->count(); ++i) {
+        tabs::TabInterface* each = tab_strip->GetTabAtIndex(i);
+        if (each->GetGroup() == space.id && IsEmptyTab(each)) {
+          found.push_back(containers::ContainerOf(each->GetContents()));
+        }
+      }
+    }
+    return found;
+  };
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    const auto found = empty_tab_containers();
+    return !found.empty() && std::ranges::all_of(found, [&](const auto& c) {
+      return c == IdOf(work);
+    });
+  }));
+  const size_t empty_tabs = empty_tab_containers().size();
+  ASSERT_TRUE(DeleteSpaceProfile(profile(), work, base::DoNothing()));
+  // At once: nothing ran between.
+  EXPECT_EQ(std::vector<std::optional<containers::ContainerId>>(empty_tabs),
+            empty_tab_containers());
+  EXPECT_TRUE(base::test::RunUntil([&] { return TabsIn(work) == 0; }));
+}
+
+// The notifications a deleted profile shows close; another profile's and the
+// default profile's stay.
+IN_PROC_BROWSER_TEST_F(KoanSpaceProfilesBrowserTest,
+                       DeleteClosesItsNotifications) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  NotificationDisplayServiceTester notifications(profile());
+  const std::string work = AddProfile(u"Work");
+  const std::string home = AddProfile(u"Home");
+  // Service workers' notifications: the id names the partition.
+  const auto show = [&](const std::string& container) {
+    const std::string domain =
+        container.empty()
+            ? std::string()
+            : containers::PartitionConfigFor(profile(), IdOf(container))
+                  .partition_domain();
+    const GURL origin = Page("a.test").DeprecatedGetOriginAsURL();
+    const std::string id = containers::TagPersistentNotificationId(
+        "p#" + origin.spec() + "#0" + container, domain);
+    NotificationDisplayServiceFactory::GetForProfile(profile())->Display(
+        NotificationHandler::Type::WEB_PERSISTENT,
+        message_center::Notification(
+            message_center::NOTIFICATION_TYPE_SIMPLE, id, u"Hi", u"",
+            ui::ImageModel(), u"", origin, message_center::NotifierId(origin),
+            message_center::RichNotificationData(), nullptr),
+        /*metadata=*/nullptr);
+    return id;
+  };
+  const std::string in_work = show(work);
+  const std::string in_home = show(home);
+  const std::string in_default = show("");
+  // A page's own, from a tab of the profile.
+  HostContentSettingsMapFactory::GetForProfile(profile())
+      ->SetContentSettingDefaultScope(Page("b.test"), GURL(),
+                                      ContentSettingsType::NOTIFICATIONS,
+                                      CONTENT_SETTING_ALLOW);
+  content::WebContents* page =
+      OpenInNewSpace(browser(), u"Work", work, Page("b.test"));
+  ASSERT_TRUE(page);
+  ASSERT_TRUE(content::ExecJs(page, "new Notification('Page')"));
+  const auto shown = [&](NotificationHandler::Type type) {
+    std::set<std::string> ids;
+    for (const message_center::Notification& notification :
+         notifications.GetDisplayedNotificationsForType(type)) {
+      ids.insert(notification.id());
+    }
+    return ids;
+  };
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return shown(NotificationHandler::Type::WEB_NON_PERSISTENT).size() == 1;
+  }));
+  ASSERT_EQ((std::set<std::string>{in_work, in_home, in_default}),
+            shown(NotificationHandler::Type::WEB_PERSISTENT));
+
+  ASSERT_TRUE(DeleteSpaceProfile(profile(), work, base::DoNothing()));
+  EXPECT_TRUE(base::test::RunUntil([&] {
+    return shown(NotificationHandler::Type::WEB_PERSISTENT) ==
+               std::set<std::string>{in_home, in_default} &&
+           shown(NotificationHandler::Type::WEB_NON_PERSISTENT).empty();
+  }));
+}
+
+// Visits a crash kept from a deletion go at the next start; the profile stays
+// marked until a start finds none (the history database writes some seconds
+// after a removal). A listed profile's history is never forgotten that way.
+IN_PROC_BROWSER_TEST_F(KoanSpaceProfilesBrowserTest,
+                       PRE_PRE_CrashKeptVisitsGoAtTheNextStart) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  ui_test_utils::WaitForHistoryToLoad(history());
+  const std::string ghost = AddProfile(u"Ghost");
+  const std::string home = AddProfile(u"Home");
+  AddVisit(Page("g.test"), ghost);
+  AddVisit(Page("h.test"), home);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !Pages(ghost).empty() && !Pages(home).empty(); }));
+  // As a crash leaves it: out of the list, marked, its visits still there.
+  {
+    ScopedListPrefUpdate update(profile()->GetPrefs(), prefs::kUserContainers);
+    ASSERT_TRUE(containers::RemoveUserContainer(update.Get(), IdOf(ghost)));
+  }
+  base::ListValue marked;
+  marked.Append(ghost);
+  marked.Append(home);
+  profile()->GetPrefs()->SetList(prefs::kDeletedContainersHistory,
+                                 std::move(marked));
+}
+
+IN_PROC_BROWSER_TEST_F(KoanSpaceProfilesBrowserTest,
+                       PRE_CrashKeptVisitsGoAtTheNextStart) {
+  ui_test_utils::WaitForHistoryToLoad(history());
+  const std::string home = GetSpaceProfiles(profile()).at(0).id;
+  // Home is listed: unmarked at once, its history kept.
+  const std::vector<std::string> marked = DeletedHistory();
+  ASSERT_EQ(1u, marked.size());
+  ASSERT_NE(home, marked[0]);
+  const std::string ghost = marked[0];
+  EXPECT_TRUE(base::test::RunUntil([&] { return Pages(ghost).empty(); }));
+  EXPECT_EQ(std::set<GURL>{Page("h.test")}, Pages(home));
+  // Its visits were there this time: still marked.
+  EXPECT_EQ(std::vector<std::string>{ghost}, DeletedHistory());
+}
+
+IN_PROC_BROWSER_TEST_F(KoanSpaceProfilesBrowserTest,
+                       CrashKeptVisitsGoAtTheNextStart) {
+  ui_test_utils::WaitForHistoryToLoad(history());
+  EXPECT_TRUE(base::test::RunUntil([&] { return DeletedHistory().empty(); }));
+  const std::string home = GetSpaceProfiles(profile()).at(0).id;
+  EXPECT_EQ(std::set<GURL>{Page("h.test")}, Pages(home));
 }
 
 }  // namespace koan

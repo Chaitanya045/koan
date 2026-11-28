@@ -172,7 +172,9 @@ base::DictValue KoanProfilesHandler::Profiles() {
                         .Set("name", info.name)
                         .Set("color", info.color)
                         .Set("spaces", std::move(spaces))
-                        .Set("openTabs", info.open_tabs));
+                        .Set("openTabs", info.open_tabs)
+                        .Set("essentials", info.essentials)
+                        .Set("pinnedTabs", info.pinned_tabs));
   }
   // The swatches in the colours the browser draws them in (light or dark).
   const ui::ColorProvider& provider =

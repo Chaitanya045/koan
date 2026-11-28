@@ -31,8 +31,11 @@
 #include "koan/browser/containers/koan_containers.h"
 #include "koan/browser/containers/koan_user_containers.h"
 #include "koan/browser/koan_prefs.h"
+#include "koan/browser/ui/views/koan_page_notifications.h"
+#include "koan/browser/ui/views/koan_pinned_tabs.h"
 #include "koan/browser/ui/views/koan_space_profile_menu.h"
 #include "koan/browser/ui/views/koan_spaces.h"
+#include "koan/browser/ui/views/koan_tab_auto_closer.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 
 namespace koan {
@@ -153,7 +156,10 @@ std::vector<SpaceProfileInfo> GetSpaceProfiles(Profile* profile) {
           if (SpaceProfileInfo* info =
                   container ? find(containers::Serialize(*container))
                             : nullptr) {
+            tabs::TabInterface* tab = tab_strip->GetTabAtIndex(i);
             ++info->open_tabs;
+            info->essentials += tab->IsPinned();
+            info->pinned_tabs += IsPinnedInSpace(tab);
           }
         }
         return true;
@@ -241,7 +247,7 @@ bool DeleteSpaceProfile(Profile* profile,
   // 1. Its Spaces go back to Default in every window, while they still read
   // it (a Space reads a profile that isn't listed as Default, so whatever
   // still names it afterwards, a reopened window or the stored Spaces, does
-  // too).
+  // too). Their empty tabs move into Default now (SetSpaceContainer(), #561).
   ForEachSpacesWindow(profile, [&](KoanWorkspaceController& spaces) {
     for (const KoanWorkspaceController::SpaceInfo& space : spaces.GetSpaces()) {
       if (space.container == serialized) {
@@ -276,7 +282,13 @@ bool DeleteSpaceProfile(Profile* profile,
       tab_strip->CloseWebContentsAt(index, TabCloseTypes::CLOSE_NONE);
     }
   }
-  // 4. Its data, and its folder.
+  // 4. The notifications it shows (a click on one would be dropped anyway,
+  // LoadNotificationPartition()).
+  CloseSpaceProfileNotifications(profile, *container);
+  // 5. Its visits and closed tabs (#474), its data and its folder. What
+  // marks them for deletion after a crash goes to disk with the list, before
+  // anything is deleted.
+  ForgetSpaceProfileHistory(profile, serialized);
   containers::DeleteUserContainerData(profile, *container, std::move(done));
   return true;
 }

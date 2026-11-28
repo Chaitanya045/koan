@@ -721,15 +721,28 @@ function profileSummary(profile) {
 // and tabs that use it.
 function deleteQuestion(profile) {
   const lines = [`Delete the profile “${profile.name}”?`,
-                 'Its cookies, logins and site data are deleted from this ' +
-                     'device. History, bookmarks and passwords are kept.'];
+                 'Its history, closed tabs, cookies, logins and site data ' +
+                     'are deleted from this device. Bookmarks and passwords ' +
+                     'are kept.'];
   if (profile.spaces.length) {
     lines.push(`${listText(profile.spaces)} ` +
                `${profile.spaces.length === 1 ? 'uses' : 'use'} it and ` +
                'will use Default.');
   }
   if (profile.openTabs) {
-    lines.push(`Its ${tabsText(profile.openTabs)} will close.`);
+    // Essentials and pinned tabs are easy to miss as "tabs" (#510).
+    const kept = [];
+    if (profile.essentials) {
+      kept.push(profile.essentials === 1 ? '1 Essential' :
+                                           `${profile.essentials} Essentials`);
+    }
+    if (profile.pinnedTabs) {
+      kept.push(profile.pinnedTabs === 1 ? '1 pinned tab' :
+                                           `${profile.pinnedTabs} pinned tabs`);
+    }
+    lines.push(`Its ${tabsText(profile.openTabs)}` +
+               (kept.length ? `, including ${kept.join(' and ')},` : '') +
+               ' will close.');
   }
   return lines.join('\n\n');
 }
@@ -858,8 +871,10 @@ function renderProfiles(query) {
       h('p', {class: 'description'},
         'Profiles are used to separate cookies and site data between ' +
             'spaces. Pick one for a Space in Create a Space, or with Set ' +
-            'Profile in the Space’s menu. History, bookmarks, passwords and ' +
-            'extensions are shared.'),
+            'Profile in the Space’s menu. Bookmarks and passwords are ' +
+            'shared. Each profile keeps its own history (Keep history ' +
+            'apart for each profile, in Workspaces), and an extension can ' +
+            'be turned off in it (Extensions… in the Space’s menu).'),
       ...(rows.length ? rows :
                         [h('p', {class: 'description indent'},
                            'No profiles yet. Make one with New Profile… in ' +

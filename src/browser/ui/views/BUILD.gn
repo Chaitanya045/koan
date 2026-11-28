@@ -637,6 +637,7 @@ source_set("impl") {
     "//chrome/browser/favicon",
     "//chrome/browser/first_run",
     "//chrome/browser/lifetime",
+    "//chrome/browser/notifications",
     "//chrome/browser/performance_manager",
     "//chrome/browser/prefs:util",
     "//chrome/browser/profiles:profile",

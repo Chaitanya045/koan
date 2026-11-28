@@ -19,6 +19,10 @@ namespace message_center {
 class Notification;
 }  // namespace message_center
 
+namespace koan::containers {
+struct ContainerId;
+}  // namespace koan::containers
+
 // Notifications in Koan's Spaces (.agent/notes/upstream/space-containers.md,
 // "Notifications"). A page's own notifications (`new Notification()`,
 // Chromium's non-persistent ones, #478): a page in a Space's profile may show
@@ -79,6 +83,13 @@ void LoadNotificationPartition(Profile* profile,
 // Space's profile) otherwise.
 void PlaceServiceWorkerWindow(content::SiteInstance* worker,
                               NavigateParams& params);
+
+// Delete Profile... (#477, koan_space_profiles.h): closes the notifications of
+// `container`, a Space's profile of `profile`, that are showing: its service
+// workers' (by the partition their id names) and its pages' (by the container
+// of the tab that showed them, also one that has closed since).
+void CloseSpaceProfileNotifications(Profile* profile,
+                                    const containers::ContainerId& container);
 
 // The line under a page notification's title for a page in a Space's
 // profile: the site (as Chromium shows it), then the Space.

@@ -166,8 +166,7 @@ bool RenameUserContainer(base::ListValue& list,
                          const ContainerId& id,
                          std::u16string_view name) {
   base::DictValue* entry = FindEntry(list, id);
-  if (!entry ||
-      CheckUserContainerName(name) != UserContainerNameError::kNone) {
+  if (!entry || CheckUserContainerName(name) != UserContainerNameError::kNone) {
     return false;
   }
   entry->Set(kNameKey,
