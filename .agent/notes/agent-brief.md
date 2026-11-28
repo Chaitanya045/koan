@@ -16,12 +16,13 @@ Implement GitHub issue (the issue number given in your task message) completely:
 - Tests: end-to-end tests run Koan off-screen (headless Ozone) with UI DevTools and CDP: see `scripts/e2e/run.sh`, `layout.mjs`, `shortcuts.mjs`, `workspaces.mjs`, `glance.mjs` for how to inspect native views (class names, bounds, visibility), send keys (CDP), and send native mouse/key events to a view (UI DevTools `DOM.dispatchMouseEvent`). Add an e2e test for what you build, and keep all existing tests passing: before your PR, run `agent-build.sh "$PWD" layout shortcuts glance workspaces scrollbars <yours>`. Pure logic also gets a unit test (`koan_unittests`, `scripts/test_unit.sh`, run it with `AGENT_CMD='scripts/test_unit.sh'` until agent-build.sh runs it itself), and state kept in the browser's objects (Spaces, pinned tabs, the session) a browser test (`koan_browsertests`, `scripts/test_browser.sh`, on request): see CONTRIBUTING.md, "Which test to write".
 - Style: Chromium C++ style, clang-format (`git ls-files 'src/*.cc' 'src/*.h' | xargs clang-format --style=file -i`), comments like the surrounding code, no dead code. CI (GitHub Actions) checks that patches apply to the pinned Chromium, lint and unit tests.
 
-## Target platform: macOS (issue #51)
-Koan's product is **macOS on Apple Silicon**. Linux is only the machine where agents build and run e2e tests; there are no Linux releases. So:
-- Implement features in platform-neutral code (Views, prefs, //koan). Never solve something in a Linux-only way (GTK, Ozone, X11, Linux frame classes) unless it's a test-harness concern.
-- Where Zen behaves differently on macOS, implement the macOS behaviour, or leave a clear hook for it and say so in the PR. Examples: window buttons as traffic lights in the sidebar's top row, ⌘ instead of Ctrl in shortcuts, trackpad gestures, the menu bar. Zen's source checks `AppConstants.platform == "macosx"` / `-moz-platform: macos`; follow those branches.
-- Guard anything genuinely platform-specific with `BUILDFLAG(IS_MAC)` / `BUILDFLAG(IS_LINUX)` and `is_mac` / `is_linux` in GN, so the code compiles on both.
-- Nothing is built or run on the Mac by agents. The maintainer builds there, and only with the user's consent.
+## Target platforms: macOS and Linux (user, 2026-11-27)
+Koan is one product on two platforms: **macOS on Apple Silicon** and **Linux x86-64** (a Flatpak; GNOME and KDE, Wayland and X11). Linux must match the Mac in features, layout, shortcuts (Ctrl for Cmd), settings and agent control; the gaps are tracked in #490. This replaces the earlier rule that Linux was only the test machine (issue #51).
+- Implement features in platform-neutral code (Views, prefs, //koan) wherever that works, so both platforms get them from the same code.
+- Where a platform needs its own code (the Mac's traffic lights, menu bar and trackpad gestures; Linux's window buttons, GTK/portal and Flatpak sandbox), write it for both, guarded with `BUILDFLAG(IS_MAC)` / `BUILDFLAG(IS_LINUX)` and `is_mac` / `is_linux` in GN, so the code compiles on both. A change for one platform must not change the other.
+- Where Zen behaves differently by platform, follow Zen's branch for that platform (`AppConstants.platform`, `-moz-platform`).
+- Text the user sees must be right for the platform ("this computer", not "this Mac", on Linux).
+- A bug found on either platform gets its own issue with the `macos` or `linux` label.
 
 ## Look: shadcn by default, Zen as an option (issue #48)
 Koan's default look will be shadcn/ui's design system, with Zen's look kept as a second style (`gh issue view 48`). Behaviour, layout and shortcuts stay Zen's. So in any UI you build, take colours from Chromium colour IDs (or Koan colour IDs mapped in a mixer) and radii/insets from a single place, never hard-coded SkColors or magic radii, so that #48 can restyle everything through tokens.
@@ -53,6 +54,7 @@ Many threads share one build lock, so builds queue. Batch your changes and build
 - The default look is Zen's (theme picker, glass, Zen's colours and onboarding). shadcn is only an optional look.
 
 ## Mac only (user decision, 2026-11-03 20:30 IST). This overrides the build rules above.
+**Superseded on 2026-11-26: builds run only in GitHub Actions.** Nothing is built on the Mac or on Linux by agents, and the Mac build loop is on hold. The macOS and Linux nightlies build `develop`; the `macos-build` and `linux-build` labels build a pull request's head once (`.agent/notes/macos-ci.md`, `.agent/notes/linux-ci.md`). The static checks below still apply. The rest of this section is kept for history.
 - **No Linux builds or e2e.** `agent-build.sh` and `agent-build-detached.sh` now refuse and exit 3. Don't work around them.
 - You may run a quick `clang -fsyntax-only` check of the files you changed against the Linux checkout. It's a static check, not a build.
 - **Every build and test runs on the user's Mac, through the Mac build loop thread only** (mcp:8291ba6a-a776-453a-afa9-60b7e312b63a). Push your branch, then message it with the head SHA and which suites or behaviours to test. Never ssh to the Mac yourself.
