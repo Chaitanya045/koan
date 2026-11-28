@@ -7,6 +7,8 @@
 
 #include "base/functional/callback.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace koan {
 
@@ -26,6 +28,14 @@ class KoanWelcomeHost : public content::WebContentsUserData<KoanWelcomeHost> {
     // opens once the screen has closed; over it, it would be hidden), or
     // "Start fresh" (nothing opens, whatever was picked before).
     base::RepeatingCallback<void(bool import)> import;
+    // The colours step (Zen's "colors" page): the theme picker's size, empty
+    // where it can't open (the shadcn look, Space themes off), and the step
+    // is left out; opening it over the page's `anchor` (in the page's
+    // coordinates, which are the page's view's), or moving it there; closing
+    // it with Zen's fade, which saves the theme to the Space.
+    base::RepeatingCallback<gfx::Size()> theme_picker_size;
+    base::RepeatingCallback<void(const gfx::Rect& anchor)> show_theme_picker;
+    base::RepeatingClosure close_theme_picker;
     // "Start browsing": close the screen.
     base::RepeatingClosure finish;
     // The page has loaded and asked for its data (KoanWelcome gives up on a

@@ -4,6 +4,7 @@
 
 #include "koan/browser/ui/views/koan_welcome.h"
 
+#include <optional>
 #include <utility>
 
 #include "base/functional/bind.h"
@@ -25,6 +26,7 @@
 #include "koan/browser/ui/color/koan_look.h"
 #include "koan/browser/ui/color/koan_tokens.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
+#include "koan/browser/ui/views/koan_theme_controller.h"
 #include "koan/browser/ui/views/koan_vertical_tabs_policy.h"
 #include "koan/browser/ui/views/koan_zen_window_drag.h"
 #include "koan/browser/ui/webui/koan_welcome_host.h"
@@ -166,6 +168,13 @@ void KoanWelcome::Show() {
       weak_factory_.GetWeakPtr());
   callbacks.window_drag = bind(&KoanWelcome::StartWindowDrag);
   callbacks.window_drag_end = bind(&KoanWelcome::EndWindowDrag);
+  callbacks.theme_picker_size = base::BindRepeating(
+      [](base::WeakPtr<KoanWelcome> welcome) {
+        return welcome ? welcome->ThemePickerSize() : gfx::Size();
+      },
+      weak_factory_.GetWeakPtr());
+  callbacks.show_theme_picker = bind(&KoanWelcome::ShowThemePicker);
+  callbacks.close_theme_picker = bind(&KoanWelcome::CloseThemePicker);
   KoanWelcomeHost::CreateForWebContents(contents, std::move(callbacks));
   // A crashed or failed page would leave a dead screen over the window.
   Observe(contents);
@@ -388,9 +397,74 @@ void KoanWelcome::EndWindowDrag() {
 #endif
 }
 
+KoanThemeController* KoanWelcome::ThemeController() const {
+  const KoanBrowserViewController* controller =
+      KoanBrowserViewController::From(browser_view_);
+  return controller ? controller->theme() : nullptr;
+}
+
+gfx::Size KoanWelcome::ThemePickerSize() const {
+  const KoanThemeController* theme = ThemeController();
+  return theme ? theme->ThemePickerSize() : gfx::Size();
+}
+
+void KoanWelcome::ShowThemePicker(const gfx::Rect& anchor) {
+  if (!web_view_ || finishing_ || !ThemeController() ||
+      !browser_view_->GetWidget()) {
+    return;
+  }
+  theme_picker_anchor_ = anchor;
+  if (!window_observation_.IsObserving()) {
+    window_observation_.Observe(browser_view_->GetWidget());
+  }
+  PlaceThemePicker();
+}
+
+void KoanWelcome::PlaceThemePicker() {
+  KoanThemeController* theme = ThemeController();
+  const gfx::Size size = ThemePickerSize();
+  if (!theme_picker_anchor_ || !web_view_ || !theme || size.IsEmpty()) {
+    return;
+  }
+  // Zen opens the panel over the box ("overlap": the panel's top-left at the
+  // box's), which the page sizes from the panel. The page isn't zoomed: its
+  // CSS pixels are its view's DIPs.
+  const gfx::Point origin = web_view_->GetBoundsInScreen().origin() +
+                            theme_picker_anchor_->OffsetFromOrigin();
+  theme->ShowThemePickerForWelcome(gfx::Rect(origin, size));
+}
+
+void KoanWelcome::CloseThemePicker() {
+  window_observation_.Reset();
+  if (!std::exchange(theme_picker_anchor_, std::nullopt)) {
+    return;
+  }
+  // Zen's fade out; the picker saves the theme to the Space as it closes.
+  if (KoanThemeController* theme = ThemeController()) {
+    theme->CloseThemePickerForWelcome();
+  }
+}
+
+void KoanWelcome::OnWidgetBoundsChanged(views::Widget* widget,
+                                        const gfx::Rect& new_bounds) {
+  PlaceThemePicker();
+}
+
+void KoanWelcome::OnWidgetDestroying(views::Widget* widget) {
+  window_observation_.Reset();
+}
+
 void KoanWelcome::Close(bool remove_page) {
   if (!web_view_) {
     return;
+  }
+  if (remove_page) {
+    // The picker goes with the screen (Skip setup, Esc, Start browsing).
+    CloseThemePicker();
+  } else {
+    // (The window takes the picker along.)
+    window_observation_.Reset();
+    theme_picker_anchor_.reset();
   }
   SetPending(false);
   load_timer_.Stop();

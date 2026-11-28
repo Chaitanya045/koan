@@ -10,12 +10,19 @@
 // - a click on Get started and on Next moves to the next step;
 // - a click in the window's top band over the page reaches the page and
 //   doesn't move the window (W-1c, the caption hit-test hook);
-// - Esc ends the setup: the page and its view go, the browser stays.
+// - in the Zen look (local_state/welcome_input.json; welcome.mjs has the
+//   shadcn look, without it), Zen's colours step: the theme picker opens
+//   over its box on the card and keeps the keyboard on the page; Back, Next
+//   and Back again close it and open it again with the theme kept;
+// - Esc ends the setup: the page and its view go, the browser stays, and
+//   the first Space has the theme picked on the colours step.
 // Each event is checked in the page (isTrusted events seen by its own
 // listeners). Without real input, the same keys and clicks go through CDP
 // (the page's side only) and the AppKit checks are reported as skipped.
 // welcome_input.flags forces the first run. Run by scripts/mac/suite.sh.
 import { centerOf, half, CDP_PORT, check, evalIn, finish, onPage, sleep, viewTree, waitFor } from './lib/koan.mjs';
+import { button as pickerButton, click as clickView, closePicker, palette, picker, tree }
+  from './lib/theme_picker.mjs';
 import { IS_MAC, alive, calibrate, fatalInLog, key, makeKey, realClick, realInput,
          realInputWhyNot, realKey, realPointer, skipped, windowOf } from './lib/mac.mjs';
 
@@ -168,12 +175,68 @@ if (realOk()) {
   skipped('W-1r / W-1c (AppKit input)', realInputWhyNot());
 }
 
+// Zen's colours step (the Zen look), between import and search.
+const go = async label => {
+  await js(`[...document.querySelectorAll('#welcome-card .step-foot .button')]
+      .find(b => b.textContent.trim() === ${JSON.stringify(label)})?.click(); 1`);
+  await sleep(700);
+};
+for (let i = 0; i < 4 && await step() !== 'colors' && await step() !== 'search'; ++i) await go('Next');
+check('The Zen look has Zen\'s colours step after import', await step() === 'colors', await step());
+const dots = await js(`[...document.querySelectorAll('#welcome-steps li')]
+    .filter(li => !li.hidden).map(li => li.dataset.step).join(',')`);
+check('...with its step dot', dots === `welcome,${IS_MAC ? 'shortcuts,' : ''}import,colors,search,done`, dots);
+check('...Zen\'s title and description', await js(`document.getElementById('welcome-title')?.textContent`) ===
+      'Your space, your colors.' && await js(`document.querySelector('#welcome-card .step-head p')?.textContent`) ===
+      'Personalize your browser by giving each space its own unique color identity.');
+check('...and Back and Next only (Zen\'s page has Next)', await js(`[...document.querySelectorAll(
+    '#welcome-card .step-foot .button')].map(b => b.textContent.trim()).join(',')`) === 'Back,Next');
+const pickerOpen = () => waitFor(async () => picker(await tree()), 4000);
+const pickerGone = () => waitFor(async () => !picker(await tree()), 4000);
+let p = await pickerOpen();
+check('The theme picker opens on the step', !!p);
+// Over the box (Zen's "overlap": the panel's top-left at the box's).
+{
+  const box = await js(`(() => { const r = document.getElementById('welcome-colors-anchor')
+      ?.getBoundingClientRect(); return r && [r.x, r.y, r.width, r.height].map(Math.round); })()`);
+  const o = await overlay();
+  const [x, y, w, h] = (p?.p.PanelInWindow ?? '').split(',').map(Number);
+  check('...over its box on the card', box && o && Math.abs(x - (o.ax + box[0])) <= 1 &&
+        Math.abs(y - (o.ay + box[1])) <= 1 && w === box[2] && h === box[3],
+        `panel ${p?.p.PanelInWindow}; box ${box} in a page at ${o?.ax},${o?.ay}`);
+}
+check('...and the page keeps the keyboard', await js('document.hasFocus()'));
+// A preset (the right arrow's page, as theme.mjs).
+await clickView(pickerButton(await tree(), 'Next colors'));
+await clickView((await tree()).find(v => v.cls === 'KoanThemeSwatch' && v.p.Index === '11'), 13, 13);
+p = picker(await tree());
+const picked = { dots: p?.p.Dots, background: p?.p.WindowBackground };
+check('A preset in the picker gives the Space its dots', !!picked.dots, picked.dots);
+await go('Back');
+check('Back leaves the step...', await step() !== 'colors', await step());
+check('...and closes the picker (Zen\'s fade)', !!await pickerGone());
+await go('Next');
+p = await pickerOpen();
+check('Next opens it again, with the theme kept', p?.p.Dots === picked.dots, `${p?.p.Dots} / ${picked.dots}`);
+await go('Next');
+check('Next moves on to the search engine...', await step() === 'search', await step());
+check('...and closes the picker', !!await pickerGone());
+await go('Back');
+check('Back on the colours step opens it again', await step() === 'colors' && !!await pickerOpen(), await step());
+
 // Esc ends the setup.
 await press('Escape', '', 0);
 const ended = await waitFor(async () => !(await overlay()), 5000);
 const stillThere = (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json())
     .some(t => t.url.startsWith('chrome://koan-welcome'));
 check(`Esc (${via}) ends the setup`, !!ended && !stillThere);
+check('...and closes the theme picker', !!await pickerGone());
+await palette('Open Theme Picker');
+p = picker(await tree());
+check('The first Space has the theme picked on the colours step',
+      !!picked.dots && p?.p.Dots === picked.dots && p?.p.WindowBackground === picked.background,
+      `${p?.p.Dots} ${p?.p.WindowBackground} / ${picked.dots} ${picked.background}`);
+await closePicker();
 check('Koan is alive', await alive());
 check('Nothing fatal in the log', !fatalInLog(), fatalInLog());
 if (!IS_MAC) skipped('macOS', 'the AppKit checks are macOS only');

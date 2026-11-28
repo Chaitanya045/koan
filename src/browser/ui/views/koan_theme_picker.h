@@ -56,7 +56,8 @@ class KoanThemePicker : public gfx::AnimationDelegate,
   // The welcome screen's colours step (Zen's ZenWelcome.mjs): centred over
   // the anchor rect (Zen's openPopup(…, {position: "overlap"})), staying open
   // while the window is used (noautohide, consumeoutsideclicks=false) and on
-  // Esc, which the welcome page handles. Before Show().
+  // Esc, which the welcome page handles, and shown without taking the page's
+  // keyboard. Before Show().
   void SetWelcomeMode();
   bool welcome_mode() const { return welcome_mode_; }
   // Moves the panel to a new anchor rect, in screen coordinates.

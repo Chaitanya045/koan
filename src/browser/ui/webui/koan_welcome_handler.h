@@ -53,6 +53,8 @@ class KoanWelcomeHandler : public content::WebUIMessageHandler {
   void HandleSkip(const base::ListValue& args);
   void HandleStartWindowDrag(const base::ListValue& args);
   void HandleEndWindowDrag(const base::ListValue& args);
+  void HandleShowThemePicker(const base::ListValue& args);
+  void HandleCloseThemePicker(const base::ListValue& args);
 
   // Whether the profile is in a search engine choice screen region (the
   // EEA): the step is then a choice screen.

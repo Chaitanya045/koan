@@ -1309,7 +1309,7 @@ dragging.
 
 The first time Koan starts with a new profile it offers a short, optional
 setup over the first window: "The only browser you need", then four
-steps. Every step has Skip, and **Skip setup** (top right) or Esc leaves at
+steps (five in the Zen look). Every step but the colours one has Skip, and **Skip setup** (top right) or Esc leaves at
 any point; nothing changes until a step's Next. It shows once (start Koan
 with `--force-first-run` and a new user data directory to see it again).
 It covers the whole window; the window buttons stay usable, and the empty
@@ -1337,6 +1337,12 @@ space around the card drags the window.
   opens on that browser once the setup is over, where you choose what to
   bring. "Start fresh" (the first choice) or the step's Skip imports
   nothing, even if you picked a browser before.
+- **Colours** (the Zen look only, as Zen's welcome; the shadcn look has no
+  Space themes): "Your space, your colors." Zen's theme picker opens on the
+  card; what you pick there is your first Space's theme, shown on the
+  window as you go and saved when you leave the step (it fades out). Back
+  and Next only: the picker's theme is the choice. Change it later with the
+  Space's **Theme…**.
 - **Search engine**: Brave Search is chosen; pick another if you like. It
   applies on Next. In the European Economic Area (and the other regions where
   Chromium shows a search engine choice screen) the step *is* that choice

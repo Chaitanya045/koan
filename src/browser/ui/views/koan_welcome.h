@@ -5,15 +5,20 @@
 #ifndef KOAN_BROWSER_UI_VIEWS_KOAN_WELCOME_H_
 #define KOAN_BROWSER_UI_VIEWS_KOAN_WELCOME_H_
 
+#include <optional>
+
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/timer/timer.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/base/accelerators/accelerator.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/view.h"
 #include "ui/views/view_observer.h"
+#include "ui/views/widget/widget_observer.h"
 
 class BrowserView;
 
@@ -23,16 +28,20 @@ class Point;
 
 namespace views {
 class WebView;
+class Widget;
 }  // namespace views
 
 namespace koan {
 
+class KoanThemeController;
+
 // Koan's welcome on Chromium's first run (onboarding v2, #181; a deliberate
 // divergence from Zen's welcome): chrome://koan-welcome (koan_welcome_ui.h)
 // over the whole first window, in shadcn's look. "The only browser you
-// need", then the shortcut set, import from another browser and the
-// search engine (Brave Search chosen); every step can be skipped, and Skip
-// setup or Esc leaves at any point.
+// need", then the shortcut set, import from another browser, in the Zen look
+// Zen's colours step (the theme picker over the page, for the first Space)
+// and the search engine (Brave Search chosen); every step can be skipped,
+// and Skip setup or Esc leaves at any point.
 //
 // The page is a WebView, the last child of the BrowserView over everything
 // else in the window, in the window itself and never a child widget: on
@@ -49,7 +58,8 @@ namespace koan {
 class KoanWelcome : public content::WebContentsObserver,
                     public ui::AcceleratorTarget,
                     public views::FocusChangeListener,
-                    public views::ViewObserver {
+                    public views::ViewObserver,
+                    public views::WidgetObserver {
  public:
   explicit KoanWelcome(BrowserView* browser_view);
   KoanWelcome(const KoanWelcome&) = delete;
@@ -105,6 +115,23 @@ class KoanWelcome : public content::WebContentsObserver,
                             views::View* child) override;
   void KeepOnTop();
 
+  // views::WidgetObserver (the window, while the theme picker is open): the
+  // picker follows the window when it moves (a drag from the space around
+  // the card).
+  void OnWidgetBoundsChanged(views::Widget* widget,
+                             const gfx::Rect& new_bounds) override;
+  void OnWidgetDestroying(views::Widget* widget) override;
+
+  // The colours step: the window's theme controller (null where the window
+  // has none); the theme picker's size (empty where it can't open, and the
+  // page leaves the step out); opening the picker over `anchor` (in the
+  // page) and keeping it there; closing it, which saves the Space's theme.
+  KoanThemeController* ThemeController() const;
+  gfx::Size ThemePickerSize() const;
+  void ShowThemePicker(const gfx::Rect& anchor);
+  void PlaceThemePicker();
+  void CloseThemePicker();
+
   // Whether this window shows the welcome: the first normal window of a
   // regular profile on Chromium's first run, if it hasn't been seen and no
   // other window has it pending.
@@ -143,12 +170,17 @@ class KoanWelcome : public content::WebContentsObserver,
   bool import_ = false;
   // Finish() ran: it applies once.
   bool finishing_ = false;
+  // The colours step's box in the page, while the theme picker is open over
+  // it.
+  std::optional<gfx::Rect> theme_picker_anchor_;
   // Gives up on a page that never asks for its data.
   base::OneShotTimer load_timer_;
   base::ScopedObservation<views::View, views::ViewObserver>
       browser_view_observation_{this};
   base::ScopedObservation<views::FocusManager, views::FocusChangeListener>
       focus_observation_{this};
+  base::ScopedObservation<views::Widget, views::WidgetObserver>
+      window_observation_{this};
 
   base::WeakPtrFactory<KoanWelcome> weak_factory_{this};
 };
