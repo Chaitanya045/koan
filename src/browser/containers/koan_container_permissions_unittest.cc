@@ -93,5 +93,12 @@ static_assert(IsUserPartitionDomain("koanuserx"));
 static_assert(!IsUserPartitionDomain("koanagentsabc"));
 static_assert(!IsUserPartitionDomain(""));
 
+// The push hook's (#596): both kinds, and nothing else (the default
+// partition's empty domain, an extension's id).
+static_assert(IsContainerPartitionDomain("koanusersabc"));
+static_assert(IsContainerPartitionDomain("koanagenttabc"));
+static_assert(!IsContainerPartitionDomain(""));
+static_assert(!IsContainerPartitionDomain("abcdefghijklmnopabcdefghijklmnop"));
+
 }  // namespace
 }  // namespace koan::containers

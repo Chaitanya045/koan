@@ -31,6 +31,14 @@ constexpr bool IsUserPartitionDomain(std::string_view domain) {
   return domain.starts_with(kUserPartitionDomainPrefix);
 }
 
+// Whether `domain` is any Koan container's, an agent's or a Space's profile.
+// Fails closed like the two above. The push hook in //content/browser that
+// keeps a container's service-worker events away from the profile's push
+// subscriptions (#596).
+constexpr bool IsContainerPartitionDomain(std::string_view domain) {
+  return IsAgentPartitionDomain(domain) || IsUserPartitionDomain(domain);
+}
+
 }  // namespace koan::containers
 
 #endif  // KOAN_BROWSER_CONTAINERS_KOAN_PARTITION_DOMAIN_H_
