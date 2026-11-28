@@ -55,7 +55,13 @@ class SpaceHistoryIndex : public base::SupportsUserData::Data,
   // profile's URL bar shows every page and another's none.
   bool ShowsPage(const GURL& url, std::string_view profile);
 
-  // Whether the index has been read from the database (for tests).
+  // The profiles the page at `url` (exactly) has visits in, or null for a
+  // page with no tagged visit (the default profile's only). After a deletion
+  // it says what the index knew before it, until the index is read again
+  // (history.onVisitRemoved, koan_extension_history.h).
+  const containers::PageProfiles* PageProfilesOf(const GURL& url) const;
+
+  // Whether the index has been read from the database (also for tests).
   bool loaded() const { return loaded_; }
 
   // history::HistoryServiceObserver:

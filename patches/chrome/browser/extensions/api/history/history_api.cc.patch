@@ -1,0 +1,70 @@
+diff --git a/chrome/browser/extensions/api/history/history_api.cc b/chrome/browser/extensions/api/history/history_api.cc
+index 534aefc..e8b1c2a 100644
+--- a/chrome/browser/extensions/api/history/history_api.cc
++++ b/chrome/browser/extensions/api/history/history_api.cc
+@@ -37,6 +37,9 @@
+ #include "extensions/browser/extensions_browser_client.h"
+ #include "extensions/buildflags/buildflags.h"
+ #include "extensions/common/event_args.h"
++#include "koan/browser/containers/koan_container_extensions.h"
++#include "koan/browser/containers/koan_extension_events.h"
++#include "koan/browser/ui/views/koan_extension_history.h"
+ #include "ui/base/page_transition_types.h"
+ 
+ #if !BUILDFLAG(IS_ANDROID)
+@@ -157,6 +160,10 @@ void HistoryEventRouter::OnURLVisited(
+   }
+   auto event_args = base::MakeRefCounted<EventArgs>(
+       OnVisited::Create(GetHistoryItem(visited_url_info.url_row)));
++  // Koan: not to an extension that is off in the visit's Space profile.
++  koan::containers::ScopedEventSkip koan_skip(
++      koan::containers::ExtensionsOffForVisit(
++          profile_, visited_url_info.visit_row.app_id));
+   DispatchEvent(profile_, events::HISTORY_ON_VISITED,
+                 api::history::OnVisited::kEventName, std::move(event_args));
+ }
+@@ -174,6 +181,10 @@ void HistoryEventRouter::OnHistoryDeletions(
+ 
+   auto event_args =
+       base::MakeRefCounted<EventArgs>(OnVisitRemoved::Create(removed));
++  // Koan: without the pages only visited in Space profiles the extension is
++  // off in.
++  koan::containers::ScopedEventSkip koan_skip(
++      koan::RemovedPagesFilter(profile_, deletion_info));
+   DispatchEvent(profile_, events::HISTORY_ON_VISIT_REMOVED,
+                 api::history::OnVisitRemoved::kEventName,
+                 std::move(event_args));
+@@ -187,6 +198,7 @@ void HistoryEventRouter::DispatchEvent(
+   if (profile && EventRouter::Get(profile)) {
+     auto event = std::make_unique<Event>(histogram_value, event_name,
+                                          std::move(event_args), profile);
++    koan::containers::SkipExtensionsInScope(*event);  // Koan
+     EventRouter::Get(profile)->BroadcastEvent(std::move(event));
+   }
+ }
+@@ -296,6 +308,8 @@ ExtensionFunction::ResponseAction HistoryGetVisitsFunction::Run() {
+ void HistoryGetVisitsFunction::QueryComplete(
+     history::QueryURLAndVisitsResult result) {
+   VisitItemList visit_item_vec;
++  // Koan: not the visits of Space profiles the extension is off in.
++  koan::EraseVisitsOffFor(browser_context(), extension_id(), result.visits);
+   if (result.success && !result.visits.empty()) {
+     for (const history::VisitRow& visit : result.visits) {
+       visit_item_vec.push_back(GetVisitItem(visit));
+@@ -333,10 +347,12 @@ ExtensionFunction::ResponseAction HistorySearchFunction::Run() {
+ 
+   history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
+       GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
+-  hs->QueryHistory(search_text, options,
+-                   base::BindOnce(&HistorySearchFunction::SearchComplete,
+-                                  base::Unretained(this)),
+-                   &task_tracker_);
++  // Koan: without the visits of Space profiles the extension is off in.
++  koan::QueryHistoryForExtension(
++      hs, browser_context(), extension_id(), search_text, options,
++      base::BindOnce(&HistorySearchFunction::SearchComplete,
++                     base::Unretained(this)),
++      &task_tracker_);
+ 
+   AddRef();               // Balanced in SearchComplete().
+   return RespondLater();  // SearchComplete() will be called asynchronously.
