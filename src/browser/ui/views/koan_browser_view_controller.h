@@ -43,7 +43,9 @@ class KoanSplitHeaderController;
 class KoanSystemThemeLock;
 #endif
 class KoanSidebarTabsController;
+class KoanSpaceExtensionsGuard;
 class KoanTabActivationTracker;
+class KoanTabAutoCloser;
 class KoanToast;
 class KoanThemeController;
 class KoanUrlBarController;
@@ -110,6 +112,7 @@ class KoanBrowserViewController : public views::ViewObserver,
   KoanLibraryController* library() const { return library_.get(); }
   KoanShortcutController* shortcuts() const { return shortcuts_.get(); }
   KoanMediaController* media() const { return media_.get(); }
+  KoanTabAutoCloser* tab_auto_closer() const { return tab_auto_closer_.get(); }
   KoanDownloadAnimation* download_animation() const {
     return download_animation_.get();
   }
@@ -167,6 +170,9 @@ class KoanBrowserViewController : public views::ViewObserver,
   std::unique_ptr<KoanGlanceController> glance_;
   std::unique_ptr<KoanLibraryController> library_;
   std::unique_ptr<KoanTabActivationTracker> tab_activation_;
+  std::unique_ptr<KoanTabAutoCloser> tab_auto_closer_;
+  // Extensions off in a Space's profile: the side panel and toolbar (#473).
+  std::unique_ptr<KoanSpaceExtensionsGuard> space_extensions_;
   std::unique_ptr<KoanMediaController> media_;
   std::unique_ptr<KoanDownloadAnimation> download_animation_;
   std::unique_ptr<KoanLoadingIndicator> loading_indicator_;

@@ -8,6 +8,9 @@
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -16,6 +19,8 @@
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/themes/theme_service.h"
+#include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
@@ -39,6 +44,7 @@
 #include "koan/browser/containers/koan_agent_containers.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/koan_shortcut_table.h"
+#include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_folder_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
@@ -55,7 +61,12 @@
 #include "ui/base/models/list_selection_model.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/color/color_provider.h"
+#include "ui/compositor/layer.h"
+#include "ui/compositor/layer_delegate.h"
+#include "ui/compositor/property_change_reason.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/transform.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
@@ -516,6 +527,100 @@ IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest, ManySpacesStayInTheSwitcher) {
     spaces->SwitchTo(infos[index].id);
     EXPECT_TRUE(base::test::RunUntil(active_shown)) << index;
   }
+}
+
+// Stands in for a view as its layer's delegate, to count the layer's paints.
+class CountingLayerDelegate : public ui::LayerDelegate {
+ public:
+  explicit CountingLayerDelegate(ui::LayerDelegate* view) : view_(view) {}
+
+  int paints() const { return paints_; }
+  void reset() { paints_ = 0; }
+
+  // ui::LayerDelegate:
+  void OnPaintLayer(const ui::PaintContext& context) override {
+    ++paints_;
+    view_->OnPaintLayer(context);
+  }
+  void OnDeviceScaleFactorChanged(float old_device_scale_factor,
+                                  float new_device_scale_factor) override {
+    view_->OnDeviceScaleFactorChanged(old_device_scale_factor,
+                                      new_device_scale_factor);
+  }
+  void OnLayerTransformed(const gfx::Transform& old_transform,
+                          ui::PropertyChangeReason reason) override {
+    view_->OnLayerTransformed(old_transform, reason);
+  }
+  void OnLayerClipRectChanged(const gfx::Rect& old_rect,
+                              ui::PropertyChangeReason reason) override {
+    view_->OnLayerClipRectChanged(old_rect, reason);
+  }
+  void UpdateVisualState() override { view_->UpdateVisualState(); }
+
+ private:
+  const raw_ptr<ui::LayerDelegate> view_;
+  int paints_ = 0;
+};
+
+// A Space button paints to a layer of its own, which a theme change doesn't
+// repaint by itself: after a Mode change (Settings > Look and Feel > Mode)
+// the dots kept the old mode's colours until hovered, so in light mode the
+// current Space's dot stayed white on the white sidebar (#555).
+IN_PROC_BROWSER_TEST_F(KoanSpacesBrowserTest,
+                       SpaceButtonsRepaintWhenTheModeChanges) {
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  ASSERT_TRUE(spaces);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  spaces->CreateSpace(u"Second", u"", {});
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  KoanSpaceBarView* bar = spaces->space_bar();
+  ASSERT_TRUE(bar);
+  views::Widget* widget = bar->GetWidget();
+  ASSERT_TRUE(widget);
+  widget->LayoutRootViewIfNecessary();
+
+  // The other Space's button: a dot.
+  std::optional<tab_groups::TabGroupId> other;
+  for (const KoanWorkspaceController::SpaceInfo& info : spaces->GetSpaces()) {
+    if (!info.active) {
+      other = info.id;
+    }
+  }
+  ASSERT_TRUE(other);
+  views::View* button = bar->GetSpaceButtonForTesting(*other);
+  ASSERT_TRUE(button);
+  ASSERT_TRUE(button->layer());
+  ASSERT_TRUE(button->GetVisible());
+  ui::Layer* layer = button->layer();
+  ui::LayerDelegate* view_delegate = layer->delegate();
+  CountingLayerDelegate counter(view_delegate);
+  layer->set_delegate(&counter);
+  const base::ScopedClosureRunner restore(base::BindOnce(
+      [](ui::Layer* layer, ui::LayerDelegate* view_delegate) {
+        layer->set_delegate(view_delegate);
+      },
+      base::Unretained(layer), base::Unretained(view_delegate)));
+
+  // From dark to light, as in #555. The colour the current Space's dot
+  // takes, from the window's colours.
+  ThemeService* theme_service =
+      ThemeServiceFactory::GetForProfile(browser()->GetProfile());
+  theme_service->SetBrowserColorScheme(ThemeService::BrowserColorScheme::kDark);
+  base::RunLoop().RunUntilIdle();
+  const auto foreground = [&] {
+    return widget->GetColorProvider()->GetColor(kColorKoanSpaceForeground);
+  };
+  const SkColor dark_foreground = foreground();
+
+  // Once the button has painted, nothing it had scheduled is left.
+  button->SchedulePaint();
+  ASSERT_TRUE(base::test::RunUntil([&] { return counter.paints() > 0; }));
+  counter.reset();
+  theme_service->SetBrowserColorScheme(
+      ThemeService::BrowserColorScheme::kLight);
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return foreground() != dark_foreground; }));
+  EXPECT_TRUE(base::test::RunUntil([&] { return counter.paints() > 0; }));
 }
 
 // Koan's tab drag (koan_tab_drag.h) only shows another Space while it goes

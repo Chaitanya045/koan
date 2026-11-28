@@ -87,6 +87,13 @@ class KoanDownloadArcView : public views::View {
   METADATA_HEADER(KoanDownloadArcView, views::View)
 
  public:
+  // The animation puts it on a layer of its own, which a theme change (the
+  // Mode, or the system's light/dark) doesn't repaint (#564).
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    SchedulePaint();
+  }
+
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override {
     const ui::ColorProvider* colors = GetColorProvider();
@@ -118,6 +125,13 @@ class KoanDownloadTileView : public views::View {
   METADATA_HEADER(KoanDownloadTileView, views::View)
 
  public:
+  // The animation puts it on a layer of its own, which a theme change (the
+  // Mode, or the system's light/dark) doesn't repaint (#564).
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    SchedulePaint();
+  }
+
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override {
     const ui::ColorProvider* colors = GetColorProvider();

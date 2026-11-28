@@ -31,12 +31,31 @@ namespace koan::importer {
 // "saltysalt", 1003 rounds, 16 bytes (as os_crypt's keychain key provider).
 using SafeStorageKey = std::array<uint8_t, 16>;
 SafeStorageKey DeriveSafeStorageKey(std::string_view keychain_secret);
+// The same on Linux (#493): 1 round (freedesktop_secret_key_provider.cc,
+// posix_key_provider.cc).
+SafeStorageKey DeriveLinuxSafeStorageKey(std::string_view secret);
 
-// A saved password's value ("v10" + AES-128-CBC with a 16-space IV, as
-// os_crypt on macOS), or nullopt if it isn't one or doesn't decrypt.
+// A key, and the prefix of the saved passwords it encrypts.
+struct PasswordKey {
+  std::string_view prefix;
+  SafeStorageKey key;
+};
+
+// The keys of a Chromium profile's passwords on macOS: "v10", from the
+// keychain secret.
+std::vector<PasswordKey> MacPasswordKeys(std::string_view keychain_secret);
+// On Linux: "v10", os_crypt's fixed key (passwords saved without a keyring,
+// as with --password-store=basic), and with the browser's keyring secret
+// "v11". A Flatpak browser's "v12" (the secret portal's key, bound to its
+// app) has none.
+std::vector<PasswordKey> LinuxPasswordKeys(
+    const std::optional<std::string>& keyring_secret);
+
+// A saved password's value (the prefix of one of `keys` + AES-128-CBC with a
+// 16-space IV, as os_crypt), or nullopt if it isn't one or doesn't decrypt.
 std::optional<std::u16string> DecryptPassword(
     base::span<const uint8_t> encrypted,
-    const SafeStorageKey& key);
+    base::span<const PasswordKey> keys);
 
 // Chromium's times: microseconds since 1601 (base::Time's internal value).
 base::Time FromChromiumTime(int64_t microseconds);
@@ -63,11 +82,11 @@ std::vector<user_data_importer::ImporterURLRow> ReadHistory(
     const base::FilePath& history_file);
 
 // The saved passwords (and sites never to save for) of a Login Data file,
-// decrypted with `key`. Forms of a scheme the importer can't take (digest,
+// decrypted with `keys`. Forms of a scheme the importer can't take (digest,
 // federated) and passwords that don't decrypt are left out.
 std::vector<user_data_importer::ImportedPasswordForm> ReadLogins(
     const base::FilePath& login_data_file,
-    const SafeStorageKey& key);
+    base::span<const PasswordKey> keys);
 
 }  // namespace koan::importer
 

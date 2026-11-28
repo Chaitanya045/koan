@@ -23,7 +23,6 @@
 #include <vector>
 
 #include "base/functional/bind.h"
-#include "base/functional/callback_helpers.h"
 #include "base/i18n/case_conversion.h"
 #include "base/i18n/time_formatting.h"
 #include "base/memory/raw_ptr.h"
@@ -51,6 +50,7 @@
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/common/pref_names.h"
 #include "components/keyed_service/core/service_access_type.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/sessions/core/tab_restore_service_observer.h"
@@ -66,11 +66,13 @@
 #include "koan/browser/containers/koan_user_containers.h"
 #include "koan/browser/koan_library_logic.h"
 #include "koan/browser/koan_prefs.h"
+#include "koan/browser/koan_tab_auto_close.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_library.h"
 #include "koan/browser/ui/views/koan_library_sections.h"
 #include "koan/browser/ui/views/koan_library_view.h"
 #include "koan/browser/ui/views/koan_space_history_index.h"
+#include "koan/browser/ui/views/koan_tab_auto_closer.h"
 #include "koan/browser/ui/views/koan_toast.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "ui/base/l10n/time_format.h"
@@ -171,6 +173,12 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
     if (tab_restore_) {
       restore_observation_.Observe(tab_restore_);
     }
+    // The tabs Koan closed automatically are closed tabs too.
+    auto_closed_.Init(profile_->GetPrefs());
+    auto_closed_.Add(
+        prefs::kAutoClosedTabs,
+        base::BindRepeating(&KoanLibraryHistorySection::OnDataChanged,
+                            base::Unretained(this), /*closed_tabs=*/true));
     SetFilterActive("sort", "date", true);
     SetFilterActive(
         "source",
@@ -304,13 +312,27 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
   }
 
  private:
-  // A row: a page from history, or a closed tab.
+  // A row: a page from history, or a closed tab: one the user closed
+  // (Chromium's recently closed, `closed_id`), or one Koan closed because it
+  // wasn't used (`auto_closed_id`, koan_tab_auto_closer.h).
   struct Entry {
     GURL url;
     std::u16string title;
     base::Time time;
     int visit_count = 0;
     std::optional<SessionID> closed_id;
+    std::string auto_closed_id;
+
+    bool is_closed_tab() const { return closed_id || !auto_closed_id.empty(); }
+    bool IsSameRow(const Entry& other) const {
+      if (closed_id || other.closed_id) {
+        return closed_id == other.closed_id;
+      }
+      if (!auto_closed_id.empty() || !other.auto_closed_id.empty()) {
+        return auto_closed_id == other.auto_closed_id;
+      }
+      return url == other.url;
+    }
   };
 
   bool ShowingClosed() const { return IsFilterActive("source", "closed"); }
@@ -407,7 +429,7 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
   // Whether rows are pages of history the user may delete (policy
   // AllowDeletingBrowserHistory); closed tabs can always be forgotten.
   bool MayForget(const Entry& entry) const {
-    return entry.closed_id || IsDeletingHistoryAllowed(profile_);
+    return entry.is_closed_tab() || IsDeletingHistoryAllowed(profile_);
   }
 
   void OnDataChanged(bool closed_tabs) {
@@ -528,11 +550,7 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
 
   void FetchClosedTabs() {
     exhausted_ = true;
-    if (!tab_restore_) {
-      Show({});
-      return;
-    }
-    if (!tab_restore_->IsLoaded()) {
+    if (tab_restore_ && !tab_restore_->IsLoaded()) {
       // TabRestoreServiceLoaded() fetches again. Nothing from the other
       // source meanwhile.
       ResetList();
@@ -543,24 +561,35 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
     const base::Time cutoff = Cutoff();
     const std::u16string needle = base::i18n::ToLower(query());
     const ProfileChoice shown = ShownProfile();
+    // A closed tab's profile is the container its session data names.
+    const auto in_shown_profile =
+        [&](const std::map<std::string, std::string>& data) {
+          if (!shown) {
+            return true;
+          }
+          const auto container = data.find(containers::kContainerSessionKey);
+          return (container == data.end()
+                      ? std::string()
+                      : containers::HistoryProfileFromAppId(
+                            containers::HistoryAppIdForProfile(
+                                container->second))) == *shown;
+        };
+    const auto matches = [&](const std::u16string& title, const GURL& url) {
+      return needle.empty() ||
+             base::i18n::ToLower(
+                 base::StrCat({title, u" ", base::UTF8ToUTF16(url.spec())}))
+                     .find(needle) != std::u16string::npos;
+    };
     std::vector<Entry> entries;
-    for (const auto& entry : tab_restore_->entries()) {
+    const sessions::TabRestoreService::Entries no_entries;
+    for (const auto& entry :
+         tab_restore_ ? tab_restore_->entries() : no_entries) {
       if (entry->type != sessions::tab_restore::Type::TAB ||
           entry->timestamp < cutoff) {
         continue;
       }
-      // A closed tab's profile is the container its session data names.
-      if (shown) {
-        const auto container =
-            entry->extra_data.find(containers::kContainerSessionKey);
-        const std::string tab_profile =
-            container == entry->extra_data.end()
-                ? std::string()
-                : containers::HistoryProfileFromAppId(
-                      containers::HistoryAppIdForProfile(container->second));
-        if (tab_profile != *shown) {
-          continue;
-        }
+      if (!in_shown_profile(entry->extra_data)) {
+        continue;
       }
       const auto& tab = static_cast<const sessions::tab_restore::Tab&>(*entry);
       if (tab.navigations.empty()) {
@@ -572,17 +601,26 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
       if (title.empty()) {
         title = base::UTF8ToUTF16(navigation.virtual_url().spec());
       }
-      if (!needle.empty() &&
-          base::i18n::ToLower(
-              base::StrCat(
-                  {title, u" ",
-                   base::UTF8ToUTF16(navigation.virtual_url().spec())}))
-                  .find(needle) == std::u16string::npos) {
+      if (!matches(title, navigation.virtual_url())) {
         continue;
       }
       entries.push_back({navigation.virtual_url(), std::move(title),
                          entry->timestamp, 0, entry->id});
     }
+    for (koan::auto_close::ClosedTab& tab : GetAutoClosedTabs(profile_)) {
+      if (tab.closed < cutoff || !in_shown_profile(tab.data)) {
+        continue;
+      }
+      std::u16string title =
+          tab.title.empty() ? base::UTF8ToUTF16(tab.url.spec()) : tab.title;
+      if (!matches(title, tab.url)) {
+        continue;
+      }
+      entries.push_back({tab.url, std::move(title), tab.closed, 0, std::nullopt,
+                         std::move(tab.id)});
+    }
+    // Newest first, both kinds together.
+    std::ranges::stable_sort(entries, std::greater<>(), &Entry::time);
     Show(std::move(entries));
   }
 
@@ -621,7 +659,7 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
     const size_t before = entries_.size();
     const bool per_day = PerDay();
     for (Entry& entry : entries) {
-      if (!entry.closed_id &&
+      if (!entry.is_closed_tab() &&
           !shown_keys_
                .insert({entry.url,
                         per_day ? entry.time.LocalMidnight() : base::Time()})
@@ -738,7 +776,12 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
         background ? WindowOpenDisposition::kNewBackgroundTab
                    : WindowOpenDisposition::kNewForegroundTab;
     base::OnceClosure open_tab;
-    if (entry.closed_id) {
+    if (!entry.auto_closed_id.empty()) {
+      open_tab = base::BindOnce(
+          [](BrowserWindowInterface* browser, const std::string& id,
+             bool background) { ReopenAutoClosedTab(browser, id, background); },
+          browser, entry.auto_closed_id, background);
+    } else if (entry.closed_id) {
       open_tab = base::BindOnce(
           [](sessions::TabRestoreService* service,
              BrowserWindowInterface* browser, SessionID id,
@@ -782,17 +825,17 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
     if (!MayForget(entry)) {
       return;
     }
-    if (entry.closed_id) {
+    if (!entry.auto_closed_id.empty()) {
+      ForgetAutoClosedTab(profile_, entry.auto_closed_id);
+    } else if (entry.closed_id) {
       if (tab_restore_) {
         tab_restore_->RemoveEntryById(*entry.closed_id);
       }
     } else if (history_) {
       // The profile shown's visits to the page, or all of them.
       if (const ProfileChoice shown = ShownProfile()) {
-        history_->ExpireHistoryBetween(
-            {entry.url}, containers::HistoryAppIdForProfile(*shown),
-            base::Time(), base::Time(), /*user_initiated=*/true,
-            base::DoNothing(), &forget_tracker_);
+        DeleteProfileHistory(profile_, history_, *shown, {entry.url},
+                             base::Time());
       } else {
         history_->DeleteURLs({entry.url});
       }
@@ -800,8 +843,7 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
     // Drop the row now, like Zen; the services' notifications follow. Not
     // from inside the row's own button, which the rebuild destroys.
     const auto same = [&](const Entry& other) {
-      return other.closed_id ? other.closed_id == entry.closed_id
-                             : !entry.closed_id && other.url == entry.url;
+      return other.IsSameRow(entry);
     };
     std::erase_if(entries_, same);
     std::erase_if(pool_, same);
@@ -847,17 +889,14 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
     if (history_ && IsDeletingHistoryAllowed(profile_)) {
       history::QueryOptions options;
       options.hostname_suffix = site;
-      std::optional<std::string> app_id;
       if (shown) {
-        app_id = containers::HistoryAppIdForProfile(*shown);
-        options.app_id = app_id;
+        options.app_id = containers::HistoryAppIdForProfile(*shown);
       }
       history_->QueryHistory(
           std::u16string(), options,
           base::BindOnce(
               [](base::WeakPtr<KoanLibraryHistorySection> section,
-                 std::optional<std::string> app_id,
-                 history::QueryResults results) {
+                 const ProfileChoice& shown, history::QueryResults results) {
                 if (!section || !section->history_) {
                   return;
                 }
@@ -868,18 +907,16 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
                 if (urls.empty()) {
                   return;
                 }
-                if (!app_id) {
+                if (!shown) {
                   section->history_->DeleteURLs(
                       std::vector<GURL>(urls.begin(), urls.end()));
                   return;
                 }
                 // Only that profile's visits; the pages stay for the others.
-                section->history_->ExpireHistoryBetween(
-                    urls, app_id, base::Time(), base::Time(),
-                    /*user_initiated=*/true, base::DoNothing(),
-                    &section->forget_tracker_);
+                DeleteProfileHistory(section->profile_, section->history_,
+                                     *shown, urls, base::Time());
               },
-              weak_factory_.GetWeakPtr(), std::move(app_id)),
+              weak_factory_.GetWeakPtr(), shown),
           &forget_tracker_);
     }
     // The site's data in each profile's own partition: the default one (and
@@ -928,7 +965,7 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
                     base::BindRepeating(&KoanLibraryHistorySection::ForgetEntry,
                                         weak_factory_.GetWeakPtr(), entry));
     }
-    if (!entry.closed_id && IsDeletingHistoryAllowed(profile_)) {
+    if (!entry.is_closed_tab() && IsDeletingHistoryAllowed(profile_)) {
       menu->AddItem(u"Forget About This Site",
                     base::BindRepeating(&KoanLibraryHistorySection::ForgetSite,
                                         weak_factory_.GetWeakPtr(), entry),
@@ -978,11 +1015,9 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
     } else if (hours > 0) {
       begin = now - base::Hours(hours);
     }
-    if (shown && history_) {
-      // That profile's visits only.
-      history_->ExpireHistoryBetween(
-          {}, containers::HistoryAppIdForProfile(*shown), begin, base::Time(),
-          /*user_initiated=*/true, base::DoNothing(), &forget_tracker_);
+    if (shown) {
+      // That profile's visits and closed tabs only.
+      DeleteProfileHistory(profile_, history_, *shown, {}, begin);
       return;
     }
     profile_->GetBrowsingDataRemover()->Remove(
@@ -1000,6 +1035,7 @@ class KoanLibraryHistorySection : public KoanLibrarySearchSection,
   base::ScopedObservation<sessions::TabRestoreService,
                           sessions::TabRestoreServiceObserver>
       restore_observation_{this};
+  PrefChangeRegistrar auto_closed_;
   // What the rows show, and (by most visited) what's still to show.
   std::vector<Entry> entries_;
   std::vector<Entry> pool_;

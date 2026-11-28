@@ -894,11 +894,13 @@ void KoanWorkspaceController::CreateSpace(const std::u16string& name,
   if (!tab) {
     return;
   }
-  // (Its empty tab, made before the Space has its container, moves into it
-  // with the next update: MatchEmptyTabsToSpaceContainers().)
   CreateSpaceFromTabs(
       {tab_strip_model()->GetIndexOfTab(tab)},
       {.name = name, .icon = icon, .theme = theme, .container = container});
+  // Its empty tab, made before the Space had its container, moves into it
+  // now, not with the next update: a tab opened or a link dropped on the
+  // empty tab in between would load in another partition (#543).
+  MatchEmptyTabsToSpaceContainers();
 }
 
 tab_groups::TabGroupId KoanWorkspaceController::CreateSpaceFromTabs(
@@ -1125,6 +1127,8 @@ void KoanWorkspaceController::SetSpaceContainer(
   }
   data->container = NormalizeSpaceContainer(container);
   WriteSpace(space, *data);
+  // Its empty tab follows now, as in CreateSpace().
+  MatchEmptyTabsToSpaceContainers();
 }
 
 KoanWorkspaceController::SpaceTheme KoanWorkspaceController::GetSpaceTheme(
@@ -1366,9 +1370,7 @@ void KoanWorkspaceController::ShowCreateForm() {
   auto* state =
       tabs::VerticalTabStripStateController::From(browser_view_->browser());
   if (state && state->IsCollapsed()) {
-    create_form_lock_ =
-        static_cast<BaseTabStripRegionView*>(browser_view_->tab_strip_view())
-            ->GetExpandOnHoverLock(ExpandOnHoverLockType::kKeepExpanded);
+    create_form_lock_ = TakeSidebarExpandedLock(browser_view_);
   }
   creation_form_ = tab_strip->AddChildViewAt(
       std::make_unique<KoanSpaceCreationView>(this), 2);

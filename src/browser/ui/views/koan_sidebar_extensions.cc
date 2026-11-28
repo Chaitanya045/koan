@@ -26,6 +26,8 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "extensions/common/extension_features.h"
+#include "koan/browser/containers/koan_container_extensions.h"
+#include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
@@ -237,6 +239,12 @@ KoanSidebarExtensionsView::KoanSidebarExtensionsView(BrowserView* browser_view)
     model_observation_.Observe(model);
   }
   browser_view_->browser()->GetTabStripModel()->AddObserver(this);
+  pref_change_registrar_.Init(
+      browser_view_->GetProfile()->GetOriginalProfile()->GetPrefs());
+  pref_change_registrar_.Add(
+      prefs::kUserContainers,
+      base::BindRepeating(&KoanSidebarExtensionsView::ScheduleRebuild,
+                          base::Unretained(this)));
   Rebuild();
 }
 
@@ -581,8 +589,9 @@ void KoanSidebarExtensionsView::OnTabStripModelChanged(
     TabStripModel* tab_strip_model,
     const TabStripModelChange& change,
     const TabStripSelectionChange& selection) {
+  // Which buttons there are depends on the active tab's profile.
   if (selection.active_tab_changed()) {
-    UpdateButtons();
+    Rebuild();
   }
 }
 
@@ -635,9 +644,10 @@ void KoanSidebarExtensionsView::Rebuild() {
                                          : nullptr;
   // In the toolbar's order (the user's).
   std::vector<ToolbarActionsModel::ActionId> ids;
+  content::WebContents* contents = GetActiveContents();
   if (model && model->actions_initialized()) {
     for (const ToolbarActionsModel::ActionId& id : model->pinned_action_ids()) {
-      if (GetModel(id)) {
+      if (GetModel(id) && !containers::IsExtensionOffInContents(contents, id)) {
         ids.push_back(id);
       }
     }

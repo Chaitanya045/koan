@@ -20,7 +20,7 @@
 //
 //   scripts/e2e/run.sh spaces
 import {
-  ACCEL, ALT, CTRL, IS_MAC, META, NATIVE_MENUS, NATIVE_MENU_WHY, SHIFT, UI_PORT, browserCall,
+  centerOf, whole, ACCEL, ALT, CTRL, IS_MAC, META, NATIVE_MENUS, NATIVE_MENU_WHY, SHIFT, UI_PORT, browserCall,
   check, connect, evalIn, finish, key as pageKey, keyToWidget, menuMouse, openMenus,
   pages as pageTargets, readPref, sleep, toastTexts, typeInto, viewEvent, viewMouse, viewTree,
   visiblePage, waitFor, windowTints,
@@ -306,12 +306,13 @@ async function headerMenu() {
 }
 let menu;
 // Change Name..., Change Icon..., Theme..., Set Profile (#322's
-// containers), the Spaces, Unload Space, Unload All Other Spaces, Create
-// Space, Delete Space, Space Routing Settings (#233's routing): 11 with two
+// containers), Extensions... (#473, with koan-space-extensions on, its
+// default), the Spaces, Unload Space, Unload All Other Spaces, Create
+// Space, Delete Space, Space Routing Settings (#233's routing): 12 with two
 // Spaces (koan_space_menu.cc).
-const HEADER_MENU_ITEMS = 11;
-// Unload Space's place: after the four entries and the two Spaces.
-const UNLOAD_ITEM = 6;
+const HEADER_MENU_ITEMS = 12;
+// Unload Space's place: after the five entries and the two Spaces.
+const UNLOAD_ITEM = 7;
 if (NATIVE_MENUS) {
   skipped('The header menu has Zen\'s entries and the Spaces', NATIVE_MENU_WHY);
 } else {
@@ -465,17 +466,13 @@ const collapsedTabs = collapsedSidebar.tabs;
 await key(VK.N, CTRL | ALT, 'n');
 s = await sidebar();
 form = one(s.vs, 'KoanSpaceCreationView');
-// Fails on Linux: #541. The header menus above leave their sidebar hold
-// (kKeepCurrentState) waiting for the pointer to move over the window, which
-// synthetic events never do, and that hold outranks the form's kKeepExpanded
-// lock, so the hidden sidebar stays shut with the form in it.
 {
   const hidden = s.vs.find(v => v.cls === 'KoanSpaceCreationView');
   check('Collapsed, Ctrl+Alt+N shows the Create form (the sidebar expands)',
         !!form && form.h > 100 && form.w >= 200,
         form ? JSON.stringify([form.w, form.h])
              : hidden ? `the form is there but hidden (${hidden.w}x${hidden.h}; the strip ` +
-                        `region ${regionWidth(s.vs)} wide; #541)` : 'no form');
+                        `region ${regionWidth(s.vs)} wide)` : 'no form');
 }
 const cancel = shown(s.vs, 'MdTextButton')
     .find(b => b.path.includes('KoanSpaceCreationView') && b.props.Text === 'Cancel');
@@ -488,14 +485,14 @@ if (IS_MAC && realInput()) {
   const page = await visiblePage();
   const b = page && (await windowOf(page.id))?.bounds;
   if (b) {
-    await ptr('move', Math.round(b.left + b.width * 3 / 4), Math.round(b.top + b.height / 2), 100);
+    await ptr('move', whole(b.left + b.width * 3 / 4), whole(b.top + b.height / 2), 100);
   }
 }
 if (cancel) {
   await click(cancel);
 } else {
-  // (A hidden form, #541: Esc in its name field cancels it, as Cancel would,
-  // so the steps after this one still run.)
+  // (A hidden form: Esc in its name field cancels it, as Cancel would, so the
+  // steps after this one still run.)
   const name = s.vs.find(t => t.cls === 'Textfield' && t.path.includes('KoanSpaceCreationView'));
   if (name) await viewKey(name, VK.ESCAPE);
 }
@@ -608,8 +605,7 @@ check('...and deletes the Space, showing another',
 async function rootClick(view) {
   const vs = await views();
   const root = vs.find(v => v.cls === 'BrowserRootView' && v.widget === view.widget);
-  const x = Math.round(view.ax + view.w / 2);
-  const y = Math.round(view.ay + view.h / 2);
+  const { x, y } = centerOf(view);
   await mouse(root, 'mouseMoved', x, y);
   await mouse(root, 'mousePressed', x, y);
   await mouse(root, 'mouseReleased', x, y);

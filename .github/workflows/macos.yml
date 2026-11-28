@@ -10,13 +10,14 @@
 # the .dmg; the release job publishes it. The chain is macos-chain.yml,
 # which release.yml (tagged releases) shares. See .agent/notes/macos-ci.md.
 #
-# Runs here are incremental: they start from the last successful develop
-# run's tree and out/Koan and rebuild only what changed, so a full ~16 h
-# build happens only for a new Chromium, new fetch inputs or a new Xcode (or
-# when no recent develop run is left to build on). Only runs that built
-# develop itself leave such a base; labelled pull requests and manual runs
-# of other refs build on it but never become one. Tagged releases always
-# build from scratch.
+# Runs here are incremental: they start from the newest trusted run's tree
+# and out/Koan (a develop nightly or a tagged release, scripts/ci/
+# find_base.sh) and rebuild only what changed, so a full ~16 h build happens
+# only for a new Chromium, new fetch inputs or a new Xcode (or when no
+# recent trusted run is left to build on), and only once: whichever kind of
+# run comes first. Only runs that built develop itself, and releases, leave
+# such a base; labelled pull requests and manual runs of other refs build on
+# it but never become one.
 #
 # The plan job skips the whole chain for other labels, for forks, and for
 # a nightly when nothing that goes into the app changed since the commit

@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/navigation_predictor/BUILD.gn b/chrome/browser/navigation_predictor/BUILD.gn
+index d09fe9e14906b96d4464b3f14fcfc0cc6f8f33c3..dbf5b36d6cc1ee387930757c7a93c3ebbf8e1dc1 100644
+--- a/chrome/browser/navigation_predictor/BUILD.gn
++++ b/chrome/browser/navigation_predictor/BUILD.gn
+@@ -58,6 +58,7 @@ source_set("impl") {
+     "//components/no_state_prefetch/browser",
+     "//components/prefs",
+     "//components/search_engines",
++    "//koan/browser/containers:partition",
+     "//net",
+     "//services/metrics/public/cpp:ukm_builders",
+     "//third_party/blink/public/common:headers",

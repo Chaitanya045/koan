@@ -1,0 +1,12 @@
+diff --git a/chrome/browser/ui/webui/cr_components/most_visited/BUILD.gn b/chrome/browser/ui/webui/cr_components/most_visited/BUILD.gn
+index e63336f8ab5eb1654552bd87d705b51e96d28c12..d7e3953945bc5b2418f21833ba0c5515757c1600 100644
+--- a/chrome/browser/ui/webui/cr_components/most_visited/BUILD.gn
++++ b/chrome/browser/ui/webui/cr_components/most_visited/BUILD.gn
+@@ -39,6 +39,7 @@ source_set("most_visited") {
+     "//components/search_engines",
+     "//components/tabs:public",
+     "//content/public/browser",
++    "//koan/browser/containers:partition",
+     "//mojo/public/cpp/bindings",
+     "//ui/base",
+     "//ui/webui/resources/cr_components/most_visited:mojom",

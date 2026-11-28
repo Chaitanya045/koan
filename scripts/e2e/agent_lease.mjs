@@ -43,7 +43,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AGENT_HOME, CLI, PROFILE, allow, allowWhy, brief, koan, spawnKoan } from './lib/agent.mjs';
-import { browserCall, check, decodePng, evalIn, finish, front, pages, sleep, viewTree, waitFor }
+import { browserCall, centerOf, check, decodePng, evalIn, finish, front, pages, sleep, viewTree,
+         waitFor }
     from './lib/koan.mjs';
 import { IS_MAC, KOAN_PID, alive, benchCannotMinimise, fatalInLog, goToAgentTab, minimiseWithButton, realInput,
          realInputWhyNot,
@@ -646,7 +647,8 @@ if (!realInput() || windowId === undefined) {
                                    v.props.Text === 'Stop');
   if (stop) {
     const root = rootOf({ views: vs.filter(v => v.widget === stop.widget) });
-    await rootMouse(root, ['mousePressed', 'mouseReleased'], stop.ax + stop.w / 2, stop.ay + stop.h / 2);
+    const c = centerOf(stop);
+    await rootMouse(root, ['mousePressed', 'mouseReleased'], c.x, c.y);
   }
   check('Stop: the pill on the agent\'s tab has Stop, and it was pressed', !!stop, pill ? 'no Stop' : 'no pill');
   // No lease is left: no hold-off.

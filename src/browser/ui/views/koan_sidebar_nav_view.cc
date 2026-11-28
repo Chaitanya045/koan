@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -33,6 +34,7 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
+#include "koan/browser/koan_features.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/color/koan_color_id.h"
 #include "koan/browser/ui/vector_icons/koan_icon_sizes.h"
@@ -45,6 +47,7 @@
 #include "koan/browser/ui/views/koan_sidebar_header.h"
 #include "koan/browser/ui/views/koan_sidebar_metrics.h"
 #include "koan/browser/ui/views/koan_site_panel_actions.h"
+#include "koan/browser/ui/views/koan_space_extensions.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "koan/browser/ui/views/koan_url_pill_buttons.h"
 #if BUILDFLAG(IS_LINUX)
@@ -445,6 +448,13 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
   // run and the release would open it again.
   extensions_button_->button_controller()->set_notify_action(
       views::ButtonController::NotifyAction::kOnPress);
+  // Its context menu: the extensions that are off in the Space's profile.
+  if (base::FeatureList::IsEnabled(features::kKoanSpaceExtensions)) {
+    extensions_context_menu_ =
+        std::make_unique<KoanSpaceExtensionsContextMenu>(browser_view_);
+    extensions_button_->set_context_menu_controller(
+        extensions_context_menu_.get());
+  }
   // Like Zen's (opacity 0 until the sidebar is hovered), they keep their
   // place, so Tab and screen readers reach them.
   for (views::Button* button : {copy_button_.get(), extensions_button_.get()}) {
@@ -475,6 +485,10 @@ KoanSidebarNavView::KoanSidebarNavView(BrowserView* browser_view)
 
 KoanSidebarNavView::~KoanSidebarNavView() {
   browser_view_->browser()->GetTabStripModel()->RemoveObserver(this);
+  // The menu goes before the button (a child, removed after this).
+  if (extensions_button_) {
+    extensions_button_->set_context_menu_controller(nullptr);
+  }
 }
 
 void KoanSidebarNavView::OnPillHovered(bool hovered) {

@@ -18,6 +18,7 @@ source_set("views") {
     "koan_crash_restore.h",
     "koan_dialogs.h",
     "koan_essentials.h",
+    "koan_extension_history.h",
     "koan_extensions_hooks.h",
     "koan_folders.h",
     "koan_glance.h",
@@ -201,6 +202,15 @@ source_set("split_rearrange") {
   ]
 }
 
+# The split shortcut's choice of a tab to split with (koan_split_partner.h):
+# pure, for the unit tests.
+source_set("split_partner") {
+  sources = [
+    "koan_split_partner.cc",
+    "koan_split_partner.h",
+  ]
+}
+
 # Whether a pinned tab keeps its site (koan_pinned_site.h): pure, so the unit
 # tests need nothing else.
 source_set("pinned_site") {
@@ -303,6 +313,7 @@ test("koan_views_unittests") {
     "koan_space_drag_logic_unittest.cc",
     "koan_space_navigation_unittest.cc",
     "koan_space_routes_unittest.cc",
+    "koan_split_partner_unittest.cc",
     "koan_split_rearrange_unittest.cc",
     "koan_stored_space_unittest.cc",
     "koan_stored_tab_unittest.cc",
@@ -327,6 +338,7 @@ test("koan_views_unittests") {
     ":space_drag_logic",
     ":space_navigation",
     ":space_routes",
+    ":split_partner",
     ":split_rearrange",
     ":stored_space",
     ":stored_tab",
@@ -435,6 +447,7 @@ source_set("impl") {
     "koan_essentials_profiles.h",
     "koan_essentials_promo.cc",
     "koan_essentials_promo.h",
+    "koan_extension_history.cc",
     "koan_folder_controller.cc",
     "koan_folder_controller.h",
     "koan_folder_views.cc",
@@ -503,6 +516,8 @@ source_set("impl") {
     "koan_space_containers.cc",
     "koan_space_creation.cc",
     "koan_space_creation.h",
+    "koan_space_extensions.cc",
+    "koan_space_extensions.h",
     "koan_space_header.cc",
     "koan_space_header.h",
     "koan_space_history.cc",
@@ -524,6 +539,8 @@ source_set("impl") {
     "koan_system_accent_observer.h",
     "koan_tab_activation.cc",
     "koan_tab_activation.h",
+    "koan_tab_auto_closer.cc",
+    "koan_tab_auto_closer.h",
     "koan_tab_drag.cc",
     "koan_tab_drag.h",
     "koan_tab_drag_image.cc",
@@ -604,6 +621,7 @@ source_set("impl") {
     ":space_drag_logic",
     ":space_navigation",
     ":space_routes",
+    ":split_partner",
     ":split_rearrange",
     ":stored_space",
     ":stored_tab",
@@ -655,6 +673,7 @@ source_set("impl") {
     "//chrome/browser/ui/immersive:immersive_mode_controller",
     "//chrome/browser/ui/navigator",
     "//chrome/browser/ui/omnibox",
+    "//chrome/browser/ui/side_panel",
     "//chrome/browser/ui/tabs",
     "//chrome/browser/ui/tabs:tab_enums",
     "//chrome/browser/ui/tabs:tab_group",
@@ -694,6 +713,7 @@ source_set("impl") {
     "//chrome/browser/ui/views/tabs/tab",
     "//chrome/browser/ui/views/toolbar",
     "//chrome/common",
+    "//chrome/common/extensions/api",
     "//components/blocked_content",
     "//components/bookmarks/browser",
     "//components/bookmarks/common",
@@ -720,11 +740,14 @@ source_set("impl") {
     "//components/tabs:public",
     "//components/url_formatter",
     "//components/user_prefs",
+    "//components/version_info",
     "//components/vector_icons",
     "//components/viz/common",
     "//components/web_modal",
     "//components/zoom",
     "//content/public/browser",
+    "//extensions/browser",
+    "//extensions/common",
     "//extensions/common:common_constants",
     "//koan/browser:copy_urls",
     "//koan/browser:features",
@@ -734,6 +757,7 @@ source_set("impl") {
     "//koan/browser:renderer_switches",
     "//koan/browser:shortcut_table",
     "//koan/browser:space_title",
+    "//koan/browser:tab_auto_close",
     "//koan/browser:tab_hooks",
     "//koan/browser:vertical_tabs",
     "//koan/browser:welcome_state",
@@ -749,10 +773,11 @@ source_set("impl") {
     "//koan/browser/ui/fonts",
     "//koan/browser/ui/vector_icons",
     "//koan/browser/ui/webui",
-    "//koan/browser/updates:build_info",
     "//koan/browser/updates:update_logic",
+    "//koan/browser/updates:update_source",
     "//koan/browser/window_sync:model",
     "//koan/common:url_constants",
+    "//koan/version",
     "//mojo/public/cpp/bindings",
     "//net",
     "//services/data_decoder/public/cpp",

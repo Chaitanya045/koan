@@ -1,5 +1,10 @@
 # Frame dumps, for a screenshot of the revealed toolbar (SHOTS=<dir>; Linux's
-# headless Ozone only: scripts/mac/suite.sh leaves this line out, and the
-# checks run on the real window there).
+# headless Ozone only: on macOS scripts/mac/suite.sh reads
+# compact_variants.mac.flags instead).
 --ozone-dump-file={dump}
-# macOS: run
+# The window at (-640, -20): headless Ozone's pointer is always at (0, 0), so
+# it is over the window (1280 px wide), on the page near its top: clear of the
+# window's 8 px edges and of the sidebar, as a person's pointer is after
+# clicking a menu item and moving on. Otherwise it is over the sidebar, which
+# then counts as hovered and stays out once the menu and the pin let go (#579).
+--window-position=-640,-20

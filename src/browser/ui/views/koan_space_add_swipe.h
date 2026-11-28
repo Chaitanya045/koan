@@ -55,6 +55,7 @@ class KoanSpaceAddSwipeView : public views::View,
 
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override;
+  void OnThemeChanged() override;
 
   // gfx::AnimationDelegate:
   void AnimationProgressed(const gfx::Animation* animation) override;

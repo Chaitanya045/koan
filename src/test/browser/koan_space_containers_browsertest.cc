@@ -240,6 +240,46 @@ IN_PROC_BROWSER_TEST_F(KoanSpaceContainersBrowserTest,
   EXPECT_EQ("", spaces->GetSpaceContainer(space));
 }
 
+// #543: the moment a Space gets a new profile, at its creation (the
+// Create-a-Space form's New Profile...) or with Set Profile, its empty tab
+// and a tab opened at once are in it. Nothing here waits: the next update
+// must not be what moves them.
+IN_PROC_BROWSER_TEST_F(KoanSpaceContainersBrowserTest,
+                       NewProfileHoldsInTheSameTask) {
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  ASSERT_TRUE(spaces);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+
+  // New Profile... in the form, then Create Space, then Cmd+T.
+  const std::string work = AddProfile(u"Work");
+  ASSERT_FALSE(work.empty());
+  spaces->CreateSpace(u"Work", u"", {}, work);
+  const tab_groups::TabGroupId work_space = *spaces->GetActiveSpace();
+  EXPECT_EQ(work, spaces->GetSpaceContainer(work_space));
+  // (A bookmark or a dropped link loads in the empty tab itself.)
+  EXPECT_TRUE(EmptyTabIsIn(work_space, work));
+  content::WebContents* in_work = OpenNewTab(GURL(kPage));
+  ASSERT_TRUE(in_work);
+  EXPECT_EQ(work_space,
+            tabs::TabInterface::GetFromContents(in_work)->GetGroup());
+  EXPECT_EQ(containers::SpaceContainerFromString(work),
+            containers::ContainerOf(in_work));
+
+  // Set Profile > New Profile... on a Space without one, then Cmd+T.
+  spaces->CreateSpace(u"Later", u"", {});
+  const tab_groups::TabGroupId later_space = *spaces->GetActiveSpace();
+  ASSERT_TRUE(EmptyTabIsIn(later_space, ""));
+  const std::string later = AddProfile(u"Later");
+  spaces->SetSpaceContainer(later_space, later);
+  EXPECT_TRUE(EmptyTabIsIn(later_space, later));
+  content::WebContents* in_later = OpenNewTab(GURL(kOtherPage));
+  ASSERT_TRUE(in_later);
+  EXPECT_EQ(later_space,
+            tabs::TabInterface::GetFromContents(in_later)->GetGroup());
+  EXPECT_EQ(containers::SpaceContainerFromString(later),
+            containers::ContainerOf(in_later));
+}
+
 // The reviewer's check: logged in in one Space, not in another with its own
 // profile; the same profile shares the login; logging out in one leaves the
 // other's.

@@ -188,14 +188,15 @@ Mac, so it catches Mac-only build errors.
   5 hours and hand `out/Koan` on to the next as an artifact, then a
   packaging step and the release. A full build takes about 16 hours
   (4 build jobs).
-- Runs of `macos.yml` are incremental: they start from the last
-  successful develop run's tree and `out/Koan` and rebuild only what
-  changed. A new `CHROMIUM_VERSION`, branding or other fetch input, or
-  Xcode, or no successful develop run in the last 14 days, means a full
-  build. Only runs that built develop itself (the nightly, a manual run on
-  develop) leave such a base; a labelled pull request builds on it but never
-  becomes one, so unmerged code is never linked into what users install.
-  Tagged releases always build in full.
+- Runs of `macos.yml` and releases are incremental: they start from the
+  newest trusted build's tree and `out/Koan` (a develop nightly or a
+  release) and rebuild only what changed. A new `CHROMIUM_VERSION`,
+  branding or other fetch input, or Xcode, or no trusted build in the last
+  14 days, means a full build: the first one after the change, whichever
+  kind it is. Only runs that built develop itself (the nightly, a manual run
+  on develop) and releases leave such a base; a labelled pull request builds
+  on it but never becomes one, so unmerged code is never linked into what
+  users install ([docs/RELEASING.md](docs/RELEASING.md#how-releases-are-built)).
 - **It never runs on pushes.** A run can still be a full build of about
   16 hours, so it runs only nightly or when asked for. To build a branch or pull
   request with Mac-specific code (a compile check plus a .dmg to try):

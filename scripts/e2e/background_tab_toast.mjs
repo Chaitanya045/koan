@@ -4,7 +4,7 @@
 //
 //   scripts/e2e/run.sh background_tab_toast
 import {
-  check, evalIn, finish, front, key, mouseOn, onPage, pages, saveShot, shownViews, sleep,
+  centerOf, check, evalIn, finish, front, key, mouseOn, onPage, pages, saveShot, shownViews, sleep,
   views, ACCEL,
 } from './lib/koan.mjs';
 
@@ -14,10 +14,10 @@ await sleep(800);
 
 // Ctrl+click (Cmd+click on macOS, where Ctrl+click is a right click) opens
 // the link in a background tab.
-const box = await evalIn(page, `(() => {
+const box = centerOf(await evalIn(page, `(() => {
   const r = document.querySelector('#link').getBoundingClientRect();
-  return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
-})()`);
+  return { x: r.x, y: r.y, width: r.width, height: r.height };
+})()`));
 await onPage(page, async c => {
   for (const type of ['mousePressed', 'mouseReleased']) {
     await c.send('Input.dispatchMouseEvent', { type, x: box.x, y: box.y, button: 'left',

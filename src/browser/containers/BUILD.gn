@@ -25,8 +25,9 @@ source_set("access_prefs") {
 }
 
 # What a container is, the SiteInstances upstream's hooks put new tabs in, the
-# blocks' check of the user's switches (koan_agent_access.h) and the profile a
-# visit records (koan_history_profiles.h). Depends on
+# blocks' check of the user's switches (koan_agent_access.h), the profile a
+# visit records (koan_history_profiles.h) and the extensions that are off in a
+# user container (koan_container_extensions.h). Depends on
 # //base, //components/prefs, //components/user_prefs and
 # //content/public/browser only, so upstream targets in components/ and
 # extensions/ can depend on it.
@@ -34,6 +35,8 @@ source_set("partition") {
   sources = [
     "koan_agent_access.cc",
     "koan_agent_access.h",
+    "koan_container_extensions.cc",
+    "koan_container_extensions.h",
     "koan_container_partition.cc",
     "koan_container_partition.h",
     "koan_history_profiles.cc",
@@ -48,7 +51,30 @@ source_set("partition") {
     "//components/prefs",
     "//components/user_prefs",
     "//content/public/browser",
+    "//koan/browser:features",
     "//url",
+  ]
+}
+
+# The events about a tab, a visit or a download that an extension which is
+# off in its Space profile doesn't get, and the downloads and closed tabs it
+# can't see (koan_extension_events.h, #473, #544): for webNavigation's helpers,
+# which can't depend on //koan/browser/ui/views, and the tabs, history,
+# downloads and sessions APIs. Depends on //extensions/browser, so
+# //extensions/browser can't depend on it (it uses :partition).
+source_set("extension_events") {
+  sources = [
+    "koan_extension_events.cc",
+    "koan_extension_events.h",
+  ]
+  public_deps = [ "//base" ]
+  deps = [
+    ":partition",
+    "//components/download/public/common:public",
+    "//components/sessions",
+    "//content/public/browser",
+    "//extensions/browser",
+    "//extensions/common",
   ]
 }
 
@@ -61,8 +87,58 @@ source_set("user_containers") {
   ]
   public_deps = [
     ":partition",
+    ":proxy",
     "//base",
     "//components/tab_groups",
+  ]
+}
+
+# A proxy per Space (#445): a user container's proxy setting, its runtime
+# state, the proxy configuration they make, and which partition is a user
+# container's (koan_container_proxy.h). Pure logic.
+source_set("proxy") {
+  sources = [
+    "koan_container_proxy.cc",
+    "koan_container_proxy.h",
+  ]
+  public_deps = [
+    ":partition",
+    "//base",
+    "//net",
+  ]
+}
+
+# The hook in chrome/browser/net/profile_network_context_service.cc
+# (koan_container_proxy_hook.h). Header-only, with no dependencies, so the
+# upstream target can depend on it without a cycle; the definition is in
+# :proxies.
+source_set("proxy_hook") {
+  sources = [ "koan_container_proxy_hook.h" ]
+}
+
+# The proxies of a profile's user containers between upstream's
+# ProxyConfigMonitor and their network contexts (koan_container_proxies.h),
+# and the API the SSH tunnel manager and the UI call. Linked through :impl.
+source_set("proxies") {
+  sources = [
+    "koan_container_proxies.cc",
+    "koan_container_proxies.h",
+  ]
+  public_deps = [
+    ":partition",
+    ":proxy",
+    "//base",
+    "//chrome/browser/profiles:profile",
+    "//components/prefs",
+  ]
+  deps = [
+    ":proxy_hook",
+    ":user_containers",
+    "//koan/browser:features",
+    "//koan/browser:prefs",
+    "//mojo/public/cpp/bindings",
+    "//net",
+    "//services/network/public/mojom",
   ]
 }
 
@@ -109,6 +185,7 @@ source_set("impl") {
     ":containers",
     ":grants",
     ":partition",
+    ":proxies",
     ":user_containers",
     "//base",
     "//chrome/browser:browser_process",
@@ -145,9 +222,11 @@ source_set("impl") {
 test("koan_containers_unittests") {
   sources = [
     "koan_agent_access_unittest.cc",
+    "koan_container_extensions_unittest.cc",
     "koan_container_grants_unittest.cc",
     "koan_container_partition_unittest.cc",
     "koan_container_permissions_unittest.cc",
+    "koan_container_proxy_unittest.cc",
     "koan_container_restore_unittest.cc",
     "koan_history_profiles_unittest.cc",
     "koan_user_containers_unittest.cc",
@@ -155,6 +234,7 @@ test("koan_containers_unittests") {
   deps = [
     ":grants",
     ":partition",
+    ":proxy",
     ":user_containers",
     "//base",
     "//base/test:test_support",
@@ -166,6 +246,7 @@ test("koan_containers_unittests") {
     "//content/public/browser",
     "//content/test:run_all_unittests",
     "//content/test:test_support",
+    "//net",
     "//testing/gtest",
     "//url",
   ]

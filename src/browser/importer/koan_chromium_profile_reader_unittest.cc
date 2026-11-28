@@ -5,6 +5,7 @@
 #include "koan/browser/importer/koan_chromium_profile_reader.h"
 
 #include <array>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -30,13 +31,25 @@ using user_data_importer::ImportedPasswordForm;
 constexpr char kSecret[] = "peanuts";
 constexpr char kKeyHex[] = "d9a09d499b4e1b7461f28e67972c6dbd";
 constexpr char kHunter2Hex[] = "7218b8ec8774bcaad0e8305f7a6cf965";
+// Linux (#493), computed the same way: PBKDF2-HMAC-SHA1 with 1 round of
+// "peanuts" (upstream's posix_key_provider.cc has the same key) and of a
+// keyring secret, and "hunter2" under each.
+constexpr char kLinuxBasicKeyHex[] = "fd621fe5a2b402539dfa147ca9272778";
+constexpr char kLinuxBasicHunter2Hex[] = "58186cf88abd515a1cd36afe2d4d93ca";
+constexpr char kKeyringSecret[] = "keyring secret";
+constexpr char kLinuxKeyringKeyHex[] = "375e3b2ed67978c6451939ee2f484b60";
+constexpr char kLinuxKeyringHunter2Hex[] = "c69eb8588b5ed8cfff9d679210b70683";
 
-std::vector<uint8_t> V10(std::string_view hex) {
-  std::vector<uint8_t> bytes = {'v', '1', '0'};
+std::vector<uint8_t> Prefixed(std::string_view prefix, std::string_view hex) {
+  std::vector<uint8_t> bytes(prefix.begin(), prefix.end());
   std::vector<uint8_t> body;
   EXPECT_TRUE(base::HexStringToBytes(hex, &body));
   bytes.insert(bytes.end(), body.begin(), body.end());
   return bytes;
+}
+
+std::vector<uint8_t> V10(std::string_view hex) {
+  return Prefixed("v10", hex);
 }
 
 std::vector<uint8_t> Encrypt(const SafeStorageKey& key, std::string_view text) {
@@ -59,14 +72,46 @@ std::vector<std::u16string> Path(const ImportedBookmarkEntry& entry) {
 TEST(KoanChromiumProfileReaderTest, SafeStorageKeyAndPassword) {
   const SafeStorageKey key = DeriveSafeStorageKey(kSecret);
   EXPECT_EQ(kKeyHex, base::HexEncodeLower(key));
-  EXPECT_EQ(u"hunter2", DecryptPassword(V10(kHunter2Hex), key));
-  EXPECT_EQ(u"pässwörd", DecryptPassword(Encrypt(key, "pässwörd"), key));
+  const std::vector<PasswordKey> keys = MacPasswordKeys(kSecret);
+  EXPECT_EQ(u"hunter2", DecryptPassword(V10(kHunter2Hex), keys));
+  EXPECT_EQ(u"pässwörd", DecryptPassword(Encrypt(key, "pässwörd"), keys));
   // No "v10", the wrong key, a cut-off value: not a password.
   std::vector<uint8_t> raw;
   ASSERT_TRUE(base::HexStringToBytes(kHunter2Hex, &raw));
-  EXPECT_FALSE(DecryptPassword(raw, key));
-  EXPECT_FALSE(DecryptPassword(V10(kHunter2Hex), DeriveSafeStorageKey("x")));
-  EXPECT_FALSE(DecryptPassword(V10("7218b8ec"), key));
+  EXPECT_FALSE(DecryptPassword(raw, keys));
+  EXPECT_FALSE(DecryptPassword(V10(kHunter2Hex), MacPasswordKeys("x")));
+  EXPECT_FALSE(DecryptPassword(V10("7218b8ec"), keys));
+  // Linux's "v11" is not the Mac's.
+  EXPECT_FALSE(DecryptPassword(Prefixed("v11", kLinuxKeyringHunter2Hex), keys));
+}
+
+// Linux (#493): "v10" without a keyring, "v11" with the browser's keyring
+// secret; the secret portal's "v12" never.
+TEST(KoanChromiumProfileReaderTest, LinuxSafeStorageKeys) {
+  EXPECT_EQ(kLinuxBasicKeyHex,
+            base::HexEncodeLower(DeriveLinuxSafeStorageKey("peanuts")));
+  EXPECT_EQ(kLinuxKeyringKeyHex,
+            base::HexEncodeLower(DeriveLinuxSafeStorageKey(kKeyringSecret)));
+
+  // No keyring secret: only the passwords saved without a keyring.
+  const std::vector<PasswordKey> basic = LinuxPasswordKeys(std::nullopt);
+  ASSERT_EQ(1u, basic.size());
+  EXPECT_EQ(u"hunter2", DecryptPassword(V10(kLinuxBasicHunter2Hex), basic));
+  EXPECT_FALSE(
+      DecryptPassword(Prefixed("v11", kLinuxKeyringHunter2Hex), basic));
+
+  const std::vector<PasswordKey> keyring =
+      LinuxPasswordKeys(std::string(kKeyringSecret));
+  ASSERT_EQ(2u, keyring.size());
+  EXPECT_EQ(u"hunter2", DecryptPassword(V10(kLinuxBasicHunter2Hex), keyring));
+  EXPECT_EQ(u"hunter2",
+            DecryptPassword(Prefixed("v11", kLinuxKeyringHunter2Hex), keyring));
+  // Another keyring secret, the Mac's "v10", the portal's "v12".
+  EXPECT_FALSE(DecryptPassword(Prefixed("v11", kLinuxKeyringHunter2Hex),
+                               LinuxPasswordKeys(std::string("other"))));
+  EXPECT_FALSE(DecryptPassword(V10(kHunter2Hex), keyring));
+  EXPECT_FALSE(
+      DecryptPassword(Prefixed("v12", kLinuxKeyringHunter2Hex), keyring));
 }
 
 TEST(KoanChromiumProfileReaderTest, Bookmarks) {
@@ -239,6 +284,7 @@ TEST(KoanChromiumProfileReaderTest, Logins) {
   ASSERT_TRUE(dir.CreateUniqueTempDir());
   const base::FilePath file = dir.GetPath().AppendASCII("Login Data");
   const SafeStorageKey key = DeriveSafeStorageKey(kSecret);
+  const std::vector<PasswordKey> keys = MacPasswordKeys(kSecret);
   {
     sql::Database db(sql::Database::Tag("Test"));
     ASSERT_TRUE(db.Open(file));
@@ -277,7 +323,7 @@ TEST(KoanChromiumProfileReaderTest, Logins) {
       ASSERT_TRUE(insert.Run());
     }
   }
-  const std::vector<ImportedPasswordForm> forms = ReadLogins(file, key);
+  const std::vector<ImportedPasswordForm> forms = ReadLogins(file, keys);
   ASSERT_EQ(3u, forms.size());
   EXPECT_EQ(GURL("https://site.example/login"), forms[0].url);
   EXPECT_EQ(GURL("https://site.example/submit"), forms[0].action);
@@ -294,7 +340,7 @@ TEST(KoanChromiumProfileReaderTest, Logins) {
   EXPECT_EQ(ImportedPasswordForm::Scheme::kBasic, forms[2].scheme);
   EXPECT_EQ(u"b4sic", forms[2].password_value);
 
-  EXPECT_TRUE(ReadLogins(dir.GetPath().AppendASCII("missing"), key).empty());
+  EXPECT_TRUE(ReadLogins(dir.GetPath().AppendASCII("missing"), keys).empty());
 }
 
 }  // namespace koan::importer

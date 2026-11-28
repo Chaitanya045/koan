@@ -29,6 +29,11 @@ class StateBackground : public views::Background {
       : normal_(normal), hovered_(hovered), radius_(radius) {}
 
   // views::Background:
+  // As upstream's backgrounds of a ColorId: the view repaints with the new
+  // colours, also when it paints to a layer of its own (a Library pill that
+  // is unavailable), which a theme change doesn't repaint (#564).
+  void OnViewThemeChanged(views::View* view) override { view->SchedulePaint(); }
+
   void Paint(gfx::Canvas* canvas, views::View* view) const override {
     std::optional<ui::ColorId> color = normal_;
     if (const views::Button* button = views::Button::AsButton(view)) {
