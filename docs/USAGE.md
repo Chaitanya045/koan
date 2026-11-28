@@ -1536,12 +1536,11 @@ Flatpak installed, else its initial.
 ## Updates
 
 Koan checks its [GitHub releases](https://github.com/koan-browser/koan/releases)
-for a newer version and tells you in the sidebar. It doesn't download or
-install anything yet: on the Mac you download the new disk image and drag it
-over the old one in Applications (see
-[Installing the macOS build](#installing-the-macos-build)); on Linux you
-install the new Flatpak over the old one. A build from your own clone
-updates with `git pull && scripts/build.sh`
+for a newer version and tells you in the sidebar. On the Mac it then
+updates itself, as Zen does: it downloads the new version in the background
+and installs it the next time you restart or quit Koan. On Linux you install
+the new Flatpak over the old one (the Flatpak can't replace itself). A build
+from your own clone updates with `git pull && scripts/build.sh`
 ([BUILDING-MAC.md](BUILDING-MAC.md#updating)); the check still looks at the
 releases, not at your clone.
 
@@ -1554,6 +1553,64 @@ releases, not at your clone.
   command that installs it once it is in your Downloads folder, `flatpak
   install --user --reinstall ~/Downloads/Koan-<version>-x86_64.flatpak`.
   Linux shows the notice only once releases carry a Flatpak (#468).
+- **Restart to update (Mac).** With **Automatically download and install
+  updates** (the default), a newer release downloads into
+  `~/Library/Application Support/Koan/Updates/` without asking. If a download
+  is interrupted, the next try resumes it. Koan keeps the file only if its
+  size and SHA-256 are the ones the manifest signs. It then copies the new
+  `Koan.app` out of the disk image and checks the copy. Its signature must be
+  the release certificate's ("Koan Release Signing"), and its bundle ID and
+  version must be right. Then the sidebar says **Restart to update**, and so
+  does the app's menu (Koan > Restart to Update Koan). Chromium's
+  **Relaunch to update** joins them in the toolbar's menu after a while (its
+  own schedule: 2 days, then a coloured badge). If you don't restart, the
+  sidebar reminds you after 6 days.
+  - **Restart to update** quits Koan as Chromium's restart does, so your
+    windows and tabs come back. A small helper swaps the new app in and
+    opens it.
+  - **Quitting** with an update ready installs it too: the next start is the
+    new version.
+  - Nothing restarts on its own. If an agent is using Koan (connected, or
+    holding a tab), Restart to update asks first: "An agent is using Koan.
+    Restart anyway?"
+  - Koan never replaces itself while it runs. The helper waits until every
+    process from the app has exited (another profile's Koan included). So
+    while another Koan runs from the app (one started with its own profile
+    folder), Restart to update says "Quit the other Koan first" instead of
+    restarting.
+  - Before it swaps, the helper checks the new copy's signature again, and
+    it only ever replaces the app it came with. If anything goes wrong on a
+    restart, it still opens Koan again.
+  - **Rollback:** the old app stays (in the Updates folder) until the new
+    version has started and had a window for 10 seconds, or quit normally.
+    Right after the swap the helper runs the new `Koan --version`; if that
+    fails (the new version can't start at all), it puts the old app back at
+    once. If the new version exits before its 10 seconds after a restart,
+    the helper puts the old app back and opens it; if it fails to get that
+    far twice, its next start does the same. Putting the old app back
+    checks it against its own signature, read before the swap. That version then isn't installed
+    automatically for 7 days (never again after a second time); the sidebar
+    offers its release page instead.
+  - **When Koan can't update itself** it shows the release page's
+    **Download**, as on Linux, and you install the disk image by hand:
+    - Koan runs from the disk image or from a quarantined copy macOS moved
+      ("App Translocation"; move Koan to Applications first);
+    - your user can't change the folder Koan is in (a standard account and
+      `/Applications`);
+    - Koan is on a volume that can't swap two files in one step (HFS+ or
+      exFAT; APFS can);
+    - a download fails twice without getting any further (a slow download
+      that keeps going resumes until it is done), or the copy fails a
+      check. A copy that couldn't be made for another reason (a full disk,
+      say) is tried again later.
+  - **Check for updates, but let me choose to install them** (Settings >
+    Look and Feel > Updates, under Check for updates): nothing downloads
+    until you click **Update** in "Update Available!" (shown at each start
+    until you do). Then it goes on as above. Switching to it while a
+    download runs stops the download and asks; switching back starts it.
+    Turning **Check for updates** off stops a download too; an update that
+    is already ready still installs when you restart or quit, as in
+    Firefox.
 - **Trust:** Koan only believes a manifest signed with the release key built
   into it (Ed25519; the key is
   [`src/browser/updates/koan_update_public_key.txt`](../src/browser/updates/koan_update_public_key.txt)).
@@ -1572,15 +1629,23 @@ releases, not at your clone.
   (GitHub redirects it to its file host). It sends no cookies or
   credentials, and nothing about you or your build; GitHub sees your IP
   address, as for any page. No telemetry. Incognito windows never start it.
-- **Turn off:** Settings > Look and Feel > Updates: **Check for updates** and
-  **Show a notification after Koan was updated**.
+- **Turn off:** Settings > Look and Feel > Updates: **Check for updates**
+  (on the Mac, **When a new version is out** chooses between installing
+  automatically and asking first) and **Show a notification after Koan was
+  updated**.
 - **Trying it without a release** (developers): a test build (CI makes one
   for each pull request, never for a release or a nightly) also takes
   `--koan-update-manifest-url=<URL>` and `--koan-update-public-key=<base64>`,
   to read a local manifest signed with a throwaway key
-  (`scripts/ci/update_manifest.py make --key-file <test key>`). In the
-  Flatpak they go in `~/.var/app/dev.koan.Koan/config/koan-flags.conf`.
-  Builds people install don't have them.
+  (`scripts/ci/update_manifest.py make --key-file <test key>`). On the Mac
+  it also takes `--koan-update-download-url=<URL>` (fetch the disk image
+  from a local server; it must still match the manifest's size and SHA-256)
+  and `--koan-update-code-requirement=<requirement>` (check the staged copy's
+  signature against another identity, e.g. `certificate leaf =
+  H"<SHA-1 of your local signing certificate>"`). The helper logs to
+  `Updates/helper.log`. In the Flatpak they go in
+  `~/.var/app/dev.koan.Koan/config/koan-flags.conf`. Builds people install
+  don't have them.
 
 ## Haptic feedback (macOS)
 

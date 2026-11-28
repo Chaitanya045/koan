@@ -103,10 +103,11 @@ if [[ $identity == - ]]; then
 else
   echo "==> Signing $app with $identity"
 fi
-# The agent's `koan` and `koan-relay` sit in Resources/bin, where --deep does
-# not look for code: each is signed on its own first, so the pairing dialog
-# can name it.
-for tool in koan koan-relay; do
+# The agent's `koan` and `koan-relay`, and the updater's helper (#550), sit in
+# Resources/bin, where --deep does not look for code: each is signed on its
+# own first, so the pairing dialog can name it, and so the helper that swaps
+# an update in carries the release certificate too.
+for tool in koan koan-relay koan-update-helper; do
   if [[ -f $app/Contents/Resources/bin/$tool ]]; then
     "${sign[@]}" "$app/Contents/Resources/bin/$tool"
   fi

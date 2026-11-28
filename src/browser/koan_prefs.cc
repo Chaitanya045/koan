@@ -190,6 +190,10 @@ void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(kUpdatesNotifiedVersion, "");
   registry->RegisterBooleanPref(kUpdatesShowUpdateNotification, true);
   registry->RegisterStringPref(kUpdatesLastBuild, "");
+  registry->RegisterBooleanPref(kUpdatesAutoInstall, true);
+  registry->RegisterStringPref(kUpdatesHeldVersion, "");
+  registry->RegisterTimePref(kUpdatesHeldUntil, base::Time());
+  registry->RegisterIntegerPref(kUpdatesHeldCount, 0);
   registry->RegisterStringPref(kUpdatesLatestCommitObsolete, "");
   registry->RegisterTimePref(kUpdatesLatestCommitTimeObsolete, base::Time());
   registry->RegisterStringPref(kUpdatesNotifiedCommitObsolete, "");

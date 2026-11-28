@@ -160,7 +160,8 @@ and believes it only if the signature verifies with the public key built
 into the app
 ([`src/browser/updates/koan_update_public_key.txt`](../src/browser/updates/koan_update_public_key.txt),
 a raw Ed25519 key in base64): it then says "Update Available!" (#549), and
-on the Mac it will download the disk image it names and install it (#550).
+on the Mac it downloads the disk image it names and installs it on the next
+restart (#550, docs/USAGE.md "Updates").
 Only a test build (CI makes one for a pull request, never for a release or a
 nightly: `koan_update_test_hooks`, `src/browser/updates/BUILD.gn`) can be
 pointed at another manifest and key; a release or nightly build that has the
@@ -195,6 +196,40 @@ older, genuinely signed disk image can't be served as a newer version.
 - Publishing a release replaces what `latest` points at, so a bad release is
   fixed by publishing a newer one (or by deleting it, which makes `latest`
   point at the one before).
+
+**What updates rely on.** A Mac that has Koan installs the next release
+itself, so every release must keep these the same, or installed copies stop
+updating (they then offer the release page, and people install by hand):
+
+- **The signing certificate.** A staged copy is accepted only with
+  `codesign --verify --deep --strict -R '=certificate leaf = H"<SHA-1>"'` for
+  `scripts/ci/codesign_identity.txt` (`kReleaseCertificateSha1` in
+  `src/browser/updates/koan_update_install_logic.h`). A new certificate needs
+  one release that still carries the old one and pins both.
+- **The bundle ID** (`dev.koan.Koan`): the copy's `CFBundleIdentifier` must
+  be the running app's.
+- **`KoanVersion` in the app's Info.plist**: it must be the manifest's signed
+  version, and newer than the running one (`mac_package.sh` checks it
+  against `VERSION`).
+- **The asset:** one disk image per release, named
+  `Koan-<version>-arm64.dmg` (a plain name ending in `.dmg`), with the app at
+  the image's root, listed as `mac-arm64` in `koan-update.json` under
+  `releases/download/<tag>/`.
+- **The helper** `Contents/Resources/bin/koan-update-helper`, signed with the
+  same certificate (`mac_package.sh`), and the install marker's format
+  (`install.json`, schema 1): the running (old) version's helper installs the
+  new one. It checks the copy's signature against the same pinned
+  certificate again right before the swap.
+- **`Koan --version` exits 0.** After the swap the helper runs
+  `Contents/MacOS/<CFBundleExecutable> --version` and puts the old app back
+  if it fails. Before the swap it reads the installed app's own designated
+  requirement (`codesign -d -r-`), and a swap back checks the old copy
+  against that rather than the release certificate; an old app with none
+  (unsigned) isn't put back.
+- **The manifest's address and key** (above).
+
+`scripts/tests/test_update_install.py` checks that the code, the bundle and
+the packaging agree on these.
 
 **The secrets** live in the `release` environment of the repository:
 

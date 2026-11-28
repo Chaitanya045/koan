@@ -28,6 +28,7 @@
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode.h"
 #include "koan/browser/ui/views/koan_glance_controller.h"
+#include "koan/browser/ui/views/koan_updates.h"
 #include "koan/browser/ui/views/koan_url_bar.h"
 #include "koan/browser/ui/views/koan_url_bar_controller.h"
 #include "koan/browser/ui/views/koan_vertical_tabs_policy.h"
@@ -83,6 +84,11 @@ enum class Owner {
   // bar (bookmark_bar_controller.cc.patch), as Firefox's Ctrl+Shift+B does in
   // Zen; upstream's pref is ignored (audit 3, LB6).
   kBookmarksBar,
+  // updates::RestartToUpdate(): with an update Koan staged (#550), the app
+  // menu's "Relaunch to update" asks first while an agent is using Koan
+  // (koan_updates.h). Otherwise upstream's (an outdated build's bubble, or
+  // its relaunch).
+  kUpdates,
 };
 
 struct Row {
@@ -213,6 +219,12 @@ constexpr Row kRows[] = {
     // The bookmarks bar: ⇧⌘B, View > Always Show Bookmarks Bar.
     {kActionShowBookmarkBar, IDC_SHOW_BOOKMARK_BAR, Owner::kBookmarksBar},
 
+    // Updates: the app menu's "Relaunch to update".
+    {kActionUpgradeDialog, IDC_UPGRADE_DIALOG, Owner::kUpdates,
+     [](BrowserWindowInterface* browser, WindowOpenDisposition) {
+       chrome::MaybeUpdateChrome(browser);
+     }},
+
 #if BUILDFLAG(IS_MAC)
     // Fullscreen: View > Always Show Toolbar in Full Screen, ⇧⌘F.
     {kActionToggleFullscreenToolbar, IDC_TOGGLE_FULLSCREEN_TOOLBAR,
@@ -262,6 +274,7 @@ bool Installs(Owner owner, BrowserView* browser_view) {
     case Owner::kNewWindow:
       return browser_view->GetIsNormalType();
     case Owner::kBookmarksBar:
+    case Owner::kUpdates:
       return true;
   }
 }
@@ -310,6 +323,13 @@ bool Takes(const Row& row, BrowserWindowInterface* browser) {
       return HandleNewWindowCommand(browser);
     case Owner::kBookmarksBar:
       ToggleBookmarksBar(browser);
+      return true;
+    case Owner::kUpdates:
+      if (!updates::IsUpdateReadyToInstall()) {
+        return false;
+      }
+      updates::RestartToUpdate(
+          browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr);
       return true;
   }
 }

@@ -39,6 +39,7 @@
 #include "koan/browser/koan_shortcut_table.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_shortcuts.h"
+#include "koan/browser/ui/views/koan_updates.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/base/accelerators/platform_accelerator_cocoa.h"
 #include "ui/base/base_window.h"
@@ -262,6 +263,8 @@ NSMenuItem* ChromeItem(NSString* title, int command) {
 - (void)spaceCommand:(NSMenuItem*)item;
 // View > Appearance: the browser's colour scheme in the item's tag.
 - (void)setAppearance:(NSMenuItem*)item;
+// Koan > Restart to Update Koan, shown while an update is staged (#550).
+- (void)restartToUpdate:(id)sender;
 // Sets the Spaces menu, whose items are enabled each time it opens.
 - (void)setSpacesMenu:(NSMenu*)menu;
 // Shows the keys of the active window's shortcuts in `mainMenu` (see the
@@ -356,8 +359,20 @@ NSString* SpaceTitle(const koan::KoanWorkspaceController::SpaceInfo& space) {
   }
 }
 
+- (void)restartToUpdate:(id)sender {
+  koan::KoanBrowserViewController* controller = ActiveController();
+  koan::updates::RestartToUpdate(controller ? controller->browser_view()
+                                            : nullptr);
+}
+
 // NSMenuItemValidation:
 - (BOOL)validateMenuItem:(NSMenuItem*)item {
+  if (item.action == @selector(restartToUpdate:)) {
+    // Also with no window open: the app stays, and so does the update.
+    const bool ready = koan::updates::IsUpdateReadyToInstall();
+    item.hidden = !ready;
+    return ready;
+  }
   if (item.action == @selector(performClose:)) {
     NSWindow* window = WindowForPerformClose();
     if (BrowserWindowInterface* browser = BrowserOfWindow(window)) {
@@ -568,6 +583,16 @@ void ExtendMainMenu(NSMenu* main_menu, bool is_pwa) {
     HideItems(app, {IDC_OPTIONS});
     InsertAfter(app, IDC_OPTIONS,
                 @[ ActionItem(Action::kOpenSettings, target, @"Settings…") ]);
+    // Firefox's "Restart to Update" (Zen's app menu), under About: the Mac's
+    // app menu is the menu bar's. Hidden until an update is staged; Chrome's
+    // own "Relaunch to update" lives in the toolbar's menu.
+    NSMenuItem* restart =
+        [[NSMenuItem alloc] initWithTitle:@"Restart to Update Koan"
+                                   action:@selector(restartToUpdate:)
+                            keyEquivalent:@""];
+    restart.target = target;
+    restart.hidden = YES;
+    InsertAfter(app, IDC_ABOUT, @[ restart ]);
   }
 
   // File: Zen's New Blank Window (Cmd+Shift+N, a window without Spaces or

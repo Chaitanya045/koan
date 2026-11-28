@@ -1,0 +1,14 @@
+diff --git a/chrome/browser/upgrade_detector/upgrade_detector_impl.cc b/chrome/browser/upgrade_detector/upgrade_detector_impl.cc
+--- a/chrome/browser/upgrade_detector/upgrade_detector_impl.cc
++++ b/chrome/browser/upgrade_detector/upgrade_detector_impl.cc
+@@ -493,6 +493,10 @@
+   auto* const build_state = g_browser_process->GetBuildState();
+   build_state->AddObserver(this);
+   installed_version_poller_.emplace(build_state);
++#else
++  // Koan: its own updater (koan/browser/ui/views/koan_update_installer.cc)
++  // reports an update ready on restart through BuildState.
++  g_browser_process->GetBuildState()->AddObserver(this);
+ #endif  // BUILDFLAG(ENABLE_UPDATE_NOTIFICATIONS)
+ }
+ 
