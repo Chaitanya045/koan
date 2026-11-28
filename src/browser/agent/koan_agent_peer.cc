@@ -435,6 +435,17 @@ namespace {
 #ifndef __NR_openat2
 #define __NR_openat2 437
 #endif
+// statx(), Linux 4.11. Chromium's sysroot keeps glibc's statx() wrapper
+// (glibc 2.28) out of reach of the linker, as it does every symbol newer than
+// the glibc Chromium supports, so the system call is made directly. struct
+// statx and the STATX_* and AT_STATX_* constants come from <sys/stat.h>.
+#ifndef __NR_statx
+#if defined(__x86_64__)
+#define __NR_statx 332
+#elif defined(__aarch64__)
+#define __NR_statx 291
+#endif
+#endif
 struct KoanOpenHow {
   uint64_t flags;
   uint64_t mode;
@@ -598,8 +609,8 @@ std::optional<ProcessInfo> Executable(const ProcFs& own,
   constexpr unsigned int kWanted =
       STATX_TYPE | STATX_INO | STATX_SIZE | STATX_CTIME;
   if (!exe.is_valid() ||
-      statx(exe.get(), "", AT_EMPTY_PATH | AT_STATX_SYNC_AS_STAT, kWanted,
-            &info) != 0 ||
+      syscall(__NR_statx, exe.get(), "", AT_EMPTY_PATH | AT_STATX_SYNC_AS_STAT,
+              kWanted, &info) != 0 ||
       (info.stx_mask & kWanted) != kWanted || !S_ISREG(info.stx_mode) ||
       !(info.stx_attributes_mask & STATX_ATTR_MOUNT_ROOT) ||
       (info.stx_attributes & STATX_ATTR_MOUNT_ROOT)) {
