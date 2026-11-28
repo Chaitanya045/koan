@@ -1927,7 +1927,13 @@ void KoanThemePicker::Show(views::Widget* parent) {
           base::Unretained(this)));
   widget_observation_.Observe(widget_.get());
   OnEnvironmentChanged();
-  widget_->Show();
+  if (welcome_mode_) {
+    // Over the welcome screen, whose page keeps the keyboard (Next, Tab
+    // within the page, Esc); a click in the panel gives it the keyboard.
+    widget_->ShowInactive();
+  } else {
+    widget_->Show();
+  }
   UpdateMaterial();
 }
 

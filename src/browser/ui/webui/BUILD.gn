@@ -178,6 +178,7 @@ action("welcome_resources") {
     "resources/welcome_icons/engine-startpage.svg",
     "resources/welcome_icons/hard-drive-download.svg",
     "resources/welcome_icons/keyboard.svg",
+    "resources/welcome_icons/palette.svg",
     "resources/welcome_icons/search.svg",
     "resources/welcome_icons/sparkles.svg",
     "resources/welcome_icons/x.svg",
@@ -228,6 +229,8 @@ action("welcome_resources") {
                     root_build_dir),
     "kKoanWelcomeIconKeyboard=" +
         rebase_path("resources/welcome_icons/keyboard.svg", root_build_dir),
+    "kKoanWelcomeIconPalette=" +
+        rebase_path("resources/welcome_icons/palette.svg", root_build_dir),
     "kKoanWelcomeIconSearch=" +
         rebase_path("resources/welcome_icons/search.svg", root_build_dir),
     "kKoanWelcomeIconSparkles=" +

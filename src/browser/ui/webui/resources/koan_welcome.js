@@ -3,8 +3,9 @@
 // found in the LICENSE file.
 
 // chrome://koan-welcome: Koan's optional first-run setup (onboarding v2,
-// #181) in shadcn's look. Welcome, shortcuts, import, search engine, done;
-// every step can be skipped, and nothing changes until its Next. The page
+// #181) in shadcn's look. Welcome, shortcuts, import, colours (the Zen look
+// only), search engine, done; every step can be skipped, and nothing changes
+// until its Next. The page
 // builds its DOM without innerHTML (WebUI pages enforce Trusted Types).
 
 import {sendWithPromise} from 'chrome://resources/js/cr.js';
@@ -271,6 +272,59 @@ function importStep(data) {
   };
 }
 
+// Zen's colours step (ZenWelcome.mjs, the "colors" page), in the Zen look
+// only: the shadcn look has no Space themes (no `data.themePicker`), and
+// leaves it out. The Space theme picker opens over a box on the card that
+// the page sizes from the panel, as Zen's ("overlap": the panel's top-left
+// at the box's), and stays while the step shows; what it picks is the first
+// Space's theme, saved as the picker closes on leaving the step, with Zen's
+// fade.
+function colorsStep(data) {
+  let removeListeners = null;
+  return {
+    id: 'colors',
+    icon: 'palette',
+    title: 'Your space, your colors.',
+    description: 'Personalize your browser by giving each space its own ' +
+        'unique color identity.',
+    // Zen's page has Next only: the picker's theme is the choice.
+    noSkip: true,
+    render(body, card) {
+      // Zen: the panel's size less its shadow (Koan's size has none).
+      const anchor = el('div', {id: 'welcome-colors-anchor'});
+      anchor.style.width = `${data.themePicker.width}px`;
+      anchor.style.height = `${data.themePicker.height}px`;
+      body.appendChild(anchor);
+      const place = () => {
+        if (!anchor.isConnected) {
+          return;
+        }
+        const r = anchor.getBoundingClientRect();
+        chrome.send('showThemePicker', [r.x, r.y, r.width, r.height]);
+      };
+      // Where the box comes to rest after the card's entry animation (from
+      // the next frame, once the card is laid out); again when the page lays
+      // out anew (a resize, a scroll of a short window).
+      requestAnimationFrame(
+          () => Promise
+                    .all(card.getAnimations().map(
+                        animation => animation.finished))
+                    .then(place, () => {}));
+      addEventListener('resize', place);
+      addEventListener('scroll', place, true);
+      removeListeners = () => {
+        removeEventListener('resize', place);
+        removeEventListener('scroll', place, true);
+      };
+    },
+    leave() {
+      removeListeners?.();
+      removeListeners = null;
+      chrome.send('closeThemePicker');
+    },
+  };
+}
+
 function searchStep(data) {
   return {
     id: 'search',
@@ -326,6 +380,7 @@ function getSteps(data) {
     },
     shortcutsStep(data),
     importStep(data),
+    ...(data.themePicker ? [colorsStep(data)] : []),
     searchStep(data),
     {
       id: 'done',
@@ -387,6 +442,7 @@ class Welcome {
     if (index < 0 || index >= this.#steps.length) {
       return;
     }
+    this.#step.leave?.();
     this.#index = index;
     this.#render();
   }
@@ -414,7 +470,7 @@ class Welcome {
                     el('h1', {id: 'welcome-title'}, step.title),
                     el('p', {}, step.description));
     const body = el('div', {className: 'step-body'});
-    step.render?.(body);
+    step.render?.(body, card);
     const foot = el('div', {className: 'step-foot'});
     if (step.id === 'welcome') {
       foot.append(
@@ -434,7 +490,9 @@ class Welcome {
       foot.append(
           button('Back', {iconBefore: 'arrow-left', onClick: () => this.back()}),
           el('span', {className: 'spacer'}),
-          button('Skip', {onClick: () => this.skipStep()}),
+          ...(step.noSkip ?
+                  [] :
+                  [button('Skip', {onClick: () => this.skipStep()})]),
           button('Next', {
             primary: true,
             iconAfter: 'arrow-right',

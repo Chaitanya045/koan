@@ -68,6 +68,10 @@ kbd {
   --icon: url(icons/hard-drive-download.svg);
 }
 
+.icon[data-icon='palette'] {
+  --icon: url(icons/palette.svg);
+}
+
 .icon[data-icon='search'] {
   --icon: url(icons/search.svg);
 }
@@ -295,6 +299,38 @@ kbd {
   gap: 12px;
   min-height: 0;
   overflow-y: auto;
+}
+
+/* The colours step: its text beside the box the theme picker opens over (a
+   native panel above the page), as Zen's page puts its text beside the
+   panel; Back and Next under the text. */
+#welcome-card[step='colors'] {
+  display: grid;
+  grid-template-columns: minmax(0, 260px) auto;
+  grid-template-rows: 1fr auto;
+  gap: 24px 32px;
+  width: auto;
+  max-width: none;
+}
+
+#welcome-card[step='colors'] .step-head {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+#welcome-card[step='colors'] .step-body {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  overflow: visible;
+}
+
+#welcome-card[step='colors'] .step-foot {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+#welcome-colors-anchor {
+  flex: none;
 }
 
 .step-note {

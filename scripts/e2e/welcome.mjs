@@ -2,6 +2,9 @@
 // welcome.flags): on a first run the page covers the window; Get started,
 // then each step with Next, and "Start browsing" closes it. The shortcuts
 // step shows on macOS only (koan_welcome_shortcuts.cc: no rows elsewhere).
+// This is the default shadcn look, which has no Space themes: Zen's colours
+// step is left out, and the step dots count one fewer (welcome_input.mjs
+// has the step, in the Zen look).
 // The Mac's input checks are welcome_input.mjs and
 // scripts/mac/steps/welcome.md.
 //
@@ -65,7 +68,11 @@ if (IS_MAC) {
 }
 check('..."Start fresh" chosen', await js(`document.querySelector('input[name=import]:checked')?.value`) === 'none');
 await next();
-check('Next: search engine', await step() === 'search', await step());
+check('Next: search engine (no colours step in the shadcn look)', await step() === 'search', await step());
+const dots = await js(`[...document.querySelectorAll('#welcome-steps li')]
+    .filter(li => !li.hidden).map(li => li.dataset.step).join(',')`);
+check('...and no colours dot', dots === `welcome,${IS_MAC ? 'shortcuts,' : ''}import,search,done`, dots);
+check('...nor a theme picker', shownViews(await views(), 'KoanThemePickerView').length === 0);
 check('...Brave chosen', await js(
     `document.querySelector('input[name=engine]:checked')?.closest('label')?.textContent.trim()`) === 'Brave');
 // The engines' logos (Simple Icons, welcome_icons/engine-*.svg), not a letter

@@ -77,6 +77,7 @@ std::string_view Icon(std::string_view name) {
       {"engine-startpage", kKoanWelcomeIconEngineStartpage},
       {"hard-drive-download", kKoanWelcomeIconHardDriveDownload},
       {"keyboard", kKoanWelcomeIconKeyboard},
+      {"palette", kKoanWelcomeIconPalette},
       {"search", kKoanWelcomeIconSearch},
       {"sparkles", kKoanWelcomeIconSparkles},
       {"x", kKoanWelcomeIconX},

@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "base/functional/bind.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -34,6 +35,8 @@
 #include "koan/browser/koan_welcome_shortcuts.h"
 #include "koan/browser/ui/webui/koan_welcome_host.h"
 #include "third_party/search_engines_data/resources/definitions/prepopulated_engines.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace koan {
 
@@ -119,6 +122,8 @@ void KoanWelcomeHandler::RegisterMessages() {
   add("skip", &KoanWelcomeHandler::HandleSkip);
   add("startWindowDrag", &KoanWelcomeHandler::HandleStartWindowDrag);
   add("endWindowDrag", &KoanWelcomeHandler::HandleEndWindowDrag);
+  add("showThemePicker", &KoanWelcomeHandler::HandleShowThemePicker);
+  add("closeThemePicker", &KoanWelcomeHandler::HandleCloseThemePicker);
 }
 
 void KoanWelcomeHandler::HandleGetWelcomeData(const base::ListValue& args) {
@@ -207,6 +212,18 @@ void KoanWelcomeHandler::ResolveWelcomeData(base::Value callback_id) {
   // rules for a choice screen); elsewhere Brave is, until the user picks
   // another.
   const bool choice_screen = IsChoiceScreenRegion();
+  // The colours step's theme picker, where it can open: its size, for the
+  // box it opens over (Zen sizes the box from the panel).
+  base::Value theme_picker;
+  if (const KoanWelcomeHost* host = GetHost(web_ui());
+      host && host->callbacks().theme_picker_size) {
+    if (const gfx::Size size = host->callbacks().theme_picker_size.Run();
+        !size.IsEmpty()) {
+      theme_picker = base::Value(base::DictValue()
+                                     .Set("width", size.width())
+                                     .Set("height", size.height()));
+    }
+  }
   ResolveJavascriptCallback(
       callback_id,
       base::DictValue()
@@ -215,6 +232,7 @@ void KoanWelcomeHandler::ResolveWelcomeData(base::Value callback_id) {
           .Set("importSources", std::move(sources))
           .Set("engines", std::move(engines))
           .Set("choiceScreen", choice_screen)
+          .Set("themePicker", std::move(theme_picker))
           .Set("defaultEngine",
                choice_screen ? base::Value() : base::Value(BraveEngine().id)));
 }
@@ -368,6 +386,30 @@ void KoanWelcomeHandler::HandleEndWindowDrag(const base::ListValue& args) {
   if (const KoanWelcomeHost* host = GetHost(web_ui());
       host && host->callbacks().window_drag_end) {
     host->callbacks().window_drag_end.Run();
+  }
+}
+
+void KoanWelcomeHandler::HandleShowThemePicker(const base::ListValue& args) {
+  // [x, y, width, height]: the colours step's box, in the page.
+  if (args.size() != 4 || !std::ranges::all_of(args, [](const base::Value& v) {
+        return v.is_int() || v.is_double();
+      })) {
+    return;
+  }
+  const auto at = [&args](size_t i) {
+    return base::ClampRound<int>(args[i].GetDouble());
+  };
+  if (const KoanWelcomeHost* host = GetHost(web_ui());
+      host && host->callbacks().show_theme_picker) {
+    host->callbacks().show_theme_picker.Run(
+        gfx::Rect(at(0), at(1), at(2), at(3)));
+  }
+}
+
+void KoanWelcomeHandler::HandleCloseThemePicker(const base::ListValue& args) {
+  if (const KoanWelcomeHost* host = GetHost(web_ui());
+      host && host->callbacks().close_theme_picker) {
+    host->callbacks().close_theme_picker.Run();
   }
 }
 
