@@ -1,0 +1,54 @@
+diff --git a/content/browser/push_messaging/push_messaging_context.cc b/content/browser/push_messaging/push_messaging_context.cc
+--- a/content/browser/push_messaging/push_messaging_context.cc
++++ b/content/browser/push_messaging/push_messaging_context.cc
+@@ -5,13 +5,30 @@
+ #include "content/browser/push_messaging/push_messaging_context.h"
+ 
+ #include "content/browser/service_worker/service_worker_context_wrapper.h"
++#include "content/browser/storage_partition_impl.h"
+ #include "content/public/browser/browser_context.h"
+ #include "content/public/browser/browser_thread.h"
+ #include "content/public/browser/push_messaging_service.h"
++#include "koan/browser/containers/koan_partition_domain.h"
+ #include "url/gurl.h"
+ 
+ namespace content {
+ 
++namespace {
++
++// Koan: whether `context` is a Koan container's (or no longer has a
++// partition). Its registration ids are its own, while the profile's push
++// subscriptions are keyed by origin and registration id and are the default
++// partition's (push is refused in containers), so its events must never
++// unsubscribe one (#596).
++bool IsKoanContainer(ServiceWorkerContextWrapper* context) {
++  StoragePartitionImpl* partition = context->storage_partition();
++  return !partition || koan::containers::IsContainerPartitionDomain(
++                           partition->GetConfig().partition_domain());
++}
++
++}  // namespace
++
+ PushMessagingContext::PushMessagingContext(
+     BrowserContext* browser_context,
+     const scoped_refptr<ServiceWorkerContextWrapper>& service_worker_context)
+@@ -30,6 +47,9 @@
+                                                  const GURL& pattern,
+                                                  const blink::StorageKey& key) {
+   CHECK_CURRENTLY_ON(BrowserThread::UI, base::NotFatalUntil::M159);
++  if (IsKoanContainer(service_worker_context_.get())) {
++    return;
++  }
+   PushMessagingService* push_service =
+       browser_context_->GetPushMessagingService();
+   if (push_service) {
+@@ -40,6 +60,9 @@
+ 
+ void PushMessagingContext::OnStorageWiped() {
+   CHECK_CURRENTLY_ON(BrowserThread::UI, base::NotFatalUntil::M159);
++  if (IsKoanContainer(service_worker_context_.get())) {
++    return;
++  }
+   PushMessagingService* push_service =
+       browser_context_->GetPushMessagingService();
+   if (push_service)

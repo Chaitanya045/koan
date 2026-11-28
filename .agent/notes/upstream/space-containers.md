@@ -257,6 +257,34 @@ Others:
   `koan::OnPageNotificationClicked()` (`koan_page_notifications.h`). `NotificationDisplayService::Observer` sees a
   notification only as const and has no click event.
 
+### Push and a container's service workers (#596)
+
+Date: 2026-11-28. Chromium 158 (pristine).
+
+- Every partition of a profile has its own `PushMessagingContext` (`StoragePartitionImpl::Initialize()`), which
+  observes that partition's service workers and calls the **profile's** push service:
+  `OnRegistrationDeleted(id, scope, key)` → `PushMessagingService::DidDeleteServiceWorkerRegistration(origin, id)`,
+  `OnStorageWiped()` → `DidDeleteServiceWorkerDatabase()`. Neither passes the partition.
+- `PushMessagingServiceImpl` keys a subscription by origin and registration id
+  (`PushMessagingAppIdentifier::FindByServiceWorker()`), and registration ids come from each partition's own
+  service-worker database, which starts at 0 (`ServiceWorkerDatabase`, `INITDATA_NEXT_REGISTRATION_ID`). So a site's
+  first worker in a Space's profile or an agent container has the same id as its first worker in the default
+  partition. Unregistering it there, or clearing the container's data (`StoragePartition::ClearData()` deletes every
+  registration, which sends `OnRegistrationDeleted()`), unsubscribes the default partition's subscription:
+  `UnsubscribeInternal()` clears the subscription id from the **default** partition's worker
+  (`PushMessagingService::ClearPushSubscriptionId()`, `GetStoragePartitionForUrl(origin)`), deletes the app
+  identifier and unsubscribes from the push server. A wiped database in any partition unsubscribes everything.
+- Push is refused in Koan's containers (N2; agent containers have no notification permission), so they never have a
+  subscription of their own. **H1** (below) drops both events for a Koan container's partition. Other partitions
+  (extensions', isolated apps', guests') keep upstream's behaviour: an isolated app's push is its partition's.
+
+### Hooks (#596)
+
+- **H1** `content/browser/push_messaging/push_messaging_context.cc` (`OnRegistrationDeleted()`, `OnStorageWiped()`):
+  return first when the partition's domain is a Koan container's
+  (`koan::containers::IsContainerPartitionDomain()`, `:domain`), or when the context has no partition any more (at
+  shutdown). No extension point: the observer is content's, and the push service gets no partition to tell them apart.
+
 ## Tests
 
 - **Unit tests** (`koan_containers_unittests`):
@@ -275,6 +303,9 @@ Others:
   prompt and shows a notification naming its Space; a default tab still does, and the answer is shared; a click
   shows the tab in its Space; service-worker notifications and push are refused; the site panel's note); Mac steps
   in `scripts/mac/steps/space_notifications.md`.
+- **Push** (#596): browser tests `KoanContainerPushBrowserTest.*` (a worker with the default subscription's origin
+  and registration id, unregistered in a Space's profile or cleared with an agent container, leaves the subscription;
+  the default partition's own unregistration still unsubscribes it).
 - **e2e** `scripts/e2e/space_containers.mjs` (seeded `koan.workspaces.list` and containers): the
   reviewer's check with a local page.
   - Space A logs in (a cookie plus a localStorage theme). Space B (its own container) sees
