@@ -30,7 +30,7 @@ on:
         default: false
         type: boolean
       keep_base:
-        description: Keep the finished out/Koan for later runs to build on (only for a run of develop itself)
+        description: Keep the finished out/Koan for later runs to build on (only for a run of develop itself or of a release tag)
         required: false
         default: false
         type: boolean
@@ -121,8 +121,10 @@ jobs:
           df -h /
 
       # The base run's finished out/Koan, matching the tree the fetch job
-      # built on. If it is gone (deleted by a newer run's cleanup), the
-      # build is still right, just full.
+      # built on. A newer run's cleanup keeps it until a newer base has
+      # existed for 12 h (prune_bases.sh). If it is gone
+      # all the same (a re-run days later), the build is still right, just
+      # full, and the next step says so.
       - name: Download the base run's build
         id: base
         if: inputs.incremental && inputs.slice == 1 && inputs.base_run != ''
@@ -143,6 +145,16 @@ jobs:
           scripts/ci/mac_archive.sh unpack "$ARTIFACTS/koan-mac-out-final.tar.zst"
           echo "Building on run $BASE_RUN's out/Koan" >> "$GITHUB_STEP_SUMMARY"
           df -h /
+
+      # Loudly: a lost base makes this a full build, hours longer.
+      - name: Report a lost base
+        if: inputs.incremental && inputs.slice == 1 && inputs.base_run != '' && steps.base.outcome != 'success'
+        env:
+          BASE_RUN: ${{ inputs.base_run }}
+        run: |
+          msg="base run $BASE_RUN lost its out/Koan (koan-mac-out-final.tar.zst); building from scratch"
+          echo "::warning title=Lost base::$msg"
+          echo "**Lost base:** $msg" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build
         id: build
@@ -165,8 +177,8 @@ jobs:
           if-no-files-found: error
 
       # Kept for later runs to build on (scripts/ci/find_base.sh), only from
-      # a run that built develop itself: objects built from unmerged code
-      # must never be linked into what users install.
+      # a run that built develop itself or a release tag: objects built from
+      # unmerged code must never be linked into what users install.
       # Before packaging, which signs Koan.app in place (and adds the VMP
       # signature): the next build starts from the build's own output.
       - name: Pack the finished build
@@ -184,6 +196,12 @@ jobs:
           overwrite: true
           retention-days: 14
           if-no-files-found: error
+
+      # What gets published (a release, or the nightly from a base run) must
+      # trust only the real update key and URL.
+      - name: Check that the update test hooks are not built in
+        if: steps.build.outputs.status == 'finished' && (inputs.release || inputs.keep_base)
+        run: scripts/ci/check_update_test_hooks.sh chromium/src/out/Koan chromium/src/out/Koan/Koan.app
 
       - name: Make the disk image
         id: package

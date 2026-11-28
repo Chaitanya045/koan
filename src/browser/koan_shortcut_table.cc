@@ -35,6 +35,13 @@ constexpr int kModifiers = kCtrl | kAlt | kShift | ui::EF_COMMAND_DOWN;
 constexpr char kKey[] = "key";
 constexpr char kModifiersKey[] = "modifiers";
 
+// Quit has a Koan key on Linux only. On macOS ⌘Q is the menu bar's Quit,
+// which macOS keeps for itself (IsSystemShortcutOnMac()), so the action is
+// left out of the settings page there.
+bool IsQuitAvailable() {
+  return BUILDFLAG(IS_LINUX);
+}
+
 constexpr Group kGroups[] = {
     {"zen-compact-mode", "Compact Mode"},
     {"zen-workspace", "Workspaces"},
@@ -103,6 +110,8 @@ constexpr Info kActions[] = {
      "New Blank Window", features::IsWorkspacesEnabled},
     {Action::kNewTab, "new-tab", "windowAndTabManagement", "New Tab",
      features::IsUrlBarEnabled},
+    {Action::kQuit, "quit-app", "windowAndTabManagement", "Quit Application",
+     IsQuitAvailable},
     {Action::kCloseUnpinnedTabs, "close-unpinned-tabs",
      "windowAndTabManagement", "Close All Unpinned Tabs"},
     {Action::kNewPrivateWindow, "private-browsing", "navigation",
@@ -237,6 +246,12 @@ std::vector<Binding> DefaultBindings() {
 #else
   // Zen moves the inspector off Ctrl+Shift+C.
   bindings.push_back(bind(ui::VKEY_L, kCtrl | kShift, Action::kInspect));
+#endif
+#if BUILDFLAG(IS_LINUX)
+  // Firefox's key_quitApplication on Linux, which Zen keeps: Ctrl+Q quits.
+  // Chrome has no quit key there (accelerator_table.cc binds IDC_EXIT to
+  // Ctrl+Q on Android only).
+  bindings.push_back(bind(ui::VKEY_Q, kCtrl, Action::kQuit));
 #endif
   return bindings;
 }

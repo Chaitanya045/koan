@@ -31,9 +31,10 @@ std::span<const Face> Faces();
 std::string_view SansWoff2();
 std::string_view MonoWoff2();
 
-// Makes the faces available to the native UI by their family names, once
-// (macOS: CoreText, for this process only; other platforms keep the system
-// font, as Koan only ships on macOS). Returns whether they are available.
+// Makes the faces available to the native UI by their family names, once,
+// for this process only (macOS: CoreText, from the bytes above; Linux:
+// fontconfig, from the koan_fonts/ folder next to the binary; other
+// platforms keep the system font). Returns whether they are available.
 bool RegisterBundledFonts();
 
 }  // namespace koan::fonts

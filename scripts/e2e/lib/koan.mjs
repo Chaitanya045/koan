@@ -10,6 +10,30 @@ export const UI_PORT = process.env.UI_PORT;
 export const CDP_PORT = process.env.CDP_PORT;
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+// --- Click points, in whole pixels.
+//
+// UI DevTools drops a mouse event at a fractional point without a word: the
+// middle of a 29 px menu item (y + h / 2 = 34.5, since Geist became the
+// native font in #519) opened nothing, and the step after it failed. So a
+// point sent to UI DevTools or the DevTools protocol is built with these,
+// and the senders here (mouseOn, viewEvent, rootMouse, click) round again.
+
+// A coordinate, floored to a whole pixel.
+export const whole = n => Math.floor(n);
+// Half of a size (a view's w or h), floored: `view.ay + half(view.h)`.
+export const half = size => Math.floor(size / 2);
+// The middle of a box, in whole pixels, as {x, y}. `b` is a view from
+// viewTree() (its ax/ay, in its widget's root view), from views() (x/y, in
+// its widget) or a DOMRect (x/y or left/top, width/height); with
+// `{ local: true }`, or without a position, the middle in the box's own
+// coordinates (for viewMouse(), mouseOn() on that view).
+export function centerOf(b, { local = false } = {}) {
+  const w = b.w ?? b.width, h = b.h ?? b.height;
+  const x = local ? 0 : b.ax ?? b.x ?? b.left ?? 0;
+  const y = local ? 0 : b.ay ?? b.y ?? b.top ?? 0;
+  return { x: whole(x + w / 2), y: whole(y + h / 2) };
+}
+
 // Key modifiers for Input.dispatchKeyEvent.
 export const ALT = 1, CTRL = 2, META = 4, SHIFT = 8;
 export const IS_MAC = process.platform === 'darwin';
@@ -314,8 +338,8 @@ export async function key(page, code, modifiers, keyName) {
 export async function click(page, selector) {
   const box = await evalIn(page, `(() => {
     const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();
-    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
-  })()`);
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  })()`).then(centerOf);
   await onPage(page, async c => {
     for (const type of ['mousePressed', 'mouseReleased']) {
       await c.send('Input.dispatchMouseEvent',
@@ -446,6 +470,8 @@ export async function boundsOf(cls) {
 // views() saw is another view's, often one of the same class: on macOS the
 // sidebar's hot zone's id named the top edge's. The view is found again in
 // this session, by its class and its bounds.
+//
+// The point is floored to whole pixels (whole(), at the top).
 export async function mouseOn(view, type, x = 10, y = 10, button = 'left') {
   if (!view) throw new Error(`mouseOn(): no view to send ${type} to (not found)`);
   const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
@@ -472,7 +498,7 @@ export async function mouseOn(view, type, x = 10, y = 10, button = 'left') {
     }
   }
   await ui.send('DOM.dispatchMouseEvent', { nodeId: nodeId ?? view.nodeId,
-      event: { type, x, y, button, wheelDirection: 'none' } });
+      event: { type, x: whole(x), y: whole(y), button, wheelDirection: 'none' } });
   ui.close();
 }
 
@@ -553,7 +579,7 @@ async function findInMenu(ui, id) {
     const p = await viewProps(ui, n.nodeId);
     x += +p.X;
     y += +p.Y;
-    if (n.nodeId === itemId) y += Math.floor(+p.Height / 2);
+    if (n.nodeId === itemId) y += half(+p.Height);
   }
   return { root: views[0], x, y };
 }
@@ -615,10 +641,28 @@ export async function tabMenuCommand(tab, item, { via } = {}) {
   }
   for (const type of ['mousePressed', 'mouseReleased']) {
     await ui.send('DOM.dispatchMouseEvent', { nodeId: found.root.nodeId,
-        event: { type, x: found.x, y: found.y, button: 'left', wheelDirection: 'none' } });
+        event: { type, x: whole(found.x), y: whole(found.y), button: 'left',
+                 wheelDirection: 'none' } });
   }
   ui.close();
   await sleep(1500);
+  // The click must have run the item: its menu closes. (A dropped click left
+  // it open, and the caller's next check failed with no word why.)
+  const stillOpen = await waitFor(async () => {
+    const c = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+    try {
+      await c.send('DOM.enable');
+      await c.send('CSS.enable');
+      return await findInMenu(c, item) ? null : 'closed';
+    } finally {
+      c.close();
+    }
+  }, 3000) === null;
+  if (stillOpen) {
+    check(`tabMenuCommand(): the click on ${item} ran it (its menu closed)`, false,
+          `the menu stayed open at (${found.x}, ${found.y}) in its root view: a dropped click`);
+    return false;
+  }
   return true;
 }
 
@@ -675,6 +719,70 @@ export async function viewTree() {
   return out;
 }
 
+// The UI DevTools properties (Width, Visible, ...) of the `n`th view of
+// class `cls` in the document now (viewTree() order), or null if there is no
+// such view. Reads that one view only, so it is quick enough to sample
+// something that lasts under a second, which a whole viewTree() (seconds on
+// a busy machine) is not. (By class, not node id: a new connection numbers
+// the nodes again, so an id from an older tree can name another view once
+// views come or go.)
+export async function propsOf(cls, n = 0) {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  try {
+    await ui.send('DOM.enable');
+    await ui.send('CSS.enable');
+    const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result?.root;
+    const nodes = [];
+    const walk = node => {
+      const a = node.attributes ?? [];
+      if (node.nodeName === 'View' && a[a.indexOf('class') + 1] === cls) nodes.push(node);
+      for (const c of node.children ?? []) walk(c);
+    };
+    if (doc) walk(doc);
+    if (!nodes[n]) return null;
+    const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId: nodes[n].nodeId });
+    const p = {};
+    for (const rule of r.result?.matchedCSSRules ?? []) {
+      for (const prop of rule.rule.style.cssProperties) p[prop.name] = prop.value;
+    }
+    return p;
+  } finally {
+    ui.close();
+  }
+}
+
+// The texts of the toast's labels (KoanToastView), [] while none shows.
+// Quicker than viewTree(), which reads every view's properties: that can
+// take longer than the toast stays (2.4 s, koan_toast.h) on a busy machine.
+export async function toastTexts() {
+  const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  try {
+    await ui.send('DOM.enable');
+    await ui.send('CSS.enable');
+    const doc = (await ui.send('DOM.getDocument', { depth: -1 })).result?.root;
+    const labels = [];
+    const walk = (n, inToast) => {
+      const a = n.attributes ?? [];
+      const cls = n.nodeName === 'View' ? a[a.indexOf('class') + 1] : undefined;
+      if (inToast && cls === 'Label') labels.push(n.nodeId);
+      for (const c of n.children ?? []) walk(c, inToast || cls === 'KoanToastView');
+    };
+    if (doc) walk(doc, false);
+    const texts = [];
+    for (const nodeId of labels) {
+      const r = await ui.send('CSS.getMatchedStylesForNode', { nodeId });
+      for (const rule of r.result?.matchedCSSRules ?? []) {
+        for (const p of rule.rule.style.cssProperties) {
+          if (p.name === 'Text' && p.value) texts.push(p.value);
+        }
+      }
+    }
+    return texts;
+  } finally {
+    ui.close();
+  }
+}
+
 // Sends a native event to a view from viewTree() (UI DevTools); `method` is
 // DOM.dispatchMouseEvent or DOM.dispatchKeyEvent. Fire-and-forget when
 // `wait` is false.
@@ -685,6 +793,10 @@ export async function viewEvent(view, method, event, wait = true) {
   const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
   await ui.send('DOM.enable');
   await ui.send('DOM.getDocument', { depth: -1 });
+  // (Whole pixels for a mouse event: see whole().)
+  if (method === 'DOM.dispatchMouseEvent' && typeof event?.x === 'number') {
+    event = { ...event, x: whole(event.x), y: whole(event.y) };
+  }
   const p = ui.send(method, { nodeId: view.nodeId, event });
   if (wait) await p;
   ui.close();
@@ -753,12 +865,93 @@ export function openMenus(vs) {
 // Hovers (`types` = ['mouseMoved']) or picks a menu item, at its position
 // in the menu's root view. (Needs a sized headless screen, see
 // koan_test_env.sh: menus are clamped to the screen.)
+// The events go, in one session, to the menu's root view as that session
+// numbers it (lib/mac.mjs rootMouse()): UI DevTools numbers the nodes again
+// on each DOM.getDocument, and on Linux a window that came or went since the
+// menu was read (a toast, the loading indicator: child windows of the
+// browser's, ahead of the menu's) moves the menu root's number, so the
+// events went to another view and the menu stayed open.
+//
+// A press (in `types`) must do something: the open menus change (a submenu
+// opens, or the menu closes as its command runs). If they stay as they were the
+// click was dropped (it went to a fractional point, or to another view), and
+// a failed check says so instead of a later check failing for no clear
+// reason. Whether the click took effect (a hover alone: true).
 export async function menuMouse(menu, item,
                                 types = ['mouseMoved', 'mousePressed', 'mouseReleased']) {
-  for (const type of types) {
-    await viewMouse(menu.root, type, item.ax + 8, item.ay + item.h / 2);
-  }
+  // (lib/mac.mjs imports this file: imported when called, not at load.)
+  const { rootMouse } = await import('./mac.mjs');
+  const pressed = types.includes('mousePressed') || types.includes('mouseReleased');
+  const before = pressed ? menuShape(await viewTree()) : null;
+  await rootMouse(menu.root, types, item.ax + 8, item.ay + half(item.h));
   await sleep(1200);
+  if (!pressed) return true;
+  const error = await menuClickError(before, viewTree);
+  if (error) {
+    check(`menuMouse(): the click on the menu item at y ${item.ay + half(item.h)} took effect`,
+          false, error);
+  }
+  return !error;
+}
+
+// What menus are open, from views() or viewTree(): the number of items of
+// each menu widget (a widget's root view has an empty `path`), e.g. '9,4'
+// with a submenu open, '' with none.
+export function menuShape(vs) {
+  const menus = [];
+  let items = 0;
+  for (const v of vs) {
+    if (!v.path.length) {
+      if (items) menus.push(items);
+      items = 0;
+    } else if (v.cls === 'MenuItemView' && v.path.includes('SubmenuView')) {
+      items++;
+    }
+  }
+  if (items) menus.push(items);
+  return menus.join(',');
+}
+
+// After a click on a menu item: null once the open menus differ from
+// `before` (menuShape()) — a submenu opened, or the menu closed — or, if
+// they stayed the same for `timeout` ms, what went wrong. `read` lists the
+// views (views or viewTree).
+export async function menuClickError(before, read = views, timeout = 3000) {
+  const changed = await waitFor(async () => menuShape(await read()) !== before, timeout);
+  return changed ? null
+      : `the click did nothing: the menus stayed open as they were (${before || 'none'} items) ` +
+        'and no submenu opened (a dropped click: a fractional point, or the wrong view?)';
+}
+
+// Picks the menu items at `indices` in turn, each in the newest (sub)menu,
+// by position (UI DevTools can't read their labels: MenuItemView paints
+// them): points at the item, waits, and clicks it, in the menu's root view.
+// Each click must open a submenu or close the menu (menuClickError()).
+// Returns what went wrong, or null.
+export async function pickMenu(...indices) {
+  for (const [step, index] of indices.entries()) {
+    const vs = await views();
+    // The newest widget with menu items: its root view, and its items.
+    const widgets = [];
+    for (const v of vs) {
+      if (!v.path.length) widgets.push({ root: v, items: [] });
+      else if (v.cls === 'MenuItemView' && v.path.includes('SubmenuView')) widgets.at(-1)?.items.push(v);
+    }
+    const menu = widgets.findLast(w => w.items.length);
+    if (!menu?.items.length) return `no menu open for item ${index} (step ${step + 1})`;
+    const item = menu.items[index];
+    if (!item) return `no item ${index} of ${menu.items.length} (step ${step + 1})`;
+    const before = menuShape(vs);
+    const at = [item.x - menu.root.x + 10, item.y - menu.root.y + half(item.h)];
+    await mouseOn(menu.root, 'mouseMoved', ...at);
+    await sleep(600);
+    await mouseOn(menu.root, 'mousePressed', ...at);
+    await mouseOn(menu.root, 'mouseReleased', ...at);
+    const error = await menuClickError(before);
+    if (error) return `item ${index} (step ${step + 1}, at ${at.join(', ')}): ${error}`;
+    await sleep(800);
+  }
+  return null;
 }
 
 // Opens Zen's Create-a-Space form (Ctrl+Alt+N, Ctrl on macOS too) in
@@ -849,37 +1042,20 @@ export const setChromePref = (pref, value) => setPrefThrough('chrome://settings'
 
 // Right-clicks an empty part of the sidebar (through the window's root view,
 // so the click is routed like a real one), then picks the menu items at
-// `indices` in turn, each in the newest (sub)menu. Returns what went wrong,
-// or null.
+// `indices` in turn, each in the newest (sub)menu (pickMenu()). Returns what
+// went wrong, or null.
 export async function sidebarMenu(...indices) {
-  let vs = await views();
+  const vs = await views();
   const strip = vs.find(v => v.cls === 'VerticalTabStripRegionView' && v.shown);
   const root = vs.find(v => v.cls === 'BrowserRootView' && v.shown);
   if (!strip || !root) {
     return 'no sidebar';
   }
-  const x = strip.x + strip.w / 2, y = strip.y + strip.h - 120;
+  const x = strip.x + half(strip.w), y = strip.y + strip.h - 120;
   await mouseOn(root, 'mousePressed', x, y, 'right');
   await mouseOn(root, 'mouseReleased', x, y, 'right');
   await sleep(800);
-  for (const index of indices) {
-    vs = await views();
-    // The newest menu widget's root view, and its items.
-    const menuRoot = vs.findLast(v => v.cls.endsWith('RootView') && v.cls !== 'BrowserRootView');
-    const items = vs.slice(vs.indexOf(menuRoot))
-        .filter(v => v.cls === 'MenuItemView' && v.path[0] === menuRoot?.cls);
-    const item = items[index];
-    if (!item) {
-      return `no item ${index} of ${items.length}`;
-    }
-    const at = [item.x - menuRoot.x + 10, item.y - menuRoot.y + item.h / 2];
-    await mouseOn(menuRoot, 'mouseMoved', ...at);
-    await sleep(600);
-    await mouseOn(menuRoot, 'mousePressed', ...at);
-    await mouseOn(menuRoot, 'mouseReleased', ...at);
-    await sleep(800);
-  }
-  return null;
+  return pickMenu(...indices);
 }
 
 // With SHOTS=<dir>, run.sh dumps each window's latest frame into

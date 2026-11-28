@@ -184,6 +184,14 @@ class KoanSpaceButton : public views::Button,
     UpdateLook(/*animate=*/false);
   }
 
+  // The button paints to a layer of its own, which a theme change (the
+  // Mode, or the system's light/dark) doesn't repaint: its dot and icon
+  // would keep the old colours until hovered.
+  void OnThemeChanged() override {
+    views::Button::OnThemeChanged();
+    SchedulePaint();
+  }
+
   // Zen's reorder (ZenSpaceIcons.mjs): a plain left press may become a drag
   // along the bar.
   bool OnMousePressed(const ui::MouseEvent& event) override {
@@ -295,6 +303,13 @@ class KoanSpaceStripView : public views::View {
   void OnPaint(gfx::Canvas* canvas) override {
     views::View::OnPaint(canvas);
     bar_->PaintStripIcons(canvas);
+  }
+
+  // The emoji it paints take the theme's colours, and its layer isn't
+  // repainted on a theme change otherwise.
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    SchedulePaint();
   }
 
  private:
@@ -737,6 +752,12 @@ std::optional<gfx::Rect> KoanSpaceBarView::GetSpaceButtonBoundsForTesting(
 
 gfx::Rect KoanSpaceBarView::GetCreateButtonBoundsForTesting() const {
   return create_button_->bounds();
+}
+
+views::View* KoanSpaceBarView::GetSpaceButtonForTesting(
+    const tab_groups::TabGroupId& space) const {
+  const auto it = std::ranges::find(buttons_, space, &KoanSpaceButton::space);
+  return it == buttons_.end() ? nullptr : it->get();
 }
 
 bool KoanSpaceBarView::StripClipsForTesting() const {

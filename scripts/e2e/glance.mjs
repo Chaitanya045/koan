@@ -5,7 +5,7 @@
 //
 //   scripts/e2e/run.sh glance        (opens scripts/e2e/pages/glance.html)
 //   scripts/mac/suite.sh --only glance <Koan.app>
-import { ACCEL, IS_MAC, sendKey } from './lib/koan.mjs';
+import { whole, ACCEL, IS_MAC, sendKey } from './lib/koan.mjs';
 import { makeKey, realInput, realInputWhyNot, realKey, skipped } from './lib/mac.mjs';
 
 const UI_PORT = process.env.UI_PORT;
@@ -100,7 +100,7 @@ async function clickLink(id, modifiers) {
       returnByValue: true,
     });
     const box = JSON.parse(r.result.result.value);
-    const base = { x: box.x + 10, y: box.y + 10, modifiers, button: 'left', clickCount: 1 };
+    const base = { x: whole(box.x + 10), y: whole(box.y + 10), modifiers, button: 'left', clickCount: 1 };
     await c.send('Input.dispatchMouseEvent', { ...base, type: 'mousePressed' });
     await c.send('Input.dispatchMouseEvent', { ...base, type: 'mouseReleased' });
   });

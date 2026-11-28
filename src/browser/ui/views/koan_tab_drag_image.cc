@@ -55,6 +55,14 @@ class KoanTabDragImageView : public views::View {
   KoanTabDragImageView& operator=(const KoanTabDragImageView&) = delete;
   ~KoanTabDragImageView() override = default;
 
+  // It paints to a layer of its own, which a theme change (the Mode, or the
+  // system's light/dark) doesn't repaint: it would keep the old colours
+  // until something else repaints it (#564).
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    SchedulePaint();
+  }
+
   // Where the first row is in the view (the dot needs room above and before
   // it).
   gfx::Vector2d first_row_offset() const {
@@ -232,6 +240,14 @@ class KoanSplitFakePaneView : public views::View {
   KoanSplitFakePaneView(const KoanSplitFakePaneView&) = delete;
   KoanSplitFakePaneView& operator=(const KoanSplitFakePaneView&) = delete;
   ~KoanSplitFakePaneView() override = default;
+
+  // It paints to a layer of its own, which a theme change (the Mode, or the
+  // system's light/dark) doesn't repaint: it would keep the old colours
+  // until something else repaints it (#564).
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    SchedulePaint();
+  }
 
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override {

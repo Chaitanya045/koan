@@ -31,6 +31,11 @@ inline constexpr char kTestWindowGlass[] = "koan-test-window-glass";
 // Keychain/ folder, never from the keychain.
 inline constexpr char kImportTestRoot[] = "koan-import-test-root";
 
+// For testing "Close tabs I haven't used for" (koan_tab_auto_close.h): tabs
+// close after this many seconds unused instead of the setting's hours, and
+// windows check more often. Only while the setting isn't Never.
+inline constexpr char kAutoCloseTabsAfter[] = "koan-auto-close-tabs-after";
+
 // For testing a proxy per Space (#445) before it has a UI:
 // --koan-container-proxy="<profile name>=<value>" sets the proxy of the
 // user's container (a Space's profile) with that name when the profile's first

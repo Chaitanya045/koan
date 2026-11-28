@@ -20,10 +20,10 @@
 //
 //   scripts/e2e/run.sh spaces
 import {
-  ACCEL, ALT, CTRL, IS_MAC, META, NATIVE_MENUS, NATIVE_MENU_WHY, SHIFT, UI_PORT, browserCall,
+  centerOf, whole, ACCEL, ALT, CTRL, IS_MAC, META, NATIVE_MENUS, NATIVE_MENU_WHY, SHIFT, UI_PORT, browserCall,
   check, connect, evalIn, finish, key as pageKey, keyToWidget, menuMouse, openMenus,
-  pages as pageTargets, readPref, sleep, typeInto, viewEvent, viewMouse, viewTree, visiblePage,
-  waitFor, windowTints,
+  pages as pageTargets, readPref, sleep, toastTexts, typeInto, viewEvent, viewMouse, viewTree,
+  visiblePage, waitFor, windowTints,
 } from './lib/koan.mjs';
 import { keyWindowReport, makeKey, menuKey as macMenuKey, menuKeyWhyNot, ptr, realInput,
          realPointer, realPointerHoldsSidebar, skipped, windowOf } from './lib/mac.mjs';
@@ -305,14 +305,19 @@ async function headerMenu() {
   return menus(await views())[0];
 }
 let menu;
-// Change Name..., Change Icon..., Theme..., the Spaces, Unload Space,
-// Unload All Other Spaces, Create Space, Delete Space.
+// Change Name..., Change Icon..., Theme..., Set Profile (#322's
+// containers), the Spaces, Unload Space, Unload All Other Spaces, Create
+// Space, Delete Space, Space Routing Settings (#233's routing): 11 with two
+// Spaces (koan_space_menu.cc).
+const HEADER_MENU_ITEMS = 11;
+// Unload Space's place: after the four entries and the two Spaces.
+const UNLOAD_ITEM = 6;
 if (NATIVE_MENUS) {
   skipped('The header menu has Zen\'s entries and the Spaces', NATIVE_MENU_WHY);
 } else {
   menu = await headerMenu();
   check('The header menu has Zen\'s entries and the Spaces',
-        menu?.items.length === 9, `${menu?.items.length} item(s)`);
+        menu?.items.length === HEADER_MENU_ITEMS, `${menu?.items.length} item(s)`);
 }
 
 // Change Name...: rename in place. (On macOS F2 on the header, as below.)
@@ -328,12 +333,19 @@ check(`Change Name... edits the name in the header${VIA_F2}`, !!rename);
 if (rename) {
   await type(rename, 'Home', VK.RETURN);
 }
+// The toast first: it stays 2.4 s (koan_toast.h), and a whole view tree
+// can take longer than that on a busy Linux machine (3.5 to 10 s seen), so
+// by the time sidebar() reached the toast's widget it was gone.
+const renamedToast = (await waitFor(async () => (await toastTexts()).join(' '), 2000)) ?? '';
 s = await sidebar();
 check('...and Enter renames the Space', s.header?.name === 'Home', s.header?.name);
-const renamedToast = s.vs.filter(v => v.path.includes('KoanToastView') && v.cls === 'Label')
-    .map(v => v.props.Text).join(' ');
 check('...with Zen\'s toast', renamedToast === 'Workspace has been successfully renamed!',
       renamedToast);
+// The next steps once the toast has gone, as they always ran when this
+// check read the whole view tree: on Linux the toast is a child window of
+// the browser's, and its closing renumbers the views after it, so a click
+// on a view read before (the picker's emoji) could reach another one.
+await waitFor(async () => !(await toastTexts()).length, 4000);
 
 // Change Icon...: Zen's picker, applied right away.
 if (NATIVE_MENUS) {
@@ -378,7 +390,7 @@ if (NATIVE_MENUS) {
 } else {
   await viewKey(s.header.view, VK.RETURN);
   menu = menus(await views())[0];
-  check('Enter on the header opens the Space menu', menu?.items.length === 9,
+  check('Enter on the header opens the Space menu', menu?.items.length === HEADER_MENU_ITEMS,
         `${menu?.items.length} item(s)`);
 }
 if (menu) {
@@ -395,7 +407,7 @@ if (NATIVE_MENUS) {
 } else {
   const before = await pages();
   menu = await headerMenu();
-  await chooseMenuItem(menu, menu.items[5]);
+  await chooseMenuItem(menu, menu.items[UNLOAD_ITEM]);
   await sleep(1500);
   const after = await pages();
   check('Unload Space discards the Space\'s background tabs',
@@ -453,8 +465,14 @@ const collapsedTabs = collapsedSidebar.tabs;
 await key(VK.N, CTRL | ALT, 'n');
 s = await sidebar();
 form = one(s.vs, 'KoanSpaceCreationView');
-check('Collapsed, Ctrl+Alt+N shows the Create form (the sidebar expands)',
-      !!form && form.h > 100 && form.w >= 200, JSON.stringify(form && [form.w, form.h]));
+{
+  const hidden = s.vs.find(v => v.cls === 'KoanSpaceCreationView');
+  check('Collapsed, Ctrl+Alt+N shows the Create form (the sidebar expands)',
+        !!form && form.h > 100 && form.w >= 200,
+        form ? JSON.stringify([form.w, form.h])
+             : hidden ? `the form is there but hidden (${hidden.w}x${hidden.h}; the strip ` +
+                        `region ${regionWidth(s.vs)} wide)` : 'no form');
+}
 const cancel = shown(s.vs, 'MdTextButton')
     .find(b => b.path.includes('KoanSpaceCreationView') && b.props.Text === 'Cancel');
 // On macOS upstream's expand-on-hover reads the real pointer
@@ -466,10 +484,17 @@ if (IS_MAC && realInput()) {
   const page = await visiblePage();
   const b = page && (await windowOf(page.id))?.bounds;
   if (b) {
-    await ptr('move', Math.round(b.left + b.width * 3 / 4), Math.round(b.top + b.height / 2), 100);
+    await ptr('move', whole(b.left + b.width * 3 / 4), whole(b.top + b.height / 2), 100);
   }
 }
-await click(cancel);
+if (cancel) {
+  await click(cancel);
+} else {
+  // (A hidden form: Esc in its name field cancels it, as Cancel would, so the
+  // steps after this one still run.)
+  const name = s.vs.find(t => t.cls === 'Textfield' && t.path.includes('KoanSpaceCreationView'));
+  if (name) await viewKey(name, VK.ESCAPE);
+}
 await sleep(1000);
 s = await sidebar();
 {
@@ -508,9 +533,14 @@ if (NATIVE_MENUS) {
   await key(49, ACCEL, '1');
   s = await sidebar();
   const tab = shown(s.vs, 'TabView')[0];
+  // (Not waited for: the press opens the menu inside its own dispatch. On
+  // Linux the release's UI DevTools connection then never opens while the
+  // menu is up, and its rejection, 15 s later with nothing waiting for it,
+  // used to stop the script; the menu has opened on the press by then.)
   for (const type of ['mousePressed', 'mouseReleased']) {
     viewEvent(tab, 'DOM.dispatchMouseEvent',
-              { type, x: 10, y: 10, button: 'right', wheelDirection: 'none' }, false);
+              { type, x: 10, y: 10, button: 'right', wheelDirection: 'none' }, false)
+        .catch(e => console.log(`  (the tab's right-button ${type} was not sent: ${e.message})`));
   }
   await sleep(1500);
   const tabMenu = menus(await views())[0];
@@ -552,7 +582,8 @@ if (NATIVE_MENUS) {
   await key(87, META | CTRL, 'W');
 } else {
   menu = await headerMenu();
-  await chooseMenuItem(menu, menu.items.at(-1));
+  // Delete Space: the one before Space Routing Settings (#233), the last.
+  await chooseMenuItem(menu, menu.items.at(-2));
 }
 vs = await views();
 const yes = shown(vs, 'MdTextButton').find(b => b.props.Text === 'Yes') ??
@@ -573,8 +604,7 @@ check('...and deletes the Space, showing another',
 async function rootClick(view) {
   const vs = await views();
   const root = vs.find(v => v.cls === 'BrowserRootView' && v.widget === view.widget);
-  const x = Math.round(view.ax + view.w / 2);
-  const y = Math.round(view.ay + view.h / 2);
+  const { x, y } = centerOf(view);
   await mouse(root, 'mouseMoved', x, y);
   await mouse(root, 'mousePressed', x, y);
   await mouse(root, 'mouseReleased', x, y);

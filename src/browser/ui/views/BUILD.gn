@@ -32,6 +32,7 @@ source_set("views") {
     "koan_sidebar_header.h",
     "koan_sidebar_tabs.h",
     "koan_space_containers.h",
+    "koan_space_history.h",
     "koan_space_import.h",
     "koan_spaces.h",
     "koan_split_view.h",
@@ -192,6 +193,15 @@ source_set("split_rearrange") {
   ]
 }
 
+# The split shortcut's choice of a tab to split with (koan_split_partner.h):
+# pure, for the unit tests.
+source_set("split_partner") {
+  sources = [
+    "koan_split_partner.cc",
+    "koan_split_partner.h",
+  ]
+}
+
 # Whether a pinned tab keeps its site (koan_pinned_site.h): pure, so the unit
 # tests need nothing else.
 source_set("pinned_site") {
@@ -294,6 +304,7 @@ test("koan_views_unittests") {
     "koan_space_drag_logic_unittest.cc",
     "koan_space_navigation_unittest.cc",
     "koan_space_routes_unittest.cc",
+    "koan_split_partner_unittest.cc",
     "koan_split_rearrange_unittest.cc",
     "koan_stored_space_unittest.cc",
     "koan_stored_tab_unittest.cc",
@@ -317,6 +328,7 @@ test("koan_views_unittests") {
     ":space_drag_logic",
     ":space_navigation",
     ":space_routes",
+    ":split_partner",
     ":split_rearrange",
     ":stored_space",
     ":stored_tab",
@@ -333,13 +345,17 @@ test("koan_views_unittests") {
   ]
 }
 
-# The empty URL bar's provider and the omnibox disposition rule. The provider
-# is compiled here again (it is in :impl too) to keep the test off the whole
+# The empty URL bar's provider, the omnibox disposition rule and which
+# suggestions come from history (#474). The provider and the history rule are
+# compiled here again (they are in :impl too) to keep the test off the whole
 # UI. Build and run:
 #   autoninja -C out/Koan koan/browser/ui/views:koan_omnibox_unittests
 #   out/Koan/koan_omnibox_unittests
 test("koan_omnibox_unittests") {
   sources = [
+    "koan_history_matches.cc",
+    "koan_history_matches.h",
+    "koan_history_matches_unittest.cc",
     "koan_omnibox_action_label.h",
     "koan_omnibox_action_label_unittest.cc",
     "koan_omnibox_disposition.h",
@@ -431,6 +447,8 @@ source_set("impl") {
     "koan_glass_state.cc",
     "koan_glass_state.h",
     "koan_haptics.h",
+    "koan_history_matches.cc",
+    "koan_history_matches.h",
     "koan_keyboard_state.h",
     "koan_library.h",
     "koan_library_controller.cc",
@@ -488,6 +506,8 @@ source_set("impl") {
     "koan_space_creation.h",
     "koan_space_header.cc",
     "koan_space_header.h",
+    "koan_space_history.cc",
+    "koan_space_history_index.h",
     "koan_space_import.cc",
     "koan_space_menu.cc",
     "koan_space_menu.h",
@@ -505,6 +525,8 @@ source_set("impl") {
     "koan_system_accent_observer.h",
     "koan_tab_activation.cc",
     "koan_tab_activation.h",
+    "koan_tab_auto_closer.cc",
+    "koan_tab_auto_closer.h",
     "koan_tab_drag.cc",
     "koan_tab_drag.h",
     "koan_tab_drag_image.cc",
@@ -557,6 +579,14 @@ source_set("impl") {
       "koan_workspaces_mac.mm",
     ]
   }
+  if (is_linux) {
+    # Zen's app menu button in the sidebar's top row, where macOS has the
+    # menu bar (koan_sidebar_nav_view.cc).
+    sources += [
+      "koan_app_menu_button.cc",
+      "koan_app_menu_button.h",
+    ]
+  }
   sources += get_target_outputs(":grain_png")
   public_deps = [
     ":space_theme",
@@ -576,6 +606,7 @@ source_set("impl") {
     ":space_drag_logic",
     ":space_navigation",
     ":space_routes",
+    ":split_partner",
     ":split_rearrange",
     ":stored_space",
     ":stored_tab",
@@ -691,6 +722,7 @@ source_set("impl") {
     "//components/tabs:public",
     "//components/url_formatter",
     "//components/user_prefs",
+    "//components/version_info",
     "//components/vector_icons",
     "//components/viz/common",
     "//components/web_modal",
@@ -705,6 +737,7 @@ source_set("impl") {
     "//koan/browser:renderer_switches",
     "//koan/browser:shortcut_table",
     "//koan/browser:space_title",
+    "//koan/browser:tab_auto_close",
     "//koan/browser:tab_hooks",
     "//koan/browser:vertical_tabs",
     "//koan/browser:welcome_state",
@@ -720,10 +753,11 @@ source_set("impl") {
     "//koan/browser/ui/fonts",
     "//koan/browser/ui/vector_icons",
     "//koan/browser/ui/webui",
-    "//koan/browser/updates:build_info",
     "//koan/browser/updates:update_logic",
+    "//koan/browser/updates:update_source",
     "//koan/browser/window_sync:model",
     "//koan/common:url_constants",
+    "//koan/version",
     "//mojo/public/cpp/bindings",
     "//net",
     "//services/data_decoder/public/cpp",
@@ -823,5 +857,8 @@ source_set("impl") {
       "//ui/platform_window",
       "//ui/platform_window/wm",
     ]
+
+    # KoanAppMenuButton.
+    deps += [ "//chrome/browser/ui/views/frame:app_menu_button" ]
   }
 }

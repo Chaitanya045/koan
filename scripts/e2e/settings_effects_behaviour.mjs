@@ -42,7 +42,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import {
-  ACCEL, ALT, CDP_PORT, CTRL, IS_MAC, UI_PORT, browserCall, check, click, connect, evalIn,
+  centerOf, ACCEL, ALT, CDP_PORT, CTRL, IS_MAC, UI_PORT, browserCall, check, click, connect, evalIn,
   finish, front, key, onPage, pages, readPref, setChromePref, setKoanPref, settingsCall,
   showPane, sleep, tabMenuCommand, viewTree, visiblePage, waitFor,
 } from './lib/koan.mjs';
@@ -280,7 +280,7 @@ if (!userDataDir || !rowOf('koan.agent_control.enabled')) {
 skipped('Strict, What agents can use and Limits: their effect',
         'needs an agent: scripts/e2e/agent_cli.mjs drives them with the koan CLI');
 skipped('Check for updates / Show a notification after Koan was updated: their effect',
-        'needs GitHub and a newer build; koan_update_logic_unittest has the logic');
+        'needs a newer signed release; koan_update_logic_unittest has the logic');
 skipped('Freeze background tabs: its effect',
         'tabs freeze after minutes in the background; scripts/e2e/power.mjs checks freezing');
 skipped('The Keyboard Shortcuts pane (rebind, conflicts, reset, each by what the key then does)',
@@ -514,7 +514,7 @@ async function typeInUrlBar(from, text) {
   // On the host label: clickThroughRoot()'s default, 24 px in, is the site
   // icon (4 px inset, a 26 px button), which opens the site panel and leaves
   // the omnibox unfocused, so the typed text lands in the shown address.
-  await clickThroughRoot(vs, pill, { at: { x: Math.round(pill.w / 2), y: Math.round(pill.h / 2) } });
+  await clickThroughRoot(vs, pill, { at: centerOf(pill, { local: true }) });
   await sleep(400);  // the click's select-all is posted
   const field = await waitFor(async () => (await viewTree()).find(
       v => v.cls === 'OmniboxViewViews' && v.shown), 4000);

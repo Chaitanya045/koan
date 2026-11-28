@@ -4,6 +4,8 @@
 
 #include "koan/test/browser/koan_browser_test_utils.h"
 
+#include <utility>
+
 #include "base/test/run_until.h"
 #include "chrome/browser/sessions/session_service_test_helper.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -66,6 +68,35 @@ std::vector<int> TabsOfSpace(TabStripModel* tab_strip,
     indices.push_back(static_cast<int>(i));
   }
   return indices;
+}
+
+HistoryDeletionWaiter::HistoryDeletionWaiter(history::HistoryService* history) {
+  observation_.Observe(history);
+}
+
+HistoryDeletionWaiter::~HistoryDeletionWaiter() = default;
+
+HistoryDeletionNotice HistoryDeletionWaiter::Wait() {
+  return notice_.Take();
+}
+
+void HistoryDeletionWaiter::OnHistoryDeletions(
+    history::HistoryService* history_service,
+    const history::DeletionInfo& deletion_info) {
+  if (notice_.IsReady()) {
+    return;
+  }
+  HistoryDeletionNotice notice;
+  notice.all_history = deletion_info.IsAllHistory();
+  notice.has_time_range = deletion_info.time_range().IsValid();
+  notice.restrict_urls = deletion_info.restrict_urls();
+  if (!notice.all_history) {
+    for (const history::URLRow& row : deletion_info.deleted_rows()) {
+      notice.deleted_pages.insert(row.url());
+    }
+  }
+  notice.deleted_visits = deletion_info.deleted_visit_ids();
+  notice_.SetValue(std::move(notice));
 }
 
 }  // namespace koan

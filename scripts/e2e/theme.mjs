@@ -25,7 +25,7 @@
 // it on by default).
 import { readFileSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { ACCEL, CDP_PORT, IS_MAC, NATIVE_MENUS, NATIVE_MENU_WHY, browserCall, createSpace,
+import { half, ACCEL, CDP_PORT, IS_MAC, NATIVE_MENUS, NATIVE_MENU_WHY, browserCall, createSpace,
          menuMouse, openMenus, pages, sleep, typeInto, viewMouse, viewTree, waitFor, check,
          finish } from './lib/koan.mjs';
 import { skipped } from './lib/mac.mjs';
@@ -102,6 +102,10 @@ function placement(t) {
           `panel ${x},${y} ${w}x${h}; want ${wantX},${wantY}`];
 }
 
+// Whether the showing tab's prefers-color-scheme comes to `dark` (a scheme
+// button's choice reaches the renderers a moment after the click).
+const prefersDark = dark => waitFor(async () => await pagePrefersDark() === dark, 3000);
+
 // The Space header's menu (Spaces, #57): Change Name…, Change Icon…, Edit
 // Theme…, ….
 async function headerMenu() {
@@ -170,8 +174,8 @@ check("Five preset pages with Zen's 41 swatches", swatches.length === 41, `${swa
 check('Opacity slider and grain dial',
       !!shown(t, 'KoanThemeOpacitySlider')[0] && !!shown(t, 'KoanThemeGrainDial')[0]);
 
-await click(button(t, 'Dark'));
-check('The Dark scheme button makes websites dark', await pagePrefersDark() === true);
+await click(button(await tree(), 'Dark'));
+check('The Dark scheme button makes websites dark', await prefersDark(true), await appearance());
 
 await click(button(await tree(), 'Next colors'));
 t = await tree();
@@ -204,7 +208,7 @@ p = picker(t);
 check('Add brings a third dot', p.p.Dots.split(';').length === 3, p.p.Dots);
 
 const slider = shown(t, 'KoanThemeOpacitySlider')[0];
-await click(slider, slider.w - 6, Math.round(slider.h / 2));
+await click(slider, slider.w - 6, half(slider.h));
 t = await tree();
 p = picker(t);
 check('The opacity slider goes up to 0.8', Math.abs(+p.p.Opacity - 0.8) < 0.001, p.p.Opacity);
@@ -212,7 +216,7 @@ check('The opacity slider goes up to 0.8', Math.abs(+p.p.Opacity - 0.8) < 0.001,
 const dial = shown(t, 'KoanThemeGrainDial')[0];
 // The handle sits at the top of the dial (8px margin around the dial, 73px,
 // 66px on macOS): from there to 3 o'clock.
-const dialCentre = Math.floor(dial.w / 2);
+const dialCentre = half(dial.w);
 await drag(dial, [dialCentre, 8], [dial.w - 2, dialCentre]);
 t = await tree();
 p = picker(t);
@@ -249,14 +253,14 @@ if (!keyboardFocus(p)) {
   await pickerKey(VK.DELETE);
   check('...and Delete removes it', picker(await tree())?.p.Dots === '');
 }
-await click(button(t, 'Light'));
-check('The Light scheme button makes websites light', await pagePrefersDark() === false,
+await click(button(await tree(), 'Light'));
+check('The Light scheme button makes websites light', await prefersDark(false),
       await appearance());
 p = picker(await tree());
 check("A light window without a theme is Zen's #e9e9e9",
       p?.p.WindowBackground === 'rgba(233, 233, 233, 1)', p?.p.WindowBackground);
 await click(button(await tree(), 'Dark'));
-check('The Dark scheme button makes websites dark again', await pagePrefersDark() === true,
+check('The Dark scheme button makes websites dark again', await prefersDark(true),
       await appearance());
 await closePicker();
 
@@ -377,7 +381,7 @@ check('After a restart, the Space has its theme', !!saved && p?.p.Dots === saved
           t.filter(v => v.cls === 'Label' && inCustom(v)).map(v => v.p.Text).join('|'));
     const slider = t.find(v => v.cls === 'KoanThemeOpacitySlider' && v.shown);
     for (const x of [0.2, 0.7, 0.4]) {
-      if (slider) await click(slider, Math.round(slider.w * x), Math.round(slider.h / 2));
+      if (slider) await click(slider, Math.round(slider.w * x), half(slider.h));
     }
     check('The slider works with the row shown', !!picker(await tree()));
     t = await tree();

@@ -23,16 +23,16 @@ Found by reading the tests (check titles in quotes), not by running them.
 
 ## Totals
 
-Hook table, 56 rows: guarded 32, partly 14, none 10. Runnable on the Mac now:
-10; Linux e2e only: 36; no guard: 10.
+Hook table, 56 rows: guarded 32, partly 15, none 9. Runnable on the Mac now:
+10; Linux e2e only: 36; Linux browser tests only: 1; no guard: 9.
 Issue #183's three examples: guarded 2, partly 1.
 
 ## The gaps, by what to add
 
-* **No guard at all (10 rows)**, mostly macOS-only code that Linux e2e could
+* **No guard at all (9 rows)**, mostly macOS-only code that Linux e2e could
   never reach: the main menu, Profiles menu and Dock menu hooks, Space
   shortcuts running before Chrome's menu on a Mac, Esc no longer being Stop,
-  the Library's closed-tabs source, caption buttons, the traffic lights' row,
+  the Library's closed-tabs source, the traffic lights' row,
   the new-tab button's action swap, and tab rows snapping into a Space.
   Each wants one Mac step (`scripts/mac/steps/`) or, where the logic is pure
   (the menu-key table), a unit test next to `koan_shortcut_table_unittest.cc`.
@@ -82,7 +82,7 @@ Issue #183's three examples: guarded 2, partly 1.
 | Library: Downloads (no patch) | Download notifier/items (danger state, open-when-complete), Retry mirrors the bubble's, bubble shows a warning by content id | e2e/library "A dangerous download is listed with its warning", "...clicking it goes to Chrome's warning and closes the Library", "...and doesn't make it open when it's done"; e2e/library_downloads "Once it is in, Safe Browsing marks it dangerous", "Keep keeps it", "...and it does not open by itself". Retry: none | partly | no (Linux e2e) |
 | Library: reordering Spaces (no patch) | `MoveGroupTo` takes the group's new first index counted without its own tabs | e2e/library "Dragging a card by its handle reorders the spaces", "...in the bottom bar too" | guarded | no (Linux e2e) |
 | Sidebar header | One hand-written `ProposedLayout` of collapse button + combo; the header is a direct child of the region view; the collapse action `kActionToggleCollapseVertical` is re-pointed at compact mode; right-click menu only for `collapse_button_`; macOS lights/trailing-control placement | e2e/layout "Single toolbar by default: navigation buttons in the sidebar top row"; e2e/tabs_right "...its top row is mirrored ..."; e2e/sidebar_animation "The sidebar button turns compact mode on: the sidebar takes no space"; e2e/vertical_tabs_old_profile "Tab search shows no Chromium bubble", "...it opens Koan's URL bar"; e2e/compact_single "The sidebar's menu has Tabs on the right". macOS `AvoidTrafficLights` and `HidesSidebarTrailingControls`, the actions-off path, `UpdateCollapseAction` rewrite: none (`koan_lights_geometry_unittest.cc` is geometry only) | partly | yes |
-| Caption buttons | Caption buttons are direct children of the frame view (found by class name) and hit-testing uses `HitTestCaptionButton`; macOS traffic lights hidden via `NSWindow` | none (e2e/urlbar only prints an INFO line about caption buttons while floating; it is "reported, not checked") | none | - |
+| Caption buttons | Caption buttons are direct children of the frame view (found by class name) and hit-testing uses `HitTestCaptionButton`; on Linux a theme change replaces the frame view (`RegenerateFrameOnThemeChange()`), and the new buttons are placed by the frame's layout; macOS traffic lights hidden via `NSWindow` | koan_browsertests `KoanCaptionButtonsBrowserTest.*` (#556): a colour scheme change replaces the frame view, and its close button is found by `VIEW_ID_CLOSE_BUTTON` and hidden again (or shown beside the sidebar). Hit-testing: none (e2e/urlbar only prints an INFO line about caption buttons while floating) | partly | no (browser tests, Linux; not built in CI) |
 | Traffic lights centred in the sidebar's top row (macOS) | AppKit centres lights in `GetWindowFrameTitlebarHeight`; the sidebar top row is `toolbar_height` tall beside `caption_button_width`; `OnTabStripStateChanged()` relays the title bar | none for the AppKit behaviour (`src/browser/ui/views/koan_lights_geometry_unittest.cc` tests Koan's own geometry, not what AppKit does; captures are by eye per the Mac notes) | none | - |
 | URL bar placement (no patch) | Layout sets the top container and toolbar bounds each pass (Koan observes them); `LocationBarView` is a direct child of `ToolbarView`; the layout clips them at the end of each pass | e2e/urlbar "Clicking the pill floats the URL bar (\"float\")", "Clicking the pill edits the address in the pill", "Typing keeps the bar in place (\"normal\"), widened over the page"; e2e/layout "Clicking the URL pill opens the URL bar there", "Esc closes the URL bar" | guarded | no (Linux e2e) |
 | URL bar: float on typing; no page actions in Zen's URL bar | `OnChanged` is called on every omnibox text change with `user_input_in_progress()`; `ShouldHidePageActionIcons()` decides page actions and content setting icons | e2e/urlbar "Typing floats the URL bar, centred and Zen-sized", "...with none of Chromium's page actions", "...and no AI Mode button or hint"; e2e/layout "...and typing floats it, centred and Zen-sized" | guarded | no (Linux e2e) |

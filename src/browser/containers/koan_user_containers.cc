@@ -20,9 +20,6 @@ constexpr char kNameKey[] = "name";
 constexpr char kColorKey[] = "color";
 constexpr char kProxyKey[] = "proxy";
 
-// Names are what the user types in a prompt: short, printable.
-constexpr size_t kMaxNameLength = 64;
-
 // Firefox's container colours in its order (blue, turquoise, green, yellow,
 // orange, red, pink, purple), as tab group colours.
 constexpr tab_groups::TabGroupColorId kColors[] = {
@@ -100,15 +97,30 @@ bool SetUserContainerProxy(base::ListValue& list,
   return false;
 }
 
+// Names are what the user types in a prompt: short, printable.
+UserContainerNameError CheckUserContainerName(std::u16string_view name) {
+  const std::u16string_view trimmed =
+      base::TrimWhitespace(name, base::TRIM_ALL);
+  if (trimmed.empty()) {
+    return UserContainerNameError::kEmpty;
+  }
+  if (trimmed.size() > kMaxUserContainerNameLength) {
+    return UserContainerNameError::kTooLong;
+  }
+  if (std::ranges::any_of(
+          trimmed, [](char16_t c) { return base::IsUnicodeControl(c); })) {
+    return UserContainerNameError::kControlCharacter;
+  }
+  return UserContainerNameError::kNone;
+}
+
 std::optional<UserContainer> AddUserContainer(base::ListValue& list,
                                               std::u16string_view name) {
-  std::u16string trimmed;
-  base::TrimWhitespace(name, base::TRIM_ALL, &trimmed);
-  if (trimmed.empty() || trimmed.size() > kMaxNameLength ||
-      std::ranges::any_of(
-          trimmed, [](char16_t c) { return base::IsUnicodeControl(c); })) {
+  if (CheckUserContainerName(name) != UserContainerNameError::kNone) {
     return std::nullopt;
   }
+  const std::u16string_view trimmed =
+      base::TrimWhitespace(name, base::TRIM_ALL);
   const std::vector<UserContainer> existing = ParseUserContainers(list);
   tab_groups::TabGroupColorId color =
       kColors[existing.size() % std::size(kColors)];

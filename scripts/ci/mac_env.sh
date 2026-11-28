@@ -23,3 +23,17 @@ export DEPOT_TOOLS_UPDATE=0
 export DEVELOPER_DIR="${KOAN_CI_XCODE:-/Applications/Xcode_27.1.app}/Contents/Developer"
 export PATH="$ROOT/depot_tools:$PATH"
 mkdir -p "$HOME" "$TMPDIR"
+# Koan's test-only update hooks (koan_update_test_hooks,
+# src/browser/updates/BUILD.gn; scripts/build.sh adds them to args.gn): only
+# in a run that is neither a release nor kept as a base for the nightlies.
+# The chain's fetch job gets KOAN_CI_UPDATE_TEST_HOOKS (1 or 0) and leaves it
+# in .cache, which travels to the build jobs in the source archive.
+if [[ -n ${KOAN_CI_UPDATE_TEST_HOOKS:-} ]]; then
+  mkdir -p "$ROOT/.cache"
+  printf '%s\n' "$KOAN_CI_UPDATE_TEST_HOOKS" > "$ROOT/.cache/ci-update-test-hooks"
+fi
+if [[ "$(cat "$ROOT/.cache/ci-update-test-hooks" 2>/dev/null || true)" == 1 ]]; then
+  export KOAN_UPDATE_TEST_HOOKS=1
+else
+  export KOAN_UPDATE_TEST_HOOKS=0
+fi

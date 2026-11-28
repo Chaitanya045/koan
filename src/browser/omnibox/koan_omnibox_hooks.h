@@ -14,6 +14,8 @@
 class AutocompleteController;
 class AutocompleteInput;
 class AutocompleteProvider;
+class AutocompleteProviderClient;
+class AutocompleteResult;
 class GURL;
 class TemplateURLService;
 struct AutocompleteMatch;
@@ -28,6 +30,17 @@ void AddAutocompleteProviders(
     AutocompleteController* controller,
     int provider_types,
     std::vector<scoped_refptr<AutocompleteProvider>>& providers);
+
+// Called by AutocompleteController::UpdateResult() once the providers'
+// matches are in `result`, before they are sorted: with Keep history apart
+// for each profile on, drops the history suggestions (history, shortcuts,
+// past searches, top sites, recently closed tabs) of pages with no visit in
+// the profile of the active Space of the window being typed in (#474,
+// .agent/notes/upstream/space-history.md). The address being typed is kept.
+// Switch to Tab is scoped by the tab matcher (koan_space_history.h).
+void FilterSpaceHistoryMatches(AutocompleteProviderClient& client,
+                               const AutocompleteInput& input,
+                               AutocompleteResult& result);
 
 // Whether the zero-prefix suggestions of a box with this page classification
 // get a section for Koan's own matches (open tabs and top sites,

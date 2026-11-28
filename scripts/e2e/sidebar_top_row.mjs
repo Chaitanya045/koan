@@ -14,8 +14,8 @@
 // views' side only) and the AppKit checks are reported as skipped.
 // Run by scripts/mac/suite.sh (sidebar_top_row.flags loads the extension).
 import { execSync } from 'node:child_process';
-import { CDP_PORT, IS_MAC, check, evalIn, finish, onPage, pages, sleep, viewMouse,
-         viewTree, waitFor } from './lib/koan.mjs';
+import { centerOf, half, CDP_PORT, IS_MAC, check, evalIn, finish, onPage, pages, sleep, toastTexts,
+         viewMouse, viewTree, waitFor } from './lib/koan.mjs';
 import { alive, calibrate, fatalInLog, makeKey, ptr, realClick, realInput,
          realInputWhyNot, realKey, skipped, startServer, windowOf } from './lib/mac.mjs';
 
@@ -34,8 +34,11 @@ const go = async url => {
 check('Loads page A, then page B (so Back has somewhere to go)', !!(await go(A)) && !!(await go(B)));
 await sleep(800);
 
-const navButtons = vs => vs.filter(v => v.shown && v.path.at(-1) === 'KoanSidebarNavButtons')
+// The row's own buttons; on Linux the row starts with Zen's app menu
+// button (KoanAppMenuButton, #488), checked on its own below.
+const inRow = vs => vs.filter(v => v.shown && v.path.at(-1) === 'KoanSidebarNavButtons')
     .sort((a, b) => a.ax - b.ax);
+const navButtons = vs => inRow(vs).filter(v => v.cls !== 'KoanAppMenuButton');
 const pillButton = (vs, tip) => vs.find(v => v.shown && v.path.includes('KoanUrlPill') &&
     v.props?.TooltipText === tip);
 const extensionButton = vs => vs.find(v => v.shown && v.path.at(-1) === 'KoanSidebarExtensionsView');
@@ -48,6 +51,18 @@ const row = navButtons(vs);
 check('The top row has back, forward and reload', row.length === 3,
       row.map(v => v.props?.TooltipText).join(', '));
 if (row.length !== 3) finish();
+{
+  const all = inRow(vs);
+  const menu = all.filter(v => v.cls === 'KoanAppMenuButton');
+  if (IS_MAC) {
+    check('No app menu button in the row (the menu bar has its items)', menu.length === 0);
+  } else {
+    check('The row starts with the app menu button, before back',
+          menu.length === 1 && all[0] === menu[0] &&
+              menu[0].props?.TooltipText === 'Open application menu',
+          all.map(v => `${v.cls}:${v.props?.TooltipText}`).join(', '));
+  }
+}
 
 // The page's tab in front (the buttons act on the shown tab: the suite's
 // profile starts on another, so UI DevTools' Back stayed on it and Copy URL
@@ -62,7 +77,7 @@ if (realInput()) {
 }
 const real = () => !!origin && realInput();
 const via = real() ? 'a real click' : 'UI DevTools';
-const centre = v => ({ x: origin.x + v.ax + v.w / 2, y: origin.y + v.ay + v.h / 2 });
+const centre = v => ({ x: origin.x + centerOf(v).x, y: origin.y + centerOf(v).y });
 // A click on `view` (from viewTree()): the real pointer at its centre, or
 // UI DevTools' press and release on it.
 async function press(view, settle = 900) {
@@ -71,7 +86,7 @@ async function press(view, settle = 900) {
     return realClick(c.x, c.y, settle);
   }
   for (const type of ['mousePressed', 'mouseReleased']) {
-    await viewMouse(view, type, Math.round(view.w / 2), Math.round(view.h / 2));
+    await viewMouse(view, type, half(view.w), half(view.h));
   }
   await sleep(settle);
   return true;
@@ -140,8 +155,9 @@ if (copy) {
   if (IS_MAC) execSync('pbcopy', { input: '' });
   if (real()) await hover(copy);
   await press(copy, 300);
-  const toast = await waitFor(async () => (await viewTree()).find(v => v.cls === 'Label' &&
-      v.shown && /^Copied /.test(v.props?.Text ?? ''))?.props.Text, 2500) ?? '';
+  // (toastTexts(): a whole viewTree() can take longer than the toast stays.)
+  const toast = await waitFor(async () => (await toastTexts()).find(t => /^Copied /.test(t)),
+                              2500) ?? '';
   check(`Copy URL (${via}) shows Zen's toast`, toast === 'Copied current URL!', JSON.stringify(toast));
   if (IS_MAC) {
     const text = execSync('pbpaste', { encoding: 'utf8' });

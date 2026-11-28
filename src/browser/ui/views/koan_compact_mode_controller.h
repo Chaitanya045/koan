@@ -375,8 +375,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void OnCaptionHotZoneHovered(bool hovered);
   void SetCaptionStripRevealed(bool revealed);
   void CheckCaptionStripHide();
-  // Fades the frame's caption buttons in or out with the strip.
-  void UpdateCaptionButtons();
+  // Fades the frame's caption buttons in or out with the strip (or, without
+  // `animate`, shows or hides them at once).
+  void UpdateCaptionButtons(bool animate = true);
   // Whether `button` (a frame child) sits above the sidebar's top row, which
   // keeps room for it.
   bool IsCaptionButtonBesideSidebar(const views::View* button) const;
@@ -419,6 +420,9 @@ class KoanCompactModeController : public views::FocusChangeListener,
   raw_ptr<KoanHotZone> caption_hot_zone_ = nullptr;
   // Lets the pointer through the revealed toolbar to the caption buttons.
   std::unique_ptr<KoanCaptionButtonsTargeter> caption_buttons_targeter_;
+  // Follows the frame's caption buttons, which a rebuilt frame replaces.
+  class CaptionButtonsObserver;
+  std::unique_ptr<CaptionButtonsObserver> caption_buttons_observer_;
   // macOS: the traffic lights, which the window buttons below stand for.
   std::unique_ptr<KoanTrafficLightsController> traffic_lights_;
   bool caption_strip_collapsible_ = false;

@@ -134,13 +134,23 @@ Ctrl where the Mac uses ⌘, and a few keys of their own:
 | **Koan only:** switch single / multiple toolbars | Ctrl+Alt+B | |
 | **Koan only:** create a Space | Ctrl+Alt+N | |
 | Koan settings (Zen's "Open Preferences") | Ctrl+, | |
+| Quit Koan (Zen's "Quit Application", Firefox's key; every window closes and the session comes back on the next start) | Ctrl+Q | Nothing (Chrome has no quit key on Linux) |
+
+On Linux there is no menu bar, so the sidebar's top row starts with Zen's
+app menu button (the menu icon, before back / forward / reload): Chromium's
+app menu, opening below it over the page (with tabs on the right, towards
+the page too), with New Tab, History, Downloads, Settings and **Exit** (Ctrl+Q)
+at the bottom. Its items show Koan's keys (New Incognito window: Ctrl+Shift+P;
+Save page as: Ctrl+Alt+Shift+S), and none where Koan gave Chrome's key to
+something else (Bookmark all tabs). Quit is in Settings > Keyboard Shortcuts (Window & Tab
+Management, "Quit Application"), where you can change or clear its key.
 
 ## Layout
 
 Koan starts in Zen's default layout, **single toolbar**: there is no toolbar
 across the top, and the page reaches the top of the window. The top row of
-the sidebar has the sidebar toggle, back / forward / reload and the tab
-groups / tab search buttons; below it is a rounded grey pill with the
+the sidebar has the sidebar toggle, back / forward / reload (on Linux after
+the app menu button) and the tab groups / tab search buttons; below it is a rounded grey pill with the
 current site's icon and name (just the host, like Zen). While the pointer is
 over the sidebar, the pill also shows your pinned extensions (click one for
 its popup), **Copy URL** (copies the address, with a "Copied" toast) and
@@ -591,16 +601,18 @@ belongs to a Space, and new tabs open in the active one.
 - **Profiles: separate logins per Space** (Zen's containers per Space).
   Pick one with the Create-a-Space form's **Profile** row, or right-click
   the header > **Set Profile**. You get Default (no profile), your profiles
-  (each with a colour) and **New Profile…** (name it, then Create). A
+  (each with a colour) and **New Profile…** (name it, then Create:
+  Create waits for a name, and a name longer than 64 characters is
+  refused with a message, the dialog staying open). A
   Space with a profile keeps its own cookies and site data: you can be
   signed into a site in one Space and signed out, or signed in as someone
   else, in another, and a site's saved settings (its localStorage) are kept
   per profile. Spaces with the same profile share them. New tabs in the
   Space open in its profile: ⌘T, the address bar, bookmarks, history,
   links from other apps and New Split. Links you open from a page stay in
-  that page's profile, and a routed link takes its Space's. History,
-  bookmarks, passwords, site permissions, extensions and downloads stay
-  shared. A tab you move to another Space keeps its profile, and then shows
+  that page's profile, and a routed link takes its Space's. Bookmarks,
+  passwords, autofill, site permissions, extensions and downloads stay
+  shared. History is kept apart (below). A tab you move to another Space keeps its profile, and then shows
   a thin line in its profile's colour at its edge. Changing a Space's
   profile changes where its new tabs open; its open tabs keep theirs.
   Deleting a Space keeps its profile and its data, so another Space can
@@ -619,6 +631,21 @@ belongs to a Space, and new tabs open in the active one.
   on in a profile. In practice, sites that notify through a service worker,
   as many mail and calendar apps do, still can't notify in a profile
   ([#530](https://github.com/koan-browser/koan/issues/530)).
+- **History per profile** (Koan's own; Settings > Tab Management >
+  Workspaces > **Keep history apart for each profile**, on). Each visit
+  records the profile of its tab. In a Space with a profile, the address
+  bar suggests only that profile's pages: history, past searches, the
+  shortcuts it learned, the most visited sites of the empty bar, and
+  Switch to Tab only for that profile's tabs (also in the tabs search). A
+  Space without a profile shows the Default profile's, which includes
+  everything visited before this came, and imported history. A page
+  visited in two profiles shows in both. A tab moved to another Space
+  keeps its profile and its visits stay that profile's. Bookmarks stay
+  shared, so a bookmarked page is still suggested as a bookmark. Off,
+  every profile's history shows everywhere, as before. Chromium's Clear
+  browsing data and `chrome://history` cover every profile's history. One
+  thing is not kept apart: a link to a page you visited is drawn in the
+  visited colour on that same site in every profile.
 - **A proxy per profile** (#445; no UI yet). A profile can send all its
   tabs through a proxy, e.g. an SSH tunnel to another machine, so that
   `localhost:3000` in its Space is that machine's. Everything goes through
@@ -904,6 +931,11 @@ Besides the shortcuts above:
   onto the sidebar: the line shows where its tab will go, and letting go
   takes the tab out of the split, to that place, selected (hold Shift to
   keep the selection). The header's unsplit button does it in place.
+- **Split shortcuts** (⌘⌥V / ⌘⌥H, Ctrl+Alt+V / Ctrl+Alt+H on Linux): with
+  another tab selected, the two split; else the tab splits with the next tab
+  of its Space, wrapping to the Space's first, never a tab of another Space.
+  An Essential pairs with the next Essential. With nothing to pair, a new
+  tab opens in an empty pane next to it, as in Zen.
 - Chromium's split views have two panes (Zen's take four, in a grid): a
   third panel (Split Glance over a split, a split shortcut with more tabs
   selected) shows Zen's "Can't add more panels to the split view!" toast.
@@ -923,7 +955,8 @@ match Zen too. The Zen look follows the system's light or dark mode.
 shadcn's tokens (`background`, `foreground`, `card`, `popover`, `primary`,
 `secondary`, `muted`, `accent`, `destructive`, `border`, `input`, `ring`, the
 `sidebar-*` set) and their corner radii from `--radius` (10px: sm 6, md 8,
-lg 10, xl 14). The font is Geist (bundled, SIL OFL), from the next start.
+lg 10, xl 14). The font is Geist (bundled, SIL OFL), from the next start,
+on macOS and Linux (in the Flatpak and outside it).
 
 **Settings > Look and Feel > Appearance** (browser-wide, applies at once to
 every window):
@@ -1068,6 +1101,27 @@ Koan is set up to stay light (details in `PERFORMANCE.md`):
   (Settings > Tab Management > Performance).
 - **Energy saver** works as in Chrome: on a MacBook it turns on below 20 %
   battery (Settings > Performance > Energy saver).
+- **Close tabs you haven't used** (off by default, Arc's auto-archive):
+  Settings > Tab Management > Performance > "Close tabs I haven't used
+  for": Never, 12 hours, 24 hours, 7 days or 30 days. A tab counts as used
+  while it is the tab its window shows; the time goes on while Koan is
+  closed, so an old tab goes at the next start, once the session is back.
+  Never closed: Essentials, pinned tabs, tabs in a folder, the tab each
+  Space shows, a Space's empty tab, agent tabs, a split view with a tab
+  that stays, and tabs in use (playing sound, in a call, sharing the
+  screen, open in DevTools, with a form you started, downloading, in
+  picture-in-picture, or with a page that would ask before closing).
+  Before the first close ever, a notice says so (with a **Settings**
+  button), and nothing closes until the next check a few minutes later.
+  Closed tabs are in the Library: History > Filter > Closed tabs, kept for
+  120 days (up to 500), apart from ⌘⇧T's recently closed tabs. Click one
+  to reopen it in its Space and profile; forget it with its row's button.
+  Clearing history forgets those it covers; when the Library shows one
+  profile, only that profile's. A tab opened in the background and never
+  looked at counts from when Koan last started, not from when it was
+  opened (a known limit, so it may stay longer; #577). To try it without
+  waiting, start Koan with `--koan-auto-close-tabs-after=<seconds>` (it
+  shortens whatever time is set, not Never).
 
 ## Library
 
@@ -1099,14 +1153,18 @@ with three sections down its side, and opens on the one you used last:
   The Library widens to fit the cards.
 - **History** (⌘Y or ⌘⇧H): the last 120 days by day. Search, or **Filter**:
   when (today since midnight, this week, this month), sort (by date, site, most visited,
-  last visited) and what to look through (history or the tabs closed
-  recently). Click a page to open it in a new tab; ⌘-click or
+  last visited), what to look through (history or the tabs closed
+  recently, including those Koan closed because you hadn't used them; see
+  Memory and power) and, once you have a profile, which profile (each
+  opening shows the active Space's; All profiles shows everything). Click a page to open it in a new tab; ⌘-click or
   middle-click opens it in the background and keeps the Library open.
   Hover a row for its visit time and the forget / reopen buttons;
   right-click for "Forget About This Site" (its history, cookies, site data
   and cache). Right-click the History tab to clear history from the last
   hour, 12 hours, today, week, month or everything (it asks first, naming
-  the range), or to open `chrome://history`. Where policy forbids deleting
+  the range), or to open `chrome://history`. Forgetting and clearing act
+  on the profile the filter shows, and the question names it ("in the
+  Work profile"); with All profiles they act on every profile. Where policy forbids deleting
   history (AllowDeletingBrowserHistory) nothing here offers to, as on
   Chrome's History page.
 
@@ -1372,30 +1430,52 @@ from …" folder on it.
 
 ## Updates
 
-Koan has no automatic updater yet. To update a release, download the newest
-one from the [Releases page](https://github.com/koan-browser/koan/releases)
-and drag it over the old one in Applications (see
-[Installing the macOS build](#installing-the-macos-build)). A build from
-your own clone updates with `git pull && scripts/build.sh`
-([BUILDING-MAC.md](BUILDING-MAC.md#updating)).
+Koan checks its [GitHub releases](https://github.com/koan-browser/koan/releases)
+for a newer version and tells you in the sidebar. It doesn't download or
+install anything yet: on the Mac you download the new disk image and drag it
+over the old one in Applications (see
+[Installing the macOS build](#installing-the-macos-build)); on Linux you
+install the new Flatpak over the old one. A build from your own clone
+updates with `git pull && scripts/build.sh`
+([BUILDING-MAC.md](BUILDING-MAC.md#updating)); the check still looks at the
+releases, not at your clone.
 
-- **Update Complete!** After you start a build whose Chromium version or Koan
-  commit differs from the last one you started, the sidebar shows Zen's
+- **Update Available!** A minute after the first window opens, and then at
+  most every 12 hours, Koan reads the latest release's update manifest
+  (`koan-update.json`). If that release is newer than yours (by version,
+  pre-releases included: 0.0.3-alpha.1 comes before 0.0.3), the sidebar says
+  so once for that version: **What's new** opens the release notes and
+  **Download** the release's page. On Linux, **Download** also copies the
+  command that installs it once it is in your Downloads folder, `flatpak
+  install --user --reinstall ~/Downloads/Koan-<version>-x86_64.flatpak`.
+  Linux shows the notice only once releases carry a Flatpak (#468).
+- **Trust:** Koan only believes a manifest signed with the release key built
+  into it (Ed25519; the key is
+  [`src/browser/updates/koan_update_public_key.txt`](../src/browser/updates/koan_update_public_key.txt)).
+  The signature covers the version and the file's size and SHA-256 for your
+  platform. A manifest that isn't signed, or is signed with another key, or
+  names a file or release notes anywhere but
+  `github.com/koan-browser/koan/releases/`, is ignored. Pre-releases, drafts
+  and the nightlies are never offered: they aren't the latest release.
+- **Update Complete!** After you start a build whose Koan or Chromium
+  version differs from the last one you started, the sidebar shows Zen's
   notification for 15 seconds (it waits while you point at it). **What's new
-  in Koan** opens the commits between the two builds on GitHub; **Something
-  broke?** opens the issues.
-- **Update Available!** Once a day Koan asks GitHub for the newest commit of
-  your clone's develop branch (its `origin` remote, if that is on GitHub). If
-  it is newer than the commit your build was made from, the sidebar says so
-  once for that commit: what's new, **Copy the update command**, and how to
-  update. Koan never downloads or installs anything.
-- **Privacy:** the check is one `GET` to
-  `api.github.com/repos/<owner>/<repo>/commits?sha=develop&per_page=1`. It
-  sends no cookies or credentials, and nothing about you or your build;
-  GitHub sees your IP address, as for any page. No telemetry. Incognito
-  windows never start it.
+  in Koan** opens this version's release page; **Something broke?** opens the
+  issues.
+- **Privacy:** the check is one `GET` of
+  `https://github.com/koan-browser/koan/releases/latest/download/koan-update.json`
+  (GitHub redirects it to its file host). It sends no cookies or
+  credentials, and nothing about you or your build; GitHub sees your IP
+  address, as for any page. No telemetry. Incognito windows never start it.
 - **Turn off:** Settings > Look and Feel > Updates: **Check for updates** and
   **Show a notification after Koan was updated**.
+- **Trying it without a release** (developers): a test build (CI makes one
+  for each pull request, never for a release or a nightly) also takes
+  `--koan-update-manifest-url=<URL>` and `--koan-update-public-key=<base64>`,
+  to read a local manifest signed with a throwaway key
+  (`scripts/ci/update_manifest.py make --key-file <test key>`). In the
+  Flatpak they go in `~/.var/app/dev.koan.Koan/config/koan-flags.conf`.
+  Builds people install don't have them.
 
 ## Haptic feedback (macOS)
 
@@ -1562,7 +1642,8 @@ flatpak run dev.koan.Koan
 
 Flatpak fetches the Freedesktop runtime and the Chromium base app from
 Flathub the first time. Koan then shows up in your app menu. To update,
-install the newer file the same way. To remove it, `flatpak uninstall
+install the newer file the same way, with `--reinstall` (Koan's "Update
+Available!" copies that command for you, see [Updates](#updates)). To remove it, `flatpak uninstall
 dev.koan.Koan` (add `--delete-data` to remove the profile too).
 
 - The profile is in `~/.var/app/dev.koan.Koan/config/koan`.

@@ -20,7 +20,7 @@ the native menus, which UI DevTools can't click.
 | SC10 | Quit (⌘Q) and start again. | Both Spaces still have Work (Set Profile is checked) and the tabs are still signed in. Change a localStorage-backed theme on a site in one Space; the other keeps its own. |
 | SC11 | Set Profile > Default on a Work Space. | Existing tabs stay signed in as Work (the line shows on them), and new tabs are in the default partition. |
 | SC12 | Open a second window. | Its Spaces have the same profiles (window sync), and ⌘T there opens in the Space's profile. |
-| SC13 | Downloads, History (⌘Y) and the URL bar's suggestions in a Work tab. | A download from a Work tab completes into the normal Downloads list. Pages visited in Work show in History and the suggestions, which are shared as in Firefox's containers. |
+| SC13 | Downloads, History (⌘Y) and the URL bar's suggestions in a Work tab. | A download from a Work tab completes into the normal Downloads list. Pages visited in Work show in History and the suggestions of Work's Spaces; history per profile has its own steps (`space_history.md`, #474). |
 | SC14 | Incognito window. | No Spaces, no Profile row, no Set Profile. |
 | SC15 | Delete the Work Space (another Space keeps Work). | The other Space is still signed in as Work: deleting a Space keeps its profile and its data. |
 

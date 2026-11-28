@@ -25,7 +25,7 @@
 // scripts/mac/suite.sh.
 import fs from 'node:fs';
 import path from 'node:path';
-import { browserCall, check, connect, evalIn, finish, pages, setKoanPref, sleep, viewTree,
+import { centerOf, browserCall, check, connect, evalIn, finish, pages, setKoanPref, sleep, viewTree,
          waitFor } from './lib/koan.mjs';
 import { AGENT_HOME, CLI, PROFILE, allow, allowWhy, brief, koan } from './lib/agent.mjs';
 import { IS_MAC, alive, calibrate, fatalInLog, goToAgentTab, makeKey, realClick, realInput, realInputWhyNot,
@@ -231,7 +231,8 @@ async function clickPillButton(text) {
                               v.wname === 'KoanAgentIndicator');
   const at = button && await widgetOrigin('KoanAgentIndicator');
   if (!button || !at) return false;
-  return realClick(at.x + button.ax + button.w / 2, at.y + button.ay + button.h / 2, 900);
+  const c = centerOf(button);
+  return realClick(at.x + c.x, at.y + c.y, 900);
 }
 // The tab's entry in koan tabs --json.
 async function tabEntry(id) {
@@ -260,8 +261,8 @@ if (!realInput()) {
   check('Real pointer: calibrated on the form tab', !!origin);
   // A real click in the page at the element `selector`.
   const clickIn = async selector => {
-    const box = await evalIn(formPage, `(() => { const r = document.querySelector('${selector}')
-        .getBoundingClientRect(); return {x: r.x + r.width / 2, y: r.y + r.height / 2}; })()`);
+    const box = centerOf(await evalIn(formPage, `(() => { const r = document.querySelector('${selector}')
+        .getBoundingClientRect(); return {x: r.x, y: r.y, width: r.width, height: r.height}; })()`));
     const vs = await viewTree();
     const web = vs.filter(v => v.cls === 'ContentsWebView' && v.shown && v.w > 100)
         .sort((a, b) => b.w * b.h - a.w * a.h)[0];

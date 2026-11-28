@@ -110,7 +110,9 @@ screen does).
 
 `src/browser/ui/fonts/geist/` bundles Geist Sans and Geist Mono, Copyright (c)
 2023 Vercel, in collaboration with basement.studio, under the SIL Open Font
-License 1.1 (`src/browser/ui/fonts/geist/OFL.txt`).
+License 1.1 (`src/browser/ui/fonts/geist/OFL.txt`). The Linux build also ships the
+TrueType files as they are, with `OFL.txt`, in `koan_fonts/` next to the
+browser (`/app/koan/koan_fonts` in the Flatpak).
 
 ## Icons: Lucide (ISC)
 
