@@ -5,9 +5,15 @@
 #include "koan/browser/ui/views/koan_space_swipe.h"
 
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "koan/browser/ui/views/koan_scroll_direction.h"
+#include "koan/browser/ui/views/koan_swipe_input.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "ui/events/event_constants.h"
+
+#if BUILDFLAG(IS_LINUX)
+#include "ui/ozone/public/ozone_platform.h"
+#endif
 
 namespace koan {
 
@@ -18,35 +24,51 @@ KoanSpaceSwipe::~KoanSpaceSwipe() = default;
 
 namespace {
 
-SwipePhase GetPhase(const ui::ScrollEvent& event) {
-  switch (event.momentum_phase()) {
-    case ui::EventMomentumPhase::BEGAN:
-    case ui::EventMomentumPhase::MAY_BEGIN:
-      return SwipePhase::kBegin;
-    case ui::EventMomentumPhase::INERTIAL_UPDATE:
-      return SwipePhase::kMomentum;
-    case ui::EventMomentumPhase::END:
-    case ui::EventMomentumPhase::BLOCKED:
-      return SwipePhase::kEnd;
-    case ui::EventMomentumPhase::NONE:
-      return SwipePhase::kUpdate;
-  }
-  return SwipePhase::kUpdate;
-}
-
 double GetSeconds(const ui::ScrollEvent& event) {
   return (event.time_stamp() - base::TimeTicks()).InSecondsF();
 }
 
 }  // namespace
 
+// static
+float KoanSpaceSwipe::PixelSize() {
+#if BUILDFLAG(IS_LINUX)
+  // The offsets' scale is the backend's (LinuxSwipePixelSize()). Ozone has no
+  // other public way to tell which one runs; a rename fails to compile.
+  static const float pixel_size =
+      LinuxSwipePixelSize(ui::OzonePlatform::GetPlatformNameForTest() == "x11"
+                              ? LinuxScrollBackend::kX11
+                              : LinuxScrollBackend::kWayland);
+  return pixel_size;
+#else
+  return kMacSwipePixelSize;
+#endif
+}
+
+SwipePhase KoanSpaceSwipe::GetPhase(const ui::ScrollEvent& event,
+                                    bool advance) {
+#if BUILDFLAG(IS_LINUX)
+  bool lifted = lifted_;
+  const SwipePhase phase = LinuxSwipePhase(event.type(), lifted);
+  if (advance) {
+    lifted_ = lifted;
+  }
+  return phase;
+#else
+  return MacSwipePhase(event.momentum_phase());
+#endif
+}
+
 bool KoanSpaceSwipe::OnScrollEvent(const ui::ScrollEvent& event) {
-  // The swipe follows the fingers, not the system's natural scrolling setting
-  // (as Gecko's swipe tracker, and Zen with it, and Chromium's own swipe back
-  // and forward do): the offsets are turned round when the system had.
+  // On macOS the swipe follows the fingers, not the system's natural scrolling
+  // setting (as Gecko's swipe tracker, and Zen with it, and Chromium's own
+  // swipe back and forward do): the offsets are turned round when the system
+  // had. On Linux they come as the desktop's setting has them
+  // (ScrollFollowsFingers()).
   const float dx =
       ScrollFollowsFingers(event) ? event.x_offset() : -event.x_offset();
-  return tracker_.OnScroll(dx, event.y_offset(), GetPhase(event),
+  return tracker_.OnScroll(dx, event.y_offset(),
+                           GetPhase(event, /*advance=*/true),
                            GetSeconds(event));
 }
 
@@ -62,7 +84,7 @@ bool KoanSpaceSwipe::IsCapturing() const {
 }
 
 bool KoanSpaceSwipe::TakeScroll(const ui::ScrollEvent& event) {
-  const SwipePhase phase = GetPhase(event);
+  const SwipePhase phase = GetPhase(event, /*advance=*/false);
   // Fingers down again: whatever the swipe was, it is over (even if its end was
   // lost), and this gesture goes where the system sends it, so that a page's
   // scroll is never taken for the swipe.

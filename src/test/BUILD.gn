@@ -247,10 +247,18 @@ source_set("browsertests_impl") {
     "//url",
   ]
   if (is_linux) {
-    # The welcome never waits for a blocked detection (#493): upstream's
-    # Firefox folder moves to a fixture only on Linux.
-    sources += [ "browser/koan_welcome_browsertest.cc" ]
-    deps += [ "//koan/browser/ui/webui" ]
+    sources += [
+      # The sidebar's touchpad swipe through Aura, as Wayland's events come.
+      "browser/koan_space_swipe_browsertest.cc",
+
+      # The welcome never waits for a blocked detection (#493): upstream's
+      # Firefox folder moves to a fixture only on Linux.
+      "browser/koan_welcome_browsertest.cc",
+    ]
+    deps += [
+      "//koan/browser/ui/webui",
+      "//ui/aura",
+    ]
   }
 }
 

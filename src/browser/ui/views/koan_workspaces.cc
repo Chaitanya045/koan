@@ -101,6 +101,7 @@
 #include "koan/browser/ui/views/koan_space_swipe.h"
 #include "koan/browser/ui/views/koan_spaces.h"
 #include "koan/browser/ui/views/koan_stored_tab.h"
+#include "koan/browser/ui/views/koan_swipe_input.h"
 #include "koan/browser/ui/views/koan_tab_drag.h"
 #include "koan/browser/ui/views/koan_tab_unload.h"
 #include "koan/browser/ui/views/koan_theme_controller.h"
@@ -344,19 +345,22 @@ void SetSpaceRowsVisible(TabStripView* tab_strip, bool visible) {
 // Zen's mouse wheel over the sidebar (ZenSpaceManager's toolbox "wheel"
 // listener): a horizontal wheel, or a vertical one with the modifier of
 // zen.workspaces.scroll-modifier-key (Ctrl by default), switches Space; on
-// macOS also Zen's two-finger swipe. Runs before upstream's swipe controller on
-// the same view.
+// macOS and Linux also Zen's two-finger swipe. Runs before upstream's swipe
+// controller on the same view.
 class SpaceWheelHandler : public ui::EventHandler {
  public:
   explicit SpaceWheelHandler(KoanWorkspaceController* controller)
       : controller_(controller) {}
 
   // ui::EventHandler:
-#if BUILDFLAG(IS_MAC)
-  // macOS sends the mouse wheel as scroll events, like touchpad scrolling;
-  // only a wheel has ticks. The touchpad's horizontal swipes are
-  // KoanSpaceSwipe's (through the controller).
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+  // The touchpad's scrolling comes as scroll events, and its horizontal
+  // swipes are KoanSpaceSwipe's (through the controller). macOS sends the
+  // mouse wheel as scroll events too; only a wheel has ticks. Linux sends it
+  // as wheel events (OnMouseEvent()), on Wayland and X11 alike, and turns each
+  // touchpad scroll into wheel events too, taken or not (TouchpadWheels).
   void OnScrollEvent(ui::ScrollEvent* event) override {
+#if BUILDFLAG(IS_MAC)
     if (event->type() == ui::EventType::kScroll && event->HasNativeEvent() &&
         !ui::GetMouseWheelTick120ths(event->native_event()).IsZero()) {
       if (!Handle(event->x_offset(), event->y_offset(), event)) {
@@ -366,17 +370,15 @@ class SpaceWheelHandler : public ui::EventHandler {
       }
       return;
     }
-    // Touchpad scrolling over the Space switcher scrolls it, when its Spaces
-    // don't fit (Zen's overflow-x: auto).
-    if (event->type() == ui::EventType::kScroll &&
-        ScrollStrip(event->x_offset(), event->y_offset(), /*precise=*/true,
-                    event)) {
-      return;
+#endif
+#if BUILDFLAG(IS_LINUX)
+    const bool taken = TakeTouchpadScroll(event);
+    if (event->type() == ui::EventType::kScroll) {
+      touchpad_wheels_.OnScroll(event->time_stamp(), taken);
     }
-    if (controller_->OnSwipeScroll(*event)) {
-      event->SetHandled();
-      event->StopPropagation();
-    }
+#else
+    TakeTouchpadScroll(event);
+#endif
   }
 #endif
 
@@ -387,12 +389,28 @@ class SpaceWheelHandler : public ui::EventHandler {
     // Wheels are handled above; what comes here is touchpad scrolling,
     // which Zen leaves alone (only line scrolling switches).
 #else
-    // A horizontal wheel (or touchpad scroll) is upstream's swipe, which
-    // switches Space too (through PickSpaceTab() and WrapsSpaces()); the
-    // modifier with a vertical wheel is Zen's. Not touchpad scrolling.
+    // A horizontal wheel is upstream's swipe, which switches Space too
+    // (through PickSpaceTab() and WrapsSpaces()); the modifier with a vertical
+    // wheel is Zen's. On Linux the touchpad's scrolls come here too, as wheel
+    // events made from them: never a switch.
     if (!event->IsMouseWheelEvent()) {
       return;
     }
+#if BUILDFLAG(IS_LINUX)
+    switch (touchpad_wheels_.Classify(event->time_stamp())) {
+      case TouchpadWheels::Kind::kTakenScroll:
+        // The swipe's or the switcher's: not also upstream's wheel switch,
+        // nor the tab list's.
+        event->SetHandled();
+        event->StopPropagation();
+        return;
+      case TouchpadWheels::Kind::kLeftScroll:
+        // The tab list's (Zen switches Space with line scrolling only).
+        return;
+      case TouchpadWheels::Kind::kMouseWheel:
+        break;
+    }
+#endif
     const ui::MouseWheelEvent* wheel = event->AsMouseWheelEvent();
     const bool precise = event->flags() & ui::EF_PRECISION_SCROLLING_DELTA;
     if (!precise && controller_->IsSpaceScrollModifierDown(*event) &&
@@ -415,6 +433,25 @@ class SpaceWheelHandler : public ui::EventHandler {
     return true;
   }
 
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+  // The touchpad's scroll `event` over the sidebar: the Space switcher's when
+  // its Spaces don't fit (Zen's overflow-x: auto), else the swipe's if it is
+  // one. Returns whether either took it.
+  bool TakeTouchpadScroll(ui::ScrollEvent* event) {
+    if (event->type() == ui::EventType::kScroll &&
+        ScrollStrip(event->x_offset(), event->y_offset(), /*precise=*/true,
+                    event)) {
+      return true;
+    }
+    if (!controller_->OnSwipeScroll(*event)) {
+      return false;
+    }
+    event->SetHandled();
+    event->StopPropagation();
+    return true;
+  }
+#endif
+
   // Zen's wheel switch; returns whether it took the event.
   bool Handle(float x, float y, ui::Event* event) {
     float delta = 0;
@@ -435,6 +472,9 @@ class SpaceWheelHandler : public ui::EventHandler {
   }
 
   const raw_ptr<KoanWorkspaceController> controller_;
+#if BUILDFLAG(IS_LINUX)
+  TouchpadWheels touchpad_wheels_;
+#endif
 };
 
 }  // namespace

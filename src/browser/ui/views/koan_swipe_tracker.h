@@ -21,7 +21,9 @@ namespace koan {
 // numbers are theirs.
 //
 // The tracker turns the fingers' travel into a gesture amount: x / 550 on
-// macOS (widget.swipe.pixel-size, in points), so 550pt of travel is 1; moving
+// macOS (widget.swipe.pixel-size, in points), so 550pt of travel is 1 (on
+// Linux the travel is in Chromium's touchpad offsets, and the size is Gecko's
+// for GTK in those: LinuxSwipePixelSize(), koan_swipe_input.h); moving
 // the fingers right makes it positive, left negative. (Gecko's SwipeTracker
 // and Zen's translateX use the fingers' own direction, whatever the system's
 // natural scrolling setting: see KoanSpaceSwipe.) The Space is shown
@@ -34,8 +36,14 @@ namespace koan {
 // zen.workspaces.natural-scroll off): the Space coming in follows the fingers
 // the whole way, like paging on iOS.
 
-// The gesture amount of `travel_right` points of finger movement to the right.
-float SwipeGestureAmount(float travel_right);
+// Gecko's widget.swipe.pixel-size on macOS: the travel of one gesture amount,
+// in points.
+inline constexpr float kMacSwipePixelSize = 550.f;
+
+// The gesture amount of `travel_right` points of finger movement to the right,
+// `pixel_size` of them making one.
+float SwipeGestureAmount(float travel_right,
+                         float pixel_size = kMacSwipePixelSize);
 
 // Whether a swipe that succeeded at gesture `amount` goes to the next Space
 // (else the previous one): fingers moving left, or right in a right-to-left
@@ -69,17 +77,17 @@ float SwipeOffsetPixels(float translate, float strip_width);
 // SUCCESS_VELOCITY_CONTRIBUTION).
 bool SwipeSucceeds(float amount, float velocity);
 
-// The state of one swipe gesture, from the scroll events macOS sends. Those
-// carry no scroll phase (ui::ScrollEvent leaves it at kNone, see the TODO in
-// ui/events/event.cc); macOS puts the stream's phases in the momentum phase
-// instead (ui/events/cocoa/events_mac.mm), which is what
-// KoanSpaceSwipe translates into SwipePhase:
+// The state of one swipe gesture, from the touchpad's scroll events, which
+// KoanSpaceSwipe translates into SwipePhase (koan_swipe_input.h). On macOS:
 //
 //   fingers down  MAY_BEGIN        kBegin
 //   fingers move  NONE             kUpdate
 //   fingers up    END              kEnd       (the system's momentum follows)
 //   momentum      INERTIAL_UPDATE  kMomentum
 //   momentum over END              kEnd
+//
+// On Linux (Wayland and X11) there is no momentum: the stream ends at the
+// lift, and the next gesture begins with kBegin.
 //
 // Plain C++, so that it can be tested without a window.
 enum class SwipePhase { kBegin, kUpdate, kMomentum, kEnd };
@@ -98,16 +106,20 @@ class KoanSwipeTracker {
     ~Delegate() = default;
   };
 
-  explicit KoanSwipeTracker(Delegate* delegate);
+  // `pixel_size`: the travel of one gesture amount, in the scroll events'
+  // offsets (SwipeGestureAmount()).
+  explicit KoanSwipeTracker(Delegate* delegate,
+                            float pixel_size = kMacSwipePixelSize);
   KoanSwipeTracker(const KoanSwipeTracker&) = delete;
   KoanSwipeTracker& operator=(const KoanSwipeTracker&) = delete;
   ~KoanSwipeTracker();
 
   // Takes a scroll event over the sidebar: `dx` pixels (positive: fingers
-  // moving right, whatever the system's natural scrolling setting is) and `dy`
-  // pixels (only its size matters) at `seconds` on any steady clock. Returns
-  // whether it belongs to a horizontal swipe, which the caller then handles:
-  // nothing else sees it, like upstream's own swipe, and the tab list
+  // moving right, whatever the system's natural scrolling setting is on macOS;
+  // on Linux as the desktop's setting has them, see ScrollFollowsFingers()) and
+  // `dy` pixels (only its size matters) at `seconds` on any steady clock.
+  // Returns whether it belongs to a horizontal swipe, which the caller then
+  // handles: nothing else sees it, like upstream's own swipe, and the tab list
   // underneath doesn't get the momentum that follows. Over the page there is
   // no such tracker: the page keeps Chromium's swipe back and forward.
   bool OnScroll(float dx, float dy, SwipePhase phase, double seconds);
@@ -143,6 +155,7 @@ class KoanSwipeTracker {
   void Reset();
 
   const raw_ptr<Delegate> delegate_;
+  const float pixel_size_;
   State state_ = State::kIdle;
   float total_x_ = 0;
   float total_y_ = 0;
