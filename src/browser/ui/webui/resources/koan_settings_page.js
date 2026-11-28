@@ -916,7 +916,7 @@ function renderProfile(profile) {
 function renderProfiles(query) {
   if (!profiles ||
       (query && !matches(query, 'profiles', 'containers', 'cookies',
-                         'site data', 'logins', 'delete profile', 'proxy',
+                         'site data', 'logins', 'delete profile',
                          'extensions off',
                          ...profiles.profiles.map(p => p.name)))) {
     return [];

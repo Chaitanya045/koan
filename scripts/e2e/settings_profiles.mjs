@@ -165,12 +165,20 @@ check('Turned on again in Home: All extensions on', !!home,
       JSON.stringify(await row(settings, HOME)));
 
 // --- Both looks, light and dark: the rows fit the page.
+// (Koan's Look > Mode is the shadcn look's, and it sets Chromium's colour
+// scheme, which alone decides the Zen look's mode: so each mode is set in
+// shadcn, then the Zen look is shown in it.)
 const set = (name, value) => settingsCall(settings, 'koanSetPref', name, value);
-for (const style of ['shadcn', 'zen']) {
-  for (const mode of ['light', 'dark']) {
-    await set('koan.look.style', style);
-    await set('koan.look.mode', mode);
-    await sleep(800);
+const textColors = {};
+for (const mode of ['light', 'dark']) {
+  for (const style of ['shadcn', 'zen']) {
+    if (style === 'shadcn') {
+      await set('koan.look.style', 'shadcn');
+      await set('koan.look.mode', mode);
+    } else {
+      await set('koan.look.style', 'zen');
+    }
+    await sleep(1200);
     await evalIn(settings, `koanSettingsRoot.getElementById('group-profiles').scrollIntoView()`);
     step(`The rows in the ${style === 'zen' ? 'Zen' : 'shadcn'} look, ${mode}`);
     await look();
@@ -182,10 +190,14 @@ for (const style of ['shadcn', 'zen']) {
     })()`);
     check(`...and the label is muted next to the value (${style}, ${mode})`,
           colors && colors[0] !== colors[1], JSON.stringify(colors));
+    textColors[`${style} ${mode}`] = colors?.[1];
   }
 }
+for (const style of ['shadcn', 'zen']) {
+  check(`The ${style} look's light and dark rows differ`,
+        textColors[`${style} light`] !== textColors[`${style} dark`], JSON.stringify(textColors));
+}
 await set('koan.look.style', 'shadcn');
-await set('koan.look.mode', 'dark');
 
 // --- A start with the proxy removed (the switch's "none").
 const args = process.env.KOAN_CHROME_ARGS.split('\n').filter(Boolean)
