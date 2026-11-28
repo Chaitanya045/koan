@@ -173,6 +173,13 @@ void KoanTabDropIndicatorView::SetSlot(const gfx::Rect& slot, Style style) {
   }
 }
 
+// A line paints to a layer of its own, which a theme change (the Mode, or
+// the system's light/dark) doesn't repaint (#564).
+void KoanTabDropIndicatorView::OnThemeChanged() {
+  views::View::OnThemeChanged();
+  SchedulePaint();
+}
+
 void KoanTabDropIndicatorView::OnPaint(gfx::Canvas* canvas) {
   const ui::ColorProvider* colors = GetColorProvider();
   cc::PaintFlags flags;

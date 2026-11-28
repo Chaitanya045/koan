@@ -95,11 +95,11 @@ constexpr Group kGroups[] = {
     // about:preferences#home has one).
     {"newtab", "looks", "New Tab Page", "New tabs",
      "Choose what a new tab page shows"},
-    // Koan's own: Koan is built from source, so an update is `git pull &&
-    // scripts/build.sh`. Zen's update notification is zen.updates.*.
+    // Koan's own: the check of Koan's GitHub releases (koan_updates.h).
+    // Zen's update notification is zen.updates.*.
     {"updates", "looks", "Updates", "Koan Updates",
-     "Koan asks GitHub once a day for the newest commit of its develop "
-     "branch: the request carries no cookies and nothing about you"},
+     "Koan checks its GitHub releases for a newer version twice a day at "
+     "most: the request carries no cookies and nothing about you"},
     {"workspaces", "tabs", "Workspaces", "General settings for workspaces",
      "With workspaces, you can have multiple browsing sessions at once!"},
     {"pinned-tabs", "tabs", "Pinned Tabs", "General settings for pinned tabs",
@@ -216,6 +216,13 @@ constexpr Option kPinnedTabCloseBehaviors[] = {
     {"switch", "Switch to next tab"},
     {"reset", "Reset URL"},
     {"close", "Close tab"},
+};
+
+// "Close tabs I haven't used for" (koan::auto_close::kAllowedHours), Arc's
+// auto-archive times.
+constexpr Option kAutoCloseTimes[] = {
+    {"0", "Never"},    {"12", "12 hours"}, {"24", "24 hours"},
+    {"168", "7 days"}, {"720", "30 days"},
 };
 
 // Agent control's limits (koan/browser/agent/koan_agent_limits.h). Only these
@@ -608,6 +615,18 @@ constexpr Row kRows[] = {
               "running)",
      .is_available = IsTabFreezingAvailable,
      .local_state = true},
+    // Koan's own (Arc's auto-archive, #482).
+    {.group = "background-tabs",
+     .control = Control::kMenu,
+     .pref = prefs::kAutoCloseTabsAfterHours,
+     .label = "Close tabs I haven't used for",
+     .options = kAutoCloseTimes,
+     .note = "Never closes Essentials, pinned tabs, tabs in a folder, the tab "
+             "each Space shows, agent tabs, or tabs in use (playing sound, in "
+             "a call, sharing the screen, open in DevTools, with a form you "
+             "started, downloading, in picture-in-picture, or on a page that "
+             "asks before you leave). Closed tabs are in the Library: "
+             "History, Closed tabs."},
     // Agents.
     {.group = "agent-control",
      .control = Control::kCheckbox,

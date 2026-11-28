@@ -430,6 +430,13 @@ class KoanTabRow : public views::Button {
     UpdateSublabel();
   }
 
+  // Once it shows, the button paints to a layer of its own, which a theme
+  // change (the Mode, or the system's light/dark) doesn't repaint (#564).
+  void OnThemeChanged() override {
+    views::Button::OnThemeChanged();
+    SchedulePaint();
+  }
+
   void PaintButtonContents(gfx::Canvas* canvas) override {
     const ui::ColorProvider* colors = GetColorProvider();
     const gfx::RectF bounds(GetLocalBounds());

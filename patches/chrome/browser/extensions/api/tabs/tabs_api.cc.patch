@@ -1,24 +1,78 @@
 diff --git a/chrome/browser/extensions/api/tabs/tabs_api.cc b/chrome/browser/extensions/api/tabs/tabs_api.cc
-index a63c3270bfb16a7eeb613d9e5d1cc41803ed693a..872555047dbef2b1eb0ceaaa88691f2b95779745 100644
+index de78a21..208e8a0 100644
 --- a/chrome/browser/extensions/api/tabs/tabs_api.cc
 +++ b/chrome/browser/extensions/api/tabs/tabs_api.cc
-@@ -67,6 +67,7 @@
+@@ -68,6 +68,8 @@
  #include "extensions/common/manifest_handlers/incognito_info.h"
  #include "extensions/common/mojom/api_permission_id.mojom-shared.h"
  #include "extensions/common/permissions/permissions_data.h"
++#include "koan/browser/containers/koan_container_extensions.h"
 +#include "koan/browser/ui/views/koan_spaces.h"
  #include "services/metrics/public/cpp/ukm_builders.h"
  #include "services/metrics/public/cpp/ukm_recorder.h"
  #include "third_party/abseil-cpp/absl/container/flat_hash_set.h"
-@@ -644,6 +645,11 @@ base::ListValue TabsQueryFunction::BuildTabList(
+@@ -427,6 +429,9 @@ content::WebContents* GetTabsAPIDefaultWebContents(ExtensionFunction* function,
+       *error = ExtensionTabUtil::kNoCurrentWindowError;
+     } else {
+       web_contents = window_controller->GetActiveTab();
++      // Koan: not a tab of a Space profile the extension is off in.
++      web_contents = koan::containers::TabUnlessExtensionOff(
++          web_contents, function->extension_id());
+       if (!web_contents) {
+         *error = tabs_constants::kNoSelectedTabError;
+       }
+@@ -645,6 +650,13 @@ base::ListValue TabsQueryFunction::BuildTabList(
        ::tabs::TabInterface* tab = tab_list->GetTab(i);
        CHECK(tab);
  
-+      // Koan: Zen's hidden empty tab is not listed (Zen's ext-browser.js).
-+      if (koan::IsEmptyTab(tab)) {
++      // Koan: Zen's hidden empty tab is not listed (Zen's ext-browser.js),
++      // nor a tab of a Space profile the extension is off in.
++      if (koan::IsEmptyTab(tab) || koan::containers::IsExtensionOffInContents(
++                                       tab->GetContents(), extension_id())) {
 +        continue;
 +      }
 +
        if (!MatchesTab(tab, url_patterns)) {
          continue;
        }
+@@ -1533,6 +1545,8 @@ bool TabsUpdateFunction::ComputeDefaultTabId(int& tab_id,
+     return false;
+   }
+   contents = window_controller->GetActiveTab();
++  // Koan: not a tab of a Space profile the extension is off in.
++  contents = koan::containers::TabUnlessExtensionOff(contents, extension_id());
+   if (!contents) {
+     error = tabs_constants::kNoSelectedTabError;
+     return false;
+@@ -1955,6 +1969,9 @@ ExtensionFunction::ResponseAction TabsReloadFunction::Run() {
+     if (WindowController* window_controller =
+             ChromeExtensionFunctionDetails(this).GetCurrentWindowController()) {
+       web_contents = window_controller->GetActiveTab();
++      // Koan: not a tab of a Space profile the extension is off in.
++      web_contents = koan::containers::TabUnlessExtensionOff(web_contents,
++                                                             extension_id());
+       if (!web_contents) {
+         return RespondNow(Error(tabs_constants::kNoSelectedTabError));
+       }
+@@ -2480,6 +2497,9 @@ ExtensionFunction::ResponseAction TabsDetectLanguageFunction::Run() {
+       return RespondNow(Error(ExtensionTabUtil::kTabStripNotEditableError));
+     }
+     contents = window_controller->GetActiveTab();
++    // Koan: not a tab of a Space profile the extension is off in.
++    contents =
++        koan::containers::TabUnlessExtensionOff(contents, extension_id());
+     if (!contents) {
+       return RespondNow(Error(tabs_constants::kNoSelectedTabError));
+     }
+@@ -2613,6 +2633,11 @@ content::WebContents* TabsCaptureVisibleTabFunction::GetWebContentsForID(
+   }
+   content::WebContents* contents = tab->GetContents();
+ 
++  // Koan: not of a tab of a Space profile the extension is off in.
++  if (koan::containers::IsExtensionOffInContents(contents, extension_id())) {
++    *error = koan::containers::kExtensionOffError;
++    return nullptr;
++  }
+   if (!extension()->permissions_data()->CanCaptureVisiblePage(
+           contents->GetLastCommittedURL(),
+           sessions::SessionTabHelper::IdForTab(contents).id(), error,

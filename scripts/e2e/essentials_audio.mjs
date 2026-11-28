@@ -13,7 +13,7 @@
 //   scripts/e2e/run.sh essentials_audio
 import { servePages } from '../perf/pages_server.mjs';
 import {
-  browserCall, check, evalIn, finish, mouseOn, onPage, pages, sleep, tabMenuCommand, viewTree,
+  half, browserCall, check, evalIn, finish, mouseOn, onPage, pages, sleep, tabMenuCommand, viewTree,
   visiblePage, waitFor, NATIVE_MENUS,
 } from './lib/koan.mjs';
 import { askTestHelper } from './lib/mac.mjs';
@@ -32,7 +32,7 @@ async function tile() {
 }
 // Where the favicon is drawn: the middle 16x16 of the TabIcon (its border
 // keeps room for the attention dot).
-const favicon = icon => ({ x: icon.ax + (icon.w - 16) / 2, y: icon.ay + (icon.h - 16) / 2 });
+const favicon = icon => ({ x: icon.ax + half(icon.w - 16), y: icon.ay + half(icon.h - 16) });
 const describe = t => JSON.stringify({
   icon: t.icon && [t.icon.shown, t.icon.ax, t.icon.ay, t.icon.w, t.icon.h],
   alert: t.alert && [t.alert.shown, t.alert.w],

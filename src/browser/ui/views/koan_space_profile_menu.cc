@@ -13,8 +13,11 @@
 
 #include <utility>
 
+#include "base/callback_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -33,14 +36,22 @@ namespace koan {
 
 namespace {
 
-DECLARE_ELEMENT_IDENTIFIER_VALUE(kKoanNewProfileNameField);
-DEFINE_ELEMENT_IDENTIFIER_VALUE(kKoanNewProfileNameField);
+DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kKoanNewProfileNameField);
+DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kKoanNewProfileCreateButton);
+// Why Create didn't make the profile: one at a time, under the name.
+DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kKoanNewProfileTooLongMessage);
+DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kKoanNewProfileControlMessage);
+DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kKoanNewProfileFailedMessage);
 
+// Apart from the Space menu's (koan_space_menu.cc), which holds this one as
+// Set Profile: views' menus run a command by its id, looked up in the whole
+// menu (MenuModelAdapter::ExecuteCommand()), so an id of the Space menu's
+// would run the Space menu's command.
 enum ProfileMenuCommand {
-  kDefaultProfile = 1,
+  kDefaultProfile = 10000,
   kNewProfile,
   // The user's containers.
-  kFirstProfile = 100,
+  kFirstProfile = 10100,
 };
 
 // The colour dot before a profile's name (as Chromium's tab group menus).
@@ -54,6 +65,70 @@ constexpr char16_t kUnknownProfileName[] = u"Profile";
 // Incognito windows, but a pref read never goes to an off-the-record one).
 PrefService* PrefsOf(Profile* profile) {
   return profile->GetOriginalProfile()->GetPrefs();
+}
+
+// Shows the New Profile dialog's message `shown` and hides the others (none
+// for a null id).
+void ShowNewProfileMessage(ui::DialogModel* model,
+                           ui::ElementIdentifier shown) {
+  for (ui::ElementIdentifier id :
+       {kKoanNewProfileTooLongMessage, kKoanNewProfileControlMessage,
+        kKoanNewProfileFailedMessage}) {
+    // (Only a change: each one lays the dialog out again.)
+    if (model->GetFieldByUniqueId(id)->is_visible() != (id == shown)) {
+      model->SetVisible(id, id == shown);
+    }
+  }
+}
+
+// The name typed: Create is on once it isn't empty or only spaces, and a
+// message about an earlier name goes.
+void OnNewProfileNameChanged(ui::DialogModel* model) {
+  const std::u16string& name =
+      model->GetTextfieldByUniqueId(kKoanNewProfileNameField)->text();
+  model->SetButtonEnabled(
+      model->GetButtonByUniqueId(kKoanNewProfileCreateButton),
+      containers::CheckUserContainerName(name) !=
+          containers::UserContainerNameError::kEmpty);
+  ShowNewProfileMessage(model, ui::ElementIdentifier());
+}
+
+// Create: makes the profile and runs `done` with it, and closes the dialog
+// (true). A name the profile can't take, or a failure, leaves the dialog open
+// with a message (false), never closed with no profile (#576).
+bool CreateNewProfile(base::WeakPtr<Profile> profile,
+                      base::OnceCallback<void(const std::string&)>& done,
+                      ui::DialogModel* model) {
+  if (!profile) {
+    // The window is going, and the dialog with it.
+    return true;
+  }
+  const std::u16string name =
+      model->GetTextfieldByUniqueId(kKoanNewProfileNameField)->text();
+  switch (containers::CheckUserContainerName(name)) {
+    case containers::UserContainerNameError::kEmpty:
+      // (Enter, or a click as Create turned off: Create has nothing to make.)
+      return false;
+    case containers::UserContainerNameError::kTooLong:
+      ShowNewProfileMessage(model, kKoanNewProfileTooLongMessage);
+      return false;
+    case containers::UserContainerNameError::kControlCharacter:
+      ShowNewProfileMessage(model, kKoanNewProfileControlMessage);
+      return false;
+    case containers::UserContainerNameError::kNone:
+      break;
+  }
+  std::optional<containers::UserContainer> container;
+  {
+    ScopedListPrefUpdate update(PrefsOf(profile.get()), prefs::kUserContainers);
+    container = containers::AddUserContainer(update.Get(), name);
+  }
+  if (!container || !done) {
+    ShowNewProfileMessage(model, kKoanNewProfileFailedMessage);
+    return false;
+  }
+  std::move(done).Run(containers::Serialize(container->id));
+  return true;
 }
 
 }  // namespace
@@ -154,6 +229,12 @@ void ShowNewProfilePrompt(BrowserWindowInterface* browser,
                           base::OnceCallback<void(const std::string&)> done) {
   auto builder = std::make_unique<ui::DialogModel::Builder>();
   ui::DialogModel* model = builder->model();
+  // Create is off until there is a name (as Chromium's own dialogs with a
+  // field that must be filled, e.g. the sync passphrase dialog's OK).
+  ui::DialogModel::Button::Params create_params;
+  create_params.SetId(kKoanNewProfileCreateButton)
+      .SetLabel(u"Create")
+      .SetEnabled(false);
   builder->SetTitle(u"New Profile")
       .AddParagraph(ui::DialogModelLabel(
           u"Profiles are used to separate cookies and site data between "
@@ -161,32 +242,36 @@ void ShowNewProfilePrompt(BrowserWindowInterface* browser,
       .AddTextfield(
           kKoanNewProfileNameField, std::u16string(), std::u16string(),
           ui::DialogModelTextfield::Params().SetAccessibleName(u"Name"))
+      .AddParagraph(
+          ui::DialogModelLabel(base::StrCat(
+              {u"This name is too long. Use at most ",
+               base::NumberToString16(containers::kMaxUserContainerNameLength),
+               u" characters."})),
+          std::u16string(), kKoanNewProfileTooLongMessage)
+      .AddParagraph(ui::DialogModelLabel(u"A name can't have a tab, a line "
+                                         u"break or another control "
+                                         u"character."),
+                    std::u16string(), kKoanNewProfileControlMessage)
+      .AddParagraph(
+          ui::DialogModelLabel(u"Koan couldn't make the profile. Try again."),
+          std::u16string(), kKoanNewProfileFailedMessage)
       .SetInitiallyFocusedField(kKoanNewProfileNameField)
       .AddOkButton(
-          base::BindOnce(
-              [](base::WeakPtr<Profile> profile,
-                 base::OnceCallback<void(const std::string&)> done,
-                 ui::DialogModel* model) {
-                if (!profile) {
-                  return;
-                }
-                std::optional<containers::UserContainer> container;
-                {
-                  ScopedListPrefUpdate update(PrefsOf(profile.get()),
-                                              prefs::kUserContainers);
-                  container = containers::AddUserContainer(
-                      update.Get(),
-                      model->GetTextfieldByUniqueId(kKoanNewProfileNameField)
-                          ->text());
-                }
-                if (container) {
-                  std::move(done).Run(containers::Serialize(container->id));
-                }
-              },
+          base::BindRepeating(
+              &CreateNewProfile,
               browser->GetProfile()->GetOriginalProfile()->GetWeakPtr(),
-              std::move(done), base::Unretained(model)),
-          ui::DialogModel::Button::Params().SetLabel(u"Create"))
+              base::OwnedRef(std::move(done)), base::Unretained(model)),
+          create_params)
       .AddCancelButton(base::DoNothing());
+  ShowNewProfileMessage(model, ui::ElementIdentifier());
+  // The dialog's model outlives its fields' callbacks: the subscription goes
+  // when the dialog does.
+  base::CallbackListSubscription subscription =
+      model->GetTextfieldByUniqueId(kKoanNewProfileNameField)
+          ->AddOnFieldChangedCallback(base::BindRepeating(
+              &OnNewProfileNameChanged, base::Unretained(model)));
+  builder->SetDialogDestroyingCallback(
+      base::DoNothingWithBoundArgs(std::move(subscription)));
   chrome::ShowBrowserModal(browser, builder->Build());
 }
 

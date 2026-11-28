@@ -69,6 +69,9 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(kOpenPinnedInNewTab, true);
   registry->RegisterBooleanPref(kCtrlTabWithinKind, false);
   registry->RegisterBooleanPref(kCtrlTabSkipPending, false);
+  registry->RegisterIntegerPref(kAutoCloseTabsAfterHours, 0);
+  registry->RegisterTimePref(kAutoCloseNoticeTime, base::Time());
+  registry->RegisterListPref(kAutoClosedTabs);
   registry->RegisterBooleanPref(kCommandPaletteSuggestions, true);
   registry->RegisterDictionaryPref(kCommandPaletteUsage);
   registry->RegisterStringPref(kPinnedTabCloseShortcutBehavior,
@@ -182,11 +185,13 @@ void RegisterLocalStatePrefDefaults(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(kHapticFeedback, true);
   registry->RegisterBooleanPref(kUpdatesCheckEnabled, true);
   registry->RegisterTimePref(kUpdatesLastCheck, base::Time());
-  registry->RegisterStringPref(kUpdatesLatestCommit, "");
-  registry->RegisterTimePref(kUpdatesLatestCommitTime, base::Time());
-  registry->RegisterStringPref(kUpdatesNotifiedCommit, "");
+  registry->RegisterStringPref(kUpdatesLatestManifest, "");
+  registry->RegisterStringPref(kUpdatesNotifiedVersion, "");
   registry->RegisterBooleanPref(kUpdatesShowUpdateNotification, true);
   registry->RegisterStringPref(kUpdatesLastBuild, "");
+  registry->RegisterStringPref(kUpdatesLatestCommitObsolete, "");
+  registry->RegisterTimePref(kUpdatesLatestCommitTimeObsolete, base::Time());
+  registry->RegisterStringPref(kUpdatesNotifiedCommitObsolete, "");
   registry->RegisterBooleanPref(kAgentControlEnabled, AgentReadyByDefault());
   registry->RegisterIntegerPref(kAgentControlMaxLeasedTabs,
                                 agent::kLeasedTabsLimit.default_value);

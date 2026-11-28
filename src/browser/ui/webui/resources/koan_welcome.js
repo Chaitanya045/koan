@@ -7,7 +7,7 @@
 // every step can be skipped, and nothing changes until its Next. The page
 // builds its DOM without innerHTML (WebUI pages enforce Trusted Types).
 
-import {sendWithPromise} from 'chrome://resources/js/cr.js';
+import {addWebUiListener, sendWithPromise} from 'chrome://resources/js/cr.js';
 
 // ---- DOM helpers.
 
@@ -391,6 +391,19 @@ class Welcome {
     this.#render();
   }
 
+  // Data that came after the page did (the browsers found, the engines
+  // loaded): the step dots, and the step if it is the one showing.
+  refresh(stepId) {
+    if (this.#step.id === stepId) {
+      this.#render();
+      return;
+    }
+    for (const [i, item] of
+         [...document.querySelectorAll('#welcome-steps li')].entries()) {
+      item.hidden = !!this.#steps[i].skip?.();
+    }
+  }
+
   #render() {
     const step = this.#step;
     const last = this.#index === this.#steps.length - 1;
@@ -563,6 +576,18 @@ async function start() {
   }
   gChoices.engine = data.defaultEngine;
   gWelcome = new Welcome(getSteps(data));
+  // The page is answered within a few seconds with what is ready; the rest
+  // comes when it is (koan_welcome_handler.h).
+  addWebUiListener('import-sources-changed', sources => {
+    data.importSources = sources;
+    gWelcome.refresh('import');
+  });
+  addWebUiListener('engines-changed', engines => {
+    // (The search step was skipped until now: nothing was picked on it.)
+    Object.assign(data, engines);
+    gChoices.engine = data.defaultEngine;
+    gWelcome.refresh('search');
+  });
 }
 
 start();

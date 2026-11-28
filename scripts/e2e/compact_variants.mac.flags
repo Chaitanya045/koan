@@ -1,0 +1,3 @@
+# macOS (scripts/mac/suite.sh reads <name>.mac.flags): no flags. The frame
+# dumps and the window position in compact_variants.flags are for Linux's
+# headless Ozone; the Mac has a real pointer, and its menus are native.

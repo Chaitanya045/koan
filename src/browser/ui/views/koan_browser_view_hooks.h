@@ -41,6 +41,14 @@ bool ShowsDownloadAnimation(BrowserView* browser_view);
 // AppKit would drag the window instead of the page getting the click.
 bool IsWindowCoveredAt(BrowserView* browser_view, const gfx::Point& point);
 
+// Called in BrowserView::NonClientHitTest() with GetClientAreaTop(), the
+// toolbar's top in the BrowserView: the top of what the hit test takes as
+// client area. Never above the BrowserView: where Koan slides the toolbar out
+// of the window (single toolbar, compact mode), the toolbar's top is negative,
+// and the client area would cover the frame's resize border above the
+// BrowserView, so the window's top edge wouldn't resize (#574).
+int ClientAreaTopForHitTest(int client_area_top);
+
 }  // namespace koan
 
 #endif  // KOAN_BROWSER_UI_VIEWS_KOAN_BROWSER_VIEW_HOOKS_H_

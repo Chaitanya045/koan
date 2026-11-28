@@ -159,6 +159,7 @@ class KoanLibraryRow : public views::Button,
   // views::Button:
   void StateChanged(ButtonState old_state) override;
   void OnPaintBackground(gfx::Canvas* canvas) override;
+  void OnThemeChanged() override;
   void OnFocus() override;
   void OnBlur() override;
 
@@ -348,6 +349,7 @@ class KoanLibraryView : public views::View {
   // views::View:
   void Layout(PassKey) override;
   void OnPaintBackground(gfx::Canvas* canvas) override;
+  void OnThemeChanged() override;
 
  private:
   const raw_ptr<KoanLibraryController> library_;

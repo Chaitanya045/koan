@@ -1,0 +1,25 @@
+diff --git a/extensions/browser/permissions/active_tab_permission_granter.cc b/extensions/browser/permissions/active_tab_permission_granter.cc
+index 37bd0fc..f28fabd 100644
+--- a/extensions/browser/permissions/active_tab_permission_granter.cc
++++ b/extensions/browser/permissions/active_tab_permission_granter.cc
+@@ -35,6 +35,7 @@
+ #include "extensions/common/permissions/permissions_data.h"
+ #include "extensions/common/url_pattern_set.h"
+ #include "extensions/common/user_script.h"
++#include "koan/browser/containers/koan_container_extensions.h"
+ #include "url/gurl.h"
+ #include "url/origin.h"
+ 
+@@ -136,6 +137,12 @@ void ActiveTabPermissionGranter::GrantIfRequested(const Extension* extension) {
+   if (IsGranted(extension)) {
+     return;
+   }
++  // Koan: no activeTab grant in a tab of a Space profile the extension is off
++  // in, whatever asks for it (its action, a command, a context menu item).
++  if (koan::containers::IsExtensionOffInContents(web_contents(),
++                                                 extension->id())) {
++    return;
++  }
+ 
+   APIPermissionSet new_apis;
+   URLPatternSet new_hosts;

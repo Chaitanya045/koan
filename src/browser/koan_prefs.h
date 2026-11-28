@@ -54,29 +54,37 @@ inline constexpr char kLookAcrylicUrlBar[] = "koan.look.acrylic_urlbar";
 // Zen's is the application's.
 inline constexpr char kHapticFeedback[] = "koan.haptic_feedback";
 
-// Updates (koan_updates.h). Koan has no binary releases: a clone is updated
-// with `git pull && scripts/build.sh`. All local-state prefs, as Zen's
-// zen.updates.* are the application's.
+// Updates (koan_updates.h): Koan's tagged GitHub releases. All local-state
+// prefs, as Zen's zen.updates.* are the application's.
 //
-// Check GitHub at most once a day for a newer commit of the clone's develop
-// branch than the build's. On by default; never from an Incognito window.
+// Check the latest release's signed manifest at most every 12 hours. On by
+// default; never from an Incognito window.
 inline constexpr char kUpdatesCheckEnabled[] = "koan.updates.check_enabled";
 // When the last check ran (whatever its outcome).
 inline constexpr char kUpdatesLastCheck[] = "koan.updates.last_check";
-// The newest commit on GitHub at the last check and its commit time, and the
-// one the "update available" notification was last shown for (it shows once
-// per commit).
-inline constexpr char kUpdatesLatestCommit[] = "koan.updates.latest_commit";
-inline constexpr char kUpdatesLatestCommitTime[] =
-    "koan.updates.latest_commit_time";
-inline constexpr char kUpdatesNotifiedCommit[] = "koan.updates.notified_commit";
+// The last manifest that verified, as fetched: verified again before each
+// use, so the notice can wait for a window (or for the check to be turned
+// back on) across restarts.
+inline constexpr char kUpdatesLatestManifest[] = "koan.updates.latest_manifest";
+// The version "Update Available!" was last shown for (it shows once per
+// version).
+inline constexpr char kUpdatesNotifiedVersion[] =
+    "koan.updates.notified_version";
 // Zen's zen.updates.show-update-notification (default on): the sidebar's
 // "Update Complete!" after a launch of a build other than the last launch's.
 inline constexpr char kUpdatesShowUpdateNotification[] =
     "koan.updates.show_update_notification";
 // The build of the last launch (Zen's zen.updates.last-version and
-// last-build-id): its version and commit, updates::BuildStamp().
+// last-build-id): Koan's and Chromium's versions, updates::BuildStamp().
 inline constexpr char kUpdatesLastBuild[] = "koan.updates.last_build";
+// Obsolete: the check of develop's newest commit (before #549). Cleared at
+// startup. Remove after 2027-03.
+inline constexpr char kUpdatesLatestCommitObsolete[] =
+    "koan.updates.latest_commit";
+inline constexpr char kUpdatesLatestCommitTimeObsolete[] =
+    "koan.updates.latest_commit_time";
+inline constexpr char kUpdatesNotifiedCommitObsolete[] =
+    "koan.updates.notified_commit";
 
 // Whether compact mode (auto-hiding sidebar and toolbar) is on. Applies to
 // every window of the profile.
@@ -294,6 +302,19 @@ inline constexpr char kCtrlTabWithinKind[] = "koan.tabs.ctrl_tab_within_kind";
 // Ctrl+Tab skips tabs that haven't loaded yet (discarded or not yet
 // restored; zen.tabs.ctrl-tab.ignore-pending-tabs).
 inline constexpr char kCtrlTabSkipPending[] = "koan.tabs.ctrl_tab_skip_pending";
+// Koan's own (Arc's auto-archive, #482; Zen has none): close normal tabs
+// not used for this many hours (0, the default: never; 12, 24, 168 or 720).
+// koan_tab_auto_close.h has the rules.
+inline constexpr char kAutoCloseTabsAfterHours[] =
+    "koan.tabs.auto_close_after_hours";
+// When the one-time notice before the first automatic close was shown (a
+// time; unset: not yet). Tabs close only once it has been up a while
+// (koan::auto_close::NoticeLongEnoughAgo()).
+inline constexpr char kAutoCloseNoticeTime[] =
+    "koan.tabs.auto_close_notice_time";
+// The tabs closed automatically, newest first, for the Library's closed tabs
+// (koan::auto_close::ClosedTab).
+inline constexpr char kAutoClosedTabs[] = "koan.tabs.auto_closed";
 
 // Command palette: whether typing in the URL bar suggests matching actions
 // (Zen's zen.urlbar.suggestions.quick-actions). The ">" list works either

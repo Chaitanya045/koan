@@ -7,7 +7,9 @@
 # scripts/perf/profile_ui.mjs). Without URLs it opens
 # scripts/e2e/pages/<test>.html if that exists, else two example.com tabs.
 # scripts/e2e/prefs/<test>.json, if it exists, seeds the fresh profile's
-# Preferences ({profile} in it is the profile's directory). KOAN_FLAGS adds
+# Preferences ({profile} in it is the profile's directory), and
+# scripts/e2e/local_state/<test>.json, if it exists, is the profile's Local
+# State (as scripts/mac/suite.sh does). KOAN_FLAGS adds
 # browser flags (e.g. --disable-features=...); features in an
 # --enable-features there are added to the ones run.sh needs.
 #
@@ -15,8 +17,9 @@
 # argument per line), to restart Koan with the same profile.
 # scripts/e2e/<test>.flags, if it exists, adds browser flags too, one per
 # line; {dump} in them is a directory for frame dumps
-# (--ozone-dump-file={dump}), passed to the test as KOAN_DUMP_DIR, and
-# {profile} the profile's directory, passed as KOAN_PROFILE.
+# (--ozone-dump-file={dump}), passed to the test as KOAN_DUMP_DIR,
+# {profile} the profile's directory, passed as KOAN_PROFILE, and {root} the
+# checkout (as scripts/mac/suite.sh expands them).
 #
 # Starts Koan (out/Koan, or KOAN_OUT=out/Release) on the headless Ozone
 # platform with a fresh profile, UI DevTools and the DevTools protocol, runs
@@ -87,6 +90,10 @@ seed_prefs() {
 prefs="$KOAN_ROOT/scripts/e2e/prefs/$test_name.json"
 if [[ -f $prefs ]]; then seed_prefs "$(<"$prefs")"; fi
 if [[ -n ${PREFS:-} ]]; then seed_prefs "$PREFS"; fi
+# Local State prefs (e.g. the look, koan.look.style: theme.json's Zen look,
+# without which the Space menu's Theme… is greyed out, #585).
+local_state="$KOAN_ROOT/scripts/e2e/local_state/$test_name.json"
+if [[ -f $local_state ]]; then cp "$local_state" "$prof/Local State"; fi
 
 script="$KOAN_ROOT/scripts/e2e/$test_name.mjs"
 [[ $test_name == *.mjs ]] && script=$test_name
@@ -100,6 +107,7 @@ if [[ -f $KOAN_ROOT/scripts/e2e/$test_name.flags ]]; then
   while IFS= read -r flag; do
     [[ -z $flag || $flag == \#* ]] && continue
     flag="${flag//\{dump\}/"$KOAN_DUMP_DIR"}"
+    flag="${flag//\{root\}/"$KOAN_ROOT"}"
     file_flags+=("${flag//\{profile\}/"$prof"}")
   done <"$KOAN_ROOT/scripts/e2e/$test_name.flags"
 fi

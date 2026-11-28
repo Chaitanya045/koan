@@ -228,7 +228,8 @@ class KoanWorkspaceController : public TabStripModelObserver,
   tabs::TabInterface* GetLastActiveTab(const tab_groups::TabGroupId& space);
 
   // Creates a Space (with a new tab, right after the active Space) and
-  // shows it. `container` is its profile (SpaceData::container).
+  // shows it. `container` is its profile (SpaceData::container), which its
+  // empty tab is in when this returns.
   void CreateSpace(const std::u16string& name,
                    const std::u16string& icon,
                    const SpaceTheme& theme,
@@ -254,7 +255,7 @@ class KoanWorkspaceController : public TabStripModelObserver,
   SpaceTheme GetSpaceTheme(const tab_groups::TabGroupId& space) const;
   // Zen's Set Profile (#318): the container the Space's new tabs open in
   // (SpaceData::container; empty for none). The tabs it has keep theirs, as
-  // in Zen; its empty tab follows (MatchEmptyTabsToSpaceContainers()).
+  // in Zen; its empty tab follows at once (MatchEmptyTabsToSpaceContainers()).
   std::string GetSpaceContainer(const tab_groups::TabGroupId& space) const;
   void SetSpaceContainer(const tab_groups::TabGroupId& space,
                          const std::string& container);

@@ -9,7 +9,7 @@
 import { copyFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  ALT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, createSpace, evalIn, finish,
+  half, whole, ALT, CTRL, SHIFT, UI_PORT, browserCall, check, connect, createSpace, evalIn, finish,
   key as keyTo, pages as tabs, setKoanPref, sleep, viewTree, visiblePage, waitFor, IS_MAC,
   META,
 } from './lib/koan.mjs';
@@ -70,8 +70,8 @@ const find = (nodes, cls, pred = () => true) =>
   nodes.filter(n => n.cls === cls && pred(n));
 
 async function click(ui, node, { x, y } = {}) {
-  const px = x ?? Math.floor((+node.p.Width || 10) / 2);
-  const py = y ?? Math.floor((+node.p.Height || 10) / 2);
+  const px = whole(x ?? half(+node.p.Width || 10));
+  const py = whole(y ?? half(+node.p.Height || 10));
   for (const type of ['mousePressed', 'mouseReleased']) {
     await ui.send('DOM.dispatchMouseEvent', {
       nodeId: node.nodeId,
@@ -83,7 +83,7 @@ async function click(ui, node, { x, y } = {}) {
 async function mouse(ui, node, type, x, y, button = 'left') {
   await ui.send('DOM.dispatchMouseEvent', {
     nodeId: node.nodeId,
-    event: { type, x, y, button, wheelDirection: 'none' },
+    event: { type, x: whole(x), y: whole(y), button, wheelDirection: 'none' },
   });
 }
 
@@ -276,7 +276,7 @@ const downloads = join(profile, 'Downloads');
     returnByValue: true,
   });
   const box = JSON.parse(r.result.result.value);
-  const at = { x: box.x + 10, y: box.y + 10, button: 'left', clickCount: 1 };
+  const at = { x: whole(box.x + 10), y: whole(box.y + 10), button: 'left', clickCount: 1 };
   await c.send('Input.dispatchMouseEvent', { ...at, type: 'mousePressed' });
   await c.send('Input.dispatchMouseEvent', { ...at, type: 'mouseReleased' });
   c.close();
@@ -506,7 +506,8 @@ async function clickInWidget(name, x, y) {
     for (const type of ['mousePressed', 'mouseReleased']) {
       await ui.send('DOM.dispatchMouseEvent', {
         nodeId: widget.root.nodeId,
-        event: { type, x: x - widget.x, y: y - widget.y, button: 'left', wheelDirection: 'none' },
+        event: { type, x: whole(x - widget.x), y: whole(y - widget.y), button: 'left',
+                 wheelDirection: 'none' },
       });
     }
     return true;
@@ -521,7 +522,7 @@ async function libraryCorner() {
   const vs = await viewTree();
   const button = vs.find(v => v.cls === 'KoanLibraryButton' && v.shown && v.wname === 'BrowserWidget');
   if (!button) return null;
-  const x = button.ax + Math.floor(button.w / 2), y = button.ay + Math.floor(button.h / 2);
+  const x = whole(button.ax + half(button.w)), y = whole(button.ay + half(button.h));
   const ui = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
   await ui.send('DOM.enable');
   await ui.send('CSS.enable');

@@ -15,11 +15,14 @@
 #include <string>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/strings/strcat.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "koan/browser/koan_features.h"
+#include "koan/browser/ui/views/koan_space_extensions.h"
 #include "koan/browser/ui/views/koan_space_profile_menu.h"
 #include "koan/browser/ui/views/koan_space_routing.h"
 #include "ui/base/models/image_model.h"
@@ -45,6 +48,7 @@ enum SpaceMenuCommand {
   kDelete,
   kSpaceRouting,
   kSetProfile,
+  kExtensions,
   // The Spaces to switch to (opened from the header).
   kFirstSwitch = 100,
 };
@@ -92,6 +96,10 @@ KoanSpaceMenu::KoanSpaceMenu(KoanWorkspaceController* controller,
       base::BindRepeating(&KoanWorkspaceController::SetSpaceContainer,
                           controller_->GetWeakPtr(), space_));
   model_.AddSubMenu(kSetProfile, u"Set Profile", profile_menu_->model());
+  // The extensions that are off in its profile (#473).
+  if (base::FeatureList::IsEnabled(features::kKoanSpaceExtensions)) {
+    model_.AddItem(kExtensions, u"Extensions\u2026");
+  }
   model_.AddSeparator(ui::NORMAL_SEPARATOR);
   if (from_header_) {
     int command = kFirstSwitch;
@@ -176,6 +184,9 @@ void KoanSpaceMenu::Execute(int command_id) {
       return;
     case kSpaceRouting:
       controller_->space_routing()->ShowSettings();
+      return;
+    case kExtensions:
+      ShowSpaceExtensions(controller_, space_);
       return;
   }
 }

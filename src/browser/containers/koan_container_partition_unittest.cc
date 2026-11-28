@@ -4,13 +4,19 @@
 
 #include "koan/browser/containers/koan_container_partition.h"
 
+#include <memory>
 #include <set>
 #include <string>
+#include <utility>
 
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/storage_partition_config.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_browser_context.h"
+#include "content/public/test/test_renderer_host.h"
+#include "content/public/test/web_contents_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -114,6 +120,37 @@ TEST_F(ContainerPartitionTest, ContainerSiteInstances) {
   EXPECT_FALSE(IsContainerSiteInstance(nullptr));
   EXPECT_FALSE(IsContainerFrame(nullptr));
   EXPECT_FALSE(IsContainerContents(nullptr));
+}
+
+class ContainerContentsTest : public ContainerPartitionTest {
+ protected:
+  std::unique_ptr<content::WebContents> TabIn(
+      scoped_refptr<content::SiteInstance> site_instance) {
+    return content::WebContentsTester::CreateTestWebContents(
+        &context_, std::move(site_instance));
+  }
+
+  content::RenderViewHostTestEnabler render_view_host_enabler_;
+};
+
+// What the hooks that keep a container's tabs out of the default partition's
+// preloading ask: search prefetch, the omnibox's, the bookmark bar's and the
+// new tab page's preconnects, the navigation predictor's, a link's
+// pointer-down preconnect. A tab and its main frame in either kind of
+// container are in one; a default tab and its frame aren't.
+TEST_F(ContainerContentsTest, TabsAndFramesInContainers) {
+  const GURL url("https://example.com/");
+  for (ContainerKind kind : {ContainerKind::kAgent, ContainerKind::kUser}) {
+    const ContainerId container{.kind = kind, .id = NewContainerId(false)};
+    std::unique_ptr<content::WebContents> tab =
+        TabIn(CreateSiteInstance(&context_, container, url));
+    EXPECT_TRUE(IsContainerContents(tab.get()));
+    EXPECT_TRUE(IsContainerFrame(tab->GetPrimaryMainFrame()));
+  }
+  std::unique_ptr<content::WebContents> tab =
+      TabIn(content::SiteInstance::CreateForURL(&context_, url));
+  EXPECT_FALSE(IsContainerContents(tab.get()));
+  EXPECT_FALSE(IsContainerFrame(tab->GetPrimaryMainFrame()));
 }
 
 TEST_F(ContainerPartitionTest, SessionFormRoundTrip) {

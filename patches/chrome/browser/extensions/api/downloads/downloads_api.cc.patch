@@ -1,0 +1,83 @@
+diff --git a/chrome/browser/extensions/api/downloads/downloads_api.cc b/chrome/browser/extensions/api/downloads/downloads_api.cc
+index 98c6033..a4afd74 100644
+--- a/chrome/browser/extensions/api/downloads/downloads_api.cc
++++ b/chrome/browser/extensions/api/downloads/downloads_api.cc
+@@ -79,6 +79,8 @@
+ #include "extensions/common/permissions/permissions_data.h"
+ #include "net/base/filename_util.h"
+ #include "net/base/load_flags.h"
++#include "koan/browser/containers/koan_container_extensions.h"
++#include "koan/browser/containers/koan_extension_events.h"
+ #include "net/http/http_util.h"
+ #include "net/traffic_annotation/network_traffic_annotation.h"
+ #include "third_party/skia/include/core/SkBitmap.h"
+@@ -511,6 +513,11 @@ void InitSortTypeMap(SortTypeMap* sorter_types_ptr) {
+ }
+ 
+ bool ShouldExport(const DownloadItem& download_item) {
++  // Koan: not to an extension that is off in the download's Space profile
++  // (every search, erase and id lookup of the downloads functions asks this).
++  if (koan::containers::IsCallingExtensionOffInDownload(download_item)) {
++    return false;
++  }
+   return !download_item.IsTemporary() &&
+          download_item.GetDownloadSource() !=
+              download::DownloadSource::INTERNAL_API;
+@@ -1141,6 +1148,9 @@ ExtensionFunction::ResponseAction DownloadsFunction::Run() {
+ }
+ 
+ void DownloadsFunction::ExecuteFromQueue() {
++  // Koan: as RunWithValidation() sets it around Run().
++  koan::containers::ScopedExtensionCall koan_call(
++      extension() ? extension()->id() : std::string());
+   ResponseAction action = RunInternal();
+   action.Execute();
+ }
+@@ -1992,6 +2002,9 @@ void ExtensionDownloadsEventRouter::OnDeterminingFilename(
+   bool any_determiners = false;
+   base::DictValue json = DownloadItemToJSON(item, profile_);
+   json.Set(kFilenameKey, suggested_path.LossyDisplayName());
++  // Koan: not to an extension that is off in the download's Space profile.
++  koan::containers::ScopedEventSkip koan_skip(
++      koan::containers::ExtensionsOffInDownload(item));
+   DispatchEvent(events::DOWNLOADS_ON_DETERMINING_FILENAME,
+                 downloads::OnDeterminingFilename::kEventName, false,
+                 base::BindRepeating(&OnDeterminingFilenameWillDispatchCallback,
+@@ -2151,6 +2164,9 @@ void ExtensionDownloadsEventRouter::OnDownloadCreated(
+   // download_item->GetFileExternallyRemoved() should always return false for
+   // unfinished download.
+   base::DictValue json_item = DownloadItemToJSON(download_item, profile_);
++  // Koan: not to an extension that is off in the download's Space profile.
++  koan::containers::ScopedEventSkip koan_skip(
++      koan::containers::ExtensionsOffInDownload(download_item));
+   DispatchEvent(events::DOWNLOADS_ON_CREATED, downloads::OnCreated::kEventName,
+                 true, Event::WillDispatchCallback(),
+                 base::Value(json_item.Clone()));
+@@ -2244,6 +2260,9 @@ void ExtensionDownloadsEventRouter::OnDownloadUpdated(
+   // changed. Replace the stored json with the new json.
+   data->OnItemUpdated();
+   if (changed) {
++    // Koan: not to an extension that is off in the download's Space profile.
++    koan::containers::ScopedEventSkip koan_skip(
++        koan::containers::ExtensionsOffInDownload(download_item));
+     DispatchEvent(events::DOWNLOADS_ON_CHANGED,
+                   downloads::OnChanged::kEventName, true,
+                   Event::WillDispatchCallback(), base::Value(std::move(delta)));
+@@ -2258,6 +2277,9 @@ void ExtensionDownloadsEventRouter::OnDownloadRemoved(
+   if (!ShouldExport(*download_item)) {
+     return;
+   }
++  // Koan: not to an extension that is off in the download's Space profile.
++  koan::containers::ScopedEventSkip koan_skip(
++      koan::containers::ExtensionsOffInDownload(download_item));
+   DispatchEvent(events::DOWNLOADS_ON_ERASED, downloads::OnErased::kEventName,
+                 true, Event::WillDispatchCallback(),
+                 base::Value(static_cast<int>(download_item->GetId())));
+@@ -2291,6 +2313,7 @@ void ExtensionDownloadsEventRouter::DispatchEvent(
+       std::make_unique<Event>(histogram_value, event_name, std::move(args),
+                               restrict_to_browser_context);
+   event->will_dispatch_callback = std::move(will_dispatch_callback);
++  koan::containers::SkipExtensionsInScope(*event);  // Koan
+   EventRouter::Get(profile_)->BroadcastEvent(std::move(event));
+ }
+ 

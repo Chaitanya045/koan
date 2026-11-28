@@ -4,6 +4,8 @@
 
 #include "koan/browser/ui/views/koan_browser_view_hooks.h"
 
+#include <algorithm>
+
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_compact_mode_controller.h"
 #include "koan/browser/ui/views/koan_download_animation.h"
@@ -40,6 +42,10 @@ bool IsWindowCoveredAt(BrowserView* browser_view, const gfx::Point& point) {
   const KoanBrowserViewController* controller =
       browser_view ? KoanBrowserViewController::From(browser_view) : nullptr;
   return controller && controller->welcome()->CoversPoint(point);
+}
+
+int ClientAreaTopForHitTest(int client_area_top) {
+  return std::max(0, client_area_top);
 }
 
 }  // namespace koan

@@ -38,6 +38,10 @@ source_set("sources") {
     "//chrome/common:ini_parser",
     "//koan/browser:features",
   ]
+  if (is_linux) {
+    # The browsers' icons (koan_import_icons_linux.cc).
+    sources += [ "koan_import_icons_linux.cc" ]
+  }
 }
 
 # Reading a Chromium-format profile (pure, unit-tested).
@@ -59,11 +63,11 @@ source_set("reader") {
   ]
 }
 
-# The hooks' side: Koan's sources in Chromium's ImporterList
-# (importer_list.cc), the Chromium-format import and the Spaces
-# (external_process_importer_host.cc), and the keychain and app icons on
-# macOS. Linked through //chrome/browser/importer:impl; the Spaces are made
-# by //koan/browser/ui/views:impl (koan_space_import.h).
+# The hooks' side: Koan's sources in Chromium's ImporterList (importer_list.cc),
+# the Chromium-format import and the Spaces (external_process_importer_host.cc),
+# and the keychain and app icons on macOS, the keyring on Linux. Linked through
+# //chrome/browser/importer:impl; the Spaces are made by
+# //koan/browser/ui/views:impl (koan_space_import.h).
 source_set("importer") {
   sources = [
     "koan_chromium_profile_importer.cc",
@@ -89,6 +93,7 @@ source_set("importer") {
     deps += [ "//crypto" ]
     frameworks = [ "AppKit.framework" ]
   } else {
-    sources += [ "koan_import_platform_other.cc" ]
+    sources += [ "koan_import_platform_linux.cc" ]
+    deps += [ "//dbus" ]
   }
 }
