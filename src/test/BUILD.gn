@@ -159,6 +159,8 @@ source_set("browsertests_impl") {
     "//chrome/browser/ui/location_bar",
     "//chrome/browser/ui/navigator",
     "//chrome/browser/ui/omnibox",
+    "//chrome/browser/ui/side_panel",
+    "//chrome/browser/ui/side_panel:side_panel_views_dependent",
     "//chrome/browser/ui/startup",
     "//chrome/browser/ui/tabs",
     "//chrome/browser/ui/tabs:tab_enums",

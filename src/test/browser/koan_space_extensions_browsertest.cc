@@ -10,17 +10,23 @@
 // (tab ids, the active tab) and has no context menu item in them, gets none
 // of the profile's history, closed tabs, top sites and downloads (#544), and
 // still works in every other Space. A change applies to the profile's open
-// tabs by restarting them.
+// tabs by restarting them. Its side panel stays closed there, and the pages
+// that use the tabs API with no extension (the bookmarks side panel,
+// chrome://bookmarks) keep working in every Space (#602).
 
 #include <memory>
 #include <optional>
 #include <set>
 #include <string>
 
+#include "base/callback_list.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/test/bind.h"
 #include "base/test/run_until.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
@@ -33,10 +39,16 @@
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/navigator/browser_navigator.h"
 #include "chrome/browser/ui/navigator/browser_navigator_params.h"
+#include "chrome/browser/ui/side_panel/side_panel_entry_id.h"
+#include "chrome/browser/ui/side_panel/side_panel_entry_key.h"
+#include "chrome/browser/ui/side_panel/side_panel_registry.h"
+#include "chrome/browser/ui/side_panel/side_panel_ui.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/download/public/common/download_item.h"
@@ -133,6 +145,15 @@ constexpr char kRules[] = R"([{
                 "resourceTypes": ["xmlhttprequest", "main_frame", "sub_frame"]}
 }])";
 
+// An extension with only a side panel (sidePanel.setOptions' default page).
+constexpr char kSidePanelManifest[] = R"({
+  "name": "Koan Space side panel test",
+  "version": "1",
+  "manifest_version": 3,
+  "permissions": ["sidePanel"],
+  "side_panel": {"default_path": "panel.html"}
+})";
+
 class KoanSpaceExtensionsBrowserTest : public InProcessBrowserTest {
  public:
   void SetUpOnMainThread() override {
@@ -173,11 +194,23 @@ class KoanSpaceExtensionsBrowserTest : public InProcessBrowserTest {
     ASSERT_TRUE(ready.WaitUntilSatisfied());
   }
 
+  void LoadSidePanelExtension() {
+    dir_.WriteManifest(kSidePanelManifest);
+    dir_.WriteFile(FILE_PATH_LITERAL("panel.html"), "<title>Panel</title>");
+    scoped_refptr<const extensions::Extension> extension =
+        extensions::ChromeTestExtensionLoader(profile()).LoadExtension(
+            dir_.UnpackedPath());
+    ASSERT_TRUE(extension);
+    extension_id_ = extension->id();
+  }
+
   // Opens `path` in a new tab of the active Space, as Cmd+T and the URL bar
   // do (its profile's partition).
   content::WebContents* OpenInActiveSpace(const std::string& path) {
-    NavigateParams params(browser(), embedded_test_server()->GetURL(path),
-                          ui::PAGE_TRANSITION_TYPED);
+    return OpenUrlInActiveSpace(embedded_test_server()->GetURL(path));
+  }
+  content::WebContents* OpenUrlInActiveSpace(const GURL& url) {
+    NavigateParams params(browser(), url, ui::PAGE_TRANSITION_TYPED);
     params.disposition = WindowOpenDisposition::kNewForegroundTab;
     ui_test_utils::NavigateToURL(&params);
     return params.navigated_or_inserted_contents;
@@ -363,6 +396,78 @@ class KoanSpaceExtensionsBrowserTest : public InProcessBrowserTest {
     return CallWithTabId(contents,
                          "((id) => chrome.scripting.executeScript("
                          "{target: {tabId: id}, func: () => 1}))");
+  }
+
+  // The bookmarks side panel's page, once it has loaded.
+  content::WebContents* BookmarksPanelPage() {
+    for (content::WebContents* contents : content::GetAllWebContents()) {
+      if (contents->GetLastCommittedURL().host() ==
+              chrome::kChromeUIBookmarksSidePanelHost &&
+          !contents->IsLoading()) {
+        return contents;
+      }
+    }
+    return nullptr;
+  }
+
+  // The ids of the tabs that `page`, a WebUI page that may use the tabs API
+  // (chrome://bookmarks, the bookmarks side panel), gets from
+  // chrome.tabs.query({}). It calls the API with no extension.
+  std::set<int> TabIdsFor(content::WebContents* page) {
+    const content::EvalJsResult result =
+        content::EvalJs(page,
+                        "chrome.tabs.query({}).then("
+                        "(tabs) => tabs.map((tab) => tab.id))");
+    std::set<int> ids;
+    if (result.is_list()) {
+      for (const base::Value& id : result.ExtractList()) {
+        if (id.is_int()) {
+          ids.insert(id.GetInt());
+        }
+      }
+    }
+    return ids;
+  }
+
+  // Ctrl+B: the bookmarks side panel opens, its page asks for the tabs
+  // (chrome.tabs.query), and it lists `tab`.
+  void OpenBookmarksPanel(content::WebContents* tab) {
+    SidePanelUI* side_panel = SidePanelUI::From(browser());
+    ASSERT_TRUE(side_panel);
+    chrome::ExecuteCommand(browser(), IDC_SHOW_BOOKMARK_SIDE_PANEL);
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return side_panel->IsSidePanelEntryShowing(
+          SidePanelEntryKey(SidePanelEntryId::kBookmarks));
+    }));
+    content::WebContents* page = nullptr;
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      page = BookmarksPanelPage();
+      return page != nullptr;
+    }));
+    EXPECT_TRUE(
+        TabIdsFor(page).contains(extensions::ExtensionTabUtil::GetTabId(tab)));
+    // Still open after the Space guard's check (posted when it showed).
+    base::RunLoop loop;
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, loop.QuitClosure());
+    loop.Run();
+    EXPECT_TRUE(side_panel->IsSidePanelEntryShowing(
+        SidePanelEntryKey(SidePanelEntryId::kBookmarks)));
+    side_panel->Close();
+    ASSERT_TRUE(base::test::RunUntil(
+        [&] { return !side_panel->IsSidePanelShowing(); }));
+  }
+
+  // What `call` (a tabs function without a tab id: the active tab) gives
+  // `page`, a WebUI page with no extension: "ok" or its error.
+  std::string ActiveTabCallFrom(content::WebContents* page,
+                                const std::string& call) {
+    const content::EvalJsResult result = content::EvalJs(
+        page, base::StrCat({call, ".then(() => 'ok', (e) => e.message)"}));
+    if (result.is_string()) {
+      return result.ExtractString();
+    }
+    return result.is_ok() ? "not a string" : result.ExtractError();
   }
 
   extensions::TestExtensionDir dir_;
@@ -683,6 +788,114 @@ IN_PROC_BROWSER_TEST_F(KoanSpaceExtensionsBrowserTest,
            in_bank->GetPrimaryMainFrame()->IsRenderFrameLive() &&
            Injected(in_bank);
   }));
+}
+
+// Ctrl+B in a new Space and in one whose profile has an extension off
+// (#602): the bookmarks side panel opens and lists the Space's tab. Its page
+// and chrome://bookmarks call the tabs API with no extension, which the
+// hooks for an extension that is off let through.
+IN_PROC_BROWSER_TEST_F(KoanSpaceExtensionsBrowserTest,
+                       BookmarksSidePanelInEverySpace) {
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  ASSERT_TRUE(spaces);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  ASSERT_NO_FATAL_FAILURE(LoadTestExtension());
+  SidePanelUI::From(browser())->DisableAnimationsForTesting();
+  const std::string bank = AddProfile(u"Bank");
+  SetOff(bank, true);
+
+  // A new Space without a profile.
+  spaces->CreateSpace(u"Work", u"", {});
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  content::WebContents* in_work = OpenInActiveSpace("/title1.html?work");
+  ASSERT_TRUE(in_work);
+  ASSERT_NO_FATAL_FAILURE(OpenBookmarksPanel(in_work));
+
+  // A Space whose profile has the extension off.
+  spaces->CreateSpace(u"Bank", u"", {}, bank);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 3));
+  content::WebContents* in_bank = OpenInActiveSpace("/title1.html?bank");
+  ASSERT_TRUE(in_bank);
+  ASSERT_EQ(containers::SpaceContainerFromString(bank),
+            containers::ContainerOf(in_bank));
+  ASSERT_NO_FATAL_FAILURE(OpenBookmarksPanel(in_bank));
+  // The extension still doesn't see the tab.
+  EXPECT_FALSE(Listed(in_bank));
+
+  // chrome://bookmarks in that Space: the tabs functions that take the active
+  // tab, and the tab list.
+  content::WebContents* manager =
+      OpenUrlInActiveSpace(GURL(chrome::kChromeUIBookmarksURL));
+  ASSERT_TRUE(manager);
+  ASSERT_TRUE(content::WaitForLoadStop(manager));
+  EXPECT_EQ("ok", ActiveTabCallFrom(manager, "chrome.tabs.getZoom()"));
+  EXPECT_EQ("ok",
+            ActiveTabCallFrom(manager, "chrome.tabs.update({active: true})"));
+  const std::set<int> ids = TabIdsFor(manager);
+  EXPECT_TRUE(ids.contains(extensions::ExtensionTabUtil::GetTabId(in_bank)));
+  EXPECT_TRUE(ids.contains(extensions::ExtensionTabUtil::GetTabId(in_work)));
+}
+
+// #515's side panel case: an extension's side panel closes when it would
+// show while a tab of a profile the extension is off in is active (opened
+// there, or that tab activated with it open), and shows in another profile.
+// The bookmarks side panel stays open there.
+IN_PROC_BROWSER_TEST_F(KoanSpaceExtensionsBrowserTest,
+                       ExtensionSidePanelOnlyOutsideTheProfile) {
+  KoanWorkspaceController* spaces = GetSpaces(browser());
+  ASSERT_TRUE(spaces);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  ASSERT_NO_FATAL_FAILURE(LoadSidePanelExtension());
+  SidePanelUI* side_panel = SidePanelUI::From(browser());
+  ASSERT_TRUE(side_panel);
+  side_panel->DisableAnimationsForTesting();
+  const SidePanelEntryKey panel(SidePanelEntryId::kExtension, extension_id_);
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return SidePanelRegistry::From(browser())->GetEntryForKey(panel) != nullptr;
+  }));
+  int shown = 0;
+  base::CallbackListSubscription shown_subscription =
+      side_panel->RegisterSidePanelShown(
+          base::BindLambdaForTesting([&] { ++shown; }));
+  const std::string bank = AddProfile(u"Bank");
+  const std::string work = AddProfile(u"Work");
+  SetOff(bank, true);
+
+  // Work, where it is on: the panel shows.
+  spaces->CreateSpace(u"Work", u"", {}, work);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 2));
+  content::WebContents* in_work = OpenInActiveSpace("/title1.html?work");
+  ASSERT_TRUE(in_work);
+  side_panel->Show(panel);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return side_panel->IsSidePanelEntryShowing(panel); }));
+
+  // A tab of Bank, where it is off, becomes active: the panel closes.
+  spaces->CreateSpace(u"Bank", u"", {}, bank);
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 3));
+  content::WebContents* in_bank = OpenInActiveSpace("/title1.html?bank");
+  ASSERT_TRUE(in_bank);
+  ASSERT_EQ(containers::SpaceContainerFromString(bank),
+            containers::ContainerOf(in_bank));
+  EXPECT_TRUE(
+      base::test::RunUntil([&] { return !side_panel->IsSidePanelShowing(); }));
+
+  // Opened in Bank: it shows and closes at once.
+  const int shown_before = shown;
+  side_panel->Show(panel);
+  EXPECT_TRUE(base::test::RunUntil([&] {
+    return shown > shown_before && !side_panel->IsSidePanelShowing();
+  }));
+
+  // The bookmarks side panel stays open in Bank.
+  ASSERT_NO_FATAL_FAILURE(OpenBookmarksPanel(in_bank));
+
+  // Back in Work's tab, the panel shows again.
+  TabStripModel* model = browser()->tab_strip_model();
+  model->ActivateTabAt(model->GetIndexOfWebContents(in_work));
+  side_panel->Show(panel);
+  EXPECT_TRUE(base::test::RunUntil(
+      [&] { return side_panel->IsSidePanelEntryShowing(panel); }));
 }
 
 }  // namespace koan

@@ -67,6 +67,14 @@ process, a tab) and then for the list.
 | Toolbar button (Chromium's toolbar, multiple-toolbar layout) | `ExtensionsToolbarDesktop::IsActionVisibleOnToolbar()`, re-asked from `UpdateAllIcons()` (every tab switch, `ToolbarView::Update()`) | hidden while a tab of the profile is active |
 | Side panel | `SidePanelUI` (public: `IsSidePanelEntryShowing()`, `Close()`, `RegisterSidePanelShown()`) | closed when it shows the extension's panel while a tab of the profile is active, and when the user switches to such a tab |
 
+**Callers with no extension (#602).** The tabs and windows APIs are also open to WebUI pages
+(`_api_features.json`: chrome://bookmarks, the bookmarks and reading list side panels, the tab
+strip), which call them with no extension: `ExtensionFunction::extension()` is null there and
+`extension_id()` dereferences it. The bookmarks side panel calls `tabs.query` as it opens, so the
+first version of the `tabs_api.cc` hunks crashed on every Ctrl+B. Each hook asks only when the
+caller has an extension (`extension() && ...extension()->id()`, as the window, tab object and
+event hooks already did); a WebUI page sees every tab, as upstream.
+
 ### Which profile a request is in
 
 A navigation's request has no renderer process: `WebRequestAPI::MaybeProxyURLLoaderFactory()` makes the

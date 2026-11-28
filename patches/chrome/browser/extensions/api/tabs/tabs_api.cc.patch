@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/extensions/api/tabs/tabs_api.cc b/chrome/browser/extensions/api/tabs/tabs_api.cc
-index de78a21..208e8a0 100644
+index de78a21..55484b5 100644
 --- a/chrome/browser/extensions/api/tabs/tabs_api.cc
 +++ b/chrome/browser/extensions/api/tabs/tabs_api.cc
 @@ -68,6 +68,8 @@
@@ -11,60 +11,69 @@ index de78a21..208e8a0 100644
  #include "services/metrics/public/cpp/ukm_builders.h"
  #include "services/metrics/public/cpp/ukm_recorder.h"
  #include "third_party/abseil-cpp/absl/container/flat_hash_set.h"
-@@ -427,6 +429,9 @@ content::WebContents* GetTabsAPIDefaultWebContents(ExtensionFunction* function,
+@@ -427,6 +429,12 @@ content::WebContents* GetTabsAPIDefaultWebContents(ExtensionFunction* function,
        *error = ExtensionTabUtil::kNoCurrentWindowError;
      } else {
        web_contents = window_controller->GetActiveTab();
-+      // Koan: not a tab of a Space profile the extension is off in.
++      // Koan: not a tab of a Space profile the extension is off in. A WebUI
++      // page that may use the tabs API (chrome://bookmarks, the bookmarks
++      // and reading list side panels, _api_features.json) has no extension.
 +      web_contents = koan::containers::TabUnlessExtensionOff(
-+          web_contents, function->extension_id());
++          web_contents, function->extension() ? function->extension()->id()
++                                              : std::string());
        if (!web_contents) {
          *error = tabs_constants::kNoSelectedTabError;
        }
-@@ -645,6 +650,13 @@ base::ListValue TabsQueryFunction::BuildTabList(
+@@ -645,6 +653,15 @@ base::ListValue TabsQueryFunction::BuildTabList(
        ::tabs::TabInterface* tab = tab_list->GetTab(i);
        CHECK(tab);
  
 +      // Koan: Zen's hidden empty tab is not listed (Zen's ext-browser.js),
-+      // nor a tab of a Space profile the extension is off in.
-+      if (koan::IsEmptyTab(tab) || koan::containers::IsExtensionOffInContents(
-+                                       tab->GetContents(), extension_id())) {
++      // nor a tab of a Space profile the extension is off in (a WebUI page,
++      // such as the bookmarks side panel, has no extension).
++      if (koan::IsEmptyTab(tab) ||
++          (extension() && koan::containers::IsExtensionOffInContents(
++                              tab->GetContents(), extension()->id()))) {
 +        continue;
 +      }
 +
        if (!MatchesTab(tab, url_patterns)) {
          continue;
        }
-@@ -1533,6 +1545,8 @@ bool TabsUpdateFunction::ComputeDefaultTabId(int& tab_id,
+@@ -1533,6 +1550,10 @@ bool TabsUpdateFunction::ComputeDefaultTabId(int& tab_id,
      return false;
    }
    contents = window_controller->GetActiveTab();
-+  // Koan: not a tab of a Space profile the extension is off in.
-+  contents = koan::containers::TabUnlessExtensionOff(contents, extension_id());
++  // Koan: not a tab of a Space profile the extension is off in (a WebUI page
++  // has no extension).
++  contents = koan::containers::TabUnlessExtensionOff(
++      contents, extension() ? extension()->id() : std::string());
    if (!contents) {
      error = tabs_constants::kNoSelectedTabError;
      return false;
-@@ -1955,6 +1969,9 @@ ExtensionFunction::ResponseAction TabsReloadFunction::Run() {
+@@ -1955,6 +1976,10 @@ ExtensionFunction::ResponseAction TabsReloadFunction::Run() {
      if (WindowController* window_controller =
              ChromeExtensionFunctionDetails(this).GetCurrentWindowController()) {
        web_contents = window_controller->GetActiveTab();
-+      // Koan: not a tab of a Space profile the extension is off in.
-+      web_contents = koan::containers::TabUnlessExtensionOff(web_contents,
-+                                                             extension_id());
++      // Koan: not a tab of a Space profile the extension is off in (a WebUI
++      // page has no extension).
++      web_contents = koan::containers::TabUnlessExtensionOff(
++          web_contents, extension() ? extension()->id() : std::string());
        if (!web_contents) {
          return RespondNow(Error(tabs_constants::kNoSelectedTabError));
        }
-@@ -2480,6 +2497,9 @@ ExtensionFunction::ResponseAction TabsDetectLanguageFunction::Run() {
+@@ -2480,6 +2505,10 @@ ExtensionFunction::ResponseAction TabsDetectLanguageFunction::Run() {
        return RespondNow(Error(ExtensionTabUtil::kTabStripNotEditableError));
      }
      contents = window_controller->GetActiveTab();
-+    // Koan: not a tab of a Space profile the extension is off in.
-+    contents =
-+        koan::containers::TabUnlessExtensionOff(contents, extension_id());
++    // Koan: not a tab of a Space profile the extension is off in (a WebUI
++    // page has no extension).
++    contents = koan::containers::TabUnlessExtensionOff(
++        contents, extension() ? extension()->id() : std::string());
      if (!contents) {
        return RespondNow(Error(tabs_constants::kNoSelectedTabError));
      }
-@@ -2613,6 +2633,11 @@ content::WebContents* TabsCaptureVisibleTabFunction::GetWebContentsForID(
+@@ -2613,6 +2642,11 @@ content::WebContents* TabsCaptureVisibleTabFunction::GetWebContentsForID(
    }
    content::WebContents* contents = tab->GetContents();
  
