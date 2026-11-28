@@ -21,7 +21,7 @@
 //   scripts/e2e/run.sh spaces
 import {
   centerOf, whole, ACCEL, ALT, CTRL, IS_MAC, META, NATIVE_MENUS, NATIVE_MENU_WHY, SHIFT, UI_PORT, browserCall,
-  check, connect, evalIn, finish, key as pageKey, keyToWidget, menuMouse, openMenus,
+  check, connect, evalIn, finish, key as pageKey, keyToView, keyToWidget, menuMouse, openMenus,
   pages as pageTargets, readPref, sleep, toastTexts, typeInto, viewEvent, viewMouse, viewTree,
   visiblePage, waitFor, windowTints,
 } from './lib/koan.mjs';
@@ -324,7 +324,8 @@ if (NATIVE_MENUS) {
 // Change Name...: rename in place. (On macOS F2 on the header, as below.)
 const VIA_F2 = NATIVE_MENUS ? ' (macOS: F2, the menu is native)' : '';
 if (NATIVE_MENUS) {
-  await viewKey((await sidebar()).header.view, VK.F2);
+  await keyToView('KoanSpaceHeaderView', VK.F2);
+  await sleep(1200);
 } else {
   await chooseMenuItem(menu, menu.items[0]);
 }
@@ -365,40 +366,65 @@ if (NATIVE_MENUS) {
   check('...and picking sets the Space\'s icon',
         s.header?.icon === picked?.props.Label && s.buttons[0].label === s.header?.icon,
         JSON.stringify([s.header?.icon, picked?.props.Label]));
+  // The picker stays open after a pick (close_on_pick false, as in Zen), and
+  // it is the active widget, so Esc goes to it, not to the page: a key on the
+  // page never reached it, and the picker was still open (and active) when
+  // F2 came, which then went nowhere now and then (#600). A real Esc closes
+  // it (checked by hand on Wayland, picker search field focused, after a
+  // pick and with the pointer over the page).
+  const escSent = await keyToWidget('KoanEmojiPicker', VK.ESCAPE);
+  const closed = await waitFor(async () => !shown(await views(), 'KoanEmojiPicker').length, 3000);
+  check('...and Esc closes the picker', closed,
+        closed ? '' : `Esc ${escSent ? 'sent to the picker\'s widget' : 'not sent (no widget)'}; ` +
+                      await pickerLeft());
 }
-await key(VK.ESCAPE);
 
 // The keyboard path: the header takes focus; F2 renames, Enter opens the
-// menu.
+// menu. Only once the picker's widget has gone: F2 would go to the picker,
+// and the keys below are looked up by class in the session that sends them
+// (keyToView()), as a widget going away renumbers the views.
+await waitFor(async () => !(await views()).some(v => v.cls === 'KoanEmojiPicker'), 3000);
 s = await sidebar();
 check('The header is a focusable button with a menu',
       s.header?.view.props.FocusBehavior === 'ALWAYS',
       s.header?.view.props.FocusBehavior);
-await viewKey(s.header.view, VK.F2);
-let field = shown(await views(), 'Textfield').find(t => t.path.includes('KoanSpaceHeaderView'));
-check('F2 on the header renames the Space', !!field);
+await keyToView('KoanSpaceHeaderView', VK.F2);
+// The rename field, once it shows (a slow frame can come between the key and
+// the view tree; #600).
+const renameField = () => waitFor(async () =>
+    shown(await views(), 'Textfield').find(t => t.path.includes('KoanSpaceHeaderView')), 3000);
+let field = await renameField();
+check('F2 on the header renames the Space', !!field,
+      field ? '' : `the picker ${shown(await views(), 'KoanEmojiPicker').length ? 'is open' : 'is closed'}`);
 if (field) {
-  await type(field, '', VK.ESCAPE);
+  await keyToView('Textfield', VK.ESCAPE, { inside: 'KoanSpaceHeaderView' });
 }
-s = await sidebar();
+// Until the field has gone.
+s = await waitFor(async () => {
+  const now = await sidebar();
+  return !shown(now.vs, 'Textfield').some(t => t.path.includes('KoanSpaceHeaderView')) && now;
+}, 3000) || await sidebar();
 check('...and Escape keeps the name', s.header?.name === 'Home' &&
       !shown(s.vs, 'Textfield').some(t => t.path.includes('KoanSpaceHeaderView')),
-      s.header?.name);
+      `${s.header?.name}, field ${shown(s.vs, 'Textfield')
+          .some(t => t.path.includes('KoanSpaceHeaderView')) ? 'still open' : 'gone'}`);
 if (NATIVE_MENUS) {
   // (Not pressed: the open native menu would keep UI DevTools from answering.)
   skipped('Enter on the header opens the Space menu', NATIVE_MENU_WHY);
   menu = null;
 } else {
-  await viewKey(s.header.view, VK.RETURN);
-  menu = menus(await views())[0];
+  await keyToView('KoanSpaceHeaderView', VK.RETURN);
+  menu = await waitFor(async () => menus(await views())[0], 3000);
   check('Enter on the header opens the Space menu', menu?.items.length === HEADER_MENU_ITEMS,
         `${menu?.items.length} item(s)`);
 }
 if (menu) {
   await chooseMenuItem(menu, menu.items[0]);  // Change Name..., to close it
-  field = shown(await views(), 'Textfield').find(t => t.path.includes('KoanSpaceHeaderView'));
+  field = await renameField();
   if (field) {
-    await type(field, '', VK.ESCAPE);
+    await keyToView('Textfield', VK.ESCAPE, { inside: 'KoanSpaceHeaderView' });
+    await waitFor(async () => !shown(await views(), 'Textfield')
+        .some(t => t.path.includes('KoanSpaceHeaderView')), 3000);
   }
 }
 

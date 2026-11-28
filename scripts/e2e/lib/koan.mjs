@@ -830,6 +830,39 @@ export async function keyToWidget(cls, keyCode) {
   return !!widget;
 }
 
+// A key press (keyPressed only, as viewEvent() sends one) on the first view
+// of class `cls`, inside a view of class `inside` if given, looked up in the
+// session that sends it. A view read from viewTree() before can't be used for
+// this when widgets come and go: each DOM.getDocument numbers the widgets
+// first, then their views, so one more or one fewer widget (a bubble
+// closing, a tooltip, the toast) moves every view's node id, and the key
+// goes to the view next to it (#600). Whether there was such a view.
+export async function keyToView(cls, keyCode, { inside } = {}) {
+  const c = await connect(`ws://127.0.0.1:${UI_PORT}/0`);
+  await c.send('DOM.enable');
+  const doc = (await c.send('DOM.getDocument', { depth: -1 })).result.root;
+  const classOf = n => {
+    const a = n.attributes ?? [];
+    return n.nodeName === 'View' ? a[a.indexOf('class') + 1] : undefined;
+  };
+  const find = (n, within) => {
+    within = within || !inside || classOf(n) === inside;
+    if (within && classOf(n) === cls) return n.nodeId;
+    for (const child of n.children ?? []) {
+      const found = find(child, within);
+      if (found) return found;
+    }
+    return null;
+  };
+  const view = find(doc, false);
+  if (view) {
+    await c.send('DOM.dispatchKeyEvent', { nodeId: view,
+        event: { type: 'keyPressed', keyCode, code: 0, flags: 0, key: 0, isChar: false } });
+  }
+  c.close();
+  return !!view;
+}
+
 export const viewMouse = (view, type, x, y, button = 'left', wheelDirection = 'none') =>
   viewEvent(view, 'DOM.dispatchMouseEvent', { type, x, y, button, wheelDirection });
 
