@@ -32,6 +32,14 @@
 # until they expire. Only trusted runs are touched: pull requests' and
 # other refs' archives are theirs.
 #
+# A GitHub API read that fails even after gh_api's retries (gh_api.sh) stops
+# the pruning: nothing more is deleted, and the step still succeeds with a
+# ::warning:: naming the call. An unknown run or a missing archive list must
+# never be read as "no base" (#589): a failed out-final list made every base
+# look like it had only its source. And failing the step would fail this
+# keep_base run, which find_base.sh then won't take as a base. What isn't
+# deleted expires after 14 days anyway. A failed DELETE is a warning too.
+#
 # NOW=<epoch seconds> stands in for the clock (tests).
 set -euo pipefail
 
@@ -46,17 +54,24 @@ GRACE_HOURS="${GRACE_HOURS:-12}"
 NOW="${NOW:-$(date +%s)}"
 grace=$((GRACE_HOURS * 3600))
 
+stop() {
+  echo "::warning::could not look up $1 on GitHub (the error is above): deleting nothing more"
+  exit 0
+}
+
 # Unexpired archives of runs older than this one on BRANCH or a v* tag (the
 # run's own record decides below): run id -> artifact ids, and which of the
-# two each run has.
+# two each run has. Both lists are read in full before anything is decided.
 declare -A ids=() has=()
 for name in "$PREFIX-source.tar.zst" "$PREFIX-out-final.tar.zst"; do
+  list="$(gh_api --paginate "repos/$GH_REPO/actions/artifacts?name=$name&per_page=100" \
+    --jq ".artifacts[] | select((.expired | not) and (.workflow_run.head_branch == \"$BRANCH\" or (.workflow_run.head_branch // \"\" | startswith(\"v\")))) | [.id, .workflow_run.id] | @tsv")" ||
+    stop "the $name archives"
   while IFS=$'\t' read -r id run; do
     if [[ -z $id ]] || ((run >= RUN)); then continue; fi
     ids[$run]+=" $id"
     has[$run]+=" $name"
-  done < <(gh api --paginate "repos/$GH_REPO/actions/artifacts?name=$name&per_page=100" \
-    --jq ".artifacts[] | select((.expired | not) and (.workflow_run.head_branch == \"$BRANCH\" or (.workflow_run.head_branch // \"\" | startswith(\"v\")))) | [.id, .workflow_run.id] | @tsv")
+  done <<<"$list"
 done
 
 delete() {
@@ -64,7 +79,8 @@ delete() {
   shift
   echo "deleting the archives of run $run ($*)"
   for id in ${ids[$run]}; do
-    gh api -X DELETE "repos/$GH_REPO/actions/artifacts/$id"
+    gh_api -X DELETE "repos/$GH_REPO/actions/artifacts/$id" ||
+      echo "::warning::could not delete artifact $id of run $run (the error is above)"
   done
 }
 
@@ -72,9 +88,20 @@ delete() {
 # appeared (this run: now).
 superseded=$NOW
 for run in $(printf '%s\n' "${!ids[@]}" | sort -rn); do
-  read -r status conclusion updated path event branch sha < <(gh api "repos/$GH_REPO/actions/runs/$run" \
-    --jq '[.status, (.conclusion // "none"), (.updated_at | fromdateiso8601), (.path | split("@")[0] | split("/") | last), .event, (.head_branch // "-"), (.head_sha // "-")] | @tsv') || continue
-  trusted_base_run "$path" "$event" "$branch" "$sha" || continue
+  # A run that is gone (404) is passed over, as before. Any other failure
+  # stops rather than guess what the run is.
+  record="$(gh_api "repos/$GH_REPO/actions/runs/$run" \
+    --jq '[.status, (.conclusion // "none"), (.updated_at | fromdateiso8601), (.path | split("@")[0] | split("/") | last), .event, (.head_branch // "-"), (.head_sha // "-")] | @tsv')" || {
+    rc=$?
+    ((rc == GH_API_NOT_FOUND)) && continue
+    stop "run $run"
+  }
+  read -r status conclusion updated path event branch sha <<<"$record"
+  trusted_base_run "$path" "$event" "$branch" "$sha" && rc=0 || rc=$?
+  if ((rc == 2)); then
+    stop "the tag of run $run"
+  fi
+  ((rc == 0)) || continue
   if [[ $status != completed ]]; then
     echo "keeping the archives of run $run: still $status"
     continue

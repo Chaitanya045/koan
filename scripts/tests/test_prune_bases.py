@@ -43,6 +43,19 @@ data_file = os.environ['FAKE_GH_DATA']
 data = json.load(open(data_file))
 with open(os.environ['FAKE_GH_LOG'], 'a') as log:
   log.write(f'{method} {path}\n')
+fail = os.environ.get('FAKE_GH_FAIL')
+if fail:
+  # FAKE_GH_FAIL=<part of the path>:<times>: that many calls fail like a
+  # GitHub outage, then they work ('always': never).
+  part, times = fail.rsplit(':', 1)
+  if part in path:
+    count_file = os.environ['FAKE_GH_DATA'] + '.failed'
+    failed = int(open(count_file).read()) if os.path.exists(count_file) else 0
+    if times == 'always' or failed < int(times):
+      open(count_file, 'w').write(str(failed + 1))
+      sys.stderr.write('gh: HTTP 502: Server Error (https://api.github.com/'
+                       + path + ')\n')
+      sys.exit(1)
 url = urllib.parse.urlsplit(path)
 query = dict(urllib.parse.parse_qsl(url.query))
 parts = url.path.split('/')
@@ -143,14 +156,23 @@ class FakeGhTest(unittest.TestCase):
                                      'artifacts': self.artifacts,
                                      'tags': self.tags}))
     self.log.write_text('')
+    (self.tmp / 'data.json.failed').unlink(missing_ok=True)
     env = dict(os.environ, FAKE_GH_DATA=str(self.data),
                FAKE_GH_LOG=str(self.log), GH_REPO='owner/repo',
-               BRANCH='develop', NOW=str(NOW),
+               BRANCH='develop', NOW=str(NOW), GH_API_DELAY='0',
                PATH=f'{self.tmp / "bin"}{os.pathsep}{os.environ["PATH"]}')
-    for key in ('GITHUB_OUTPUT', 'GITHUB_STEP_SUMMARY', 'GRACE_HOURS'):
+    for key in ('GITHUB_OUTPUT', 'GITHUB_STEP_SUMMARY', 'GRACE_HOURS',
+                'FAKE_GH_FAIL', 'GH_API_TRIES'):
       env.pop(key, None)
     env.update(extra)
     return env
+
+  def recorded(self):
+    """Run id -> the archive names add_run gave it."""
+    runs = {}
+    for a in self.artifacts:
+      runs.setdefault(a['run'], set()).add(a['name'])
+    return runs
 
   def left(self):
     """Run id -> the archive names it still has."""
@@ -162,11 +184,14 @@ class FakeGhTest(unittest.TestCase):
 
 class PruneBasesTest(FakeGhTest):
 
-  def prune(self, run):
+  def prune(self, run, **extra):
+    return self.run_prune(run, **extra).stdout
+
+  def run_prune(self, run, **extra):
     return subprocess.run(
         ['bash', str(CI / 'prune_bases.sh'), 'linux.yml', 'koan-linux'],
-        env=self.env(RUN=str(run)), capture_output=True, text=True,
-        check=True).stdout
+        env=self.env(RUN=str(run), **extra), capture_output=True, text=True,
+        check=True)
 
   def test_previous_base_survives_this_run(self):
     # #569: the base a pull request's build picked minutes ago stays.
@@ -274,6 +299,48 @@ class PruneBasesTest(FakeGhTest):
     self.assertNotIn(old, left)
     for run in (feature, release, newer):
       self.assertIn(run, left)
+
+
+  # #589: an API error must never be read as "no base". A failed out-final
+  # list made every base look like it had only its source, so "no base:
+  # delete it".
+
+  def test_a_failing_archive_list_deletes_nothing(self):
+    self.add_run(ended=60 * HOUR)  # Would go: superseded 40 h ago.
+    self.add_run(ended=40 * HOUR)
+    self.add_run(ended=20 * HOUR)
+    this = self.add_run(ended=0)
+    before = self.recorded()
+    for part in ('name=koan-linux-out-final', 'name=koan-linux-source'):
+      with self.subTest(part=part):
+        result = self.run_prune(this, FAKE_GH_FAIL=f'{part}:always')
+        self.assertEqual(self.left(), before)
+        self.assertNotIn('DELETE', self.log.read_text())
+        self.assertIn(f'::warning::could not look up the koan-linux-', result.stdout)
+        self.assertIn('deleting nothing more', result.stdout)
+        self.assertIn('GitHub said: gh: HTTP 502', result.stderr)
+
+  def test_a_failing_run_lookup_deletes_nothing_more(self):
+    old = self.add_run(ended=60 * HOUR)
+    self.add_run(ended=40 * HOUR)
+    newest = self.add_run(ended=20 * HOUR)
+    this = self.add_run(ended=0)
+    before = self.recorded()
+    result = self.run_prune(this, FAKE_GH_FAIL=f'actions/runs/{newest}:always')
+    self.assertEqual(self.left(), before)
+    self.assertIn(f'::warning::could not look up run {newest}', result.stdout)
+    self.assertNotIn('deleting the archives', result.stdout)
+    self.assertIn(old, self.left())
+
+  def test_a_call_that_fails_once_is_retried(self):
+    old = self.add_run(ended=40 * HOUR)
+    previous = self.add_run(ended=20 * HOUR)
+    this = self.add_run(ended=0)
+    result = self.run_prune(this, FAKE_GH_FAIL='name=koan-linux-out-final:1')
+    self.assertIn('failed (try 1 of 4', result.stderr)
+    left = self.left()
+    self.assertNotIn(old, left)
+    self.assertEqual(left[previous], set(BOTH))
 
 
 if __name__ == '__main__':
