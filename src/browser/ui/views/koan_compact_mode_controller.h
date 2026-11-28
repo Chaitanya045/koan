@@ -247,6 +247,10 @@ class KoanCompactModeController : public views::FocusChangeListener,
   void UpdateActive();
   void Activate(Mode mode);
   void Deactivate();
+  // Deactivate() and Activate(mode) for a change that isn't compact mode
+  // turning off (the tabs' side, the variant): the pin and the empty tab's
+  // hold stay.
+  void Reactivate(Mode mode);
   void OnTabsOnRightChanged();
 
   // Compact mode with the toolbar hidden in the overlay, revealed at the top
