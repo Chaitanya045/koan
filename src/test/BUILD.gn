@@ -121,6 +121,7 @@ source_set("browsertests_impl") {
     "browser/koan_tab_management_browsertest.cc",
     "browser/koan_theme_repaint_browsertest.cc",
     "browser/koan_toolbar_browsertest.cc",
+    "browser/koan_top_edge_hit_test_browsertest.cc",
     "browser/koan_window_sync_browsertest.cc",
   ]
   deps = [
