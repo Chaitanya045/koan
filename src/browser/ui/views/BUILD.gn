@@ -11,6 +11,7 @@ import("//testing/test.gni")
 source_set("views") {
   sources = [
     "koan_blank_page.h",
+    "koan_bookmark_spaces_hooks.h",
     "koan_browser_view_hooks.h",
     "koan_command_policy.h",
     "koan_compact_mode.h",
@@ -279,6 +280,16 @@ source_set("url_pill_buttons") {
   sources = [ "koan_url_pill_buttons.h" ]
 }
 
+# Zen's rule for bookmarks per Space (koan_bookmark_spaces_rule.h): plain
+# strings over //base, so the unit tests need nothing else.
+source_set("bookmark_spaces_rule") {
+  sources = [
+    "koan_bookmark_spaces_rule.cc",
+    "koan_bookmark_spaces_rule.h",
+  ]
+  deps = [ "//base" ]
+}
+
 # Which recreated Space a stored per-Space entry (a folder) belongs to.
 source_set("stored_space") {
   sources = [
@@ -292,6 +303,7 @@ source_set("stored_space") {
 #   out/Koan/koan_views_unittests
 test("koan_views_unittests") {
   sources = [
+    "koan_bookmark_spaces_rule_unittest.cc",
     "koan_content_radius_unittest.cc",
     "koan_essentials_audio_unittest.cc",
     "koan_extension_drop_unittest.cc",
@@ -317,6 +329,7 @@ test("koan_views_unittests") {
     "koan_zen_logic_unittest.cc",
   ]
   deps = [
+    ":bookmark_spaces_rule",
     ":content_radius",
     ":essentials_audio",
     ":extension_drop",
@@ -409,6 +422,8 @@ source_set("impl") {
     "koan_agent_indicator.cc",
     "koan_agent_indicator.h",
     "koan_blank_page.cc",
+    "koan_bookmark_spaces.cc",
+    "koan_bookmark_spaces.h",
     "koan_browser_view_controller.cc",
     "koan_browser_view_controller.h",
     "koan_browser_view_hooks.cc",
@@ -597,6 +612,7 @@ source_set("impl") {
     ":split_rearrange",
   ]
   deps = [
+    ":bookmark_spaces_rule",
     ":content_radius",
     ":essentials_audio",
     ":extension_drop",
@@ -705,6 +721,7 @@ source_set("impl") {
     "//components/blocked_content",
     "//components/bookmarks/browser",
     "//components/bookmarks/common",
+    "//components/bookmarks/managed",
     "//components/content_settings/core/browser",
     "//components/content_settings/core/common",
     "//components/constrained_window",

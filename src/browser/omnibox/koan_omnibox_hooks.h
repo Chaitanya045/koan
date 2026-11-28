@@ -20,6 +20,11 @@ class GURL;
 class TemplateURLService;
 struct AutocompleteMatch;
 
+namespace bookmarks {
+class BookmarkModel;
+class TitledUrlNode;
+}  // namespace bookmarks
+
 namespace koan {
 
 // Called at the end of the AutocompleteController constructor, after the
@@ -71,6 +76,13 @@ bool IsEmptyTabSearch(const AutocompleteInput& input,
 int EmptyTabSearchRelevance(const AutocompleteInput& input,
                             const GURL& url,
                             base::Time last_shown_time);
+
+// Whether BookmarkProvider leaves out `node`, a bookmark of `model`, from the
+// URL bar's suggestions: Zen's bookmarks per Space (koan/browser/ui/views/
+// koan_bookmark_spaces.h), for the active window (the one being typed in),
+// if it is `model`'s profile's. Defined in //koan/browser/ui/views:impl.
+bool HidesBookmarkSuggestion(const bookmarks::BookmarkModel* model,
+                             const bookmarks::TitledUrlNode* node);
 
 }  // namespace koan
 

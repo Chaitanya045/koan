@@ -95,6 +95,8 @@ void KoanWindowSync::AddWindow(Window* window) {
     stale_items_.insert(window);
     ScheduleFlush();
   }
+  // Its Spaces may have sync ids already (from its session).
+  spaces_changed_callbacks_.Notify();
 }
 
 void KoanWindowSync::RemoveWindow(Window* window) {
@@ -137,6 +139,7 @@ void KoanWindowSync::ReportSpaces(
   if (model_.SetSpaces(std::move(spaces))) {
     // Deleting a Space drops its pinned tabs, so the items change too.
     MarkOthersOutOfDate(window, /*spaces=*/true, /*items=*/true);
+    spaces_changed_callbacks_.Notify();
   }
 }
 
@@ -352,6 +355,8 @@ void KoanWindowSync::Flush() {
     if (model_.SetSpaces(std::move(spaces))) {
       MarkOthersOutOfDate(window, /*spaces=*/true, /*items=*/true);
     }
+    // The window's Spaces have their ids now.
+    spaces_changed_callbacks_.Notify();
     ScheduleFlush();
     return;
   }
@@ -375,8 +380,16 @@ void KoanWindowSync::Flush() {
     // The window may have gone while it was reconciled (RemoveWindow()
     // cleared `applying_` then).
     applying_ = nullptr;
+    if (spaces) {
+      spaces_changed_callbacks_.Notify();
+    }
   }
   ScheduleFlush();
+}
+
+base::CallbackListSubscription KoanWindowSync::AddSpacesChangedCallback(
+    base::RepeatingClosure callback) {
+  return spaces_changed_callbacks_.Add(std::move(callback));
 }
 
 void KoanWindowSync::Store() {

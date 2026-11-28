@@ -11,6 +11,8 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_list.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/supports_user_data.h"
@@ -172,6 +174,12 @@ class KoanWindowSync : public base::SupportsUserData::Data {
   window_sync::WindowSyncModel& model() { return model_; }
   const window_sync::WindowSyncModel& model() const { return model_; }
 
+  // Runs `callback` whenever the synced Spaces, or a window's sync ids for
+  // its Spaces, may have changed: a window joined, reported its Spaces or
+  // was reconciled (bookmarks per Space follow them, koan_bookmark_spaces.h).
+  base::CallbackListSubscription AddSpacesChangedCallback(
+      base::RepeatingClosure callback);
+
  private:
   // Every other window gets the model's state soon.
   void MarkOthersOutOfDate(Window* origin, bool spaces, bool items);
@@ -198,6 +206,7 @@ class KoanWindowSync : public base::SupportsUserData::Data {
   std::map<std::string, WindowId> pending_drops_;
   raw_ptr<Window> applying_ = nullptr;
   bool flush_scheduled_ = false;
+  base::RepeatingClosureList spaces_changed_callbacks_;
   base::WeakPtrFactory<KoanWindowSync> weak_factory_{this};
 };
 

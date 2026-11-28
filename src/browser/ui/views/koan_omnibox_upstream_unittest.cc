@@ -23,9 +23,10 @@
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 
-// The patched AutocompleteController constructor and UpdateResult() call
-// these (the command palette and the Space history filter live in the views
-// target, which this test does not link): no provider, no filter.
+// The patched AutocompleteController constructor, UpdateResult() and
+// BookmarkProvider call these (the command palette, the Space history filter
+// and bookmarks per Space live in the views target, which this test does not
+// link): no provider, no filter, every bookmark.
 namespace koan {
 void AddAutocompleteProviders(
     AutocompleteController* controller,
@@ -34,6 +35,10 @@ void AddAutocompleteProviders(
 void FilterSpaceHistoryMatches(AutocompleteProviderClient& client,
                                const AutocompleteInput& input,
                                AutocompleteResult& result) {}
+bool HidesBookmarkSuggestion(const bookmarks::BookmarkModel* model,
+                             const bookmarks::TitledUrlNode* node) {
+  return false;
+}
 }  // namespace koan
 
 namespace koan {

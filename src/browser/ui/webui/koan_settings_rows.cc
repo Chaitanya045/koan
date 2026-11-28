@@ -582,6 +582,14 @@ constexpr Row kRows[] = {
      .note = "The URL bar suggests only the active Space's profile's pages "
              "and tabs, and the Library's History shows that profile first. "
              "Bookmarks, passwords and autofill stay shared."},
+    // Zen's bookmarks per Space (always on in Zen).
+    {.group = "workspaces",
+     .control = Control::kCheckbox,
+     .pref = prefs::kBookmarksPerSpace,
+     .label = "Bookmarks per Space: the bookmarks bar, the bookmark menus and "
+              "the address bar's suggestions show the active Space's "
+              "bookmarks and those in no Space",
+     .is_available = features::IsWorkspacesEnabled},
     {.group = "pinned-tabs",
      .control = Control::kCheckbox,
      .pref = prefs::kPinnedTabRestoreToPinnedUrl,

@@ -390,6 +390,12 @@ inline constexpr char kHideTabThrobber[] = "koan.theme.hide_tab_throbber";
 // this pref by name: keep the name in
 // patches/chrome/browser/ui/bookmarks/bookmark_bar_controller.cc.patch.
 inline constexpr char kBookmarksBarShow[] = "koan.bookmarks_bar.show";
+// Zen's bookmarks per Space (koan/browser/ui/views/koan_bookmark_spaces.h):
+// the bookmarks bar, the bookmark menus and the URL bar's bookmark
+// suggestions show the active Space's bookmarks and those of no Space. Zen
+// has no setting; on by default, as Zen. Off, every bookmark shows (their
+// Spaces are kept).
+inline constexpr char kBookmarksPerSpace[] = "koan.bookmarks.per_space";
 // What a new tab page shows: "koan" (the default) is Koan's blank page in the
 // theme's colours, like Zen's new tab; "chromium" is Chromium's own new tab
 // page. Koan's own setting. A new tab page set by policy or by an extension

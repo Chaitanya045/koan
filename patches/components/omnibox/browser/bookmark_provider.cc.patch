@@ -1,0 +1,22 @@
+diff --git a/components/omnibox/browser/bookmark_provider.cc b/components/omnibox/browser/bookmark_provider.cc
+--- a/components/omnibox/browser/bookmark_provider.cc
++++ b/components/omnibox/browser/bookmark_provider.cc
+@@ -26,6 +26,7 @@
+ #include "components/omnibox/browser/titled_url_match_utils.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/query_parser/query_parser.h"
++#include "koan/browser/omnibox/koan_omnibox_hooks.h"
+ #include "third_party/metrics_proto/omnibox_event.pb.h"
+ #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
+ #include "third_party/metrics_proto/omnibox_input_type.pb.h"
+@@ -104,6 +105,10 @@
+ 
+   const std::u16string fixed_up_input(FixupUserInput(adjusted_input).second);
+   for (auto& bookmark_match : matches) {
++    // Koan: not a bookmark of other Spaces (koan_omnibox_hooks.h).
++    if (koan::HidesBookmarkSuggestion(bookmark_model_, bookmark_match.node)) {
++      continue;
++    }
+     // Score the TitledUrlMatch. If its score is greater than 0 then the
+     // AutocompleteMatch is created and added to matches_.
+     auto [relevance, bookmark_count] =

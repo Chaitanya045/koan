@@ -1,0 +1,11 @@
+diff --git a/chrome/browser/ui/bookmarks/BUILD.gn b/chrome/browser/ui/bookmarks/BUILD.gn
+--- a/chrome/browser/ui/bookmarks/BUILD.gn
++++ b/chrome/browser/ui/bookmarks/BUILD.gn
+@@ -112,6 +112,7 @@
+     "//components/user_education/common",
+     "//components/user_prefs",
+     "//components/version_info",
++    "//koan/browser/ui/views",
+   ]
+ 
+   if (is_mac) {

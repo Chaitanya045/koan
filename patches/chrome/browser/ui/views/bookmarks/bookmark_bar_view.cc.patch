@@ -1,0 +1,25 @@
+diff --git a/chrome/browser/ui/views/bookmarks/bookmark_bar_view.cc b/chrome/browser/ui/views/bookmarks/bookmark_bar_view.cc
+--- a/chrome/browser/ui/views/bookmarks/bookmark_bar_view.cc
++++ b/chrome/browser/ui/views/bookmarks/bookmark_bar_view.cc
+@@ -83,6 +83,7 @@
+ #include "components/saved_tab_groups/public/features.h"
+ #include "components/url_formatter/elide_url.h"
+ #include "components/url_formatter/url_formatter.h"
++#include "koan/browser/ui/views/koan_bookmark_spaces_hooks.h"
+ #include "ui/accessibility/ax_action_data.h"
+ #include "ui/accessibility/ax_enums.mojom.h"
+ #include "ui/accessibility/ax_node_data.h"
+@@ -847,6 +848,13 @@
+         button_count = bookmark_buttons_.size();
+       }
+       views::View* child = bookmark_buttons_[i].first;
++      // Koan: a bookmark of other Spaces takes no room
++      // (koan_bookmark_spaces_hooks.h).
++      if (koan::CollapseBookmarkBarButton(browser_, bookmark_buttons_[i].second,
++                                          child, x, y,
++                                          can_render_button_bounds)) {
++        continue;
++      }
+ 
+       // If the child view can fit in the bookmarks comfortably, make it visible
+       // and set its bounds.
