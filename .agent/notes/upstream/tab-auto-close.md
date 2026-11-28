@@ -58,7 +58,21 @@ No hook patch is needed.
    session data) for the tabs on screen at each check and for the tab left
    at each switch, at most once a minute per tab. So a tab counts from when
    it stopped being the visible tab, across restarts. A tab never shown
-   counts from when it was made.
+   counts from when it was made, also across restarts (#577): Chromium
+   saves a tab's last-active time only when the tab is shown, so a restored
+   tab never shown gets the restore time. The closer writes
+   `koan.opened_unseen` (per-tab session data) for a tab put in its window
+   in the background that has neither key, in a task posted after the
+   insert (by then a foreground tab is selected and skipped): the tab's
+   `GetLastActiveTime()`, its WebContents' creation time for a tab never
+   shown (for a tab restored before #577, the restore; it counts from then
+   on), or a restored shown tab's saved time, which it counted from anyway.
+   It is removed when the tab is shown (it becomes active, or is selected
+   with the active tab at a check). While it is there, `LastUsed()` takes
+   it instead of `GetLastActiveTime()`. A tab reopened from the list comes
+   back without it (the record drops both keys) and gets a new one.
+   Browser test: `ANeverShownTabKeepsItsAgeAcrossARestart` (12 hours, not
+   the test switch's second, which the restore time would pass too).
 5. **The rule is one pure function** (`auto_close::WhyKept`), unit-tested
    per exemption: Essentials, pinned tabs, folder tabs, the tab each Space
    shows (and tabs selected with it), a Space's empty tab, agent tabs
@@ -118,13 +132,5 @@ No hook patch is needed.
 
 - The per-Space opt-out (decision 2).
 - Clearing history while no window is open isn't seen by the list.
-- **A restart resets the age of a background tab that was never shown.**
-  Chromium saves a tab's last-active time only when the tab is shown, and a
-  restored tab never shown gets the restore time; `koan.last_seen` is
-  written only for tabs that were on screen. So a tab opened in the
-  background and never looked at counts from the last start, and with the
-  time set to 12 hours, someone who restarts Koan more often than that never
-  has those tabs closed. It errs on the side of keeping tabs; a follow-up
-  (writing `koan.last_seen` when such a tab is made) is #577.
 - The notice is a toast; if the front window is minimised it can go unseen
   (it is still marked shown).

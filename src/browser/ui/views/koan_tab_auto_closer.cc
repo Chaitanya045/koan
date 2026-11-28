@@ -283,6 +283,15 @@ KoanTabAutoCloser::KoanTabAutoCloser(BrowserView* browser_view)
           profile(), ServiceAccessType::EXPLICIT_ACCESS)) {
     history_observation_.Observe(history);
   }
+  // The tabs already in the window (OnTabStripModelChanged() marks the ones
+  // inserted from now on).
+  TabStripModel* model = browser->GetTabStripModel();
+  for (int i = 0; i < model->count(); ++i) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&KoanTabAutoCloser::MarkUnseen,
+                                  weak_factory_.GetWeakPtr(),
+                                  model->GetWebContentsAt(i)->GetWeakPtr()));
+  }
   OnSettingChanged();
 }
 
@@ -324,8 +333,33 @@ void KoanTabAutoCloser::OnTabStripModelChanged(
     TabStripModel* tab_strip_model,
     const TabStripModelChange& change,
     const TabStripSelectionChange& selection) {
-  if (!browser_view_ || !selection.active_tab_changed()) {
+  if (!browser_view_) {
     return;
+  }
+  // A tab put in the window in the background (opened, moved here or
+  // restored): when it was opened, once it is in its window (and once Koan
+  // has put it in its Space). Not if it is shown by then.
+  if (change.type() == TabStripModelChange::kInserted) {
+    for (const TabStripModelChange::ContentsWithIndex& inserted :
+         change.GetInsert()->contents) {
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE, base::BindOnce(&KoanTabAutoCloser::MarkUnseen,
+                                    weak_factory_.GetWeakPtr(),
+                                    inserted.contents->GetWeakPtr()));
+    }
+  }
+  if (!selection.active_tab_changed()) {
+    return;
+  }
+  // The tab shown now (and its split view) counts from when it is left.
+  if (selection.new_contents) {
+    if (tabs::TabInterface* shown =
+            tabs::TabInterface::MaybeGetFromContents(selection.new_contents)) {
+      for (tabs::TabInterface* tab :
+           WithSplitPartners(tab_strip_model, shown)) {
+        ClearUnseen(tab);
+      }
+    }
   }
   // The tab left was on screen until now (and its split view with it).
   if (selection.old_contents &&
@@ -404,6 +438,7 @@ void KoanTabAutoCloser::Stamp(tabs::TabInterface* tab) {
   if (!contents) {
     return;
   }
+  ClearUnseen(tab);
   const base::Time now = base::Time::Now();
   const base::Time stored = auto_close::ParseTime(
       GetTabSessionData(contents, auto_close::kLastSeenSessionKey));
@@ -412,6 +447,39 @@ void KoanTabAutoCloser::Stamp(tabs::TabInterface* tab) {
   }
   SetTabSessionData(contents, auto_close::kLastSeenSessionKey,
                     auto_close::SerializeTime(now));
+}
+
+void KoanTabAutoCloser::MarkUnseen(
+    base::WeakPtr<content::WebContents> contents) {
+  if (!browser_view_ || !contents) {
+    return;
+  }
+  TabStripModel* model = browser_view_->browser()->GetTabStripModel();
+  const int index = model->GetIndexOfWebContents(contents.get());
+  if (index == TabStripModel::kNoTab || model->IsTabSelected(index) ||
+      !GetTabSessionData(contents.get(), auto_close::kLastSeenSessionKey)
+           .empty() ||
+      !GetTabSessionData(contents.get(), auto_close::kOpenedUnseenSessionKey)
+           .empty()) {
+    return;
+  }
+  // A tab never shown has the time its WebContents was made (after a
+  // restart, the restore: a tab from before #577, which counts from then on);
+  // one shown before a restart, its saved last-active time, which is what
+  // it counted from anyway.
+  SetTabSessionData(contents.get(), auto_close::kOpenedUnseenSessionKey,
+                    auto_close::SerializeTime(std::min(
+                        contents->GetLastActiveTime(), base::Time::Now())));
+}
+
+void KoanTabAutoCloser::ClearUnseen(tabs::TabInterface* tab) {
+  content::WebContents* contents = tab->GetContents();
+  if (contents &&
+      !GetTabSessionData(contents, auto_close::kOpenedUnseenSessionKey)
+           .empty()) {
+    SetTabSessionData(contents, auto_close::kOpenedUnseenSessionKey,
+                      std::string());
+  }
 }
 
 auto_close::TabFacts KoanTabAutoCloser::FactsFor(
@@ -433,10 +501,12 @@ auto_close::TabFacts KoanTabAutoCloser::FactsFor(
       // An unloaded tab plays nothing, holds no form and has no handlers.
       .in_use = !unloaded && (IsTabInUse(contents) || IsDownloading(contents) ||
                               contents->NeedToFireBeforeUnload()),
-      .last_used =
-          auto_close::LastUsed(contents->GetLastActiveTime(),
-                               auto_close::ParseTime(GetTabSessionData(
-                                   contents, auto_close::kLastSeenSessionKey))),
+      .last_used = auto_close::LastUsed(
+          contents->GetLastActiveTime(),
+          auto_close::ParseTime(
+              GetTabSessionData(contents, auto_close::kLastSeenSessionKey)),
+          auto_close::ParseTime(GetTabSessionData(
+              contents, auto_close::kOpenedUnseenSessionKey))),
   };
 }
 
@@ -547,6 +617,7 @@ void KoanTabAutoCloser::Close(tabs::TabInterface* tab) {
   }
   record.data = GetTabSessionData(contents);
   record.data.erase(auto_close::kLastSeenSessionKey);
+  record.data.erase(auto_close::kOpenedUnseenSessionKey);
   if (record.url.is_valid()) {
     PrefService* prefs = profile()->GetPrefs();
     prefs->SetList(

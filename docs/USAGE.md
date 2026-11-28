@@ -1138,10 +1138,9 @@ Koan is set up to stay light (details in `PERFORMANCE.md`):
   to reopen it in its Space and profile; forget it with its row's button.
   Clearing history forgets those it covers; when the Library shows one
   profile, only that profile's. A tab opened in the background and never
-  looked at counts from when Koan last started, not from when it was
-  opened (a known limit, so it may stay longer; #577). To try it without
-  waiting, start Koan with `--koan-auto-close-tabs-after=<seconds>` (it
-  shortens whatever time is set, not Never).
+  looked at counts from when it was opened, across restarts too. To try it
+  without waiting, start Koan with `--koan-auto-close-tabs-after=<seconds>`
+  (it shortens whatever time is set, not Never).
 
 ## Library
 

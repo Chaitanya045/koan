@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -25,6 +26,10 @@
 class BrowserView;
 class BrowserWindowInterface;
 class Profile;
+
+namespace content {
+class WebContents;
+}
 
 namespace tabs {
 class TabInterface;
@@ -48,7 +53,10 @@ namespace koan {
 //
 // It also keeps the time each visible tab was last on screen with the
 // session (koan::auto_close::kLastSeenSessionKey): WebContents only knows
-// when a tab was shown.
+// when a tab was shown. And for a tab put in the window without being shown,
+// when it was opened (koan::auto_close::kOpenedUnseenSessionKey, until it is
+// shown): Chromium keeps no last-active time for a tab never shown, so after
+// a restart its age would start again (#577).
 class KoanTabAutoCloser : public TabStripModelObserver,
                           public history::HistoryServiceObserver {
  public:
@@ -85,6 +93,11 @@ class KoanTabAutoCloser : public TabStripModelObserver,
   std::vector<tabs::TabInterface*> VisibleTabs() const;
   // Notes that `tab` is on screen now.
   void Stamp(tabs::TabInterface* tab);
+  // Notes when `contents`, in this window and not shown, was opened, unless
+  // it was ever on screen (it has a time either way).
+  void MarkUnseen(base::WeakPtr<content::WebContents> contents);
+  // `tab` is on screen: it no longer counts from when it was opened.
+  void ClearUnseen(tabs::TabInterface* tab);
   auto_close::TabFacts FactsFor(
       tabs::TabInterface* tab,
       const std::vector<tabs::TabInterface*>& active) const;
@@ -104,6 +117,7 @@ class KoanTabAutoCloser : public TabStripModelObserver,
   base::ScopedObservation<history::HistoryService,
                           history::HistoryServiceObserver>
       history_observation_{this};
+  base::WeakPtrFactory<KoanTabAutoCloser> weak_factory_{this};
 };
 
 // The Library's closed tabs (koan_library_history.cc): the tabs `profile`

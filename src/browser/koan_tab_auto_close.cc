@@ -116,8 +116,13 @@ Keep WhyKept(const TabFacts& tab,
   return Keep::kNone;
 }
 
-base::Time LastUsed(base::Time last_shown, base::Time last_seen) {
-  return std::max(last_shown, last_seen);
+base::Time LastUsed(base::Time last_shown,
+                    base::Time last_seen,
+                    base::Time opened_unseen) {
+  // Never shown since it was opened: `last_shown` is only when its
+  // WebContents was made, after a restart the restore.
+  return std::max(opened_unseen.is_null() ? last_shown : opened_unseen,
+                  last_seen);
 }
 
 std::string SerializeTime(base::Time time) {

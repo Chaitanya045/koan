@@ -6,7 +6,8 @@
 // real window: an old tab closes into the Library's list and reopens from
 // it, Essentials, pinned tabs and a tab playing sound stay, nothing closes
 // before the one-time notice or with the setting at Never, and a tab that
-// aged while the browser was closed goes after the session is restored. The
+// aged while the browser was closed goes after the session is restored, a
+// tab never shown included (#577). The
 // --koan-auto-close-tabs-after switch makes "old" one second.
 
 #include <optional>
@@ -24,6 +25,7 @@
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
@@ -50,6 +52,7 @@
 #include "koan/browser/koan_tab_auto_close.h"
 #include "koan/browser/ui/views/koan_browser_view_controller.h"
 #include "koan/browser/ui/views/koan_pinned_tabs.h"
+#include "koan/browser/ui/views/koan_session_data.h"
 #include "koan/browser/ui/views/koan_tab_auto_closer.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "koan/test/browser/koan_browser_test_utils.h"
@@ -125,6 +128,26 @@ class KoanTabAutoCloseBrowserTest : public InProcessBrowserTest {
 
   std::vector<auto_close::ClosedTab> Closed() {
     return GetAutoClosedTabs(browser()->GetProfile());
+  }
+};
+
+// With the setting's own time (12 hours) instead of the test switch's
+// second: a tab's age after a restart has to come from before it.
+class KoanTabAutoCloseHoursBrowserTest : public KoanTabAutoCloseBrowserTest {
+ public:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    InProcessBrowserTest::SetUpCommandLine(command_line);
+  }
+
+ protected:
+  std::string OpenedUnseen(const std::string& title) {
+    for (int i = 0; i < model()->count(); ++i) {
+      content::WebContents* contents = model()->GetWebContentsAt(i);
+      if (CurrentTabUrl(contents) == Page(title)) {
+        return GetTabSessionData(contents, auto_close::kOpenedUnseenSessionKey);
+      }
+    }
+    return std::string();
   }
 };
 
@@ -251,6 +274,55 @@ IN_PROC_BROWSER_TEST_F(KoanTabAutoCloseBrowserTest,
   std::vector<auto_close::ClosedTab> closed = Closed();
   ASSERT_EQ(1u, closed.size());
   EXPECT_EQ(Page("Aged"), closed[0].url);
+}
+
+// Restarted (#577): a tab opened in the background 13 hours ago and never
+// shown goes after the restore with the time at 12 hours, though Chromium
+// gives it the restore time as its last-active time. One opened just now
+// stays, and loses its "opened unseen" time once it is shown.
+IN_PROC_BROWSER_TEST_F(KoanTabAutoCloseHoursBrowserTest,
+                       PRE_ANeverShownTabKeepsItsAgeAcrossARestart) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  tabs::TabInterface* unseen = AddBackgroundTab("Unseen");
+  AddBackgroundTab("Recent");
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    return !OpenedUnseen("Unseen").empty() && !OpenedUnseen("Recent").empty();
+  }));
+  EXPECT_LE(auto_close::ParseTime(OpenedUnseen("Recent")), base::Time::Now());
+  EXPECT_TRUE(GetTabSessionData(model()->GetActiveWebContents(),
+                                auto_close::kOpenedUnseenSessionKey)
+                  .empty());
+  // As if it had been opened 13 hours ago.
+  SetTabSessionData(
+      unseen->GetContents(), auto_close::kOpenedUnseenSessionKey,
+      auto_close::SerializeTime(base::Time::Now() - base::Hours(13)));
+  FlushSession(browser());
+}
+
+IN_PROC_BROWSER_TEST_F(KoanTabAutoCloseHoursBrowserTest,
+                       ANeverShownTabKeepsItsAgeAcrossARestart) {
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return HasTab(Page("Unseen")) && HasTab(Page("Recent")); }));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return !SessionRestore::IsRestoring(browser()->GetProfile()); }));
+  // Its time came back with the session; the restore didn't replace it.
+  const base::Time opened = auto_close::ParseTime(OpenedUnseen("Unseen"));
+  EXPECT_LT(opened, base::Time::Now() - base::Hours(12));
+  TurnOn();
+  closer()->CheckNowForTesting();
+  ASSERT_TRUE(base::test::RunUntil([&] { return !HasTab(Page("Unseen")); }));
+  EXPECT_TRUE(HasTab(Page("Recent")));
+  std::vector<auto_close::ClosedTab> closed = Closed();
+  ASSERT_EQ(1u, closed.size());
+  EXPECT_EQ(Page("Unseen"), closed[0].url);
+  EXPECT_FALSE(closed[0].data.contains(auto_close::kOpenedUnseenSessionKey));
+  // Shown, it counts from when it is left.
+  for (int i = 0; i < model()->count(); ++i) {
+    if (CurrentTabUrl(model()->GetWebContentsAt(i)) == Page("Recent")) {
+      model()->ActivateTabAt(i);
+    }
+  }
+  EXPECT_TRUE(OpenedUnseen("Recent").empty());
 }
 
 // The Library's Clear history for one profile (#474), "Everything": only
