@@ -255,8 +255,13 @@ bool KoanShortcutController::CanRun(Action action) const {
     case Action::kNewPrivateWindow:
       return chrome::IsCommandEnabled(browser, IDC_NEW_INCOGNITO_WINDOW);
     case Action::kQuit:
-      // As Run(): a Koan key quits on Linux only.
-      return BUILDFLAG(IS_LINUX) && chrome::IsCommandEnabled(browser, IDC_EXIT);
+      // As Run(): a Koan key quits on Linux only. An #if, not `BUILDFLAG() &&`,
+      // so the Mac's -Wunreachable-code sees no dead call.
+#if BUILDFLAG(IS_LINUX)
+      return chrome::IsCommandEnabled(browser, IDC_EXIT);
+#else
+      return false;
+#endif
     case Action::kMuteSite:
       return chrome::IsCommandEnabled(browser, IDC_WINDOW_MUTE_SITE);
     case Action::kBookmarks:
