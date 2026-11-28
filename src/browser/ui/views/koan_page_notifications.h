@@ -59,6 +59,17 @@ void OnShowingServiceWorkerNotification(
     Profile* profile,
     message_center::Notification& notification);
 
+// PersistentNotificationHandler::OnClick() and OnClose(), before content
+// dispatches the event: loads the partition of the Space's profile that the
+// service worker's notification `notification_id` names, if that profile is
+// listed (prefs::kUserContainers). Content looks the partition up without
+// creating it (NotificationEventDispatcherImpl::DispatchNotificationEvent()),
+// so an event of a profile that no longer exists is dropped and doesn't
+// create its folder again, while one of a listed profile reaches it also
+// before anything else has loaded it (a click after a restart, on macOS).
+void LoadNotificationPartition(Profile* profile,
+                               const std::string& notification_id);
+
 // ChromeContentBrowserClient::OpenURL(), before it navigates `params`: a
 // service worker's window (`clients.openWindow()`, also a payment handler's)
 // from `worker`, its SiteInstance. For a worker in a Space's profile the tab

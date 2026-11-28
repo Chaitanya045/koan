@@ -345,8 +345,8 @@ origin, so the site's tag (after it) can't make one. The default partition's ids
 | The label | The line under the title names a Space with the profile after the site, as a page's (`OnShowingServiceWorkerNotification()`): the Space of a tab of the site in that profile, else the shown Space if it has the profile, else the first that has it, windows by last use; with none, the profile's name. |
 | `clients.openWindow()` | Opens in the profile, in that same Space (`PlaceServiceWorkerWindow()` sets `params.browser` and `params.group`; `koan::SiteInstanceForNewTab()` rule 6 then gives the Space's profile), and the Space shows with the new tab. With no Space of that profile, the tab still opens in the profile (`params.source_site_instance` = the worker, rule 3), in the Space it opens in, with the profile's line. A payment handler's window takes the same path. |
 | `client.focus()` | The client's own tab, so its own Space (Koan follows the active tab). |
-| Restart, a notification still on screen (macOS) | Its id still names the profile, so the click routes there; the partition is created if not loaded yet (`GetStoragePartition(config)`, as a tab of that profile would). |
-| A profile that no longer exists | The click finds no notification in the (new, empty) partition and upstream closes it (`kDatabaseError`); storage-partition GC removes that empty partition at the next start, as it isn't in `koan.containers.user`. Koan can't delete a profile yet, so this is only a stale or hand-edited list. |
+| Restart, a notification still on screen (macOS) | Its id still names the profile, so the click routes there. Koan loads the partition first if the profile is listed (`koan::LoadNotificationPartition()` in `PersistentNotificationHandler::OnClick()`/`OnClose()`, N8), since no tab of it may have loaded it yet. |
+| A profile that no longer exists | Not listed, so N8 doesn't load it, and N6 looks the partition up with `can_create = false`: the click, action or close is dropped (`kDatabaseError`, upstream then closes the notification) and the partition, folder and all, isn't created again. In the session the profile was deleted in, its partition is still loaded (content can't unload one) and its database is what the deletion left. |
 | Agent containers | Unchanged: no permission (B1), so no notification. Their domains are never tagged or read back. |
 | DevTools' notification log | Still the default partition's (not hooked; rare and harmless). |
 
@@ -358,8 +358,13 @@ origin, so the site's tag (after it) can't make one. The default partition's ids
   `DoWriteNotificationData()` after the id is generated (2 lines + comment). The id has to be made on the database's
   sequence, where the partition can't be read.
 - **N6** `content/browser/notifications/notification_event_dispatcher_impl.cc` (`DispatchNotificationEvent()`, the
-  N3 patch's second hunk): after upstream's `GetStoragePartitionForUrl()`, the partition the id names (8 lines +
-  comment). No extension point: content picks the partition from the origin alone.
+  N3 patch's second hunk): after upstream's `GetStoragePartitionForUrl()`, the partition the id names, only if loaded
+  (`can_create = false`); none drops the event (14 lines + comment). No extension point: content picks the partition
+  from the origin alone.
+- **N8** `chrome/browser/notifications/persistent_notification_handler.cc` (`OnClick()`, `OnClose()`, right before
+  the dispatch): `koan::LoadNotificationPartition()` loads the partition the id names if that profile is listed
+  (`koan.containers.user`), so N6 finds it after a restart; content can't read Koan's profile list. 2 lines each +
+  include, `chrome/browser/notifications/BUILD.gn` already has `//koan/browser/ui/views` (N4).
 - **N7** `chrome/browser/notifications/platform_notification_service_impl.cc` (`DisplayPersistentNotification()`,
   the N4 patch's second hunk: one call, `koan::OnShowingServiceWorkerNotification()`) and
   `chrome/browser/chrome_content_browser_client.cc` (`OpenURL()`: one call, `koan::PlaceServiceWorkerWindow()`;
@@ -439,8 +444,8 @@ for Koan's partition per app id, so an old Koan or an upstream reset loses only 
   `KoanSpaceNotificationsBrowserTest.*` (a page in a Space's profile gets the prompt and shows a notification naming
   its Space; a default tab still does, and the answer is shared; a click shows the tab in its Space; a service
   worker's notification in profile A reaches A's worker only, not Default's or profile B's, with its own
-  `getNotifications()`; `openWindow()` opens in A's Space and `focus()` shows it; a click for a gone profile finds
-  nothing; push is refused; the site panel's note); Mac steps in `scripts/mac/steps/space_notifications.md`.
+  `getNotifications()`; `openWindow()` opens in A's Space and `focus()` shows it; a click or close for a gone profile finds
+  nothing and creates no partition; a listed profile's partition is loaded for its notification's events; push is refused; the site panel's note); Mac steps in `scripts/mac/steps/space_notifications.md`.
 - **Push** (#596): browser tests `KoanContainerPushBrowserTest.*` (a worker with the default subscription's origin
   and registration id, unregistered in a Space's profile or cleared with an agent container, leaves the subscription;
   the default partition's own unregistration still unsubscribes it).

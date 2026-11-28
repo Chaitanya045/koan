@@ -24,6 +24,7 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/prefs/pref_service.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tabs/public/tab_interface.h"
 #include "components/url_formatter/elide_url.h"
@@ -33,6 +34,8 @@
 #include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/web_contents.h"
 #include "koan/browser/containers/koan_container_partition.h"
+#include "koan/browser/containers/koan_user_containers.h"
+#include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_space_profile_menu.h"
 #include "koan/browser/ui/views/koan_workspaces.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
@@ -290,6 +293,29 @@ void OnShowingServiceWorkerNotification(
     name = SpaceProfileName(profile, containers::Serialize(*container));
   }
   SetSpaceContext(notification, name);
+}
+
+void LoadNotificationPartition(Profile* profile,
+                               const std::string& notification_id) {
+  // No notifications off the record; content's lookup is for one on disk.
+  if (!profile || profile->IsOffTheRecord()) {
+    return;
+  }
+  const std::optional<containers::ContainerId> container =
+      ContainerOfNotification(profile, notification_id);
+  if (!container) {
+    return;
+  }
+  for (const containers::UserContainer& listed :
+       containers::ParseUserContainers(
+           profile->GetPrefs()->GetList(prefs::kUserContainers))) {
+    if (listed.id == *container) {
+      profile->GetStoragePartition(
+          containers::PartitionConfigFor(profile, listed.id),
+          /*can_create=*/true);
+      return;
+    }
+  }
 }
 
 void PlaceServiceWorkerWindow(content::SiteInstance* worker,

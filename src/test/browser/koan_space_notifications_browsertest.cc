@@ -14,12 +14,18 @@
 #include <string>
 #include <vector>
 
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/run_until.h"
 #include "base/test/test_future.h"
+#include "base/threading/thread_restrictions.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/notifications/notification_common.h"
+#include "chrome/browser/notifications/notification_display_service.h"
+#include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/browser/notifications/notification_handler.h"
 #include "chrome/browser/profiles/profile.h"
@@ -37,10 +43,13 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/notification_event_dispatcher.h"
+#include "content/public/browser/storage_partition.h"
+#include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/persistent_notification_status.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/test_utils.h"
 #include "koan/browser/containers/koan_container_partition.h"
 #include "koan/browser/containers/koan_user_containers.h"
 #include "koan/browser/koan_prefs.h"
@@ -50,9 +59,11 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
+#include "ui/base/models/image_model.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/message_center/public/cpp/notification.h"
+#include "ui/message_center/public/cpp/notifier_id.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -504,20 +515,89 @@ IN_PROC_BROWSER_TEST_F(KoanSpaceNotificationsBrowserTest,
   }));
 }
 
-// A click on a notification whose profile is gone finds nothing, and upstream
-// then closes it (PersistentNotificationHandler::OnClickCompleted()).
+// A click or a close of a notification whose profile is gone (deleted while
+// its notification was still in the notification centre) finds nothing and
+// doesn't create the profile's partition again; upstream then closes it
+// (PersistentNotificationHandler::OnClickCompleted()).
 IN_PROC_BROWSER_TEST_F(KoanSpaceNotificationsBrowserTest,
                        ClickForAGoneProfileFindsNothing) {
+  AllowWorkerSite();
+  const std::string id = "pkoanusersgoneprofile#" +
+                         url::Origin::Create(WorkerPage()).Serialize() +
+                         "#010001";
+  const content::StoragePartitionConfig gone =
+      content::StoragePartitionConfig::Create(profile(), "koanusersgoneprofile",
+                                              /*partition_name=*/"",
+                                              /*in_memory=*/false);
+
   base::test::TestFuture<content::PersistentNotificationStatus> status;
   content::NotificationEventDispatcher::GetInstance()
       ->DispatchNotificationClickEvent(
-          profile(),
-          "pkoanusersgoneprofile#" +
-              url::Origin::Create(WorkerPage()).Serialize() + "#010001",
-          url::Origin::Create(WorkerPage()).GetURL(), std::nullopt,
-          std::nullopt, status.GetCallback());
+          profile(), id, url::Origin::Create(WorkerPage()).GetURL(),
+          std::nullopt, std::nullopt, status.GetCallback());
   EXPECT_EQ(content::PersistentNotificationStatus::kDatabaseError,
             status.Get());
+
+  // The way the platform's click and close come in, for the notification as
+  // the platform still has it. Upstream closes it after a failed click.
+  auto show = [&] {
+    NotificationDisplayServiceFactory::GetForProfile(profile())->Display(
+        NotificationHandler::Type::WEB_PERSISTENT,
+        message_center::Notification(
+            message_center::NOTIFICATION_TYPE_SIMPLE, id, u"Gone", u"",
+            ui::ImageModel(), u"", WorkerPage().DeprecatedGetOriginAsURL(),
+            message_center::NotifierId(WorkerPage().DeprecatedGetOriginAsURL()),
+            message_center::RichNotificationData(), nullptr),
+        std::make_unique<PersistentNotificationMetadata>());
+  };
+  show();
+  notifications_->SimulateClick(NotificationHandler::Type::WEB_PERSISTENT, id,
+                                std::nullopt, std::nullopt);
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return WorkerNotifications().empty(); }));
+  show();
+  notifications_->SimulateClick(NotificationHandler::Type::WEB_PERSISTENT, id,
+                                /*action_index=*/0, std::nullopt);
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return WorkerNotifications().empty(); }));
+  show();
+  notifications_->RemoveNotification(NotificationHandler::Type::WEB_PERSISTENT,
+                                     id, /*by_user=*/true);
+  content::RunAllTasksUntilIdle();
+  EXPECT_FALSE(profile()->GetStoragePartition(gone, /*can_create=*/false));
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  EXPECT_FALSE(base::PathExists(profile()
+                                    ->GetPath()
+                                    .AppendASCII("Storage")
+                                    .AppendASCII("ext")
+                                    .AppendASCII("koanusersgoneprofile")));
+}
+
+// A listed profile's partition is loaded for its notification's events, also
+// when nothing has loaded it yet (a click after a restart, on macOS); a gone
+// profile's isn't created, and Default's id is left alone.
+IN_PROC_BROWSER_TEST_F(KoanSpaceNotificationsBrowserTest,
+                       LoadsTheNotificationPartitionOfListedProfilesOnly) {
+  const std::optional<containers::ContainerId> listed =
+      containers::SpaceContainerFromString(AddProfile(u"Later"));
+  ASSERT_TRUE(listed);
+  const content::StoragePartitionConfig config =
+      containers::PartitionConfigFor(profile(), *listed);
+  ASSERT_FALSE(profile()->GetStoragePartition(config, /*can_create=*/false));
+  const std::string origin = url::Origin::Create(WorkerPage()).Serialize();
+
+  LoadNotificationPartition(
+      profile(), "p" + config.partition_domain() + "#" + origin + "#010001");
+  EXPECT_TRUE(profile()->GetStoragePartition(config, /*can_create=*/false));
+
+  LoadNotificationPartition(profile(),
+                            "pkoanusersgoneprofile#" + origin + "#010001");
+  EXPECT_FALSE(profile()->GetStoragePartition(
+      content::StoragePartitionConfig::Create(profile(), "koanusersgoneprofile",
+                                              /*partition_name=*/"",
+                                              /*in_memory=*/false),
+      /*can_create=*/false));
+  LoadNotificationPartition(profile(), "p#" + origin + "#010001");
 }
 
 // The site panel says so on a page in a Space's profile, unless the site is

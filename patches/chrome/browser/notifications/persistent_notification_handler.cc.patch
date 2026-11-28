@@ -1,0 +1,29 @@
+diff --git a/chrome/browser/notifications/persistent_notification_handler.cc b/chrome/browser/notifications/persistent_notification_handler.cc
+--- a/chrome/browser/notifications/persistent_notification_handler.cc
++++ b/chrome/browser/notifications/persistent_notification_handler.cc
+@@ -44,6 +44,7 @@
+ #include "content/public/browser/platform_notification_context.h"
+ #include "content/public/browser/storage_partition.h"
+ #include "content/public/common/persistent_notification_status.h"
++#include "koan/browser/ui/views/koan_page_notifications.h"
+ #include "services/metrics/public/cpp/ukm_recorder.h"
+ #include "third_party/blink/public/common/permissions/permission_utils.h"
+ #include "ui/message_center/message_center_stats_collector.h"
+@@ -143,6 +144,8 @@ void PersistentNotificationHandler::OnClose(
+   int32_t callback_id = close_completed_callbacks_.Add(
+       std::make_unique<base::OnceClosure>(std::move(completed_closure)));
+ 
++  // Koan: the partition of the Space's profile the id names, if listed.
++  koan::LoadNotificationPartition(profile, notification_id);
+   content::NotificationEventDispatcher::GetInstance()
+       ->DispatchNotificationCloseEvent(
+           profile, notification_id, origin, by_user,
+@@ -237,6 +240,8 @@ void PersistentNotificationHandler::OnClick(
+   site_engagement::SiteEngagementService::Get(profile)
+       ->HandleNotificationInteraction(origin);
+ 
++  // Koan: the partition of the Space's profile the id names, if listed.
++  koan::LoadNotificationPartition(profile, notification_id);
+   content::NotificationEventDispatcher::GetInstance()
+       ->DispatchNotificationClickEvent(
+           profile, notification_id, origin, action_index, reply,
