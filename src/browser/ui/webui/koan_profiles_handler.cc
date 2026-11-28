@@ -12,9 +12,12 @@
 #include "base/functional/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/webui/extensions/extension_icon_source.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
+#include "extensions/common/constants.h"
+#include "extensions/common/icons/extension_icon_set.h"
 #include "koan/browser/koan_prefs.h"
 #include "koan/browser/ui/views/koan_space_profiles.h"
 #include "ui/color/color_provider.h"
@@ -59,6 +62,10 @@ void KoanProfilesHandler::RegisterMessages() {
       "koanDeleteProfile",
       base::BindRepeating(&KoanProfilesHandler::HandleDelete,
                           base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "koanShowProfileExtensions",
+      base::BindRepeating(&KoanProfilesHandler::HandleShowExtensions,
+                          base::Unretained(this)));
 }
 
 void KoanProfilesHandler::OnJavascriptAllowed() {
@@ -67,10 +74,13 @@ void KoanProfilesHandler::OnJavascriptAllowed() {
       prefs::kUserContainers,
       base::BindRepeating(&KoanProfilesHandler::OnProfilesChanged,
                           base::Unretained(this)));
+  extension_registry_observation_.Observe(
+      extensions::ExtensionRegistry::Get(&*profile_));
 }
 
 void KoanProfilesHandler::OnJavascriptDisallowed() {
   pref_change_registrar_.Reset();
+  extension_registry_observation_.Reset();
   // Replies still on their way were for the page that went.
   weak_factory_.InvalidateWeakPtrs();
 }
@@ -135,6 +145,29 @@ void KoanProfilesHandler::HandleDelete(const base::ListValue& args) {
   }
 }
 
+void KoanProfilesHandler::HandleShowExtensions(const base::ListValue& args) {
+  CHECK_EQ(args.size(), 2u);
+  AllowJavascript();
+  const std::string* id = StringArg(args, 1);
+  ResolveJavascriptCallback(
+      args[0], id && ShowSpaceProfileExtensions(
+                         &*profile_, web_ui()->GetWebContents(), *id));
+}
+
+void KoanProfilesHandler::OnExtensionInstalled(
+    content::BrowserContext* browser_context,
+    const extensions::Extension* extension,
+    bool is_update) {
+  OnProfilesChanged();
+}
+
+void KoanProfilesHandler::OnExtensionUninstalled(
+    content::BrowserContext* browser_context,
+    const extensions::Extension* extension,
+    extensions::UninstallReason reason) {
+  OnProfilesChanged();
+}
+
 void KoanProfilesHandler::OnSizes(base::Value callback_id,
                                   base::flat_map<std::string, int64_t> sizes) {
   if (!IsJavascriptAllowed()) {
@@ -167,6 +200,27 @@ base::DictValue KoanProfilesHandler::Profiles() {
     for (const std::u16string& space : info.spaces) {
       spaces.Append(space);
     }
+    base::Value proxy;
+    if (!info.proxy.empty() || info.proxy_disconnected) {
+      proxy = base::Value(base::DictValue()
+                              .Set("server", info.proxy)
+                              .Set("disconnected", info.proxy_disconnected));
+    }
+    // (32 pixels, drawn at 16: sharp on a Retina screen.)
+    base::ListValue extensions_off;
+    for (const SpaceProfileInfo::OffExtension& extension :
+         info.extensions_off) {
+      extensions_off.Append(
+          base::DictValue()
+              .Set("id", extension.id)
+              .Set("name", extension.name)
+              .Set("icon",
+                   extensions::ExtensionIconSource::GetIconURL(
+                       extension.id, extension_misc::EXTENSION_ICON_SMALL,
+                       ExtensionIconSet::Match::kBigger,
+                       /*grayscale=*/false)
+                       .spec()));
+    }
     profiles.Append(base::DictValue()
                         .Set("id", info.id)
                         .Set("name", info.name)
@@ -174,7 +228,9 @@ base::DictValue KoanProfilesHandler::Profiles() {
                         .Set("spaces", std::move(spaces))
                         .Set("openTabs", info.open_tabs)
                         .Set("essentials", info.essentials)
-                        .Set("pinnedTabs", info.pinned_tabs));
+                        .Set("pinnedTabs", info.pinned_tabs)
+                        .Set("proxy", std::move(proxy))
+                        .Set("extensionsOff", std::move(extensions_off)));
   }
   // The swatches in the colours the browser draws them in (light or dark).
   const ui::ColorProvider& provider =

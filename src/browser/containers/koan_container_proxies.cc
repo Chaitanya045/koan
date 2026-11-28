@@ -115,6 +115,10 @@ ContainerProxies* ContainerProxies::For(Profile* profile) {
   return proxies;
 }
 
+ContainerProxies* ContainerProxies::Find(Profile* profile) {
+  return static_cast<ContainerProxies*>(profile->GetUserData(kUserDataKey));
+}
+
 ContainerProxies::ContainerProxies(Profile* profile) : profile_(profile) {
   ApplySwitch();
   registrar_.Init(profile_->GetPrefs());

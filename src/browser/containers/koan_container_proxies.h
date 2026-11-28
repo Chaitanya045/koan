@@ -45,6 +45,10 @@ class ContainerProxies : public base::SupportsUserData::Data,
  public:
   // `profile`'s, created on first use.
   static ContainerProxies* For(Profile* profile);
+  // `profile`'s if it was made (its first user container network context
+  // makes it), else null. For a reader that mustn't make it: making it applies
+  // --koan-container-proxy, which writes koan.containers.user.
+  static ContainerProxies* Find(Profile* profile);
 
   explicit ContainerProxies(Profile* profile);
   ContainerProxies(const ContainerProxies&) = delete;

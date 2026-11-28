@@ -688,7 +688,15 @@ belongs to a Space, and new tabs open in the active one.
   can still delete history.
 - **Manage profiles** in Settings > Tab Management > **Profiles**. Each
   profile shows its colour, its name, the Spaces that use it, its open tabs
-  and how much it keeps on this device.
+  and how much it keeps on this device, and what else is kept with it:
+  - **Proxy**: the profile's proxy server ("Disconnected" when its pages
+    can't connect), or **Direct** without one. Read only for now: a proxy is
+    set with the switch below.
+  - **Extensions off**: the extensions that are off in the profile, with
+    their icons, or **All extensions on**. **Change…** opens the Space
+    menu's Extensions… for a Space that uses the profile (greyed out when no
+    Space does). The row follows at once when you press Done there, and when
+    an extension is installed or removed.
   - **Rename**: edit the name and press Return. **Colour**: click one of
     the eight dots. Every window follows at once: the colour line on tabs,
     the Set Profile menu and the Create-a-Space form.

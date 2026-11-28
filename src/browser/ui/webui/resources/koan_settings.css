@@ -517,6 +517,76 @@ button.profile-color:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--ring) 50%, transparent);
 }
 
+/* What else is kept with it: Proxy, Extensions off. Labels in a column of
+ * their own; a value wraps under itself at a narrow width. */
+.profile-details {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+  gap: 4px 12px;
+  font-size: 13px;
+}
+
+.profile-detail-label {
+  color: var(--muted-foreground);
+}
+
+.profile-detail-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.profile-proxy-server {
+  font-family: ui-monospace, 'Geist Mono', monospace;
+}
+
+.profile-proxy-down {
+  color: var(--destructive);
+}
+
+.profile-extension {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.profile-extension img {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+/* A link to where it is changed (the Space menu's Extensions...). */
+button.profile-change {
+  padding: 0;
+  border: none;
+  border-radius: var(--r-item);
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+button.profile-change:hover {
+  text-decoration: underline;
+}
+
+button.profile-change:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+button.profile-change:disabled {
+  color: var(--muted-foreground);
+  text-decoration: none;
+  cursor: default;
+}
+
 .profile-actions {
   display: flex;
   flex-wrap: wrap;

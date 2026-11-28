@@ -766,6 +766,64 @@ function sayInProfiles(text, error = false) {
   }
 }
 
+// What else is kept with a profile (#477's last item): its proxy (#445) and
+// the extensions that are off in it (#473). The proxy is read only: Koan has
+// no setting for it yet, only the --koan-container-proxy switch.
+function profileProxy(profile) {
+  const proxy = profile.proxy;
+  const value = h('span', {
+    class: 'profile-detail-value',
+    id: `profile-proxy-${profile.id}`,
+    title: 'Set with the --koan-container-proxy switch for now',
+  });
+  if (!proxy) {
+    value.append('Direct');
+  } else {
+    if (proxy.server) {
+      value.append(h('span', {class: 'profile-proxy-server'}, proxy.server));
+    }
+    if (proxy.disconnected) {
+      value.append(h('span', {class: 'profile-proxy-down'},
+                     proxy.server ? ' · Disconnected' : 'Disconnected'));
+    }
+  }
+  return [h('span', {class: 'profile-detail-label'}, 'Proxy'), value];
+}
+
+function profileExtensions(profile) {
+  const off = profile.extensionsOff;
+  const value = h(
+      'span',
+      {class: 'profile-detail-value', id: `profile-extensions-${profile.id}`},
+      ...(off.length ?
+              off.map(extension => h(
+                          'span', {class: 'profile-extension'},
+                          h('img', {
+                            src: extension.icon,
+                            alt: '',
+                            width: 16,
+                            height: 16,
+                          }),
+                          h('span', {}, extension.name))) :
+              ['All extensions on']));
+  // The list is edited for a Space (the Space menu's Extensions…).
+  const used = profile.spaces.length > 0;
+  const change = h('button', {
+    class: 'profile-change',
+    disabled: !used,
+    title: used ? `Turn extensions on or off in “${profile.name}”` :
+                  'Give a Space this profile to change its extensions',
+    'aria-label': `Change the extensions of “${profile.name}”`,
+    onclick: async () => {
+      if (!await sendWithPromise('koanShowProfileExtensions', profile.id)) {
+        sayInProfiles('No Space uses this profile', true);
+      }
+    },
+  }, 'Change…');
+  value.append(change);
+  return [h('span', {class: 'profile-detail-label'}, 'Extensions off'), value];
+}
+
 function renderProfile(profile) {
   const say = sayInProfiles;
   const name = h('input', {
@@ -850,6 +908,8 @@ function renderProfile(profile) {
       h('div', {class: 'profile-header'}, dot, name),
       h('p', {class: 'description', id: `profile-summary-${profile.id}`},
         profileSummary(profile)),
+      h('div', {class: 'profile-details'}, ...profileProxy(profile),
+        ...profileExtensions(profile)),
       colors, h('div', {class: 'profile-actions'}, clear, remove));
 }
 
@@ -857,6 +917,7 @@ function renderProfiles(query) {
   if (!profiles ||
       (query && !matches(query, 'profiles', 'containers', 'cookies',
                          'site data', 'logins', 'delete profile',
+                         'extensions off',
                          ...profiles.profiles.map(p => p.name)))) {
     return [];
   }

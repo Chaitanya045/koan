@@ -20,6 +20,7 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/test/run_until.h"
@@ -27,6 +28,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/notifications/notification_display_service_factory.h"
@@ -63,8 +65,13 @@
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/browsing_data_remover_test_util.h"
+#include "extensions/browser/extension_registrar.h"
+#include "extensions/browser/uninstall_reason.h"
+#include "extensions/common/extension.h"
+#include "extensions/test/test_extension_dir.h"
 #include "koan/browser/containers/koan_container_extensions.h"
 #include "koan/browser/containers/koan_container_partition.h"
+#include "koan/browser/containers/koan_container_proxy.h"
 #include "koan/browser/containers/koan_history_profiles.h"
 #include "koan/browser/containers/koan_partition_domain.h"
 #include "koan/browser/containers/koan_user_containers.h"
@@ -331,6 +338,73 @@ IN_PROC_BROWSER_TEST_F(KoanSpaceProfilesBrowserTest,
       profile(), work, static_cast<int>(tab_groups::TabGroupColorId::kGrey)));
   EXPECT_FALSE(RenameSpaceProfile(profile(), "user:snothere", u"X"));
   EXPECT_EQ(u"Day job", SpaceProfileName(profile(), work));
+}
+
+// What else is kept with a profile shows in its row in Settings: its proxy
+// ("Direct" without one) and the extensions that are off in it, by name (an
+// extension that is no longer installed is not one), and each follows a
+// change.
+IN_PROC_BROWSER_TEST_F(KoanSpaceProfilesBrowserTest,
+                       RowShowsProxyAndExtensions) {
+  ASSERT_TRUE(WaitForSpaceCount(browser(), 1));
+  const std::string work = AddProfile(u"Work");
+  const std::string home = AddProfile(u"Home");
+  extensions::TestExtensionDir dir;
+  dir.WriteManifest(R"({"name": "Koan row test", "version": "1",
+                        "manifest_version": 3})");
+  scoped_refptr<const extensions::Extension> extension =
+      extensions::ChromeTestExtensionLoader(profile()).LoadExtension(
+          dir.UnpackedPath());
+  ASSERT_TRUE(extension);
+
+  const auto info = [&](const std::string& id) {
+    for (const SpaceProfileInfo& listed : GetSpaceProfiles(profile())) {
+      if (listed.id == id) {
+        return listed;
+      }
+    }
+    ADD_FAILURE() << id << " isn't listed";
+    return SpaceProfileInfo();
+  };
+  EXPECT_EQ("", info(work).proxy);
+  EXPECT_FALSE(info(work).proxy_disconnected);
+  EXPECT_TRUE(info(work).extensions_off.empty());
+
+  {
+    ScopedListPrefUpdate update(profile()->GetPrefs(), prefs::kUserContainers);
+    ASSERT_TRUE(containers::SetUserContainerProxy(
+        update.Get(), IdOf(work),
+        containers::ProxySetting{.server = "socks5://127.0.0.1:1080"}));
+    // Off, and an id of an extension that isn't installed.
+    ASSERT_TRUE(containers::SetExtensionsOff(
+        update.Get(), IdOf(work), {extension->id(), std::string(32, 'a')}));
+  }
+  const SpaceProfileInfo with = info(work);
+  EXPECT_EQ("socks5://127.0.0.1:1080", with.proxy);
+  EXPECT_FALSE(with.proxy_disconnected);
+  ASSERT_EQ(1u, with.extensions_off.size());
+  EXPECT_EQ(extension->id(), with.extensions_off[0].id);
+  EXPECT_EQ(u"Koan row test", with.extensions_off[0].name);
+  // The other profile has neither.
+  EXPECT_EQ("", info(home).proxy);
+  EXPECT_TRUE(info(home).extensions_off.empty());
+
+  // The list is edited for a Space: no Space uses Home, so nothing opens.
+  EXPECT_FALSE(ShowSpaceProfileExtensions(profile(), nullptr, home));
+  EXPECT_FALSE(ShowSpaceProfileExtensions(profile(), nullptr, "user:snothere"));
+
+  {
+    ScopedListPrefUpdate update(profile()->GetPrefs(), prefs::kUserContainers);
+    ASSERT_TRUE(containers::SetUserContainerProxy(update.Get(), IdOf(work),
+                                                  std::nullopt));
+  }
+  EXPECT_EQ("", info(work).proxy);
+  // Uninstalled: no longer listed as off.
+  ASSERT_TRUE(
+      extensions::ExtensionRegistrar::Get(profile())->UninstallExtension(
+          extension->id(), extensions::UNINSTALL_REASON_FOR_TESTING, nullptr));
+  EXPECT_TRUE(
+      base::test::RunUntil([&] { return info(work).extensions_off.empty(); }));
 }
 
 // Delete profile...: its Spaces go back to Default in every window (and stay),

@@ -28,3 +28,14 @@ the same site in a Space without a profile. Open a second window (⌘N).
 | SP14 | Incognito window: ⌘, opens Settings in the regular profile. | The same Profiles list; Incognito still has no Spaces and no profiles. |
 | SP15 | Before SP8: visit two pages in the Work Space, one in Home and one without a profile; pin one Work tab as an Essential; let a page in Work show a notification. Then SP8. | The question names the Essential ("…, including 1 Essential, will close"). After OK: the notification is gone from Notification Center; Library > History (All profiles) has no Day job visits, Home's and Default's are there; ⌘T in the Work Space opens in Default at once. |
 | SP16 | Delete a profile, then force-quit Koan at once (⌥⌘⎋ or `kill -9`) and start again. | Its folder is gone after the start (SP11) and its visits too (SP15); Home's and Default's visits, cookies and Spaces are all there. |
+
+What else is kept with a profile (#477's last item). Install one extension (any, from the Chrome Web Store). Start Koan
+with `--koan-container-proxy="Home=socks5://127.0.0.1:1080"`.
+
+| # | Do | Expect |
+|---|---|---|
+| SP17 | ⌘, then Tab Management > Profiles. | Home's row: **Proxy** `socks5://127.0.0.1:1080`; Work's: **Direct**. Both: **Extensions off** All extensions on, and **Change…**. |
+| SP18 | Change… on Work's row. | The Space menu's Extensions… dialog ("Extensions in Work") opens over the settings window. Turn the extension off, Done: Work's row lists it at once, with its icon. Home's row is unchanged. |
+| SP19 | In the Work Space, right-click the header > Extensions…, turn it on again, Done. | Work's row says All extensions on, without a reload of the settings page. |
+| SP20 | Give no Space the Home profile (Set Profile > Default on Home). | Home's Change… is greyed out; its tooltip says to give a Space the profile. |
+| SP21 | Light and dark (⌘, > Look and Feel), shadcn and Zen look; make the window narrow. | The rows stay readable: labels in one column, values wrap under themselves, nothing scrolls sideways. |

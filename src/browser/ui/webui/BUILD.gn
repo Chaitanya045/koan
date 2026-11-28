@@ -43,6 +43,11 @@ source_set("webui") {
     "//chrome/browser/ui:accelerator_table",
     "//chrome/browser/ui/color:color_headers",
     "//chrome/browser/ui/tabs",
+
+    # extension_icon_source.h only: its definitions are linked through
+    # //chrome/browser/ui/webui/extensions, which depends on more than this
+    # can.
+    "//chrome/browser/ui/webui/extensions:headers",
     "//chrome/common:constants",
     "//components/performance_manager",
     "//components/prefs",
@@ -53,6 +58,8 @@ source_set("webui") {
     "//components/tab_groups",
     "//components/user_data_importer/common",
     "//content/public/common",
+    "//extensions/browser",
+    "//extensions/common",
     "//koan/browser:features",
     "//koan/browser:prefs",
     "//koan/browser:shortcut_table",
